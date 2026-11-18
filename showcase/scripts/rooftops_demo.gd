@@ -19,6 +19,9 @@ var _target := Vector3()
 var _has_target := false
 var _quit_at_end := false
 var _mark := INF # when the shot's mantle began (its program's "m+" times)
+var _climb: Node3D # the foot of the climb up the bell tower (ClimbStart), facing the wall
+var _climbing := false # running to the climb's foot, then up the holds
+var _path: Array = [] # points walked to one after another
 
 
 func _ready() -> void:
@@ -38,14 +41,19 @@ func _ready() -> void:
 	_cam = _rig.get_node("Camera3D")
 	_player.autopilot = true
 	_player.get_node("Traversal").connect("mantle_started", func(_k, _l): _mark = minf(_mark, t))
+	_climb = get_node_or_null("../ClimbStart") as Node3D
 	_make_shots()
 	_start(from)
 
 
 # ------------------------------------------------------------------ the shots
 
+## A point in the climb's frame (x: right, facing the wall; y: up; z: out from the wall) in the world.
+func _cl(p_local: Vector3) -> Vector3:
+	return _climb.global_transform * p_local if _climb else p_local
+
+
 func _make_shots() -> void:
-	var beam_arch := Vector3(1.26, 0.0, -12.42)
 	shots = [
 		{
 			"name": "establish", "duration": 7.0,
@@ -56,26 +64,38 @@ func _make_shots() -> void:
 			"prog": [],
 		},
 		{
-			"name": "run", "duration": 5.6,
-			"place": [Vector3(-1.6, 0.0, 15.5), 0.0],
+			# Across the square to the bell tower, a jump for its first hold, up the rustication.
+			"name": "run", "duration": 14.0, "until_y": 4.5,
+			"place": [Vector3(2.6, 0.0, 11.0), 0.0],
 			"cam": {"mode": "follow", "yaw": 18.0, "pitch": -8.0, "rate": 3.0},
-			"prog": [[0.0, {"to": Vector3(1.26, 0.0, -13.0), "sprint": true}]],
+			"prog": [[0.0, {"climb": true, "sprint": true}]],
 		},
 		{
-			"name": "climb", "duration": 5.6,
-			"place": [beam_arch + Vector3(0.0, 13.6, 0.0), 0.0],
-			"cam": {"mode": "track", "keys": [[0.0, Vector3(7.0, 11.0, -6.5), 44.0], [5.6, Vector3(6.2, 15.5, -7.2), 42.0]], "look_up": 0.5},
-			"prog": [[0.0, {"wish": Vector3(0, 0, -1), "sprint": true}]],
+			# Up the shaft from hold to hold: reaching hand over hand, leaping to the string course.
+			"name": "climb", "duration": 20.0, "until_y": 11.5,
+			"cam": {"mode": "track", "keys": [[0.0, _cl(Vector3(4.2, 4.0, 5.5)), 46.0], [8.0, _cl(Vector3(3.6, 10.5, 6.5)), 44.0]], "look_up": 0.4},
+			"prog": [],
 		},
 		{
-			"name": "belfry", "duration": 30.0, "until_perch": 6.6,
-			"place": [beam_arch + Vector3(0.0, 22.4, 0.0), 0.0],
+			# Wide: the tower over the square, the climber small on its face.
+			"name": "climb_wide", "duration": 20.0, "until_y": 21.0,
+			"cam": {"mode": "track", "keys": [[0.0, _cl(Vector3(-9.0, 9.0, 17.0)), 50.0], [10.0, _cl(Vector3(-7.0, 15.0, 15.0)), 46.0]], "look_up": 2.0},
+			"prog": [],
+		},
+		{
+			# From above, the square far below; into the belfry's arch.
+			"name": "climb_top", "duration": 16.0, "until_mantle": true,
+			"cam": {"mode": "track", "keys": [[0.0, _cl(Vector3(3.2, 31.5, 3.6)), 58.0], [7.0, _cl(Vector3(2.6, 30.5, 3.0)), 58.0]], "look_up": -0.6},
+			"prog": [],
+		},
+		{
+			"name": "belfry", "duration": 30.0, "until_perch": 6.6, "mantle_at_start": true,
 			"cam": {"mode": "follow", "yaw": -25.0, "pitch": 12.0, "rate": 2.0},
 			# Times "m+<s>": after the mantle into the belfry's arch began.
-			"prog": [[0.0, {"wish": Vector3(0, 0, -1), "sprint": true}],
-					["m+0.0", {"wish": Vector3(), "sprint": false}],
-					["m+1.6", {"to_viewpoint": true, "walk": true, "aim": [140.0, -20.0, 1.2]}],
-					["m+4.2", {"perch": true}]],
+			# Into the belfry, across it behind the arches and out along the beam to its end.
+			"prog": [["m+0.0", {"climb": false, "wish": Vector3(), "sprint": false}],
+					["m+1.3", {"belfry_path": true, "walk": true, "aim": [140.0, -20.0, 1.2]}],
+					["m+7.6", {"perch": true}]],
 		},
 		{
 			"name": "leap", "duration": 6.0, "until_hay": true,
@@ -92,9 +112,26 @@ func _make_shots() -> void:
 			"cam": {"mode": "path_follow", "keys": [
 				[0.0, Vector3(-2.5, 2.2, -3.0), Vector3(1.0, 1.5, -9.0), 55.0],
 				[6.5, Vector3(-9.0, 14.0, 10.0), Vector3(2.0, 11.0, -14.0), 60.0]]},
-			"prog": [[0.3, {"to": Vector3(-8.0, 0.0, -7.5), "walk": true}]],
+			"prog": [[0.3, {"to": Vector3(4.0, 0.0, 1.0), "walk": true}]],
 		},
 	]
+
+
+## From the right arch (where the climb comes in) into the belfry, across behind the arches and out along the beam to
+## the viewpoint at its end.
+func _belfry_path() -> Array:
+	var vp := get_node_or_null("../Viewpoint") as Node3D
+	if vp == null or _climb == null:
+		return []
+	var inward := -_climb.global_basis.z
+	var back := vp.global_basis.z # from the beam's end back into the tower
+	var here := _player.global_position
+	var in_right := here + inward * 1.5
+	var in_left := vp.global_position + back * 3.6
+	in_left.y = here.y
+	var end := vp.global_position
+	end.y = here.y
+	return [in_right, in_left, end]
 
 
 func _start(i: int) -> void:
@@ -107,6 +144,8 @@ func _start(i: int) -> void:
 	_has_target = false
 	_mark = INF
 	var s: Dictionary = shots[i]
+	if s.get("mantle_at_start", false):
+		_mark = 0.0 # the mantle that ended the last shot
 	if s.has("place"):
 		var tr: Node = _player.get_node("Traversal")
 		if tr.is_active() or tr.is_climbing() or tr.is_hanging():
@@ -170,17 +209,44 @@ func _physics_process(delta: float) -> void:
 			_player.want_jump = true
 		if c.has("perch"):
 			_player.want_perch = true
+		if c.has("climb"):
+			_climbing = c["climb"]
+		if c.has("belfry_path"):
+			_path = _belfry_path()
 		if c.has("aim"):
 			s["cam"]["yaw"] = c["aim"][0]
 			s["cam"]["pitch"] = c["aim"][1]
 			s["cam"]["rate"] = c["aim"][2]
 			s["cam"]["aim_world"] = true
 		_next += 1
-	if _has_target:
+	if _climbing and _climb:
+		# To the climb's foot and on into the wall; on the wall, straight at it (up the holds, no shimmy).
+		var inward := -_climb.global_basis.z
+		var tr: Node = _player.get_node("Traversal")
+		if tr.is_hanging() or tr.is_transferring() or tr.is_active():
+			_player.wish = inward
+		else:
+			var d := _climb.global_position + inward * 1.2 - _player.global_position
+			d.y = 0.0
+			_player.wish = d.normalized()
+	elif not _path.is_empty():
+		var d: Vector3 = (_path[0] as Vector3) - _player.global_position
+		d.y = 0.0
+		if d.length() < 0.35:
+			_path.pop_front()
+			if _path.is_empty():
+				_player.wish = Vector3()
+		else:
+			_player.wish = d.normalized()
+	elif _has_target:
 		var d := _target - _player.global_position
 		d.y = 0.0
 		_player.wish = d.normalized() if d.length() > 0.4 else Vector3()
 	if s.get("until_hay", false) and _player.mode == 5:
+		_start(shot + 1)
+	elif s.has("until_y") and _player.global_position.y >= float(s["until_y"]):
+		_start(shot + 1)
+	elif s.get("until_mantle", false) and _mark < INF:
 		_start(shot + 1)
 	elif s.has("until_perch") and _player.mode == 3:
 		# The swirl round the perch for its time, then the next shot.

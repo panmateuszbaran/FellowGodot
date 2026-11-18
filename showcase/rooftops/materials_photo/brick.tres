@@ -1,0 +1,28 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_rxd7j"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/brick_wall_006_diff_2k.jpg" id="2_jlj8e"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/brick_wall_006_arm_2k.jpg" id="3_7a1f6"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/brick_wall_006_nor_gl_2k.jpg" id="4_a2s6d"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_rxd7j")
+shader_parameter/albedo_tex = ExtResource("2_jlj8e")
+shader_parameter/normal_tex = ExtResource("4_a2s6d")
+shader_parameter/arm_tex = ExtResource("3_7a1f6")
+shader_parameter/tex_size = 3.0
+shader_parameter/tint = Color(0.56, 0.38, 0.3, 1)
+shader_parameter/tint_strength = 0.5
+shader_parameter/tex_lum = 0.2522825321932033
+shader_parameter/brightness = null
+shader_parameter/normal_strength = 0.75
+shader_parameter/roughness_bias = null
+shader_parameter/specular = 0.2
+shader_parameter/anti_tile = false
+shader_parameter/variation = 0.1
+shader_parameter/stains = 0.3
+shader_parameter/ground_dirt = null
+shader_parameter/seed = 5.0
+shader_parameter/fallen = null
+shader_parameter/patch_size = null

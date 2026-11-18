@@ -1,0 +1,28 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_i4m75"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/stone_floor_diff_2k.jpg" id="2_x6eoh"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/stone_floor_arm_2k.jpg" id="3_prgly"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/stone_floor_nor_gl_2k.jpg" id="4_af72r"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_i4m75")
+shader_parameter/albedo_tex = ExtResource("2_x6eoh")
+shader_parameter/normal_tex = ExtResource("4_af72r")
+shader_parameter/arm_tex = ExtResource("3_prgly")
+shader_parameter/tex_size = 1.8499999
+shader_parameter/tint = null
+shader_parameter/tint_strength = null
+shader_parameter/tex_lum = 0.14057941883283992
+shader_parameter/brightness = null
+shader_parameter/normal_strength = null
+shader_parameter/roughness_bias = null
+shader_parameter/specular = 0.25
+shader_parameter/anti_tile = null
+shader_parameter/variation = null
+shader_parameter/stains = 0.0
+shader_parameter/ground_dirt = 0.0
+shader_parameter/seed = 11.0
+shader_parameter/fallen = null
+shader_parameter/patch_size = null

@@ -1,0 +1,28 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_tonup"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_08_diff_2k.jpg" id="2_ge21w"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_08_arm_2k.jpg" id="3_o7djm"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_08_nor_gl_2k.jpg" id="4_4lwel"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_tonup")
+shader_parameter/albedo_tex = ExtResource("2_ge21w")
+shader_parameter/normal_tex = ExtResource("4_4lwel")
+shader_parameter/arm_tex = ExtResource("3_o7djm")
+shader_parameter/tex_size = 4.2
+shader_parameter/tint = Color(0.76, 0.71, 0.62, 1)
+shader_parameter/tint_strength = 0.5
+shader_parameter/tex_lum = 0.29968594340607535
+shader_parameter/brightness = null
+shader_parameter/normal_strength = 2.2
+shader_parameter/roughness_bias = null
+shader_parameter/specular = 0.22
+shader_parameter/anti_tile = false
+shader_parameter/variation = 0.16
+shader_parameter/stains = 0.4
+shader_parameter/ground_dirt = 0.9
+shader_parameter/seed = 3.0
+shader_parameter/fallen = null
+shader_parameter/patch_size = null

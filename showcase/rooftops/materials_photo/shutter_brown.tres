@@ -1,0 +1,28 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_18cxi"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/distressed_painted_planks_diff_2k.jpg" id="2_k0q5t"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/distressed_painted_planks_arm_2k.jpg" id="3_3yusn"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/distressed_painted_planks_nor_gl_2k.jpg" id="4_d58wq"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_18cxi")
+shader_parameter/albedo_tex = ExtResource("2_k0q5t")
+shader_parameter/normal_tex = ExtResource("4_d58wq")
+shader_parameter/arm_tex = ExtResource("3_3yusn")
+shader_parameter/tex_size = 1.5999999
+shader_parameter/tint = Color(0.42, 0.22, 0.12, 1)
+shader_parameter/tint_strength = 0.8
+shader_parameter/tex_lum = 0.19447440227668256
+shader_parameter/brightness = null
+shader_parameter/normal_strength = null
+shader_parameter/roughness_bias = null
+shader_parameter/specular = 0.25
+shader_parameter/anti_tile = false
+shader_parameter/variation = null
+shader_parameter/stains = 0.0
+shader_parameter/ground_dirt = null
+shader_parameter/seed = 10.0
+shader_parameter/fallen = null
+shader_parameter/patch_size = null

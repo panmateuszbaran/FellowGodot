@@ -75,20 +75,24 @@ starts at a time, weather and place; `--showcase_walk=<s>`, `--showcase_run=1`, 
 
 ## The rooftops (`rooftops/rooftops.tscn`)
 
-A Renaissance square at the golden hour, in the manner of Assassin's Creed's Florence: palazzi and houses round it, a
-bell tower 38 m high with a beam out over a hay cart, a fountain, market stalls, banners and laundry in the wind,
-pigeons that burst up when someone runs at them, swifts over the roofs; the city beyond (its blocks, a cathedral's dome,
-towers, its walls and gate) and the Tuscan hills round it (fields, vineyards, olive groves, cypress avenues, stone
-pines, farms). Play it with `godot --path showcase res://rooftops/rooftops.tscn`; watch its demo with
+A Renaissance square at the golden hour, in the manner of Assassin's Creed's Florence: palazzi and houses round it and
+along the streets out of it, a bell tower 38 m high with a beam out over a hay cart, a fountain, market stalls, banners
+and laundry in the wind, its people (passers-by round the square, across it and in and out of its streets, groups
+talking, people on the palaces' stone benches, the stall keepers), pigeons that burst up when someone runs at them,
+swifts over the roofs; the city beyond (its blocks, a cathedral's dome, towers, its walls and gate) and the Tuscan
+hills round it (fields, vineyards, olive groves, cypress avenues, stone pines, farms). The buildings are climbed as in
+the game, from hold to hold: window sills and hoods, the ground floors' impost bands and the rustication's top, string
+courses, the bell tower's corbels and beams. Play it with `godot --path showcase res://rooftops/rooftops.tscn`; watch its demo with
 `godot --path showcase res://rooftops/rooftops.tscn -- --demo` (`--demo_from=<shot>`, `--demo_quit`; with
 `--write-movie <file> --fixed-fps 30` it is the showcase's video).
 
 | keys | |
 |---|---|
 | WASD or the left stick, the mouse or the right stick | run (camera-relative), look |
-| Shift (right shoulder) held | free-run: sprint, and climb any wall you run at (the buildings' faces are climbable) |
+| Shift (right shoulder) held | free-run: sprint; at a wall, a jump for its first hold; hanging, push on to climb (hand over hand to a hold within reach, a leap to one further up) |
+| W hanging (towards the wall) | climb to the hold above, hand over hand; at the top, over it |
 | Ctrl | walk |
-| Space (A) | jump; hanging or climbing, a jump along, up or round a corner (`hang_jump()`) |
+| Space (A) | jump; hanging, a leap along, up, down or round a corner to another hold (`hang_jump()`) |
 | C (B) | let go of a wall or a ledge; running, a roll |
 | E (Y) | at the bell tower's beam's end: perch (the camera swirls round, "synchronizing"); then Space: the leap of faith into the hay |
 | Esc, a click, F11 | free the mouse, take it again, full screen |
@@ -116,13 +120,18 @@ godot --headless --path showcase -s res://tools/build_rooftops.gd -- <dir>
 * `tools/blender/mannequin.py`, `mannequin_rig.py`, `mannequin_anims.py`: the mannequin (lofted shells, ball joints,
   hands with fingers) on a skeleton named as Godot's humanoid profile; its clips posed by forward kinematics and
   two-bone IK — locomotion cycles from a gait (the feet planted, the heels and toes rolling), the rest keyed.
-* `tools/build_rooftops.gd`: the Godot side — the models' meshes with the scene's materials (procedural shaders in
-  `rooftops/shaders`: plaster with its stains and fallen patches, masonry, roof tiles, wood and shutters, window glass
-  with rooms behind, hay, cloth, the ground's paving by zone, the country's patchwork), the ground, pavements and
-  kerbs, the landscape, its trees (instances made at the start: `scripts/rooftops_multimesh.gd`), the farms, the
-  cloth, the lamps, the birds, the dust, the light and the sky, the player (`rooftops/player.tscn`: the mannequin,
-  an `AnimationTree`, `FellowTraversal3D` with the clips) and the camera.
+* `tools/build_rooftops.gd`: the Godot side — the models' meshes with the scene's materials, the ground, pavements and
+  kerbs, the ring of houses round the square (copies of its houses), the landscape, its trees (instances made at the
+  start: `scripts/rooftops_multimesh.gd`), the farms, the cloth, the lamps, the people (`rooftops/npc.tscn`,
+  `scripts/rooftops_crowd.gd`), the birds, the dust, the light and the sky, the player (`rooftops/player.tscn`: the
+  mannequin, an `AnimationTree`, `FellowTraversal3D` with the clips: climbing from hold to hold — decision 0282) and
+  the camera.
+* The materials: photographs from [Poly Haven](https://polyhaven.com) (CC0) where they have been fetched —
+  `python tools/fetch_textures.py` downloads them (about 95 MB, 2k) into `rooftops/textures/` (not in git), the
+  editor imports them, then the builder uses them (`rooftops/shaders/facade_pbr.gdshader`: tinted plaster with its
+  weathering, stone, rustication, brick, roof tiles, wood, shutters, sampled twice against tiling;
+  `paving_pbr.gdshader`: the ground by zone); without them the procedural shaders (`plaster`, `masonry`, `paving`, …).
 * `scripts/rooftops_player.gd` (the controller), `rooftops_camera.gd` (the camera: damped springs, look-ahead,
   sprint pull-back, sphere-cast collision, the swirl and the leap's shots), `rooftops_demo.gd` (the demo's shots),
-  `rooftops_birds.gd`, `rooftops.gd` (the scene's sky).
+  `rooftops_birds.gd`, `rooftops_crowd.gd` (the people), `rooftops.gd` (the scene's sky).
 

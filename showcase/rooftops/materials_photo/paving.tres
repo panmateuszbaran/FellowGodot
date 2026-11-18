@@ -1,0 +1,44 @@
+[gd_resource type="ShaderMaterial" format=4]
+
+[ext_resource type="Shader" path="res://rooftops/shaders/paving_pbr.gdshader" id="1_obufs"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/cobblestone_floor_08_diff_2k.jpg" id="2_3quh1"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/cobblestone_floor_08_arm_2k.jpg" id="3_20l3i"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/cobblestone_floor_08_nor_gl_2k.jpg" id="4_mjv0k"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/patterned_cobblestone_diff_2k.jpg" id="5_m387q"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/patterned_cobblestone_arm_2k.jpg" id="6_oqvfa"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/patterned_cobblestone_nor_gl_2k.jpg" id="7_jb8kw"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/precast_stone_paving_diff_2k.jpg" id="8_oc30p"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/precast_stone_paving_arm_2k.jpg" id="9_33oo2"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/precast_stone_paving_nor_gl_2k.jpg" id="10_r6rfn"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/stone_floor_diff_2k.jpg" id="11_8yhcw"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/stone_floor_arm_2k.jpg" id="12_2qjdk"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/stone_floor_nor_gl_2k.jpg" id="13_2pjcx"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_obufs")
+shader_parameter/walls = PackedVector4Array(-9, -18, 7.1, 5.1, 2.5, -16.1, 3.22, 3.22, 12.2, -17, 4.3, 4.1, 22.5, -3, 5.6, 4.9, 21.5, 8, 4.6, 3.8, 6, 18, 5.6, 4.1, -9, 18.5, 5.1, 4.6)
+shader_parameter/wall_count = 7
+shader_parameter/square = null
+shader_parameter/fountain = Vector2(-3.5, 1)
+shader_parameter/pavement_width = 1.2
+shader_parameter/puddles = null
+shader_parameter/slabs_albedo = ExtResource("11_8yhcw")
+shader_parameter/slabs_normal = ExtResource("13_2pjcx")
+shader_parameter/slabs_arm = ExtResource("12_2qjdk")
+shader_parameter/slabs_size = 4.069999790191651
+shader_parameter/slabs_tint = Color(0.62, 0.59, 0.54, 1)
+shader_parameter/slabs_lum = 0.14057941883283992
+shader_parameter/slabs_tint_strength = 0.8
+shader_parameter/fan_albedo = ExtResource("5_m387q")
+shader_parameter/fan_normal = ExtResource("7_jb8kw")
+shader_parameter/fan_arm = ExtResource("6_oqvfa")
+shader_parameter/fan_size = 2.4999995
+shader_parameter/cob_albedo = ExtResource("2_3quh1")
+shader_parameter/cob_normal = ExtResource("4_mjv0k")
+shader_parameter/cob_arm = ExtResource("3_20l3i")
+shader_parameter/cob_size = 2.0
+shader_parameter/pave_albedo = ExtResource("8_oc30p")
+shader_parameter/pave_normal = ExtResource("10_r6rfn")
+shader_parameter/pave_arm = ExtResource("9_33oo2")
+shader_parameter/pave_size = 2.24

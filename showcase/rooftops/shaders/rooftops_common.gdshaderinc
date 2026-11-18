@@ -76,3 +76,32 @@ vec4 rt_blocks(vec2 uv, vec2 size, float offset, out vec2 id) {
 	float dy = min(f.y, 1.0 - f.y) * size.y;
 	return vec4(f, min(dx, dy), rt_hash12(id + vec2(row * 0.37, 3.0)));
 }
+
+// A tangent frame from the screen-space derivatives of the position and the UVs (Schüler, "Normal mapping without
+// precomputed tangents"): normal maps on meshes that carry none.
+mat3 rt_cotangent_frame(vec3 n, vec3 p, vec2 uv) {
+	vec3 dp1 = dFdx(p);
+	vec3 dp2 = dFdy(p);
+	vec2 duv1 = dFdx(uv);
+	vec2 duv2 = dFdy(uv);
+	vec3 dp2perp = cross(dp2, n);
+	vec3 dp1perp = cross(n, dp1);
+	vec3 t = dp2perp * duv1.x + dp1perp * duv2.x;
+	vec3 b = dp2perp * duv1.y + dp1perp * duv2.y;
+	float invmax = inversesqrt(max(max(dot(t, t), dot(b, b)), 1e-20));
+	return mat3(t * invmax, b * invmax, n);
+}
+
+// An OpenGL normal map's texel (0..1) to a normal in the frame (the UVs' v running down, as Godot's do).
+vec3 rt_normal_from_map(mat3 tbn, vec3 texel, float strength) {
+	vec3 t = texel * 2.0 - 1.0;
+	t.y = -t.y;
+	t.xy *= strength;
+	return normalize(tbn * normalize(vec3(t.xy, max(t.z, 0.05))));
+}
+
+vec2 rt_rotate(vec2 v, float a) {
+	float c = cos(a);
+	float s = sin(a);
+	return vec2(c * v.x - s * v.y, s * v.x + c * v.y);
+}

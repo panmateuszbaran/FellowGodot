@@ -231,48 +231,143 @@ def clip_roll():
 
 # Hanging and climbing: the wall's face 0.33 m in front of the root (the capsule off it), the hands on its edge.
 WALL = -0.33
+# Hanging braced (FellowTraversal3D's hang_brace_height): the feet against the wall this high over the root, the balls
+# of the feet on it (the ankle 0.12 m out), the knees bent towards it.
+BRACE = 0.65
+BRACE_Y = WALL + 0.12
+
+
+def _hands(zl=2.0, zr=2.0, xl=0.23, xr=-0.23, yl=WALL + 0.02, yr=WALL + 0.02):
+	return {"arm_L": {"ik": ((xl, yl, zl), (1.0, 0.4, -0.6))}, "arm_R": {"ik": ((xr, yr, zr), (-1.0, 0.4, -0.6))}}
+
+
+def _feet(zl=BRACE, zr=BRACE, xl=0.11, xr=-0.11, yl=BRACE_Y, yr=BRACE_Y):
+	return {"leg_L": {"ik": ((xl, yl, zl), (0.35, -1.0, 0.35))}, "leg_R": {"ik": ((xr, yr, zr), (-0.35, -1.0, 0.35))}}
 
 
 def hang_base(**kw):
+	"""Hanging braced: the arms up to the edge, the hips back off the wall, the knees bent and the feet on the wall."""
 	p = stand()
 	p.update({
-		"hips": (0, 0.03, -0.03),
-		"hips_rot": (-4.0, 0, 0),
-		"spine": (-4.0, 0, 0),
-		"neck": (-6.0, 0),
-		"head": (-14.0, 0, 0),
+		"hips": (0, 0.1, -0.05),
+		"hips_rot": (8.0, 0, 0),
+		"spine": (-10.0, 0, 0),
+		"neck": (-8.0, 0),
+		"head": (-16.0, 0, 0),
 		"shoulder_L": (18.0, 4.0),
 		"shoulder_R": (18.0, 4.0),
-		"arm_L": {"ik": ((0.23, WALL + 0.02, 2.0), (1.0, 0.4, -0.6))},
-		"arm_R": {"ik": ((-0.23, WALL + 0.02, 2.0), (-1.0, 0.4, -0.6))},
 		"hand_L": (30.0, 0, 0),
 		"hand_R": (30.0, 0, 0),
 		"grip_L": 0.85,
 		"grip_R": 0.85,
-		"leg_L": {"ik": ((0.08, -0.06, 0.14), (0.2, -1, 0))},
-		"leg_R": {"ik": ((-0.09, -0.02, 0.18), (-0.2, -1, 0))},
-		"foot_L": (-35.0, 6.0, 0),
-		"foot_R": (-30.0, 6.0, 0),
+		"foot_L": (8.0, 6.0, 0),
+		"foot_R": (8.0, 6.0, 0),
+		"toes_L": 25.0,
+		"toes_R": 25.0,
 	})
+	p.update(_hands())
+	p.update(_feet())
 	p.update(kw)
 	return p
 
 
 def clip_hang_idle():
 	a = hang_base()
-	b = hang_base(hips=(0.01, 0.06, -0.035), hips_rot=(-7.0, 2.0, 0), spine=(-6.0, -2.0, 0),
-			leg_L={"ik": ((0.07, 0.0, 0.15), (0.2, -1, 0))}, leg_R={"ik": ((-0.08, 0.03, 0.2), (-0.2, -1, 0))}, head=(-18.0, 5.0, 0))
+	b = hang_base(hips=(0.012, 0.12, -0.06), hips_rot=(10.0, 2.0, 0), spine=(-12.0, -2.0, 0), head=(-20.0, 6.0, 0),
+			**_feet(zl=BRACE - 0.02, zr=BRACE + 0.02))
 	keys = [(0.0, a), (1.3, b), (2.6, a)]
 	return 2.6, True, lambda t: keyed(keys, t, loop=True, length=2.6)
 
 
 def clip_hang_shimmy():
-	a = hang_base(hips=(0.05, 0.03, -0.04), hips_rot=(-4.0, 0, -6.0), leg_L={"ik": ((0.14, -0.04, 0.16), (0.3, -1, 0))},
-			leg_R={"ik": ((-0.03, -0.02, 0.13), (-0.2, -1, 0))}, spine=(-4.0, 0, 4.0))
-	b = hang_base(hips=(-0.05, 0.03, -0.04), hips_rot=(-4.0, 0, 6.0), leg_L={"ik": ((0.03, -0.02, 0.13), (0.2, -1, 0))},
-			leg_R={"ik": ((-0.14, -0.04, 0.16), (-0.3, -1, 0))}, spine=(-4.0, 0, -4.0))
+	# The hips swaying under the hands, the feet stepping along the wall in turn.
+	a = hang_base(hips=(0.05, 0.1, -0.06), hips_rot=(8.0, 0, -6.0), spine=(-10.0, 0, 4.0),
+			**_feet(xl=0.17, xr=-0.05, zl=BRACE + 0.04, zr=BRACE))
+	b = hang_base(hips=(-0.05, 0.1, -0.06), hips_rot=(8.0, 0, 6.0), spine=(-10.0, 0, -4.0),
+			**_feet(xl=0.05, xr=-0.17, zl=BRACE, zr=BRACE + 0.04))
 	keys = [(0.0, a), (0.45, b), (0.9, a)]
 	return 0.9, True, lambda t: keyed(keys, t, loop=True, length=0.9)
+
+
+def clip_hang_reach(lead):
+	"""Up to the ledge above hand over hand (0.75 s, FellowTraversal3D's TRANSFER_REACH_UP; its hands and feet are put on
+	the stone by the pose's IK): the leading hand reaching up, the body stretching and turning towards it, then pulled
+	up, the knees driving up the wall, the other hand following; the head looking up at the hold. lead: "L" or "R"."""
+	s = 1.0 if lead == "L" else -1.0
+	R = 1.15  # the ledge's height over the old one (the IK puts the hands where it really is)
+	base = hang_base()
+
+	def side(xl, xr, zl, zr):
+		# The hands' places with the leading one first (mirrored for the right).
+		return _hands(zl=zl, zr=zr, xl=xl, xr=xr) if s > 0 else _hands(zl=zr, zr=zl, xl=-xr, xr=-xl)
+
+	def feet(z_lead, z_other):
+		# The feet's heights: the leading hand's side's foot, the other's (the other steps first).
+		return _feet(zl=z_lead, zr=z_other) if s > 0 else _feet(zl=z_other, zr=z_lead)
+
+	keys = [
+		(0.0, base),
+		(0.18, hang_base(hips=(-0.04 * s, 0.12, -0.12), hips_rot=(6.0, -6.0 * s, 4.0 * s), spine=(-16.0, 10.0 * s, -6.0 * s),
+				neck=(-12.0, 6.0 * s), head=(-28.0, 8.0 * s, 0), **side(0.2, -0.23, 2.0 + R * 0.7, 2.0),
+				**feet(BRACE - 0.05, BRACE - 0.05))),
+		(0.34, hang_base(hips=(-0.03 * s, 0.1, -0.16), hips_rot=(4.0, -4.0 * s, 3.0 * s), spine=(-14.0, 8.0 * s, -4.0 * s),
+				neck=(-10.0, 4.0 * s), head=(-24.0, 6.0 * s, 0), **side(0.24, -0.23, 2.0 + R, 2.0),
+				**feet(BRACE, BRACE + 0.25))),
+		(0.5, hang_base(hips=(0.02 * s, 0.04, 0.02), hips_rot=(12.0, 3.0 * s, -2.0 * s), spine=(-2.0, -4.0 * s, 2.0 * s),
+				neck=(-6.0, -2.0 * s), head=(-18.0, -6.0 * s, 0), **side(0.24, -0.18, 2.0 + R * 0.55, 2.0 + R * 0.25),
+				**feet(BRACE + 0.3, BRACE + 0.15))),
+		(0.64, hang_base(hips=(0.01 * s, 0.07, -0.02), hips_rot=(9.0, 1.0 * s, 0), spine=(-8.0, -2.0 * s, 0),
+				head=(-16.0, -2.0 * s, 0), **side(0.23, -0.23, 2.04, 2.08), **feet(BRACE + 0.06, BRACE + 0.1))),
+		(0.75, base),
+	]
+	return 0.75, False, lambda t: keyed(keys, t)
+
+
+def clip_hang_leap_up():
+	"""The leap up to a ledge too far to reach (0.45 s, TRANSFER_JUMP_UP): crouched on the wall, the legs driving the
+	body up off it, the arms thrown up overhead and catching the edge, the legs swinging in under the body and braced
+	again."""
+	base = hang_base()
+	keys = [
+		(0.0, base),
+		(0.08, hang_base(hips=(0, 0.04, -0.2), hips_rot=(14.0, 0, 0), spine=(-4.0, 0, 0), head=(-24.0, 0, 0),
+				**_hands(zl=1.92, zr=1.92), **_feet(zl=BRACE + 0.12, zr=BRACE + 0.12, yl=BRACE_Y + 0.02, yr=BRACE_Y + 0.02))),
+		(0.2, hang_base(hips=(0, 0.06, 0.04), hips_rot=(-6.0, 0, 0), spine=(-14.0, 0, 0), neck=(-12.0, 0), head=(-30.0, 0, 0),
+				**_hands(zl=2.32, zr=2.32, xl=0.2, xr=-0.2, yl=WALL + 0.08, yr=WALL + 0.08),
+				**_feet(zl=0.12, zr=0.22, xl=0.09, xr=-0.1, yl=0.06, yr=0.12),
+				foot_L=(-40.0, 6.0, 0), foot_R=(-35.0, 6.0, 0), toes_L=10.0, toes_R=10.0)),
+		(0.32, hang_base(hips=(0, 0.16, -0.06), hips_rot=(4.0, 0, 0), spine=(-8.0, 0, 0), head=(-18.0, 0, 0),
+				**_feet(zl=0.42, zr=0.36, yl=WALL + 0.2, yr=WALL + 0.24))),
+		(0.45, base),
+	]
+	return 0.45, False, lambda t: keyed(keys, t)
+
+
+def clip_hang_leap_side(lead):
+	"""A leap along the wall to the next ledge (0.5 s, TRANSFER_JUMP_ALONG, DIAGONAL, CORNER): the body swung away from
+	the side it goes to, then flung across, the leading arm reaching out for the ledge, the legs trailing, caught and
+	braced again. lead: "L" (to the body's left) or "R"."""
+	s = 1.0 if lead == "L" else -1.0
+	base = hang_base()
+
+	def hands(xl, xr, zl, zr):
+		return _hands(zl=zl, zr=zr, xl=xl, xr=xr) if s > 0 else _hands(zl=zr, zr=zl, xl=-xr, xr=-xl)
+
+	def feet(xl, xr, zl, zr, yl=BRACE_Y, yr=BRACE_Y):
+		return _feet(zl=zl, zr=zr, xl=xl, xr=xr, yl=yl, yr=yr) if s > 0 else _feet(zl=zr, zr=zl, xl=-xr, xr=-xl, yl=yr, yr=yl)
+
+	keys = [
+		(0.0, base),
+		(0.1, hang_base(hips=(-0.1 * s, 0.08, -0.12), hips_rot=(10.0, -6.0 * s, -10.0 * s), spine=(-8.0, -8.0 * s, 6.0 * s),
+				head=(-14.0, 18.0 * s, 0), **hands(0.2, -0.26, 1.96, 1.98), **feet(0.02, -0.24, BRACE + 0.08, BRACE))),
+		(0.25, hang_base(hips=(0.08 * s, 0.1, 0.02), hips_rot=(0.0, 8.0 * s, 12.0 * s), spine=(-12.0, 10.0 * s, -10.0 * s),
+				neck=(-8.0, 10.0 * s), head=(-16.0, 20.0 * s, 0), **hands(0.62, 0.0, 2.08, 1.9),
+				**feet(0.0, -0.3, 0.3, 0.12, yl=0.0, yr=0.08), foot_L=(-30.0, 6.0, 0), foot_R=(-30.0, 6.0, 0))),
+		(0.4, hang_base(hips=(0.06 * s, 0.14, -0.06), hips_rot=(6.0, 4.0 * s, 6.0 * s), spine=(-10.0, 4.0 * s, -4.0 * s),
+				head=(-16.0, 8.0 * s, 0), **feet(0.2, -0.04, 0.4, 0.34, yl=WALL + 0.2, yr=WALL + 0.24))),
+		(0.5, base),
+	]
+	return 0.5, False, lambda t: keyed(keys, t)
 
 
 def climb_base(**kw):
@@ -511,6 +606,42 @@ def clip_perch():
 	return 3.6, True, lambda t: keyed(keys, t, loop=True, length=3.6)
 
 
+def clip_sit():
+	"""Sitting on a bench (its top 0.47 m over the feet's ground): the hips on it, the thighs forward, the hands on the
+	knees; breathing, the head turning to look about (the square's passers-by: rooftops_crowd.gd)."""
+	base = stand(hips=(0, 0.16, -0.44), hips_rot=(-4.0, 0, 0), spine=(10.0, 0, 0), neck=(-2.0, 0), head=(-4.0, 0, 0),
+			leg_L={"ik": ((0.13, -0.36, ANKLE), (0.3, -1.0, 0.4))}, leg_R={"ik": ((-0.12, -0.33, ANKLE), (-0.3, -1.0, 0.4))},
+			foot_L=(0.0, 8.0, 0), foot_R=(0.0, 8.0, 0),
+			arm_L={"ik": ((0.17, -0.3, 0.6), (1.0, 0.6, -0.3))}, arm_R={"ik": ((-0.17, -0.28, 0.6), (-1.0, 0.6, -0.3))},
+			hand_L=(-10.0, 0, 0), hand_R=(-10.0, 0, 0), grip_L=0.4, grip_R=0.4)
+	keys = [
+		(0.0, base),
+		(2.0, {"spine": (11.5, 4.0, 0), "neck": (-3.0, 12.0), "head": (-5.0, 16.0, 1.0)}),
+		(4.5, {"spine": (9.0, -3.0, 0), "neck": (-1.0, -10.0), "head": (-3.0, -14.0, -1.0)}),
+		(6.0, base),
+	]
+	return 6.0, True, lambda t: keyed(keys, t, loop=True, length=6.0)
+
+
+def clip_talk():
+	"""Standing talking with someone: the weight shifting from foot to foot, one hand then the other gesturing, the head
+	nodding (the square's groups: rooftops_crowd.gd)."""
+	base = stand(hips=(0.02, 0, -0.014), hips_rot=(0, 0, -2.0))
+	keys = [
+		(0.0, base),
+		(0.9, {"arm_R": {"fk": (55.0, 45.0, 75.0, 30.0)}, "hand_R": (-20.0, 0, 0), "grip_R": 0.15, "head": (-4.0, 6.0, 2.0),
+				"spine": (3.0, 4.0, 0)}),
+		(1.6, {"arm_R": {"fk": (62.0, 38.0, 70.0, 20.0)}, "head": (2.0, 4.0, 0.0)}),
+		(2.4, {"arm_R": {"fk": (78.0, 3.0, 14.0, 6.0)}, "hand_R": (8.0, 0, 0), "grip_R": 0.3, "head": (-2.0, 0, 0)}),
+		(3.4, {"hips": (-0.02, 0, -0.014), "hips_rot": (0, 0, 2.0), "arm_L": {"fk": (58.0, 40.0, 72.0, 30.0)}, "hand_L": (-20.0, 0, 0),
+				"grip_L": 0.15, "head": (-3.0, -6.0, -2.0), "spine": (3.0, -4.0, 0)}),
+		(4.2, {"arm_L": {"fk": (65.0, 30.0, 65.0, 20.0)}, "head": (3.0, -3.0, 0)}),
+		(5.0, {"arm_L": {"fk": (78.0, 3.0, 14.0, 6.0)}, "hand_L": (8.0, 0, 0), "grip_L": 0.3}),
+		(6.0, base),
+	]
+	return 6.0, True, lambda t: keyed(keys, t, loop=True, length=6.0)
+
+
 def clips():
 	out = {}
 	for name in ("walk", "run", "sprint"):
@@ -523,6 +654,11 @@ def clips():
 	out["roll"] = clip_roll()
 	out["hang_idle"] = clip_hang_idle()
 	out["hang_shimmy"] = clip_hang_shimmy()
+	out["hang_reach_l"] = clip_hang_reach("L")
+	out["hang_reach_r"] = clip_hang_reach("R")
+	out["hang_leap_up"] = clip_hang_leap_up()
+	out["hang_leap_l"] = clip_hang_leap_side("L")
+	out["hang_leap_r"] = clip_hang_leap_side("R")
 	out["climb_idle"] = clip_climb_idle()
 	out["climb_move"] = clip_climb_move()
 	out["climb_jump"] = clip_climb_jump()
@@ -533,6 +669,8 @@ def clips():
 	out["dive_start"] = clip_dive_start()
 	out["hay_exit"] = clip_hay_exit()
 	out["perch"] = clip_perch()
+	out["sit"] = clip_sit()
+	out["talk"] = clip_talk()
 	return out
 
 

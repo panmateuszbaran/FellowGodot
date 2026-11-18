@@ -1,16 +1,27 @@
 extends CharacterBody3D
 ## The rooftops' character: the mannequin (made in Blender: tools/blender/build_mannequin.py) moved by this controller
-## and by FellowTraversal3D — running, sprinting, jumping and rolling on the ground; mantling, vaulting, hanging,
-## shimmying and climbing walls (the traversal moves the body, FellowTraversalPose3D puts the hands and the feet on the
-## stone over the clips); perching on the bell tower's beam, the leap of faith and the way out of the hay.
+## and by FellowTraversal3D — running, sprinting, jumping and rolling on the ground; mantling, vaulting; climbing the
+## buildings from hold to hold as in Assassin's Creed (sills, hoods, string courses, corbels and beams: hanging braced
+## on the wall, shimmying along a ledge, reaching up hand over hand to the next, leaping to one further up or along —
+## the traversal moves the body, FellowTraversalPose3D puts the hands and the feet on the stone over the clips);
+## perching on the bell tower's beam, the leap of faith and the way out of the hay.
 ##
-## Its wishes come from the player (WASD or a stick, Shift to free-run and climb, Space to jump, C to drop or roll, E to
-## perch at a viewpoint) or from a script setting `wish`, `want_sprint`, `want_jump` and `want_drop` itself
-## (`autopilot`: the showcase's demo).
+## Its wishes come from the player (WASD or a stick, Shift to free-run — at a wall it jumps for the first hold, and
+## hanging it climbs on, leaping where a hold is out of reach —, Space to jump, C to drop or roll, E to perch at a
+## viewpoint) or from a script setting `wish`, `want_sprint`, `want_jump` and `want_drop` itself (`autopilot`: the
+## showcase's demo).
 
 enum Mode { GROUND, AIR, TRAVERSE, PERCH, DIVE, HAY, ROLL }
 
-const ONE_SHOTS := {"jump": 0.34, "land": 0.45, "roll": 0.8, "climb_jump": 0.5, "dive_start": 0.55, "hay_exit": 2.2}
+const ONE_SHOTS := {"jump": 0.34, "land": 0.45, "roll": 0.8, "climb_jump": 0.5, "dive_start": 0.55, "hay_exit": 2.2,
+		"hang_reach_l": 0.75, "hang_reach_r": 0.75, "hang_leap_up": 0.45, "hang_leap_l": 0.5, "hang_leap_r": 0.5}
+# FellowTraversal3D's Transfer values.
+const TRANSFER_JUMP_ALONG := 2
+const TRANSFER_JUMP_UP := 3
+const TRANSFER_JUMP_DIAGONAL := 6
+const TRANSFER_JUMP_BACK := 7
+const TRANSFER_JUMP_CORNER := 8
+const TRANSFER_REACH_UP := 9
 
 @export var walk_speed := 1.6
 @export var run_speed := 4.4
@@ -58,6 +69,19 @@ func _ready() -> void:
 	_set_state("loco")
 	_last_pos = global_position
 	traversal.connect("climb_jumped", func(_d): _play("climb_jump"))
+	traversal.connect("hang_transfer_started", _on_transfer)
+
+
+## A move from hold to hold: its clip (the hands and feet are put on the stone by the pose's IK over it).
+func _on_transfer(_ledge: Dictionary, how: int, _duration: float, lead: int) -> void:
+	var side := "l" if lead == 0 else "r"
+	match how:
+		TRANSFER_REACH_UP:
+			_play("hang_reach_" + side)
+		TRANSFER_JUMP_UP:
+			_play("hang_leap_up")
+		TRANSFER_JUMP_ALONG, TRANSFER_JUMP_DIAGONAL, TRANSFER_JUMP_CORNER, TRANSFER_JUMP_BACK:
+			_play("hang_leap_" + side)
 
 
 static func _ensure_actions() -> void:
@@ -109,8 +133,8 @@ func _physics_process(delta: float) -> void:
 		speed_goal = sprint_speed
 	elif want_walk:
 		speed_goal = walk_speed
-	# Free-running (the sprint held) climbs walls; plain running only mantles and vaults.
-	traversal.set("free_climb", want_sprint or busy)
+	# Climbing is from hold to hold (no free climbing of bare walls).
+	traversal.set("free_climb", false)
 	traversal.set_intent(wish * speed_goal)
 	match mode:
 		Mode.DIVE:
@@ -160,6 +184,9 @@ func _move(delta: float, speed_goal: float) -> void:
 	if want_perch and on_floor and _at_viewpoint():
 		_start_perch()
 		return
+	# Free-running at a wall: a jump for the first hold (caught in the air by the traversal's grab).
+	if want_sprint and on_floor and _one_shot <= 0.0 and mode == Mode.GROUND and _wall_ahead(1.1):
+		want_jump = true
 	if want_jump and on_floor and _one_shot <= 0.0:
 		velocity.y = jump_velocity
 		mode = Mode.AIR
@@ -204,13 +231,16 @@ func _traverse(_delta: float) -> void:
 	facing = rotation.y
 	velocity = Vector3()
 	if traversal.is_hanging() or traversal.is_transferring():
-		if want_jump:
+		# Free-running on: pushing on leaps to a hold out of reach (the traversal reaches to a near one by itself).
+		var at_wall := wish.length() > 0.5
+		if want_jump or (want_sprint and at_wall and not traversal.is_transferring()):
 			traversal.hang_jump()
 		elif want_drop:
 			traversal.release()
 		var along := absf(wish.dot(global_basis.x))
 		tree.set("parameters/hang/blend_position", clampf(along * 1.5, 0.0, 1.0))
-		_set_state("hang")
+		if _one_shot <= 0.0:
+			_set_state("hang")
 	elif traversal.is_climbing():
 		if want_jump and _one_shot <= 0.0:
 			traversal.hang_jump()
@@ -227,6 +257,17 @@ func _traverse(_delta: float) -> void:
 		tree.set("parameters/loco/blend_position", 0.0)
 		_set_state("loco")
 	_air_top = global_position.y
+
+
+## A wall in front of the chest within p_distance (the way the body faces and wishes to go).
+func _wall_ahead(p_distance: float) -> bool:
+	if wish.length() < 0.5:
+		return false
+	var d := Vector3(wish.x, 0.0, wish.z).normalized()
+	var from := global_position + Vector3.UP * 1.3
+	var q := PhysicsRayQueryParameters3D.create(from, from + d * (p_distance + 0.35), collision_mask, [get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	return not hit.is_empty() and absf((hit.normal as Vector3).y) < 0.3 and (hit.normal as Vector3).dot(-d) > 0.7
 
 
 # ------------------------------------------------------------------ the viewpoint, the leap, the hay
@@ -339,6 +380,13 @@ func _hay(_delta: float) -> void:
 	# The clip's root motion carries the body out of the cart and down beside it.
 	var m: Vector3 = tree.get_root_motion_position()
 	global_position += global_basis * (Basis(Vector3.UP, PI) * m)
+	# Never below the street: the clip ends on the ground, wherever the cart stands.
+	var space := get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.35, global_position + Vector3.DOWN * 0.4,
+			collision_mask, [get_rid()])
+	var hit := space.intersect_ray(q)
+	if hit and (hit.normal as Vector3).y > 0.7 and global_position.y < (hit.position as Vector3).y:
+		global_position.y = (hit.position as Vector3).y
 	if _one_shot <= 0.0:
 		mode = Mode.GROUND
 		velocity = Vector3()

@@ -29,6 +29,16 @@ const PLACES := {
 
 const BUILDINGS := ["PalazzoOcra", "Campanile", "CasaCrema", "PalazzoSiena", "CasaBianca", "CasaOcraBassa", "CasaRosa"]
 
+## The ring of houses round the square (copies of its houses, their meshes shared): closing its west side, lining the
+## streets out of it before the city's blocks (the Skyline model leaves this ring empty). [model, position, degrees]
+const NEAR := [
+	["CasaBianca", Vector2(-23.6, -9.5), 90.0], ["CasaCrema", Vector2(-23.1, 10.2), 90.0],
+	["CasaOcraBassa", Vector2(-36.0, 2.0), 90.0],
+	["CasaBianca", Vector2(-8.6, 28.0), 90.0], ["CasaCrema", Vector2(4.7, 27.6), -90.0],
+	["CasaRosa", Vector2(33.5, -2.7), 0.0], ["CasaOcraBassa", Vector2(33.6, 8.4), 180.0],
+	["CasaBianca", Vector2(1.1, -27.0), 90.0], ["CasaOcraBassa", Vector2(12.0, -28.0), -90.0],
+]
+
 ## The buildings' footprints (their width and depth on the ground, the rusticated ground floor's 0.1 m included), as
 ## tools/blender/build_rooftops_models.py makes them.
 const FOOTPRINTS := {
@@ -157,6 +167,101 @@ func _make_materials() -> void:
 	mats["bronze"] = bronze
 	for n in mats:
 		_save(mats[n], "%s/materials/%s.tres" % [OUT, n])
+	_photo_materials(plaster)
+	# The photographic versions beside them (rooftops/materials_photo; their textures are not in the repository): the
+	# scene puts them in place of the procedural ones when the textures are there (scripts/rooftops.gd).
+	DirAccess.make_dir_recursive_absolute(OUT + "/materials_photo")
+	for n in photo:
+		var path := "%s/materials_photo/%s.tres" % [OUT, n]
+		_save(photo[n], path)
+		# Their textures by path only (each machine imports them with its own uids).
+		var text := FileAccess.get_file_as_string(path)
+		var rx := RegEx.create_from_string(' uid="uid://[a-z0-9]+"( path="res://rooftops/textures/)')
+		var out := FileAccess.open(path, FileAccess.WRITE)
+		out.store_string(rx.sub(text, "$1", true))
+		out.close()
+
+
+var _tex := {}
+var photo := {} # the photographic materials by the name of the procedural one each replaces
+
+
+## A photographic texture set (tools/fetch_textures.py) by its role: [colour, normal, ARM, its size in metres, its
+## colour's mean linear luminance].
+func _texset(p_role: String) -> Array:
+	var info: Dictionary = _tex[p_role]
+	var dir := OUT + "/textures/"
+	var maps: Dictionary = info["maps"]
+	var dims: Array = info["dimensions_mm"] if info["dimensions_mm"] else [2000, 2000]
+	var lum := 0.25
+	var img := Image.load_from_file(ProjectSettings.globalize_path(dir + maps["diff"]))
+	if img:
+		img.resize(16, 16, Image.INTERPOLATE_BILINEAR)
+		var sum := 0.0
+		for y in 16:
+			for x in 16:
+				var c := img.get_pixel(x, y).srgb_to_linear()
+				sum += c.r * 0.3 + c.g * 0.55 + c.b * 0.15
+		lum = sum / 256.0
+	return [load(dir + maps["diff"]), load(dir + maps["nor_gl"]), load(dir + maps["arm"]), float(dims[0]) / 1000.0, lum]
+
+
+func _photo(p_role: String, p_params: Dictionary) -> ShaderMaterial:
+	var t := _texset(p_role)
+	var params := {"albedo_tex": t[0], "normal_tex": t[1], "arm_tex": t[2], "tex_size": t[3], "tex_lum": t[4]}
+	params.merge(p_params, true)
+	return _shader_mat("facade_pbr", params)
+
+
+## The buildings' and the ground's materials from Poly Haven's photographs (CC0) where they have been fetched
+## (tools/fetch_textures.py, then imported by the editor), each by the name of the procedural one it replaces; the far
+## city keeps its procedural ones.
+func _photo_materials(p_plaster: Dictionary) -> void:
+	var f := FileAccess.open(OUT + "/textures/textures.json", FileAccess.READ)
+	if f == null or not ResourceLoader.exists(OUT + "/textures/" + "plastered_wall_diff_2k.jpg"):
+		print("rooftops: no photographic textures (tools/fetch_textures.py): the procedural materials")
+		return
+	_tex = JSON.parse_string(f.get_as_text())
+	var brick := _texset("brick")
+	for n in p_plaster:
+		photo[n] = _photo("plaster_smooth", {"tint": p_plaster[n][0], "tint_strength": 0.9, "brightness": 1.0, "seed": p_plaster[n][2],
+				"fallen": p_plaster[n][1], "patch_albedo": brick[0], "patch_normal": brick[1], "patch_size": brick[3],
+				"specular": 0.22, "roughness_bias": 0.08, "stains": 0.45, "variation": 0.12})
+	# Laid textures (blocks, bricks, tiles, boards) are not turned for the anti-tiling: their courses must stay level.
+	photo["stone"] = _photo("stone", {"tint": Color(0.8, 0.76, 0.66), "tint_strength": 0.45, "specular": 0.25, "stains": 0.3,
+			"anti_tile": false, "seed": 1.0})
+	photo["water_stone"] = _photo("stone", {"tint": Color(0.82, 0.8, 0.74), "tint_strength": 0.6, "specular": 0.25, "stains": 0.5,
+			"anti_tile": false, "seed": 2.0})
+	# The ground floors' rustication: the sandstone's blocks, larger and rougher, greyer than the dressings.
+	photo["stone_rustic"] = _photo("stone", {"tint": Color(0.76, 0.71, 0.62), "tint_strength": 0.5, "specular": 0.22,
+			"stains": 0.4, "ground_dirt": 0.9, "normal_strength": 2.2, "tex_size": 4.2, "variation": 0.16, "anti_tile": false,
+			"seed": 3.0})
+	photo["kerb"] = _photo("stone", {"tint": Color(0.62, 0.62, 0.6), "tint_strength": 0.7, "specular": 0.25, "anti_tile": false, "seed": 4.0})
+	photo["brick"] = _photo("brick", {"tint": Color(0.56, 0.38, 0.3), "tint_strength": 0.5, "normal_strength": 0.75, "specular": 0.2,
+			"stains": 0.3, "variation": 0.1, "anti_tile": false, "seed": 5.0})
+	photo["roof"] = _photo("roof", {"specular": 0.22, "roughness_bias": 0.05, "stains": 0.25, "variation": 0.15, "ground_dirt": 0.0,
+			"anti_tile": false, "seed": 6.0})
+	photo["wood"] = _photo("wood", {"specular": 0.2, "stains": 0.0, "ground_dirt": 0.3, "anti_tile": false, "seed": 7.0})
+	photo["wood_dark"] = _photo("wood_dark", {"specular": 0.2, "brightness": 0.6, "stains": 0.0, "ground_dirt": 0.3, "anti_tile": false,
+			"seed": 8.0})
+	photo["shutter_green"] = _photo("shutter_green", {"specular": 0.25, "stains": 0.0, "anti_tile": false, "seed": 9.0})
+	photo["shutter_brown"] = _photo("shutter_painted", {"tint": Color(0.42, 0.22, 0.12), "tint_strength": 0.8, "specular": 0.25,
+			"stains": 0.0, "anti_tile": false, "seed": 10.0})
+	photo["ground_stone"] = _photo("square_slabs", {"specular": 0.25, "stains": 0.0, "ground_dirt": 0.0, "seed": 11.0})
+	var walls := PackedVector4Array()
+	for n in FOOTPRINTS:
+		walls.append(_footprint(n))
+	var sl := _texset("square_slabs")
+	var fan := _texset("street_fan")
+	var cob := _texset("cobbles")
+	var pav := _texset("pavement")
+	photo["paving"] = _shader_mat("paving_pbr", {"walls": walls, "wall_count": walls.size(), "pavement_width": PAVEMENT,
+			"fountain": PLACES["Fountain"][0], "slabs_albedo": sl[0], "slabs_normal": sl[1], "slabs_arm": sl[2], "slabs_size": sl[3] * 2.2,
+			"slabs_lum": sl[4], "slabs_tint": Color(0.62, 0.59, 0.54), "slabs_tint_strength": 0.8,
+			"fan_albedo": fan[0], "fan_normal": fan[1], "fan_arm": fan[2], "fan_size": fan[3],
+			"cob_albedo": cob[0], "cob_normal": cob[1], "cob_arm": cob[2], "cob_size": cob[3],
+			"pave_albedo": pav[0], "pave_normal": pav[1], "pave_arm": pav[2], "pave_size": pav[3]})
+	print("rooftops: photographic materials (Poly Haven, CC0)")
 
 
 # ------------------------------------------------------------------ models
@@ -324,6 +429,11 @@ func _build_scene() -> void:
 	for n in BUILDINGS:
 		if models.has(n):
 			_model(town, n, _place(n))
+	for i in NEAR.size():
+		var near: Array = NEAR[i]
+		if models.has(near[0]):
+			var p: Vector2 = near[1]
+			_model(town, near[0], Transform3D(Basis(Vector3.UP, deg_to_rad(near[2])), Vector3(p.x, 0.0, p.y))).name = "Near%d%s" % [i, near[0]]
 	for n in ["Fountain", "StallA", "StallB"]:
 		if models.has(n):
 			_model(town, n, _place(n), LAYER_WORLD)
@@ -356,11 +466,17 @@ func _build_scene() -> void:
 		var vp := Marker3D.new()
 		vp.transform = _viewpoint_xform()
 		_add(root, vp, "Viewpoint")
+		# The foot of the climb up the bell tower's front (its holds), facing the wall: the demo's run ends here.
+		var foot := Marker3D.new()
+		var e: Transform3D = _place("Campanile") * (models["Campanile"]["empties"].get("Campanile_climb", Transform3D()) as Transform3D)
+		foot.transform = Transform3D(Basis.looking_at(-(_place("Campanile").basis * Vector3(0.0, 0.0, 1.0)), Vector3.UP), Vector3(e.origin.x, 0.0, e.origin.z))
+		_add(root, foot, "ClimbStart")
 	if models.has("Mannequin"):
 		var player: Node3D = _build_player().instantiate()
 		player.position = Vector3(-6.0, 0.05, 8.0)
 		player.set("viewpoint_path", NodePath("../Viewpoint"))
 		_add(root, player, "Player")
+		_crowd(root)
 		var rig := Node3D.new()
 		rig.set_script(load("res://scripts/rooftops_camera.gd"))
 		_add(root, rig, "CameraRig")
@@ -402,14 +518,19 @@ func _environment(p_root: Node3D) -> void:
 	env.ssao_radius = 1.0
 	env.ssao_intensity = 1.8
 	env.ssao_detail = 0.6
-	# Screen-space reflections: the puddles, the windows.
-	env.ssr_enabled = true
-	env.ssr_max_steps = 56
-	env.ssr_fade_in = 0.1
-	env.ssr_fade_out = 2.0
+	# No screen-space reflections: on rough stone and old glass they read as a sheen on everything; the puddles and
+	# windows reflect the sky's radiance.
+	env.ssr_enabled = false
 	env.ssil_enabled = true
 	env.ssil_radius = 4.0
 	env.ssil_intensity = 1.2
+	# The light bounced off the sunlit fronts into the shade (the square's other side, the streets): SDFGI.
+	env.sdfgi_enabled = true
+	env.sdfgi_use_occlusion = true
+	env.sdfgi_cascades = 4
+	env.sdfgi_min_cell_size = 0.25
+	env.sdfgi_bounce_feedback = 0.6
+	env.sdfgi_energy = 1.0
 	env.fog_enabled = true
 	env.fog_density = 0.0
 	env.fog_light_color = Color(0.85, 0.72, 0.58)
@@ -438,7 +559,9 @@ func _environment(p_root: Node3D) -> void:
 	sun.directional_shadow_max_distance = 140.0
 	sun.directional_shadow_blend_splits = true
 	sun.light_volumetric_fog_energy = 1.2
-	sun.rotation_degrees = Vector3(-17.0, -40.0, 0.0) # from the south-west: the square's north and east fronts lit
+	# From the south-west, over the ring of houses on the west (lower, its shadow would fill the square): the square's
+	# north and east fronts lit, the bell tower's face with its holds.
+	sun.rotation_degrees = Vector3(-24.0, -52.0, 0.0)
 	_add(p_root, sun, "Sun")
 
 
@@ -829,8 +952,8 @@ func _hay_cart(p_parent: Node3D) -> void:
 	# Under the bell tower's beam: the leap's landing.
 	var beam := _viewpoint_xform()
 	var out := -beam.basis.z
-	# Out from the beam and to the side of the run up to the tower's front.
-	var at := beam.origin + out * 3.4 - beam.basis.x * 2.4
+	# Out from the beam and to the side away from the climb up the tower's front (under its other arch).
+	var at := beam.origin + out * 3.4 + beam.basis.x * 2.4
 	var x := Transform3D(Basis(Vector3.UP, deg_to_rad(84.0)), Vector3(at.x, 0.0, at.z))
 	var cart := _model(p_parent, "HayCart", x, LAYER_WORLD | LAYER_HAY)
 	cart.add_to_group("hay", true)
@@ -845,7 +968,7 @@ func _viewpoint_xform() -> Transform3D:
 
 
 func _props(p_parent: Node3D) -> void:
-	# Stone posts at the pavements' corners and across the street's mouth and the square's open side; barrels and
+	# Stone posts at the pavements' corners and across the street mouths; barrels and
 	# crates by the stalls and the doors; grates round the fountain.
 	var k := 0
 	var posts := []
@@ -857,10 +980,9 @@ func _props(p_parent: Node3D) -> void:
 					posts.append(Vector3(f.x + sx * (f.z + PAVEMENT + 0.3), 0.0, f.y + sz * (f.w + PAVEMENT + 0.3)))
 		for x in [-3.2, -0.3]:
 			posts.append(Vector3(x, 0.0, 13.3))
-		var z := -9.0
-		while z < 12.5:
+		# Across the west street's mouth.
+		for z in [-4.5, -1.0, 2.5, 5.0]:
 			posts.append(Vector3(-18.0, 0.0, z))
-			z += 3.5
 		for p in posts:
 			# Not in the way of the climb up the tower's front, nor in the square's middle.
 			if (p as Vector3).distance_to(Vector3(1.26, 0.0, -11.0)) < 2.5:
@@ -1121,7 +1243,8 @@ func _lamps(p_parent: Node3D) -> void:
 # ------------------------------------------------------------------ the character
 
 ## Clips that loop (glTF says nothing of it).
-const LOOPS := ["idle", "walk", "run", "sprint", "fall", "hang_idle", "hang_shimmy", "climb_idle", "climb_move", "dive", "perch"]
+const LOOPS := ["idle", "walk", "run", "sprint", "fall", "hang_idle", "hang_shimmy", "climb_idle", "climb_move", "dive", "perch",
+		"sit", "talk"]
 
 
 func _build_player() -> PackedScene:
@@ -1147,6 +1270,7 @@ func _build_player() -> PackedScene:
 	joint.albedo_color = Color(0.09, 0.09, 0.1)
 	joint.metallic = 0.65
 	joint.roughness = 0.32
+	joint.resource_name = "mannequin_joint" # (the crowd dresses the other surfaces)
 	_save(shell, OUT + "/character/mannequin_shell.tres")
 	_save(joint, OUT + "/character/mannequin_joint.tres")
 	var mesh := body_mi.mesh as ArrayMesh
@@ -1164,6 +1288,7 @@ func _build_player() -> PackedScene:
 	for a in ["mantle_high", "mantle_low", "vault"]:
 		_save(lib.get_animation(a), "%s/character/clip_%s.res" % [OUT, a])
 	_save(lib, OUT + "/character/mannequin_clips.res")
+	_mann = [mesh, lib]
 
 	var player := CharacterBody3D.new()
 	player.name = "Player"
@@ -1204,11 +1329,19 @@ func _build_player() -> PackedScene:
 	at.anim_player = NodePath("../AnimationPlayer")
 	at.root_node = NodePath("../Model")
 	at.root_motion_track = NodePath("Mannequin/Skeleton3D:Root")
+	# Advanced with the physics ticks that read its root motion (the way out of the hay): at the idle frame's rate a
+	# tick would read the same motion twice, or none, whenever the two rates differ.
+	at.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
 	var trav: Node = ClassDB.instantiate("FellowTraversal3D")
 	trav.set("climb_mask", LAYER_CLIMB)
 	trav.set("collision_mask", LAYER_WORLD)
 	trav.set("climb_speed", 1.5)
 	trav.set("shimmy_speed", 1.3)
+	# Climbing from hold to hold (decision 0282): a ledge within 1.25 m reached hand over hand, one up to 2.3 m leapt to;
+	# the feet braced on the wall.
+	trav.set("hang_reach_up", 1.25)
+	trav.set("hang_jump_height", 2.3)
+	trav.set("hang_brace_height", 0.65)
 	trav.set("high_clip", lib.get_animation(&"mantle_high"))
 	trav.set("low_clip", lib.get_animation(&"mantle_low"))
 	trav.set("vault_clip", lib.get_animation(&"vault"))
@@ -1223,6 +1356,88 @@ func _build_player() -> PackedScene:
 	ResourceSaver.save(ps, OUT + "/player.tscn")
 	player.free()
 	return load(OUT + "/player.tscn")
+
+
+var _mann := [] # the mannequin's mesh (its materials set) and clips, from _build_player()
+
+
+## The square's people's figure (rooftops_crowd.gd dresses each one): the mannequin, its front +Z, its clips played by
+## its own AnimationPlayer.
+func _build_npc() -> PackedScene:
+	var doc := GLTFDocument.new()
+	var st := GLTFState.new()
+	doc.append_from_file(models_dir.path_join("Mannequin.glb"), st)
+	var src: Node = doc.generate_scene(st)
+	var skel: Skeleton3D = src.find_child("Skeleton3D", true, false)
+	var body_mi: MeshInstance3D = src.find_child("MannequinBody", true, false)
+	var npc := Node3D.new()
+	npc.name = "NPC"
+	var prev := scene_root
+	scene_root = npc
+	var mann := Node3D.new()
+	_add(npc, mann, "Mannequin")
+	skel.owner = null
+	body_mi.owner = null
+	skel.get_parent().remove_child(skel)
+	_add(mann, skel, "Skeleton3D")
+	body_mi.owner = npc
+	body_mi.mesh = _mann[0]
+	body_mi.skin = load(OUT + "/character/mannequin_skin.res")
+	var ap := AnimationPlayer.new()
+	ap.add_animation_library(&"", _mann[1])
+	_add(npc, ap, "AnimationPlayer")
+	ap.root_node = NodePath("..")
+	scene_root = prev
+	src.free()
+	var ps := PackedScene.new()
+	ps.pack(npc)
+	ResourceSaver.save(ps, OUT + "/npc.tscn")
+	npc.free()
+	return load(OUT + "/npc.tscn")
+
+
+## The square's people (rooftops_crowd.gd): walkers on routes round the square, across it and along its streets out,
+## groups talking, people on the palaces' benches, the stall keepers.
+func _crowd(p_root: Node3D) -> void:
+	var crowd := Node3D.new()
+	crowd.set_script(load("res://scripts/rooftops_crowd.gd"))
+	crowd.set("npc_scene", _build_npc())
+	var P := func(a: Array) -> PackedVector3Array:
+		var out := PackedVector3Array()
+		for v in a:
+			out.append(Vector3(v.x, 0.0, v.y))
+		return out
+	crowd.set("routes", [
+		# Round the square by its fronts, one way and (further in) the other.
+		[P.call([Vector2(-15.0, -10.6), Vector2(14.6, -10.6), Vector2(14.6, 11.6), Vector2(-15.0, 11.6)]), true, 7],
+		[P.call([Vector2(-10.5, -5.0), Vector2(-10.5, 8.6), Vector2(8.4, 8.6), Vector2(8.4, -5.0)]), true, 5],
+		# Across it, past the fountain.
+		[P.call([Vector2(14.0, -9.5), Vector2(6.0, -2.0), Vector2(0.5, 6.5), Vector2(-8.0, 11.5)]), false, 3],
+		# In and out of the streets.
+		[P.call([Vector2(-1.8, 34.0), Vector2(-1.8, 12.5), Vector2(-7.5, 9.5)]), false, 3],
+		[P.call([Vector2(32.0, 3.0), Vector2(16.0, 3.0), Vector2(10.0, -1.0)]), false, 2],
+		[P.call([Vector2(6.8, -26.0), Vector2(6.8, -12.0), Vector2(9.0, -6.0)]), false, 2],
+		[P.call([Vector2(-32.0, 2.0), Vector2(-16.5, 2.0), Vector2(-10.0, -2.5)]), false, 2],
+	])
+	crowd.set("groups", [[Vector3(1.0, 0.0, 5.5), 3], [Vector3(-9.6, 0.0, 7.0), 2], [Vector3(12.6, 0.0, -9.6), 2],
+			[Vector3(14.0, 0.0, -4.0), 2], [Vector3(-7.0, 0.0, -9.2), 3]])
+	var seats: Array[Transform3D] = []
+	for n in ["PalazzoOcra", "PalazzoSiena"]:
+		if not models.has(n):
+			continue
+		for e in models[n]["empties"]:
+			if String(e).contains("_seat_"):
+				var x: Transform3D = _place(n) * (models[n]["empties"][e] as Transform3D)
+				seats.append(Transform3D(x.basis.orthonormalized(), Vector3(x.origin.x, 0.08, x.origin.z)))
+	crowd.set("seats", seats)
+	var keepers: Array[Transform3D] = []
+	for n in ["StallA", "StallB"]:
+		if models.has(n):
+			# Behind the counter (the stall's front is Blender's -Y, Godot's +Z), facing out over it.
+			var place := _place(n)
+			keepers.append(Transform3D(place.basis, place * Vector3(0.3, 0.0, -0.2)))
+	crowd.set("keepers", keepers)
+	_add(p_root, crowd, "Crowd")
 
 
 func _anim_tree() -> AnimationNodeBlendTree:
@@ -1248,7 +1463,8 @@ func _anim_tree() -> AnimationNodeBlendTree:
 		a.animation = pt[0]
 		climb.add_blend_point(a, pt[1], -1, pt[0])
 	bt.add_node(&"climb", climb, Vector2(0, 400))
-	var states := ["loco", "jump", "fall", "land", "roll", "hang", "climb", "climb_jump", "dive_start", "dive", "hay_exit", "perch"]
+	var states := ["loco", "jump", "fall", "land", "roll", "hang", "climb", "climb_jump", "dive_start", "dive", "hay_exit", "perch",
+			"hang_reach_l", "hang_reach_r", "hang_leap_up", "hang_leap_l", "hang_leap_r"]
 	var tr := AnimationNodeTransition.new()
 	tr.xfade_time = 0.2
 	for i in states.size():

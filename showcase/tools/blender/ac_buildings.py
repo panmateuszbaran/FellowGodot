@@ -119,9 +119,11 @@ def fbox(B, F, u0, u1, z0, z1, w0, w1, material, bevel=0.015):
 	B.box(c, (abs(u1 - u0), abs(w1 - w0), abs(z1 - z0)), material, bevel=bevel, rot_z=rot_z)
 
 
-def window(B, F, u, z, w=1.0, h=1.8, kind="plain", shutters=None, shutters_closed=False, rng=None):
+def window(B, F, u, z, w=1.0, h=1.8, kind="plain", shutters=None, shutters_closed=False, rng=None, Bc=None):
 	"""A window centred at u, its sill at z: the opening (to be cut by wall()), its stone frame, its sill (a handhold),
-	a cornice or a pediment over it on the piano nobile, its shutters. Returns the opening."""
+	a cornice over it on the piano nobile, a hood over a plain one (handholds too), or a pediment; its shutters. With
+	Bc, the holds go into the collision (the climbing's ledges: FellowTraversal3D hangs from them and reaches or leaps
+	from one to the next). Returns the opening."""
 	x0, x1 = u - w * 0.5, u + w * 0.5
 	arch = kind == "arched"
 	o = opening(x0, x1, z, z + h, arch=arch, back="glass", depth=0.2)
@@ -148,14 +150,26 @@ def window(B, F, u, z, w=1.0, h=1.8, kind="plain", shutters=None, shutters_close
 		fbox(B, F, x0 - f, x0, z, z + h + f, -0.04, 0.02, "stone")
 		fbox(B, F, x1, x1 + f, z, z + h + f, -0.04, 0.02, "stone")
 		fbox(B, F, x0, x1, z + h, z + h + f, -0.04, 0.02, "stone")
-	# The sill: wider than the frame, standing out (a hand's hold).
-	fbox(B, F, x0 - f - 0.08, x1 + f + 0.08, z - 0.09, z, -0.15, 0.02, "stone", bevel=0.02)
+	# The sill: wider than the frame, standing out on two small brackets (a hand's hold).
+	fbox(B, F, x0 - f - 0.08, x1 + f + 0.08, z - 0.12, z, -0.17, 0.02, "stone", bevel=0.02)
+	for bu in (x0 - f * 0.4, x1 + f * 0.4):
+		fbox(B, F, bu - 0.05, bu + 0.05, z - 0.26, z - 0.12, -0.11, 0.02, "stone", bevel=0.01)
+	if Bc is not None:
+		fbox(Bc, F, x0 - f - 0.08, x1 + f + 0.08, z - 0.12, z, -0.17, 0.0, "stone", bevel=0.0)
 	if kind == "nobile":
 		# A cornice on brackets over the window.
 		top = z + h + f
 		fbox(B, F, x0 - f - 0.1, x1 + f + 0.1, top + 0.02, top + 0.16, -0.16, 0.02, "stone", bevel=0.02)
 		for bu in (x0 - f * 0.5, x1 + f * 0.5):
 			fbox(B, F, bu - 0.05, bu + 0.05, top - 0.16, top + 0.02, -0.12, 0.02, "stone", bevel=0.01)
+		if Bc is not None:
+			fbox(Bc, F, x0 - f - 0.1, x1 + f + 0.1, top + 0.02, top + 0.16, -0.16, 0.0, "stone", bevel=0.0)
+	elif kind == "plain":
+		# A hood over the frame: a moulded lintel standing out.
+		top = z + h + f
+		fbox(B, F, x0 - f - 0.06, x1 + f + 0.06, top, top + 0.12, -0.15, 0.02, "stone", bevel=0.02)
+		if Bc is not None:
+			fbox(Bc, F, x0 - f - 0.06, x1 + f + 0.06, top, top + 0.12, -0.15, 0.0, "stone", bevel=0.0)
 	elif kind == "pediment":
 		top = z + h + f
 		fbox(B, F, x0 - f - 0.1, x1 + f + 0.1, top, top + 0.1, -0.14, 0.02, "stone", bevel=0.015)
@@ -420,6 +434,14 @@ def house(name, w, d, floors, plaster, roof="hip", seed=1, shutters="shutter_gre
 					bu = u - 0.36 + 0.18 * b
 					fbox(B, R, bu - 0.015, bu + 0.015, 2.2, 3.2, 0.1, 0.13, "iron", bevel=0.0)
 		wall(B, R, 0.0, gh, opens, "stone_rustic", reveal="stone_rustic")
+		# The impost band at the arches' springing, between the openings: the first ledge up from the street.
+		spans = sorted([(o["x0"], o["x1"]) for o in opens if o["z0"] < 2.2])
+		prev = -0.05
+		for a, b in spans + [(R.length + 0.05, R.length + 0.05)]:
+			if a - prev > 0.5:
+				fbox(B, R, prev, a, 2.06, 2.22, -0.13, 0.02, "stone", bevel=0.02)
+				fbox(Bc, R, prev, a, 2.06, 2.22, -0.13, 0.0, "stone", bevel=0.0)
+			prev = b
 		# Steps at the doors and the shops (on the pavement), stone benches along the front between them (Florence's
 		# palaces' panche di via).
 		for o in opens:
@@ -434,10 +456,15 @@ def house(name, w, d, floors, plaster, roof="hip", seed=1, shutters="shutter_gre
 				if a - 0.35 - (prev + 0.35) > 1.2:
 					gaps.append((prev + 0.35, a - 0.35))
 				prev = b
-			for u0, u1 in gaps:
+			for gi, (u0, u1) in enumerate(gaps):
 				fbox(B, R, u0, u1, 0.0, 0.38, -0.36, 0.02, "stone_rustic", bevel=0.02)
 				fbox(B, R, u0 - 0.03, u1 + 0.03, 0.38, 0.47, -0.45, 0.02, "stone", bevel=0.02)
 				fbox(Bc, R, u0, u1, 0.0, 0.47, -0.45, 0.02, "stone", bevel=0.0)
+				# Seats on the bench for the square's people (rooftops_crowd.gd): on the ground in front of it, facing out.
+				n_seats = max(1, int((u1 - u0) / 0.9))
+				for k in range(n_seats):
+					p = R.p(u0 + (u1 - u0) * (k + 0.5) / n_seats, 0.0, -0.4)
+					empty(f"{name}_seat_{gi}_{k}", (p.x, p.y, p.z), rot_z=math.atan2(R.n.y, R.n.x))
 		for o in opens:
 			if o["arch"]:
 				# The arch's voussoirs, rusticated: radial blocks.
@@ -452,6 +479,7 @@ def house(name, w, d, floors, plaster, roof="hip", seed=1, shutters="shutter_gre
 					e = empty(f"{name}_lamp_{fi}_{len(opens)}", (p.x, p.y, p.z))
 		# The ledge on the rustication's top.
 		fbox(B, R, -0.05, R.length + 0.05, gh - 0.12, gh, -0.06, 0.1, "stone", bevel=0.02)
+		fbox(Bc, R, -0.05, R.length + 0.05, gh - 0.14, gh, -0.08, 0.0, "stone", bevel=0.0)
 	# Upper floors.
 	for fl in range(1, floors):
 		z = gh + fh * (fl - 1)
@@ -483,7 +511,7 @@ def house(name, w, d, floors, plaster, roof="hip", seed=1, shutters="shutter_gre
 					Bc.box(F.p(u, z - 0.06, -0.47), (2.4 if abs(F.r.x) > 0.5 else 0.95, 0.95 if abs(F.r.x) > 0.5 else 2.4, 0.18), "stone")
 					continue
 				sh = shutters if rng.random() < 0.85 else None
-				opens.append(window(B, F, u, z + 0.95, 1.0, 1.85 if fl == 1 else 1.7, kind, sh, closed, rng))
+				opens.append(window(B, F, u, z + 0.95, 1.0, 1.85 if fl == 1 else 1.7, kind, sh, closed, rng, Bc=Bc))
 			wall(B, F, z, z + fh, opens, plaster)
 		if fl < floors - 1:
 			string_course(B, facades, z + fh, out=0.13, h=0.2)
@@ -536,8 +564,37 @@ def campanile(name="Campanile", seed=7):
 		if fi == 0:
 			opens.append(opening(R.length * 0.5 - 0.8, R.length * 0.5 + 0.8, 0.0, 3.2, arch=True, back="wood_dark", depth=0.6))
 		wall(B, R, 0.0, 4.0, opens, "stone_rustic", reveal="stone_rustic")
-		fbox(B, R, -0.05, R.length + 0.05, 3.85, 4.0, -0.08, 0.12, "stone", bevel=0.02)
+		fbox(B, R, -0.05, R.length + 0.05, 3.85, 4.0, -0.1, 0.12, "stone", bevel=0.02)
+		fbox(Bc, R, -0.05, R.length + 0.05, 3.84, 4.0, -0.1, 0.0, "stone", bevel=0.0)
 	shaft_top = 26.0
+	# The climb up the front (Assassin's Creed's way: from hold to hold): under the belfry's right arch, a column of
+	# holds — stone corbels in the rustication and the lower shaft, beams across old putlogs higher up — a reach apart
+	# (about 1.1 m) or a leap (1.6 m, to each string course), each wide enough for both hands.
+	F0 = facades[0]
+	R0 = rustic[0]
+	cu = F0.length * 0.72  # under the right arch (the beam goes out of the left one), clear of the clock
+	holds = [(R0, 2.4, 0.0, "corbel"), (R0, 3.25, 0.04, "corbel")]
+	for z0 in (4.0, 10.0, 16.0):
+		for k, dz in enumerate((1.1, 2.2, 3.3, 4.4)):
+			holds.append((F0, z0 + dz, 0.05 if k % 2 else -0.05, "corbel" if z0 < 12.0 else "beam"))
+	holds += [(F0, 23.1, -0.05, "beam"), (F0, 24.2, 0.05, "beam"), (F0, 25.1, -0.04, "beam")]
+	for Fh, z, du, kind in holds:
+		u = cu + du
+		# Every hold stands out as far from the shaft's face (0.22 m; the rustication is 0.12 m proud of it): the body
+		# hanging from one has room past the others.
+		out = 0.22 if Fh is F0 else 0.14
+		if kind == "corbel":
+			# A stone block on a smaller one under it.
+			fbox(B, Fh, u - 0.38, u + 0.38, z - 0.15, z, -out + 0.01, 0.02, "stone", bevel=0.02)
+			fbox(B, Fh, u - 0.2, u + 0.2, z - 0.3, z - 0.15, -out * 0.6, 0.02, "stone", bevel=0.015)
+		else:
+			# Two beam ends out of their putlog holes, a beam laid across them.
+			for su in (-0.26, 0.26):
+				fbox(B, Fh, u + su - 0.07, u + su + 0.07, z - 0.29, z - 0.15, -0.26, 0.05, "wood_dark", bevel=0.015)
+			fbox(B, Fh, u - 0.42, u + 0.42, z - 0.15, z, -0.25, -0.05, "wood_dark", bevel=0.015)
+		fbox(Bc, Fh, u - 0.38, u + 0.38, z - 0.15, z, -out, 0.0, "stone", bevel=0.0)
+	foot = R0.p(cu, 0.0, -0.9)
+	empty(name + "_climb", (foot.x, foot.y, foot.z))
 	levels = [4.0, 10.0, 16.0, 22.0, shaft_top]
 	for li in range(len(levels) - 1):
 		z0, z1 = levels[li], levels[li + 1]
@@ -558,11 +615,11 @@ def campanile(name="Campanile", seed=7):
 	import mathutils
 
 	rot = mathutils.Matrix.Rotation(math.radians(90), 4, "X")
-	B.cylinder(c + Vector((0, 0.06, 0)), c - Vector((0, 0.06, 0)), 1.05, "stone", segments=32, smooth=False)
-	B.cylinder(c - Vector((0, 0.06, 0)), c - Vector((0, 0.09, 0)), 0.95, "plaster_white", segments=32, smooth=False)
+	B.cylinder(c + Vector((0, 0.06, 0)), c - Vector((0, 0.06, 0)), 0.95, "stone", segments=32, smooth=False)
+	B.cylinder(c - Vector((0, 0.06, 0)), c - Vector((0, 0.09, 0)), 0.86, "plaster_white", segments=32, smooth=False)
 	for k in range(12):
 		a = 2 * math.pi * k / 12
-		p = c - Vector((0, 0.1, 0)) + Vector((math.sin(a), 0, math.cos(a))) * 0.82
+		p = c - Vector((0, 0.1, 0)) + Vector((math.sin(a), 0, math.cos(a))) * 0.74
 		B.box(tuple(p), (0.06, 0.02, 0.14), "iron", bevel=0.0, rot=mathutils.Matrix.Rotation(-a, 4, "Y"))
 	B.box(tuple(c - Vector((0, 0.11, 0)) + Vector((0.2, 0, 0.2))), (0.05, 0.02, 0.62), "bronze", bevel=0.0, rot=mathutils.Matrix.Rotation(math.radians(-45), 4, "Y"))
 	B.box(tuple(c - Vector((0, 0.12, 0)) + Vector((-0.15, 0, 0.1))), (0.05, 0.02, 0.4), "bronze", bevel=0.0, rot=mathutils.Matrix.Rotation(math.radians(60), 4, "Y"))
@@ -758,7 +815,8 @@ def skyline(name="Skyline", seed=21):
 			B.poly([m @ Vector(p) for p in f], "roof", uv_slope=True)
 
 	def clear(x, y, margin):
-		if -40.0 - margin < x < 30.5 + margin and abs(y) < 25.5 + margin:
+		# The square and the ring of houses round it (the scene's NEAR: copies of the square's houses along its streets).
+		if -42.0 - margin < x < 40.0 + margin and abs(y) < 34.0 + margin:
 			return False  # the square and its houses (open to the west)
 		if math.hypot(x + 70.0, y - 95.0) < 34.0 + margin:
 			return False  # the cathedral
