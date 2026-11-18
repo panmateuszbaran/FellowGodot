@@ -22,7 +22,17 @@ lavapipe in the cloud.
 
 ## 1. Checks
 
-(pending)
+* Lavapipe: Streaming Lab with the record on and fences counted late after 0.5 ms (the reports read), Slice Lab and
+  World Lab (no anomaly), Streaming Lab under Vulkan's core and synchronization validation with the record on (no
+  message); the image regression suite with the record on in every group (`run --sync-log`: 48 of 48 identical, no
+  anomaly) and without it (`terrain_holes` blessed again: the holes' rims); `hair_check.gd --scalp_mesh=1
+  --sun_turn=150 --self_shadow=1` (new options: the hair from a painted mesh scalp, the sun turned — the hair's mean
+  share of the light 0.498 → 0.542, the shade following it).
+* The Intel GPU: the terrain-holes scene's frames 60, 90 and 120 in two runs with milestone 142's build, with discard as
+  demote, and with the fix (`m146_f503`).
+* The RTX: Bistro exterior streamed with releases held 10 s — the record on and off (`m146_f502`, 12 runs each), the
+  record on as is, without the present and submit threads, and with FellowEngine off (`m146_f504`, 20 runs each), the
+  pass timestamps on (`m146_f506`); hair_crowd_check's 24 heads with and without self-shadowing (`m146_f505`).
 
 ## 2. Next
 

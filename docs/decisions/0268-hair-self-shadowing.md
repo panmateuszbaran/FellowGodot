@@ -76,3 +76,18 @@ threads; existing scenes unchanged; the editor's preset turns it on.
   do): the guides' points are already on the CPU, a few thousand of them; the strands between three guides take their
   guides' shade smoothly. Per-strand detail (a single strand's shadow on its neighbour) is left to the shadow maps.
 * **Other lights** (point and spot lights, a second sun): one map, the sun's; the others light the hair as before.
+
+## On the RTX (milestone 146)
+
+`hair_crowd_check.gd`'s 24 heads (2 000 strands each) at 1920x1080 without vsync, 3 runs each, the laptop's 24
+processors (`m146_f505`, the check's GPU timing new):
+
+| 24 heads | GPU | frame | main thread's hair group | maps summed over the heads | steps summed |
+|---|---:|---:|---:|---:|---:|
+| `self_shadow` 0 | 0.366 ms | 2.05 ms | 1.60 ms | — | 6.29 ms |
+| `self_shadow` 1 | 0.369 ms | 2.22 ms | 1.83 ms | 2.39 ms (0.10 ms a head) | 6.56 ms |
+
+The shader's six more texel fetches a vertex cost the GPU nothing measurable; the maps add 0.23 ms to the main
+thread's hair group (the workers take them: 11 × parallel). On lavapipe (`hair_check.gd --scalp_mesh=1 --sun_turn=150`)
+the hair grown from a painted mesh scalp shadows itself as from the sphere's cap, and the shade follows a turning sun
+(the points' mean share of the light 0.498 → 0.542 as the sun goes round 150°).
