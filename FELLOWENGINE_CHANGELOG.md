@@ -9,6 +9,23 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 151 — climbing from hold to hold; the rooftops' people, photographs and ring of houses (2026-11-19)
+
+- Decision 0282: climbing from hold to hold, as in Assassin's Creed (opt-in: `FellowTraversal3D.hang_reach_up`,
+  `hang_brace_height`) — hanging, a ledge within `hang_reach_up` is climbed to hand over hand (`TRANSFER_REACH_UP`,
+  0.75 s: the hands in turn, the body pulled up, the feet stepping up the wall) by pushing up or at the wall, one further
+  up still leapt to; the body stands out from a ledge past a hold below it that stands out more (0.08 m steps to
+  0.32 m) and stays out over its top; pushing up climbs onto what the hands hold; the feet braced on the wall found
+  under the ledge; `hang_transfer_started` for the move's clip. `climb_check.gd`'s new `hold_climb` lane: caught, a
+  reach, a leap, a reach past a corbel, over the top at 7.4 m, never in the wall (GodotPhysics3D and Jolt); the other
+  lanes value for value; the regression scenes `climb`, `ledge_corners` and `traversal` exact.
+- The rooftops showcase: the buildings climbed on their holds (sills and hoods, impost bands, the rustication's top,
+  string courses, the bell tower's corbels and beams) with braced hanging, reaching and leaping clips — not free
+  climbing; the square's people (passers-by, groups, people on the stone benches, stall keepers: tinted mannequins,
+  robes, hats); a ring of houses round the square and along its streets; photographic materials from Poly Haven
+  (CC0, `tools/fetch_textures.py`, outside the repository) in place of the procedural ones when fetched; the hay's exit
+  on the physics ticks (no longer under the street), no screen-space reflections, SDFGI.
+
 ## Milestone 150 — climbing past courses and plinths; the rooftops showcase (2026-11-18)
 
 - Decision 0281: free climbing past what stands out of the wall — an underside (a string course's, a cornice's) is no

@@ -279,7 +279,7 @@ func _lane(name: String, start: Vector3, program: Array) -> Dictionary:
 	t.hang_finished.connect(func(climbed: bool) -> void:
 		lane.events.append(["hang_finished", climbed, snappedf(frame / 60.0, 0.01)]))
 	t.hang_transferred.connect(func(_ledge: Dictionary, how: int) -> void:
-		lane.events.append(["hang_transferred", ["outer", "inner", "along", "up", "drop", "down", "diagonal", "back", "corner"][how], snappedf(frame / 60.0, 0.01)]))
+		lane.events.append(["hang_transferred", ["outer", "inner", "along", "up", "drop", "down", "diagonal", "back", "corner", "reach"][how], snappedf(frame / 60.0, 0.01)]))
 	t.ladder_started.connect(func(_ladder: Node3D) -> void:
 		lane.events.append(["ladder_started", snappedf(frame / 60.0, 0.01)]))
 	t.ladder_finished.connect(func(at_top: bool) -> void:
@@ -315,7 +315,7 @@ func _build() -> void:
 	sun.rotation_degrees = Vector3(-50, 35, 0)
 	sun.shadow_enabled = true
 	root3d.add_child(sun)
-	_box(Vector3(46, -0.5, -5), Vector3(132, 1, 40), Color(0.36, 0.42, 0.34)) # milestone 150: to x 112 (the course and plinth lanes)
+	_box(Vector3(50, -0.5, -5), Vector3(140, 1, 40), Color(0.36, 0.42, 0.34)) # milestone 150: to x 112 (the course and plinth lanes)
 
 	var walk := Vector3(0, 0, -1)
 	var x := 0.0
@@ -486,6 +486,18 @@ func _build() -> void:
 	_box(Vector3(108, 2.5, 9.0), Vector3(3.0, 5.0, 2.0), Color(0.62, 0.55, 0.48))
 	_box(Vector3(108, 1.0, 10.075), Vector3(3.0, 2.0, 0.15), Color(0.72, 0.7, 0.66))
 	climb_lanes.append(_lane("climb_plinth", Vector3(108, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [5.2, {"intent": Vector3()}]]))
+	# Milestone 151 (decision 0282): climbing from hold to hold. A 7.4 m wall with corbels (0.8 m wide, 0.22 m out) at
+	# 2.6, 3.7 and 4.8 m and one at 6.4 m: a jump at the wall (caught by the corbel at 3.7 m), hand over hand up to the
+	# next (pushing at the wall), a leap to the one at 6.4 m (hang_jump; out of reach), hand over hand to the wall's top
+	# (the body standing out from it past the corbel below) and over it.
+	_box(Vector3(116, 3.7, 9.0), Vector3(3.0, 7.4, 2.0), Color(0.62, 0.55, 0.48))
+	for h in [2.6, 3.7, 4.8, 6.4]:
+		_box(Vector3(116, h - 0.075, 10.11), Vector3(0.8, 0.15, 0.22), Color(0.72, 0.7, 0.66))
+	var lh := _lane("hold_climb", Vector3(116, 0, 12), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}],
+			[3.4, {"call": "hang_jump"}], [4.0, {"call": "hang_jump"}], [5.0, {"intent": Vector3()}]])
+	(lh.traversal as FellowTraversal3D).hang_reach_up = 1.25
+	(lh.traversal as FellowTraversal3D).hang_jump_height = 2.3
+	(lh.traversal as FellowTraversal3D).hang_brace_height = 0.65
 	# None: free_climb off; the wall outside climb_mask; an overhang of 30 degrees.
 	_box(Vector3(40, 2.25, 9.0), Vector3(3.0, 4.5, 2.0), Color(0.6, 0.6, 0.66))
 	_lane("climb_off", Vector3(40, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [4.0, {"intent": Vector3()}]])
@@ -785,6 +797,9 @@ func _finish() -> void:
 				# must, never in it) and over the top.
 				var top := 6.0 if lane.name == "climb_course" else 5.0
 				ok = ok and names.has("climb_started") and names.has("climb_finished:true") and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - top) < 0.05
+			"hold_climb":
+				# Milestone 151: up the corbels hand over hand and by a leap, over the wall's top (7.4 m), standing on it.
+				ok = ok and names.has("hang_started:3.7") and names.count("hang_transferred:reach") == 2 and names.count("hang_transferred:up") == 1 and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 7.4) < 0.05
 			"climb_off", "climb_masked", "climb_overhang":
 				# Not climbed: standing at the wall's foot.
 				ok = ok and not names.has("climb_started") and feet.y < 0.05

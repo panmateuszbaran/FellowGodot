@@ -112,7 +112,7 @@
 		<method name="hang_jump">
 			<return type="void" />
 			<description>
-				Hanging, jumps to another ledge the way [method set_intent]'s wish goes, at the next physics frame: along the edge past its end (left or right; the first edge within [member hang_jump_distance] at about the same height, hung from 0.3 m into it), up (within [member hang_jump_height], both hands on it) or down (milestone 86: within [member hang_jump_depth], both hands on it; the body going out to the lower ledge's face first), back (milestone 95: the wish away from the wall: a ledge on the wall behind, within [member hang_jump_distance] of the body's back, at about this edge's height, facing this wall; the body turning round), or diagonally (milestone 93: the wish both along and up or down, each over 0.35: the nearest edge past this one's end within [member hang_jump_distance], 0.4 m higher or lower at least, within [member hang_jump_height] or [member hang_jump_depth]), or round the corner (milestone 149: the wish along with no edge on along it: a ledge on the side of the wall where it turns away, or standing out of it, 0.3 m to [member hang_jump_distance] back from the corner, at about this edge's height, both hands on it; the body out round the corner, turning a quarter, the wish held going on along the new edge), with room for the body there and on the way. Nothing happens when there is none (a wish down then lets go). The body flies there along a curve (0.5 s along, 0.45 s up, 0.4 s down, 0.55 s diagonally, 0.6 s back or round a corner), its hands letting go and catching the new edge; [signal hang_transferred] is emitted when it hangs again. Climbing a face (milestone 148), it lunges over the face the way the wish goes (up without one) by up to [member climb_jump_distance], as far as the face and room for the body go (0.4 m at least), and emits [signal climb_jumped].
+				Hanging, jumps to another ledge the way [method set_intent]'s wish goes, at the next physics frame: along the edge past its end (left or right; the first edge within [member hang_jump_distance] at about the same height, hung from 0.3 m into it), up (within [member hang_jump_height], both hands on it; within [member hang_reach_up], hand over hand instead) or down (milestone 86: within [member hang_jump_depth], both hands on it; the body going out to the lower ledge's face first), back (milestone 95: the wish away from the wall: a ledge on the wall behind, within [member hang_jump_distance] of the body's back, at about this edge's height, facing this wall; the body turning round), or diagonally (milestone 93: the wish both along and up or down, each over 0.35: the nearest edge past this one's end within [member hang_jump_distance], 0.4 m higher or lower at least, within [member hang_jump_height] or [member hang_jump_depth]), or round the corner (milestone 149: the wish along with no edge on along it: a ledge on the side of the wall where it turns away, or standing out of it, 0.3 m to [member hang_jump_distance] back from the corner, at about this edge's height, both hands on it; the body out round the corner, turning a quarter, the wish held going on along the new edge), with room for the body there and on the way. Nothing happens when there is none (a wish down then lets go). The body flies there along a curve (0.5 s along, 0.45 s up, 0.4 s down, 0.55 s diagonally, 0.6 s back or round a corner), its hands letting go and catching the new edge; [signal hang_transferred] is emitted when it hangs again. Climbing a face (milestone 148), it lunges over the face the way the wish goes (up without one) by up to [member climb_jump_distance], as far as the face and room for the body go (0.4 m at least), and emits [signal climb_jumped].
 			</description>
 		</method>
 		<method name="is_active" qualifiers="const">
@@ -264,6 +264,9 @@
 		<member name="hang" type="bool" setter="set_hang" getter="is_hang" default="true">
 			In the air, hangs from a ledge it cannot climb (no room on its top: a ceiling, an overhang) when the edge is about [member hang_reach] over its feet; and with [member hang_first], from every ledge it could climb.
 		</member>
+		<member name="hang_brace_height" type="float" setter="set_hang_brace_height" getter="get_hang_brace_height" default="0.0">
+			Hanging, the feet braced on the wall this high over the hanging body's feet, in metres: on the wall's face found in front of the body at that height (under a ledge that stands out, further in than its edge), or at the edge's face where there is none within reach (an opening). Reaching up ([member hang_reach_up]), the feet step up the wall at this height in turn. [code]0[/code]: off, the feet 0.35 m up at the edge's face (milestone 151, decision 0282).
+		</member>
 		<member name="hang_first" type="bool" setter="set_hang_first" getter="is_hang_first" default="false">
 			In the air, hangs from ledges it could climb too, and climbs only when asked (pushing at the wall, up, or [method climb_up]).
 		</member>
@@ -278,6 +281,9 @@
 		</member>
 		<member name="hang_reach" type="float" setter="set_hang_reach" getter="get_hang_reach" default="2.05">
 			Hanging, the hands' height over the feet (the body hangs this far below the edge, its capsule [member reach_distance]-free of the top).
+		</member>
+		<member name="hang_reach_up" type="float" setter="set_hang_reach_up" getter="get_hang_reach_up" default="0.0">
+			Hanging, a ledge up to this far over the edge (0.4 m at least, both hands on it, room for the body there) is climbed to hand over hand ([constant TRANSFER_REACH_UP], 0.75 s): pushing up or at the wall where nothing can be mantled, or by [method hang_jump] with the wish up. The hand that followed last time leads, up to the ledge and out from the wall on the way; the body is pulled up as the other follows; the feet step up the wall in turn. A ledge further up, within [member hang_jump_height], is still jumped to. A push held through a reach goes on climbing: over the top when the ledge reached is the last. [code]0[/code]: off, every ledge above is jumped to and only by [method hang_jump] (milestone 151, decision 0282).
 		</member>
 		<member name="high_clip" type="Animation" setter="set_high_clip" getter="get_high_clip">
 			The clip played for a [constant KIND_HIGH] mantle (its length is the mantle's).
@@ -371,6 +377,15 @@
 			<param index="0" name="ledge" type="Dictionary" />
 			<description>
 				Emitted when the body starts hanging from a ledge ([param ledge]: as [method find_ledge]'s).
+			</description>
+		</signal>
+		<signal name="hang_transfer_started">
+			<param index="0" name="ledge" type="Dictionary" />
+			<param index="1" name="how" type="int" />
+			<param index="2" name="duration" type="float" />
+			<param index="3" name="lead_hand" type="int" />
+			<description>
+				Emitted when the hanging body sets off for another ledge (milestone 151): [param ledge] the one it goes to (as [method find_ledge]'s), [param how] a [enum Transfer] value, [param duration] the seconds it takes, [param lead_hand] the hand that goes first ([code]0[/code]: the left; reaching up, the hands take turns; jumping, the one on the side it goes to). A controller plays its clip for the move from here.
 			</description>
 		</signal>
 		<signal name="hang_transferred">
@@ -469,6 +484,9 @@
 		</constant>
 		<constant name="TRANSFER_JUMP_CORNER" value="8" enum="Transfer">
 			Round the corner past the edge's end, in the air, onto a ledge on the side of the wall where it turns away (milestone 149, [method hang_jump] with the wish along when there is no edge on along it).
+		</constant>
+		<constant name="TRANSFER_REACH_UP" value="9" enum="Transfer">
+			Up to a ledge within [member hang_reach_up], hand over hand (milestone 151).
 		</constant>
 		<constant name="KIND_MAX" value="10" enum="Kind">
 			The number of kinds.
