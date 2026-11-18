@@ -19,6 +19,19 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   simulation, about 75 µs a head; without it the material and the pictures as before (the regression suite exact).
   `hair_check.gd --self_shadow=1`, `hair_crowd_check.gd --self_shadow=1`.
 
+## Milestone 143 — milestones 137-142 on the laptop's GPUs (2026-11-18)
+
+- On the RTX: Bistro exterior's DDS textures streamed (decision 0264) load in 1.5-1.7 s instead of 2.9-3.4 s with
+  1.70 GB of video memory instead of 3.08 GB, the frame +2 % (the rare long frames 2 ms longer: next); Crowd Lab with
+  `animation/update_lod` (0265) −32 % frame time; Frontier Lab's groups in two levels (0262) the same draws in its
+  flight (the second level shows from outside the world); milestone 33's device loss (0133, 0267) no longer happens
+  with the clouds' shadow map written and read in one frame — with a build from before milestone 142's fixes too: the
+  double buffer kept.
+- On the Intel GPU: City Lab 13 % faster than stock once the GPU's clock has risen (milestone 136's +7 % was its ramp);
+  `run_benchmarks.py`'s heat soak runs the first build as it will be measured (it had heated the RTX). The terrain
+  holes' run-to-run differences there narrowed to FellowEngine's renderer and the patches over the holes, none of 23
+  settings off alone removing them.
+
 ## Milestone 142 — the frame under Vulkan's validation (2026-11-18)
 
 - Decision 0267: the image regression suite, PBR Lab and five labs run under the Khronos validation layer's core and

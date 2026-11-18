@@ -58,7 +58,9 @@ does not apply that factor while they are on.
   and reading the one written in the previous frame did not. So the map is double-buffered: each frame writes one map
   and the colour passes read the other, one frame behind the clouds (which move a fraction of a metre in it; lavapipe:
   at most 9 levels in a few pixels against the single map). What in the frame's graph orders that write and read
-  wrongly with DDGI is not found yet.
+  wrongly with DDGI is not found yet. Milestones 142-143 (decision 0267): the Vulkan validation layer finds no hazard
+  on the map with it written and read in one frame (`debug/cloud_shadow_same_frame`), and on the RTX the same
+  captures no longer lose the device — with a build from before 0267's fixes too; the double buffer stays.
 
 ## Verification
 

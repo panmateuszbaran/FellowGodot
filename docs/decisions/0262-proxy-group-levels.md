@@ -109,6 +109,13 @@ more than 16 levels off the world all loaded, D 0.99 → 0.42 %.
 The levels' bake costs little beside the cells' and groups': the 8 × 8 cells' bake 9.5 s with one level, 10.0 s with
 two; the 16 × 16 cells' 44 s with three.
 
+**Frontier Lab on the RTX** (milestone 143, `m143_f489_frontier_levels`: the 4 km world generated again by m142's
+editor with its 64 groups of 4 × 4 far cells in one level and in two — four coarser proxies, 65 691 triangles and
+2.5 MB of textures over them — then its flythrough streamed with the atmosphere at 1080p, 3 runs of 90 s each,
+interleaved): the same 469 draws and 5.55 M triangles a frame with either, the frame 4.06 and 4.09 ms. The flight stays
+inside the world, where the first level's groups are what the far cells need; the second level shows only from outside
+it (as World Lab's views above). The bake 133.7 s for the cells' proxies with both levels.
+
 ## Decision
 
 Keep, opt-in per bake (`group_levels` 1 by default: a world of a few kilometres has few groups; a larger one asks for

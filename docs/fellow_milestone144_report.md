@@ -24,5 +24,5 @@ option off); the editor check (the preset added without warnings, undone).
 
 ## 2. Next
 
-Milestone 143's measurements on the laptop (running): Frontier Lab's levels of groups, the Intel GPU's terrain holes
-and City Lab, milestone 33's device loss asked again.
+The hair with self-shadowing on the RTX (its shader's six more texel fetches a vertex), and on a character's mesh scalp
+(milestone 125's `scalp_mesh`) with a moving sun.

@@ -49,10 +49,23 @@ DDS files written from them (`--streaming_dds=1`), texture streaming off and on:
   bake read the DDS files whole.
 * The image regression suite: exact (no scene of it loads a DDS file).
 
+**Bistro exterior on the RTX** (milestone 143, `m143_f488_bistro_dds`: its flythrough at 1080p, 3 runs each,
+interleaved, autotune off; m136b streamed for comparison, before this decision):
+
+| Bistro exterior (492 textures) | loaded in | video memory (peak) | textures | frame | GPU | p99 frame |
+|---|---:|---:|---:|---:|---:|---:|
+| DDS whole (streaming off) | 2.9-3.4 s | 3 080 MB | 2 763 MB | 4.28 ms | 4.20 ms | 5.3 ms |
+| m136b, streaming on (DDS not streamed) | 3.7-6.5 s | 3 080 MB | 2 763 MB | 4.19 ms | 4.10 ms | 5.2 ms |
+| **DDS streamed** | **1.5-1.7 s** | **1 699 MB** | **1 354 MB** | 4.36 ms | 4.12 ms | 7.4 ms |
+
+320 of the 492 textures streamed (the rest small or not DDS), 928 MB resident at the end of the flight of 2 338 MB in
+full. The frame +2 %, and the rare long ones longer: the largest main-thread step of each second 5.4 → 7.8 ms — the
+streamer's swaps; what they cost there is next.
+
 ## Decision
 
-Keep, with texture streaming: a DDS texture streams as an imported one. Bistro's measurement on the RTX follows when the
-laptop's GPU is free.
+Keep, with texture streaming: a DDS texture streams as an imported one — Bistro loads in half the time with 1.4 GB less
+video memory on the RTX.
 
 ## Rejected / not done
 

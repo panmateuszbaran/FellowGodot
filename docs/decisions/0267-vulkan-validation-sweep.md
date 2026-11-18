@@ -57,8 +57,12 @@ between runs).
 **The device loss of milestone 33**: with `debug/cloud_shadow_same_frame` (new, diagnostics: the colour passes read the
 map written in the same frame, as before decision 0133), PBR Lab with ray-traced GI and the clouds' shadows reports no
 hazard on the map; the cause on NVIDIA's driver remains unfound, and the double buffer stays. With the invalid barrier
-above fixed (the frame's bloom, there in milestone 33's captures too), the RTX is asked again in milestone 143 —
-Bistro exterior (milestone 33's scene) with ray-traced GI, the clouds' shadows and `debug/cloud_shadow_same_frame`.
+above fixed (the frame's bloom, there in milestone 33's captures too), the RTX was asked again in milestone 143 —
+Bistro exterior (milestone 33's scene) with ray-traced GI, the clouds' shadows and `debug/cloud_shadow_same_frame`
+(`m143_f493`, `m143_f495`): no device lost, with m142 twice and with a build from before this decision's fixes
+(25f3742926, the diagnostic alone) — every such capture lost it in milestone 33. The cause is gone on this driver
+(NVIDIA 32.0.16.1714) whatever this decision fixed; the double buffer stays (a frame's lag of clouds that move a
+fraction of a metre in it, against a device loss on drivers that may still have it).
 
 ## Decision
 

@@ -63,6 +63,12 @@ On the 120 m field (4 characters within 20 m, 14 within 40 m, 54 within 80 m, 10
 evaluated every frame, ½, ¼, ⅛ and ⅛ of the frames; every evaluation put its clip where it is without the setting
 (the largest difference 2·10⁻¹⁴ s). Manual seeks unchanged (the same hashes off and on).
 
+**Crowd Lab on the RTX** (milestone 143, `m143_f488_crowd_update_lod`: its 256 characters playing in the idle process,
+`--crowd_process=1`, the flythrough at 1080p, the release template, 3 runs each interleaved, autotune off): the frame
+4.38 → **2.99 ms (−32 %)**, its 99th percentile 6.4 → 4.4 ms, the GPU's 1.74 → 1.77 ms (the skinning of the same
+characters, their poses updated less often) — the scene is the main thread's, and the far crowd's animation was most
+of it.
+
 ## Decision
 
 Keep, opt-in: a crowd's far and hidden characters cost a fraction of the main thread, the near ones nothing changes;
