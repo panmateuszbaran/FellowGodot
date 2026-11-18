@@ -58,6 +58,7 @@ public:
 		KIND_BLOCKED, // a top, but no room on it or on the way (the reason says which)
 		KIND_HANG, // milestone 75: hanging from a ledge, moving along it
 		KIND_LADDER, // milestone 75: on a FellowLadder3D
+		KIND_CLIMB, // milestone 148: climbing a wall's face (free_climb)
 		KIND_MAX,
 	};
 
@@ -84,6 +85,7 @@ public:
 		Vector3 target; // the feet on the top, or where a vault lands
 		float depth = 0.0f; // a vaulted obstacle's depth
 		bool open_below = false; // the body could go on under the ledge (the automatic mantle leaves it)
+		float face_lean = 0.0f; // milestone 148: metres the face under the edge goes back from the body per metre up (a slab)
 		ObjectID collider;
 	};
 
@@ -117,6 +119,7 @@ public:
 		SafeNumeric<uint64_t> hangs; // milestone 75
 		SafeNumeric<uint64_t> transfers; // milestone 81: corners wrapped, jumps between ledges
 		SafeNumeric<uint64_t> ladders;
+		SafeNumeric<uint64_t> climbs; // milestone 148
 		SafeNumeric<uint64_t> poses;
 		SafeNumeric<uint64_t> pose_usec;
 	};
@@ -165,6 +168,11 @@ private:
 	bool ladders = true;
 	float ladder_speed = 1.2f;
 	float ladder_reach = 0.6f;
+	// Milestone 148 (decision 0276): climbing any wall's face.
+	bool free_climb = false;
+	uint32_t climb_mask = 1; // the physics layers whose walls are climbable
+	float climb_speed = 1.0f;
+	float climb_max_overhang = 20.0f; // degrees past vertical the face may lean over the body
 
 	// The body's capsule (body space), from its first CollisionShape3D child.
 	float radius = 0.35f;
@@ -172,6 +180,9 @@ private:
 	Vector3 shape_center = Vector3(0, 0.9f, 0);
 	RID probe_shape; // the physics server's shapes the queries cast
 	RID body_shape;
+	// Milestone 148: the size body_shape was given last (a shape's data set again rebuilds it: Jolt's, every time).
+	mutable float body_shape_radius = -1.0f;
+	mutable float body_shape_height = -1.0f;
 
 	// The mantle in progress.
 	bool active = false;
@@ -222,6 +233,15 @@ private:
 	float ladder_h = 0.0f; // the feet's height along the ladder from its foot
 	bool ladder_from_top = false; // taken from the floor at its top (over the edge, then down)
 	double hold_time = 0.0; // how long the body has hung or climbed (the blend in)
+	// Climbing a wall (KIND_CLIMB): the point on the face at the chest's height, the face's outward normal there.
+	Vector3 climb_point;
+	Vector3 climb_normal;
+	Vector3 climb_facing; // the body's facing, turned towards the face's (round a corner, over a few frames)
+	float climb_travel = 0.0f; // metres moved on the face (the hands and feet step with it)
+	// The wish held turns with the face (round a tower, a corner: the stick held left keeps going left along it).
+	bool climb_hold = false;
+	Vector3 climb_hold_intent;
+	Vector3 climb_hold_normal;
 
 	// The debug drawing (debug_draw).
 	MeshInstance3D *debug_instance = nullptr;
@@ -261,6 +281,14 @@ private:
 	void _step_ladder(double p_delta);
 	void _end_ladder(bool p_at_top, const Vector3 &p_velocity);
 	void _place(CollisionObject3D *p_body, const Vector3 &p_feet, const Vector3 &p_facing, double p_delta);
+	bool _probe_wall(const Vector3 &p_from, const Vector3 &p_dir, float p_length, Vector3 &r_point, Vector3 &r_normal, ObjectID &r_collider) const;
+	bool _climbable(const Vector3 &p_normal, ObjectID p_collider) const;
+	Vector3 _climb_feet(const Vector3 &p_point, const Vector3 &p_normal) const;
+	bool _find_climb(const Vector3 &p_direction, Vector3 &r_point, Vector3 &r_normal) const;
+	bool _climb_top(Ledge &r_ledge) const;
+	bool _start_climb(const Vector3 &p_point, const Vector3 &p_normal);
+	void _step_climb(double p_delta);
+	void _end_climb(bool p_at_top, const Vector3 &p_velocity);
 	static Dictionary _ledge_dict(const Ledge &p_ledge);
 
 protected:
@@ -295,6 +323,9 @@ public:
 	bool is_hanging() const { return active && action == KIND_HANG; }
 	bool is_on_ladder() const { return active && action == KIND_LADDER; }
 	Node3D *get_ladder() const;
+	// Milestone 148.
+	bool try_climb(const Vector3 &p_direction = Vector3());
+	bool is_climbing() const { return active && action == KIND_CLIMB; }
 	void set_climb_input(float p_input) { climb_input = CLAMP(p_input, -1.0f, 1.0f); }
 	float get_climb_input() const { return climb_input; }
 
@@ -378,6 +409,14 @@ public:
 	float get_ladder_speed() const { return ladder_speed; }
 	void set_ladder_reach(float p_reach) { ladder_reach = MAX(0.05f, p_reach); }
 	float get_ladder_reach() const { return ladder_reach; }
+	void set_free_climb(bool p_enabled) { free_climb = p_enabled; }
+	bool is_free_climb() const { return free_climb; }
+	void set_climb_mask(uint32_t p_mask) { climb_mask = p_mask; }
+	uint32_t get_climb_mask() const { return climb_mask; }
+	void set_climb_speed(float p_speed) { climb_speed = MAX(0.0f, p_speed); }
+	float get_climb_speed() const { return climb_speed; }
+	void set_climb_max_overhang(float p_degrees) { climb_max_overhang = CLAMP(p_degrees, 0.0f, 60.0f); }
+	float get_climb_max_overhang() const { return climb_max_overhang; }
 
 	FellowTraversal3D();
 	~FellowTraversal3D();

@@ -18,9 +18,12 @@ extends SceneTree
 ## a jump across a gap to the next ledge, a jump up to a beam over the ledge. Milestone 84 (decision 0192): walking
 ## over a platform's edge into a hang from it (then along it and letting go), and running over it (no hang). Milestone 86
 ## (decision 0194): from a hang down to a ledge below. Milestone 93 (decision 0201): a diagonal jump, across a gap and up.
-## Milestone 95 (decision 0203): a jump back to the ledge on the wall behind.
+## Milestone 95 (decision 0203): a jump back to the ledge on the wall behind. Milestone 148 (decision 0276): free
+## climbing, on a row of its own — up a 4.5 m wall and over its top; up, along it to the left and down to the floor; round
+## a round tower; round a block's outside corner (the wish held turning with the face); up a slab leaning back 20 degrees
+## and over its top; and none: with free_climb off, on a wall outside climb_mask, at an overhang of 30 degrees.
 
-const KIND_NAMES := ["none", "step", "low", "high", "vault", "too_high", "blocked", "hang", "ladder"]
+const KIND_NAMES := ["none", "step", "low", "high", "vault", "too_high", "blocked", "hang", "ladder", "climb"]
 const RUN_SECONDS := 9.0
 
 var args := {}
@@ -263,7 +266,7 @@ func _lane(name: String, start: Vector3, program: Array) -> Dictionary:
 		"name": name, "x": start.x, "start": start, "body": body, "traversal": t, "skeleton": sk, "pose": pose,
 		"events": [], "penetration_frames": 0, "hang_frames": 0, "ladder_frames": 0, "edge_start": null, "edge_last": null,
 		"inward_start": null, "inward_last": null, "hand_error_max": 0.0, "foot_error_max": 0.0, "hand_samples": 0,
-		"foot_samples": 0, "wall_gap_max": 0.0,
+		"foot_samples": 0, "wall_gap_max": 0.0, "climb_frames": 0, "climb_top": -1.0, "facing_start": null, "facing_last": null,
 	}
 	t.mantle_started.connect(func(kind: int, _ledge: Dictionary) -> void:
 		lane.events.append(["mantle_started", KIND_NAMES[kind], snappedf(frame / 60.0, 0.01)]))
@@ -279,6 +282,10 @@ func _lane(name: String, start: Vector3, program: Array) -> Dictionary:
 		lane.events.append(["ladder_started", snappedf(frame / 60.0, 0.01)]))
 	t.ladder_finished.connect(func(at_top: bool) -> void:
 		lane.events.append(["ladder_finished", at_top, snappedf(frame / 60.0, 0.01)]))
+	t.climb_started.connect(func() -> void:
+		lane.events.append(["climb_started", snappedf(frame / 60.0, 0.01)]))
+	t.climb_finished.connect(func(at_top: bool) -> void:
+		lane.events.append(["climb_finished", at_top, snappedf(frame / 60.0, 0.01)]))
 	sk.skeleton_updated.connect(_on_skeleton_updated.bind(lane))
 	lanes.append(lane)
 	return lane
@@ -431,6 +438,38 @@ func _build() -> void:
 			[2.5, {"intent": Vector3(0, 0, 1), "call": "hang_jump"}], [2.55, {"intent": Vector3()}]])
 	(l15.traversal as FellowTraversal3D).hang_first = true
 
+	# Milestone 148 (decision 0276): free climbing, a row of walls whose faces are at z 10 (the bodies start at z 12).
+	var climb_lanes := []
+	# A 4.5 m wall with room on top: up and over.
+	_box(Vector3(0, 2.25, 9.0), Vector3(3.0, 4.5, 2.0), Color(0.62, 0.55, 0.48))
+	climb_lanes.append(_lane("climb_up", Vector3(0, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [5.5, {"intent": Vector3()}]]))
+	# A 6 m wall: up, left (-X) 2 s, down to the floor and away.
+	_box(Vector3(9, 3.0, 9.0), Vector3(6.0, 6.0, 2.0), Color(0.62, 0.55, 0.48))
+	climb_lanes.append(_lane("climb_side", Vector3(9, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [2.5, {"intent": Vector3(-1, 0, 0)}],
+			[4.5, {"intent": Vector3(0, 0, 1)}], [7.0, {"intent": Vector3()}]]))
+	# A round tower (radius 2 m, 8 m): up, then left round it.
+	_cylinder(Vector3(20, 4.0, 8.0), 2.0, 8.0, Color(0.62, 0.55, 0.48))
+	climb_lanes.append(_lane("climb_tower", Vector3(20, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [2.0, {"intent": Vector3(-1, 0, 0)}], [4.0, {"intent": Vector3()}]]))
+	# A 2 m block, 6 m high: up, left past its corner (x 29) and on along its left side (the wish held).
+	_box(Vector3(30, 3.0, 9.0), Vector3(2.0, 6.0, 2.0), Color(0.62, 0.55, 0.48))
+	climb_lanes.append(_lane("climb_corner", Vector3(30, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [2.0, {"intent": Vector3(-1, 0, 0)}], [4.5, {"intent": Vector3()}]]))
+	# A slab leaning back 20 degrees (its top about 4.7 m): up and over.
+	var slab := _box(Vector3(60, 2.0, 9.0), Vector3(3.0, 5.0, 2.0), Color(0.62, 0.55, 0.48))
+	slab.rotation_degrees = Vector3(-20, 0, 0)
+	climb_lanes.append(_lane("climb_slab", Vector3(60, 0, 12.5), [[0.0, {"intent": walk, "speed": 1.5}], [5.4, {"intent": Vector3()}]]))
+	# None: free_climb off; the wall outside climb_mask; an overhang of 30 degrees.
+	_box(Vector3(40, 2.25, 9.0), Vector3(3.0, 4.5, 2.0), Color(0.6, 0.6, 0.66))
+	_lane("climb_off", Vector3(40, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [4.0, {"intent": Vector3()}]])
+	_box(Vector3(46, 2.25, 9.0), Vector3(3.0, 4.5, 2.0), Color(0.6, 0.6, 0.66))
+	var lm := _lane("climb_masked", Vector3(46, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [4.0, {"intent": Vector3()}]])
+	climb_lanes.append(lm)
+	var over := _box(Vector3(52, 2.0, 8.5), Vector3(3.0, 5.0, 2.0), Color(0.6, 0.6, 0.66))
+	over.rotation_degrees = Vector3(30, 0, 0)
+	climb_lanes.append(_lane("climb_overhang", Vector3(52, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [4.0, {"intent": Vector3()}]]))
+	for cl in climb_lanes:
+		(cl.traversal as FellowTraversal3D).free_climb = true
+	(lm.traversal as FellowTraversal3D).climb_mask = 2
+
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
 	cam.look_at_from_position(Vector3(22, 9, 16), Vector3(22, 1.5, -2))
@@ -507,7 +546,7 @@ func _on_skeleton_updated(lane: Dictionary) -> void:
 	var t: FellowTraversal3D = lane.traversal
 	var sk: Skeleton3D = lane.skeleton
 	var targets: Dictionary = t.get_pose_targets()
-	if not targets.get("active", false) or not (t.is_hanging() or t.is_on_ladder()):
+	if not targets.get("active", false) or not (t.is_hanging() or t.is_on_ladder() or t.is_climbing()):
 		return
 	var pairs := [["LeftHand", "hand_left", targets.hand_weights.x, "LeftUpperArm", "LeftLowerArm"],
 			["RightHand", "hand_right", targets.hand_weights.y, "RightUpperArm", "RightLowerArm"],
@@ -544,6 +583,8 @@ func _on_physics() -> void:
 		q.exclude = [body.get_rid()]
 		if not body.get_world_3d().direct_space_state.intersect_shape(q, 1).is_empty():
 			lane.penetration_frames += 1
+			if not lane.has("penetration_first"):
+				lane["penetration_first"] = snappedf(frame / 60.0, 0.01)
 		if t.is_hanging():
 			lane.hang_frames += 1
 			var tg: Dictionary = t.get_pose_targets()
@@ -555,6 +596,14 @@ func _on_physics() -> void:
 			lane.inward_last = tg.inward
 		if t.is_on_ladder():
 			lane.ladder_frames += 1
+		if t.is_climbing():
+			lane.climb_frames += 1
+			lane.climb_top = maxf(lane.climb_top, body.global_position.y)
+			var facing := -body.global_basis.z
+			facing.y = 0.0
+			if lane.facing_start == null:
+				lane.facing_start = facing.normalized()
+			lane.facing_last = facing.normalized()
 	if pictures:
 		_shoot()
 	if frame >= int(RUN_SECONDS * 60.0):
@@ -590,7 +639,7 @@ func _finish() -> void:
 		var feet := body.global_position
 		var e := {"events": lane.events, "end": [snappedf(feet.x - lane.x, 0.01), snappedf(feet.y, 0.01), snappedf(feet.z, 0.01)],
 			"penetration_frames": lane.penetration_frames, "hang_s": snappedf(lane.hang_frames / 60.0, 0.01),
-			"ladder_s": snappedf(lane.ladder_frames / 60.0, 0.01), "hand_error_max_cm": snappedf(lane.hand_error_max * 100.0, 0.1),
+			"ladder_s": snappedf(lane.ladder_frames / 60.0, 0.01), "climb_s": snappedf(lane.climb_frames / 60.0, 0.01), "hand_error_max_cm": snappedf(lane.hand_error_max * 100.0, 0.1),
 			"foot_error_max_cm": snappedf(lane.foot_error_max * 100.0, 0.1), "hand_samples": lane.hand_samples,
 			"foot_samples": lane.foot_samples, "on_floor": body.is_on_floor()}
 		var moved := 0.0
@@ -602,6 +651,11 @@ func _finish() -> void:
 			e["turned_deg"] = snappedf(turned, 0.1)
 		var names := _names(lane)
 		e["sequence"] = names
+		if lane.has("penetration_first"):
+			e["penetration_first"] = lane.penetration_first
+		if String(lane.name).begins_with("climb"):
+			var lc: Dictionary = (lane.traversal as FellowTraversal3D).get_last_check()
+			e["last_check"] = {"kind": KIND_NAMES[int(lc.get("kind", 0))], "reason": lc.get("reason", ""), "height": snappedf(float(lc.get("height", 0.0)), 0.01)}
 		var ok: bool = lane.penetration_frames == 0
 		match lane.name:
 			"hang_shimmy":
@@ -652,6 +706,35 @@ func _finish() -> void:
 			"hang_jump_back":
 				# Round to the ledge behind (its face at z 0.4): hanging from it, 0.43 m off it, turned half round.
 				ok = ok and names.has("hang_started:2.5") and names.count("hang_transferred:back") == 1 and absf(feet.z - (0.4 - 0.43)) < 0.05 and absf(feet.y - 0.45) < 0.05 and turned > 170.0 and not names.has("hang_finished:false")
+			"climb_up":
+				# Milestone 148 (decision 0276): up the face and over its top (4.5 m): on it.
+				ok = ok and names.has("climb_started") and names.has("climb_finished:true") and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 4.5) < 0.05
+			"climb_side":
+				# Up (more than a metre), 2 m left (-X: within 0.3 m), down to the floor; off the wall standing.
+				e["climb_top"] = snappedf(lane.climb_top, 0.01)
+				ok = ok and names.has("climb_started") and names.has("climb_finished:false") and lane.climb_top > 1.0 and absf(feet.x - lane.x + 2.0) < 0.3 and feet.y < 0.05
+			"climb_tower":
+				# Round the tower: still on it, turned more than 40 degrees with its face, the body's axis as far from the
+				# tower's as the capsule and its gap put it (2 + 0.35 + 0.08 m).
+				var axis := Vector3(lane.x, 0, 8.0)
+				var dist := Vector2(feet.x - axis.x, feet.z - axis.z).length()
+				var turned_c := rad_to_deg((lane.facing_start as Vector3).angle_to(lane.facing_last)) if lane.facing_start != null else 0.0
+				e["axis_distance"] = snappedf(dist, 0.01)
+				e["turned_deg"] = snappedf(turned_c, 0.1)
+				ok = ok and names.has("climb_started") and not names.has("climb_finished:false") and turned_c > 40.0 and absf(dist - 2.43) < 0.05
+			"climb_corner":
+				# Round the outside corner onto the left side (x 29): turned a quarter, the capsule and its gap off that
+				# face, along it past the corner (z under 9.6).
+				var turned_k := rad_to_deg((lane.facing_start as Vector3).angle_to(lane.facing_last)) if lane.facing_start != null else 0.0
+				e["turned_deg"] = snappedf(turned_k, 0.1)
+				e["from_side"] = snappedf(feet.x - (lane.x - 1.0), 0.01)
+				ok = ok and names.has("climb_started") and not names.has("climb_finished:false") and absf(turned_k - 90.0) < 5.0 and absf(feet.x - (lane.x - 1.0) + 0.43) < 0.05 and feet.z < 9.6
+			"climb_slab":
+				# Up the slab and over its top (4.69 m at its front edge, sloping down 20 degrees behind it).
+				ok = ok and names.has("climb_started") and names.has("climb_finished:true") and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and feet.y > 4.2
+			"climb_off", "climb_masked", "climb_overhang":
+				# Not climbed: standing at the wall's foot.
+				ok = ok and not names.has("climb_started") and feet.y < 0.05
 			"drop_run":
 				# Too fast: over the edge and down, no hang.
 				ok = ok and not names.has("hang_started:3.5") and feet.y < 0.05 and feet.z > -2.0

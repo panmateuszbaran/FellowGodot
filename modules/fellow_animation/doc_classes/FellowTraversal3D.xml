@@ -9,6 +9,7 @@
 		The pose: a [FellowTraversalPose3D] on the character's [Skeleton3D] reaches the hands for the edge, puts the feet on the wall's face and onto the top and tips the torso towards the wall over whatever animation plays; or plays the clip set for the kind ([member low_clip], [member high_clip], [member vault_clip]) across the mantle, its root's motion ([member clip_root_bone]) warped onto the ledge as the body's path. The signals tell an [AnimationTree] when to switch. See [code]docs/decisions/0180-traversal-mantling.md[/code].
 		Hanging (milestone 75): in the air, a ledge the body cannot climb (no room on its top: a wall rising behind it, an overhang) whose edge is about [member hang_reach] over its feet is caught and hung from ([member hang]; with [member hang_first], every ledge it could climb too, or [method try_hang]): the body hangs below the edge facing the wall, moves along it as the intent goes left or right ([member shimmy_speed]), following it as it turns and steps and stopping where it ends, at a gap or at something in the way; it climbs when pushed at the wall again, up, or [method climb_up] (a mantle from the hang), and lets go when pulled away, down, or [method release]. Ladders: a [FellowLadder3D] the body goes towards ([member ladders]) is climbed at [member ladder_speed] (the intent up or towards it: up; [method set_climb_input]), stepped off at its foot, and at its top mantled off onto what is there. The pose puts the hands on the edge or the rungs and the feet on the wall or the rungs.
 		Corners and jumps (milestone 81): hanging, the body goes round the corner where a ledge ends ([member wrap_corners]) and jumps to the next ledge along or up ([method hang_jump]); see [code]docs/decisions/0189-ledge-corners-and-jumps.md[/code]. Over an edge into a hang (milestone 84): [method try_drop], [member drop_to_hang]; see [code]docs/decisions/0192-drop-to-hang.md[/code].
+		Free climbing (milestone 148, [member free_climb]): pushing at a face of a wall on a layer of [member climb_mask] with nothing to mantle onto (or caught against it in the air) climbs it: the body faces the face, its capsule a few centimetres off it, and moves over it as the controller wishes ([member climb_speed]; the intent towards it or [method set_climb_input]: up, away: down, left or right: along it — an intent held turns with the face, so that going round a tower or a corner it keeps going the same way), following a curved or leaning face, onto a face in its way (an inside corner) and round an edge onto the face beyond (an outside corner); not onto a face steeper over it than [member climb_max_overhang] nor onto ground to walk on. Where the hands find no face going up, over the top (a mantle) or, with no room there, hanging from it; down to the floor, standing; [method release] lets go. The pose puts the hands over the head and the feet on the face, a step apart, changing over as it climbs, the torso towards a face that leans back. See [code]docs/decisions/0276-free-climbing.md[/code].
 		[codeblocks]
 		[gdscript]
 		# A controller: the input as the intent, nothing while the traversal moves the body.
@@ -75,7 +76,7 @@
 		<method name="get_global_stats" qualifiers="static">
 			<return type="Dictionary" />
 			<description>
-				Every traversal's work since the last [method reset_global_stats]: [code]checks[/code] and [code]check_usec[/code] (the ledges looked for), [code]steps[/code] and [code]step_usec[/code] (the physics frames of mantles moving bodies), [code]mantles_low[/code], [code]mantles_high[/code], [code]vaults[/code], [code]poses[/code] and [code]pose_usec[/code] (the [FellowTraversalPose3D]s' poses). The debugger's Monitors tab shows their time a frame as "FellowEngine/Traversal time".
+				Every traversal's work since the last [method reset_global_stats]: [code]checks[/code] and [code]check_usec[/code] (the ledges looked for), [code]steps[/code] and [code]step_usec[/code] (the physics frames of mantles moving bodies), [code]mantles_low[/code], [code]mantles_high[/code], [code]vaults[/code], [code]hangs[/code], [code]transfers[/code], [code skip-lint]ladders[/code], [code]climbs[/code] (milestone 148: faces climbed), [code]poses[/code] and [code]pose_usec[/code] (the [FellowTraversalPose3D]s' poses). The debugger's Monitors tab shows their time a frame as "FellowEngine/Traversal time".
 			</description>
 		</method>
 		<method name="get_intent" qualifiers="const">
@@ -118,6 +119,12 @@
 			<return type="bool" />
 			<description>
 				[code]true[/code] while a mantle moves the body.
+			</description>
+		</method>
+		<method name="is_climbing" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns [code]true[/code] while the body climbs a wall's face ([member free_climb]).
 			</description>
 		</method>
 		<method name="is_hanging" qualifiers="const">
@@ -164,6 +171,13 @@
 				The way the player wants to go (the input, in global space), set by the controller every physics frame: the automatic mantle checks that way, and a body pressed against a wall (its velocity into it lost to the slide) still mantles. A zero vector: the body's velocity is used.
 			</description>
 		</method>
+		<method name="try_climb">
+			<return type="bool" />
+			<param index="0" name="direction" type="Vector3" default="Vector3(0, 0, 0)" />
+			<description>
+				Climbs the climbable face in front of the body's chest within [member reach_distance], towards [param direction] (else the intent, else the body's facing), whatever [member free_climb] says. Returns [code]false[/code] when there is none or the traversal is busy.
+			</description>
+		</method>
 		<method name="try_drop">
 			<return type="bool" />
 			<param index="0" name="direction" type="Vector3" default="Vector3(0, 0, 0)" />
@@ -208,6 +222,15 @@
 		<member name="check_interval" type="int" setter="set_check_interval" getter="get_check_interval" default="2">
 			The physics frames from one automatic check to the next while nothing was in reach (staggered between traversals); with a wall in reach, every frame.
 		</member>
+		<member name="climb_mask" type="int" setter="set_climb_mask" getter="get_climb_mask" default="1">
+			The physics layers whose faces [member free_climb] climbs (their [code]collision_layer[/code]); the queries still use [member collision_mask].
+		</member>
+		<member name="climb_max_overhang" type="float" setter="set_climb_max_overhang" getter="get_climb_max_overhang" default="20.0">
+			The most a face may lean over the body (degrees past vertical) to be climbed; a face less steep than [member max_ledge_slope] is walked on instead.
+		</member>
+		<member name="climb_speed" type="float" setter="set_climb_speed" getter="get_climb_speed" default="1.0">
+			How fast the body climbs over a face (m/s).
+		</member>
 		<member name="clip_root_bone" type="StringName" setter="set_clip_root_bone" getter="get_clip_root_bone" default="&amp;&quot;&quot;">
 			The bone whose position track in the clips is the root's motion: sampled, its rise scaled to the ledge's height and its advance to the distance onto the top (or the landing), it becomes the body's path (kept out of the wall until the root has risen); [FellowTraversalPose3D] takes the displacement out of the bone's pose. Empty: the procedural path, the clip only posing the body.
 		</member>
@@ -228,6 +251,9 @@
 		</member>
 		<member name="exit_speed" type="float" setter="set_exit_speed" getter="get_exit_speed" default="1.5">
 			A [CharacterBody3D]'s speed into the ledge when a mantle ends (a vault keeps its entry speed if that is higher).
+		</member>
+		<member name="free_climb" type="bool" setter="set_free_climb" getter="is_free_climb" default="false">
+			If [code]true[/code], the body climbs any face on a layer of [member climb_mask] it pushes at with nothing to mantle onto, or is caught against in the air (milestone 148). See the class description.
 		</member>
 		<member name="grab_in_air" type="bool" setter="set_grab_in_air" getter="is_grab_in_air" default="true">
 			In the air (not on the floor, not rising faster than 1 m/s), ledges are grabbed up to 0.5 m higher than [member max_height] over the feet (hanging, the feet are lower). Vaults are not started in the air.
@@ -315,6 +341,17 @@
 		</member>
 	</members>
 	<signals>
+		<signal name="climb_finished">
+			<param index="0" name="at_top" type="bool" />
+			<description>
+				Emitted when the body stops climbing a face: [param at_top] when it goes on over the top (a mantle or a hang follows) or onto ground to walk on at its top, [code]false[/code] when it lets go or reaches the floor.
+			</description>
+		</signal>
+		<signal name="climb_started">
+			<description>
+				Emitted when the body starts climbing a face.
+			</description>
+		</signal>
 		<signal name="hang_finished">
 			<param index="0" name="climbed" type="bool" />
 			<description>
@@ -394,6 +431,9 @@
 		<constant name="KIND_LADDER" value="8" enum="Kind">
 			On a [FellowLadder3D] (milestone 75).
 		</constant>
+		<constant name="KIND_CLIMB" value="9" enum="Kind">
+			Climbing a wall's face ([member free_climb]): the action while [method is_climbing].
+		</constant>
 		<constant name="TRANSFER_OUTER_CORNER" value="0" enum="Transfer">
 			Round an outside corner: the wall turning away.
 		</constant>
@@ -418,7 +458,7 @@
 		<constant name="TRANSFER_JUMP_BACK" value="7" enum="Transfer">
 			A jump back to a ledge on the wall behind, turning round ([method hang_jump] with the wish away from the wall).
 		</constant>
-		<constant name="KIND_MAX" value="9" enum="Kind">
+		<constant name="KIND_MAX" value="10" enum="Kind">
 			The number of kinds.
 		</constant>
 	</constants>

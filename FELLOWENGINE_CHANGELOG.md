@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 148 — free climbing (2026-11-18, in progress)
+
+- Decision 0276: `FellowTraversal3D.free_climb` — a body pushing at a climbable face (`climb_mask`) with nothing to
+  mantle onto climbs it: up and down, along it (the wish held turning with the face), round towers and corners, over
+  its top (a mantle, or a hang with no room there), down to the floor; `climb_speed`, `climb_max_overhang`,
+  `try_climb()`, `is_climbing()`, `climb_started` / `climb_finished`. The mantle's path now keeps the capsule off a
+  slab's face and on a sloping top's plane. `climb_check.gd`'s eight new lanes on both physics engines; the earlier
+  lanes, `traversal_check.gd` and the regression scenes `traversal` and `climb` as before; 18 µs a climbing body a
+  frame.
+
 ## Milestone 147 — tracked vehicles and two-wheelers; the far shadow cascades without instances out of range; a garment's backstop (2026-11-18)
 
 - Decision 0272: a directional cascade that begins beyond an instance range's end (the terrain's foliage, HLOD's
