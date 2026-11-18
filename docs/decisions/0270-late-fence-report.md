@@ -78,7 +78,7 @@ in the runs that did not hang the same view passed without a long GPU frame.
 | without the present and submit threads (`f504`) | 20 | 0 |
 | FellowEngine off (`f504`: nothing streamed; two flights, not three) | 20 | 0 |
 | the record and the pass timestamps on (`f506`, `f507`) | 36 | 0 |
-| (milestone 145, `m145a`) held 10 s / 2 s | 34 / 27 | 4 / 0 |
+| (milestone 145, `m145a`) held 10 s / 2 s | 28 / 27 | 3 / 0 |
 
 Too few to tell which of them matters (3 of 32 against none of 36 is p ≈ 0.1). The pass timestamps, meant to say
 where the GPU stops, may themselves keep it from stopping: they make the render graph keep each pass's commands
