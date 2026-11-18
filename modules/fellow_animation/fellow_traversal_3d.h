@@ -240,6 +240,12 @@ private:
 	Vector3 climb_normal;
 	Vector3 climb_facing; // the body's facing, turned towards the face's (round a corner, over a few frames)
 	float climb_travel = 0.0f; // metres moved on the face (the hands and feet step with it)
+	// Milestone 150: the capsule pushed out from the face where it would not fit at its gap (a string course standing
+	// out of the wall above or below it, a setback), and the feet as placed (their distance from the face eased).
+	float climb_out = 0.0f;
+	float climb_out_goal = 0.0f;
+	Vector3 climb_feet_now;
+	Vector3 climb_feet_normal; // the face's (flat) normal where the feet were last placed
 	// The wish held turns with the face (round a tower, a corner: the stick held left keeps going left along it).
 	bool climb_hold = false;
 	Vector3 climb_hold_intent;
@@ -295,6 +301,7 @@ private:
 	Vector3 _climb_feet(const Vector3 &p_point, const Vector3 &p_normal) const;
 	bool _find_climb(const Vector3 &p_direction, Vector3 &r_point, Vector3 &r_normal) const;
 	bool _climb_top(Ledge &r_ledge) const;
+	float _climb_clearance(const Vector3 &p_point, const Vector3 &p_normal, const HashSet<RID> &p_exclude) const;
 	bool _start_climb(const Vector3 &p_point, const Vector3 &p_normal);
 	void _step_climb(double p_delta);
 	void _end_climb(bool p_at_top, const Vector3 &p_velocity);

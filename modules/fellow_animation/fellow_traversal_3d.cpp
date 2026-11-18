@@ -58,6 +58,11 @@ const float CLIMB_HANDS = 1.6f; // m over the feet, the lower hand
 const float CLIMB_FEET = 0.25f; // m over the feet, the lower foot
 const float CLIMB_STEP = 0.3f; // m: a hand's or foot's step
 const double CLIMB_GRAB = 0.25; // s onto the face before it moves
+const float CLIMB_OUT_STEP = 0.08f; // m: the steps the capsule is pushed out from the face by to fit (milestone 150)
+const float CLIMB_OUT_MAX = 0.48f; // m: the most (a string course, a cornice, a plinth's top)
+const float CLIMB_OUT_AHEAD = 0.3f; // m: standing out for what is this far ahead along the move
+const float CLIMB_OUT_RATE = 3.0f; // m/s: out from the face (for what stands out of it)
+const float CLIMB_IN_RATE = 0.8f; // m/s: back in towards it
 
 Vector3 flat(const Vector3 &p_v) {
 	return Vector3(p_v.x, 0.0f, p_v.z);
@@ -1846,6 +1851,24 @@ bool FellowTraversal3D::_climb_top(Ledge &r_ledge) const {
 	return false;
 }
 
+// Milestone 150 (decision 0281): how far out from its gap the capsule must stand at a point on the face to be free —
+// a string course or a cornice standing out of the wall over or under the chest's point, the top of a plinth the wall
+// steps back from — in steps of CLIMB_OUT_STEP up to CLIMB_OUT_MAX; -1 where it is not free even there.
+float FellowTraversal3D::_climb_clearance(const Vector3 &p_point, const Vector3 &p_normal, const HashSet<RID> &p_exclude) const {
+	Vector3 nf = flat(p_normal);
+	if (nf.length() < 1e-3f) {
+		return -1.0f;
+	}
+	nf.normalize();
+	const Vector3 feet = _climb_feet(p_point, p_normal);
+	for (float k = 0.0f; k <= CLIMB_OUT_MAX + 1e-4f; k += CLIMB_OUT_STEP) {
+		if (_capsule_free(feet + nf * k + UP * 0.02f, radius * 0.95f, height - 0.04f, p_exclude)) {
+			return k;
+		}
+	}
+	return -1.0f;
+}
+
 bool FellowTraversal3D::_start_climb(const Vector3 &p_point, const Vector3 &p_normal) {
 	CollisionObject3D *body = _get_body();
 	if (!body) {
@@ -1861,6 +1884,10 @@ bool FellowTraversal3D::_start_climb(const Vector3 &p_point, const Vector3 &p_no
 	lunge.active = false;
 	start_xf = body->get_global_transform();
 	start_feet = _feet_of(start_xf);
+	climb_out = 0.0f;
+	climb_out_goal = 0.0f;
+	climb_feet_now = start_feet;
+	climb_feet_normal = flat(p_normal).normalized();
 	time = 0.0;
 	duration = 1.0;
 	hold_time = 0.0;
@@ -1966,9 +1993,11 @@ void FellowTraversal3D::_step_climb(double p_delta) {
 		climb_normal = lunge.from_normal.slerp(lunge.to_normal, e).normalized();
 		n = climb_normal;
 		nf = flat(n).normalized();
-		const Vector3 feet = _climb_feet(climb_point, n) + flat(n).normalized() * (0.12f * Math::sin(float(Math::PI) * u));
+		const Vector3 feet = _climb_feet(climb_point, n) + flat(n).normalized() * (0.12f * Math::sin(float(Math::PI) * u) + climb_out);
 		climb_facing = -nf;
 		_place(body, feet, climb_facing, p_delta);
+		climb_feet_now = feet;
+		climb_feet_normal = nf;
 		if (u >= 1.0f) {
 			lunge.active = false;
 		}
@@ -2032,8 +2061,10 @@ void FellowTraversal3D::_step_climb(double p_delta) {
 		Vector3 hp, hn;
 		ObjectID hc;
 		bool hit = false;
-		// A face in the way along the move (an inside corner, a ceiling).
-		if (_probe_wall(climb_point + n * 0.05f, md, radius + 0.15f, hp, hn, hc) && hn.dot(n) < 0.9f) {
+		// A face in the way along the move (an inside corner, a ceiling). Milestone 150: an underside the hands can go
+		// round (a string course's, a cornice's: the face going on up in front of it) is not in the way.
+		const float floor_y = Math::cos(Math::deg_to_rad(max_ledge_slope));
+		if (_probe_wall(climb_point + n * 0.05f, md, radius + 0.15f, hp, hn, hc) && hn.dot(n) < 0.9f && (_climbable(hn, hc) || hn.y > floor_y)) {
 			hit = true;
 		} else if (_probe_wall(to + n * 0.6f, -n, 1.2f, hp, hn, hc)) {
 			hit = true; // the face, found again
@@ -2041,13 +2072,18 @@ void FellowTraversal3D::_step_climb(double p_delta) {
 			hit = true; // past an edge: the face round it
 		}
 		if (hit && _climbable(hn, hc)) {
-			const Vector3 feet = _climb_feet(hp, hn);
-			if (_capsule_free(feet + UP * 0.02f, radius * 0.95f, height - 0.04f, exclude)) {
+			// Milestone 150: where the capsule does not fit at its gap (a course standing out over or under the point,
+			// a plinth the wall steps back from), it stands out from the face as far as it must.
+			float out = _climb_clearance(hp, hn, exclude);
+			if (out >= 0.0f) {
+				// Out already for what is a step ahead (the capsule's top reaches a course before the chest does).
+				const float ahead = out > 0.0f || climb_out_goal > 0.0f || !_capsule_free(_climb_feet(hp + md * CLIMB_OUT_AHEAD, hn) + UP * 0.02f, radius * 0.95f, height - 0.04f, exclude) ? _climb_clearance(hp + md * CLIMB_OUT_AHEAD, hn, exclude) : 0.0f;
 				climb_travel += hp.distance_to(climb_point);
 				climb_point = hp;
 				climb_normal = hn;
+				climb_out_goal = MAX(out, ahead);
 			}
-		} else if (hit && hn.y > Math::cos(Math::deg_to_rad(max_ledge_slope)) && wish.y > 0.1f) {
+		} else if (hit && hn.y > floor_y && wish.y > 0.1f) {
 			// The face gives onto ground to walk on: off the wall onto it.
 			_end_climb(true, t_up * climb_speed);
 			return;
@@ -2060,7 +2096,26 @@ void FellowTraversal3D::_step_climb(double p_delta) {
 	climb_facing = climb_facing.lerp(-nf, turn);
 	climb_facing = flat(climb_facing).length() > 1e-3f ? flat(climb_facing).normalized() : -nf;
 	const float w = smooth(float(hold_time / CLIMB_GRAB));
-	const Vector3 feet = start_feet.lerp(_climb_feet(climb_point, n), w);
+	// Milestone 150: standing out from the face no farther than the capsule must there (eased back in as it can), the
+	// feet's distance from the face eased (onto a course's front and off it again).
+	if (p_delta > 0.0 && move.length_squared() <= 1e-10f) {
+		const float out_now = _climb_clearance(climb_point, n, exclude);
+		if (out_now >= 0.0f) {
+			climb_out_goal = out_now;
+		}
+	}
+	climb_out = climb_out_goal > climb_out ? MIN(climb_out_goal, climb_out + float(p_delta) * CLIMB_OUT_RATE) : MAX(climb_out_goal, climb_out - float(p_delta) * CLIMB_IN_RATE);
+	const Vector3 goal = start_feet.lerp(_climb_feet(climb_point, n) + nf * climb_out, w);
+	Vector3 feet = goal;
+	if (w >= 1.0f && p_delta > 0.0 && nf.dot(climb_feet_normal) > 0.999f) {
+		// Back in towards the face slowly; out from it at once (never into what stands out of it). Not round a
+		// corner or a curve (the face's normal turning): there the feet follow it as before.
+		const Vector3 dv = goal - climb_feet_now;
+		const float dn = dv.dot(nf);
+		feet = climb_feet_now + (dv - nf * dn) + nf * MAX(dn, -float(p_delta) * CLIMB_IN_RATE);
+	}
+	climb_feet_now = feet;
+	climb_feet_normal = nf;
 	_place(body, feet, climb_facing, p_delta);
 	// The pose: the hands over the head and the feet on the face, a step apart, changing over as it climbs.
 	t_up = UP - n * UP.dot(n);

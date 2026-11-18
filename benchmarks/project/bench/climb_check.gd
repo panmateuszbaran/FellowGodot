@@ -22,6 +22,8 @@ extends SceneTree
 ## climbing, on a row of its own — up a 4.5 m wall and over its top; up, along it to the left and down to the floor; round
 ## a round tower; round a block's outside corner (the wish held turning with the face); up a slab leaning back 20 degrees
 ## and over its top; and none: with free_climb off, on a wall outside climb_mask, at an overhang of 30 degrees.
+## Milestone 150 (decision 0281): up past a string course standing out 0.2 m and over the top; up from a plinth's face
+## onto the wall set back 0.15 m behind it and over the top.
 
 const KIND_NAMES := ["none", "step", "low", "high", "vault", "too_high", "blocked", "hang", "ladder", "climb"]
 const RUN_SECONDS := 9.0
@@ -313,7 +315,7 @@ func _build() -> void:
 	sun.rotation_degrees = Vector3(-50, 35, 0)
 	sun.shadow_enabled = true
 	root3d.add_child(sun)
-	_box(Vector3(40, -0.5, -5), Vector3(120, 1, 40), Color(0.36, 0.42, 0.34))
+	_box(Vector3(46, -0.5, -5), Vector3(132, 1, 40), Color(0.36, 0.42, 0.34)) # milestone 150: to x 112 (the course and plinth lanes)
 
 	var walk := Vector3(0, 0, -1)
 	var x := 0.0
@@ -475,6 +477,15 @@ func _build() -> void:
 	_box(Vector3(86.8, 1.25, 8.4), Vector3(0.4, 2.5, 1.2))
 	var ljc := _lane("hang_jump_corner", Vector3(88, 0, 12), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}], [1.4, {"intent": Vector3()}],
 			[2.0, {"intent": Vector3(-1, 0, 0)}], [3.6, {"call": "hang_jump"}], [4.6, {"intent": Vector3()}]])
+	# Milestone 150 (decision 0281): a 6 m wall with a string course standing out 0.2 m (0.26 m tall, its underside
+	# 2.6 m up): up past it and over the top; a 5 m wall over a plinth 2 m tall standing out 0.15 m: up from the plinth's
+	# face onto the wall's and over the top.
+	_box(Vector3(100, 3.0, 9.0), Vector3(3.0, 6.0, 2.0), Color(0.62, 0.55, 0.48))
+	_box(Vector3(100, 2.73, 10.1), Vector3(3.0, 0.26, 0.2), Color(0.72, 0.7, 0.66))
+	climb_lanes.append(_lane("climb_course", Vector3(100, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [7.0, {"intent": Vector3()}]]))
+	_box(Vector3(108, 2.5, 9.0), Vector3(3.0, 5.0, 2.0), Color(0.62, 0.55, 0.48))
+	_box(Vector3(108, 1.0, 10.075), Vector3(3.0, 2.0, 0.15), Color(0.72, 0.7, 0.66))
+	climb_lanes.append(_lane("climb_plinth", Vector3(108, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [5.2, {"intent": Vector3()}]]))
 	# None: free_climb off; the wall outside climb_mask; an overhang of 30 degrees.
 	_box(Vector3(40, 2.25, 9.0), Vector3(3.0, 4.5, 2.0), Color(0.6, 0.6, 0.66))
 	_lane("climb_off", Vector3(40, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [4.0, {"intent": Vector3()}]])
@@ -769,6 +780,11 @@ func _finish() -> void:
 			"climb_slab":
 				# Up the slab and over its top (4.69 m at its front edge, sloping down 20 degrees behind it).
 				ok = ok and names.has("climb_started") and names.has("climb_finished:true") and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and feet.y > 4.2
+			"climb_course", "climb_plinth":
+				# Milestone 150 (decision 0281): past what stands out of the face (the capsule out from it as far as it
+				# must, never in it) and over the top.
+				var top := 6.0 if lane.name == "climb_course" else 5.0
+				ok = ok and names.has("climb_started") and names.has("climb_finished:true") and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - top) < 0.05
 			"climb_off", "climb_masked", "climb_overhang":
 				# Not climbed: standing at the wall's foot.
 				ok = ok and not names.has("climb_started") and feet.y < 0.05
