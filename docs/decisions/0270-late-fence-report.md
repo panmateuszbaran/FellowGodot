@@ -86,6 +86,17 @@ together (a timestamp is adjacent to every command since the previous one), and 
 Next (`m146_f508`): GPU checkpoints (`debug/gpu_checkpoints`: NVIDIA's markers before each command, without
 constraining the order) and the render graph's reordering off (`debug/graph_reorder`), 20 runs each.
 
+`m146_f508` (milestone 147): one hang in each arm — so neither the reordering (it hung with it off, at another frame,
+8 485) nor markers between the commands keep it away. With the checkpoints, the report of the hung run:
+
+* the main queue's top of pipe and bottom of pipe both at the checkpoint before command 69 of the frame — a draw list
+  without a breadcrumb (none of Forward+'s passes carries one): everything before it done, the draw list begun and
+  never finished;
+* the bench's own viewport timestamps of the frame: the first written, the last not.
+
+The GPU stops in one draw list, nearly idle. Next (`m147_f509`): which draw list (its region, its commands' size,
+whether worker threads recorded it in secondary command buffers — now in its checkpoint — and the commands around it).
+
 ## Decision
 
 KEEP: the late fence report on by default (2 s; changes no frame), the record off by default (start-up), the fault
