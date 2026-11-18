@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 150 — climbing past courses and plinths; the rooftops showcase (2026-11-18)
+
+- Decision 0281: free climbing past what stands out of the wall — an underside (a string course's, a cornice's) is no
+  longer a face in the way, and the capsule stands out from the face as far as it must to be free (0.08 m steps up to
+  0.48 m, for what is 0.3 m ahead too), eased back in. `climb_check.gd`'s `climb_course` and `climb_plinth` climb and
+  mantle (they stopped at 0.9 m and 0.78 m); the other lanes value for value, on Jolt all pass; the regression scenes
+  `climb` and `ledge_corners` exact.
+- The showcase's rooftops (`showcase/rooftops/rooftops.tscn`): a Renaissance square at the golden hour in the manner of
+  Assassin's Creed — its buildings, props and city modelled by code in Blender (`showcase/tools/blender`), a mannequin
+  with 20 clips made there (gait cycles with IK-planted feet, mantles with root motion that `FellowTraversal3D`
+  scales onto the ledge, hanging, climbing, the leap of faith), procedural materials, paving by zone, the Tuscan
+  country with its trees, cloth, birds; the player on `FellowTraversal3D` climbing the 38 m bell tower to its belfry,
+  a damped third-person camera, and a demo of shots (`-- --demo`).
+
 ## Milestone 149 — the head following the gaze; a jump round a corner; hair shadowed by lamps (2026-11-18)
 
 - Decision 0278: `FellowHeadMotion3D.follow_gaze` (opt-in) — the head turns towards what its face looks at (past

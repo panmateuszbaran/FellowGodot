@@ -91,6 +91,7 @@ pines, farms). Play it with `godot --path showcase res://rooftops/rooftops.tscn`
 | Space (A) | jump; hanging or climbing, a jump along, up or round a corner (`hang_jump()`) |
 | C (B) | let go of a wall or a ledge; running, a roll |
 | E (Y) | at the bell tower's beam's end: perch (the camera swirls round, "synchronizing"); then Space: the leap of faith into the hay |
+| Esc, a click, F11 | free the mouse, take it again, full screen |
 
 What it shows of FellowEngine: `FellowTraversal3D` (mantles and vaults with the mannequin's own clips and their root
 motion scaled onto the ledge, hanging, shimmying, free climbing past string courses, cornices and plinths — decision
