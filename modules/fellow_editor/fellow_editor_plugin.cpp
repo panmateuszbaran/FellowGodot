@@ -1007,8 +1007,9 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			_fellow_make("FellowCloth3D", "Cloth", top, Dictionary{ { "position", Vector3(0.04, 3.9, 0) }, { "size", Vector2(1.8, 1.1) }, { "pin_mode", 2 } });
 		} break;
 		case PRESET_HAIR: {
-			// Milestone 124: hair of strands on a 0.1 m scalp (a head's size), to move under the head's BoneAttachment3D.
-			top = Object::cast_to<Node3D>(_fellow_make("FellowHair3D", "Hair", nullptr, Dictionary{ { "scalp_radius", 0.1 } }));
+			// Milestone 124: hair of strands on a 0.1 m scalp (a head's size), to move under the head's BoneAttachment3D;
+			// milestone 144: shadowing itself from the scene's sun (decision 0268).
+			top = Object::cast_to<Node3D>(_fellow_make("FellowHair3D", "Hair", nullptr, Dictionary{ { "scalp_radius", 0.1 }, { "self_shadow", 1.0 } }));
 		} break;
 		case PRESET_CURTAIN: {
 			// Milestone 73: a curtain of cloth hanging from its top edge.

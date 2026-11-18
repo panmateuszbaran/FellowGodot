@@ -6,7 +6,7 @@
 	<description>
 		Hair for a character's head (FellowEngine milestone 124, decision 0248). Put it under a [BoneAttachment3D] on the head bone: its scalp is the cap of a sphere ([member scalp_radius] about [member scalp_center], in the node's space) from its top down to [member coverage], the face's side (-Z) left bare by [member forehead_angle] — or the painted faces of [member scalp_mesh].
 		[member guide_count] guide strands grow from the scalp, combed along it (down and back) and falling, in [member segments] segments of [member length]. They are simulated on the CPU each frame in [member substeps] substeps: their roots on the scalp as the node moves, the segments' lengths kept exactly, a pull back to the styled shape strongest at the root ([member stiffness]), gravity, [member damping], the scene's [FellowWind3D] with [member drag], and out of the scalp's sphere and the [member colliders] (spheres and capsules: shoulders, a collar).
-		[member strand_count] strands are drawn, each between the three guides nearest its root (how far between them: [member spread]), along a Catmull-Rom curve through their points, as ribbons facing the camera at least a pixel wide (a thinner strand's coverage goes to its alpha, dithered: use TAA or FSR for smooth hair), [member root_width] thinning to [member tip_width]. The hair model: Kajiya-Kay's diffuse, a specular lobe in the light's colour and a broader one in the hair's ([member specular_shift], [member specular_strength], [member specular_sharpness]), light through it from behind ([member transmission]); darker at the roots ([member root_occlusion]) and on the strands under others; the light's shadows fall on it and from it.
+		[member strand_count] strands are drawn, each between the three guides nearest its root (how far between them: [member spread]), along a Catmull-Rom curve through their points, as ribbons facing the camera at least a pixel wide (a thinner strand's coverage goes to its alpha, dithered: use TAA or FSR for smooth hair), [member root_width] thinning to [member tip_width]. The hair model: Kajiya-Kay's diffuse, a specular lobe in the light's colour and a broader one in the hair's ([member specular_shift], [member specular_strength], [member specular_sharpness]), light through it from behind ([member transmission]); darker at the roots ([member root_occlusion]) and on the strands under others; the light's shadows fall on it and from it, and with [member self_shadow] it shadows itself from the sun.
 		Motion vectors follow the strands (the guides' positions go to the GPU in a texture of this frame's and the last frame's halves, each strand's instance data naming this frame's), so TAA and FSR see the hair's own motion.
 		Far away fewer, wider strands are drawn ([member lod_distance]) and the hair is not simulated ([member simulation_distance]). Every hair node of a frame is stepped on the worker threads at once (what the step reads from the scene — the node's transform, the wind, the colliders — gathered on the main thread first). In the editor the styled shape is shown, not simulated.
 	</description>
@@ -16,7 +16,7 @@
 		<method name="get_global_stats" qualifiers="static">
 			<return type="Dictionary" />
 			<description>
-				Returns every hair node's work since [method reset_global_stats]: [code]frames[/code], [code]group_usec[/code] (the main thread's time for all of them: preparing on the main thread, their steps on the worker threads at once, sending them to the GPU), [code]simulate_usec[/code] (the steps' time summed over the nodes: what one thread would spend), [code]upload_usec[/code], [code]simulated[/code] (the node-frames stepped). See decision 0250.
+				Returns every hair node's work since [method reset_global_stats]: [code]frames[/code], [code]group_usec[/code] (the main thread's time for all of them: preparing on the main thread, their steps on the worker threads at once, sending them to the GPU), [code]simulate_usec[/code] (the steps' time summed over the nodes: what one thread would spend), [code]upload_usec[/code], [code]simulated[/code] (the node-frames stepped), [code]self_shadow_usec[/code] (the [member self_shadow] maps' time summed over the nodes, on the worker threads; decision 0268). See decision 0250.
 			</description>
 		</method>
 		<method name="get_guide_points" qualifiers="const">
@@ -42,7 +42,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				Returns [code]guides[/code], [code]points[/code] (a guide's), [code]strands[/code], and the last frame's [code]simulate_usec[/code] and [code]upload_usec[/code] (the guides' texture and the strands' instance data sent to the GPU), [code]simulated[/code] (whether it was simulated: not beyond [member simulation_distance]), [code]visible_strands[/code] and [code]width_scale[/code] (the level of detail's).
+				Returns [code]guides[/code], [code]points[/code] (a guide's), [code]strands[/code], and the last frame's [code]simulate_usec[/code] and [code]upload_usec[/code] (the guides' texture and the strands' instance data sent to the GPU), [code]simulated[/code] (whether it was simulated: not beyond [member simulation_distance]), [code]visible_strands[/code] and [code]width_scale[/code] (the level of detail's); with [member self_shadow], [code]self_shadow_usec[/code] (its map's last time), [code]self_shadow_lit[/code] (a light found), [code]self_shadow_min[/code] and [code]self_shadow_mean[/code] (the least and the mean share of the light a guide's point got).
 			</description>
 		</method>
 		<method name="reset">
@@ -127,6 +127,15 @@
 		</member>
 		<member name="segments" type="int" setter="set_segments" getter="get_segments" default="12">
 			A guide's segments: its simulated points less one.
+		</member>
+		<member name="self_shadow" type="float" setter="set_self_shadow" getter="get_self_shadow" default="0.0">
+			How much the hair shadows itself from a directional light (0 to 1; 0: off, the material without it). Each frame the guides' points are splatted into a deep opacity map across the light (cells twice the guides' spacing, 32 slices along the light): what a point's strands cover of a cell — its guide's share of [member strand_count], its segment's length, the strands' width and their tips' fade, the segment's sine to the light — summed from the side nearest the light gives each point's optical depth, and [code]exp(-[member self_shadow_density] × depth)[/code] the share of the light it gets. The strands take their guides' shares, and dim that light's diffuse and specular light and the light through them from behind by it. Computed on the worker threads with the simulation (about 75 µs a frame for 160 guides on one core). The light: [member self_shadow_light], or the scene's first visible [DirectionalLight3D]. See decision 0268.
+		</member>
+		<member name="self_shadow_density" type="float" setter="set_self_shadow_density" getter="get_self_shadow_density" default="0.5">
+			How opaque the strands are to the light that crosses them, for [member self_shadow] (1: opaque strands; 0.5: a layer of strands that covers the light lets about 60 % of it through). Higher for dark hair, lower for fair hair.
+		</member>
+		<member name="self_shadow_light" type="NodePath" setter="set_self_shadow_light" getter="get_self_shadow_light" default="NodePath(&quot;&quot;)">
+			The [DirectionalLight3D] the hair shadows itself from with [member self_shadow]; empty: the scene's first visible one (looked for again at most once a second while there is none).
 		</member>
 		<member name="simulating" type="bool" setter="set_simulating" getter="is_simulating" default="true">
 			If [code]false[/code], the hair keeps its styled shape, following the node.

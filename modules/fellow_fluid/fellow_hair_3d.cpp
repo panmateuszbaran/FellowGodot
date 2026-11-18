@@ -41,6 +41,7 @@
 #include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
 #include "scene/3d/camera_3d.h"
+#include "scene/3d/light_3d.h"
 #include "scene/3d/physics/collision_shape_3d.h"
 #include "scene/main/viewport.h"
 #include "scene/resources/3d/capsule_shape_3d.h"
@@ -62,8 +63,8 @@ constexpr int STRIP_SEGMENTS = 24; // a drawn strand's segments (Catmull-Rom bet
 // UV.x -1 / +1 across); its instance colour holds two of its three guides and their weights (r, g: indices; b, a:
 // weights), its custom data the first guide (x), a random number (y), its length's share of the guides' (z) and which
 // half of the guides' texture is this frame's (w). The guides' points: the texture's rows [half × guides + guide].
-String FellowHair3D::shader_code() {
-	return R"(// FellowEngine FellowHair3D (decision 0248)
+String FellowHair3D::shader_code(bool p_self_shadow) {
+	String code = R"(// FellowEngine FellowHair3D (decision 0248)
 shader_type spatial;
 render_mode skip_vertex_transform, cull_disabled;
 
@@ -187,6 +188,29 @@ void light() {
 	SPECULAR_LIGHT += ALBEDO * LIGHT_COLOR * mix(ATTENUATION, 1.0, 0.5) * back;
 }
 )";
+	if (!p_self_shadow) {
+		return code; // the material as before decision 0268, bit for bit
+	}
+	// Self-shadowing (decision 0268): the guides' points' share of the light through the hair (the guides' texture's
+	// fourth channel), along the strand's guides and across them as its position is; the directional light it was
+	// computed for dimmed by it (diffuse, specular and the light through the hair from behind).
+	code = code.replace("uniform float width_scale = 1.0;\n", "uniform float width_scale = 1.0;\nuniform float self_shadow = 0.0;\nuniform vec3 self_shadow_dir = vec3(0.0, 1.0, 0.0);\n");
+	code = code.replace("varying float hair_seed;\n", "varying float hair_seed;\nvarying float hair_through;\n");
+	code = code.replace("void vertex() {\n", R"(// The share of the light a guide's points get through the hair, at u along it.
+float guide_light(int g, int row_base, float u) {
+	float f = clamp(u, 0.0, 1.0) * float(points - 1);
+	int i = min(int(floor(f)), points - 2);
+	float a = texelFetch(guides, ivec2(i, row_base + g), 0).w;
+	float b = texelFetch(guides, ivec2(i + 1, row_base + g), 0).w;
+	return mix(a, b, f - float(i));
+}
+
+void vertex() {
+)");
+	code = code.replace("\thair_tangent = tv;\n}", "\thair_tangent = tv;\n\thair_through = clamp(w0 * guide_light(g0, row_base, u) + w1 * guide_light(g1, row_base, u) + w2 * guide_light(g2, row_base, u), 0.0, 1.0);\n}");
+	code = code.replace("\tvec3 lc = LIGHT_COLOR * ATTENUATION;\n", "\tfloat through = LIGHT_IS_DIRECTIONAL && dot(LIGHT, normalize(mat3(VIEW_MATRIX) * self_shadow_dir)) > 0.999 ? mix(1.0, hair_through, self_shadow) : 1.0;\n\tvec3 lc = LIGHT_COLOR * ATTENUATION * through;\n");
+	code = code.replace("mix(ATTENUATION, 1.0, 0.5) * back;", "mix(ATTENUATION, 1.0, 0.5) * back * through;");
+	return code;
 }
 
 FellowHair3D::FellowHair3D() {
@@ -450,13 +474,34 @@ void FellowHair3D::_build() {
 	strip->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
 	if (material.is_null()) {
 		material.instantiate();
-		material->set_shader(FellowSharedShaders::shader(shader_code()));
+		material->set_shader(FellowSharedShaders::shader(shader_code(self_shadow > 0.0f)));
 	}
 	strip->surface_set_material(0, material);
 	multimesh->set_mesh(strip);
 	multimesh->set_instance_count(made);
 	visible_strands = -1; // the level of detail set again
 	width_scale = 1.0f;
+	// The self-shadowing's grid (decision 0268): cells twice the guides' mean spacing at their roots (each a few guides'
+	// strands), from up to 256 of them.
+	{
+		const int gc = int(guide_root.size());
+		const int step = MAX(1, gc / 256);
+		float sum = 0.0f;
+		int count = 0;
+		for (int i = 0; i < gc; i += step) {
+			float best = 1e30f;
+			for (int j = 0; j < gc; j++) {
+				if (j != i) {
+					best = MIN(best, guide_root[i].distance_squared_to(guide_root[j]));
+				}
+			}
+			if (best < 1e30f) {
+				sum += Math::sqrt(best);
+				count++;
+			}
+		}
+		self_shadow_cell = count > 0 ? MAX(2.0f * sum / float(count), 1e-4f) : MAX(scalp_radius * 0.2f, 1e-4f);
+	}
 	// The guides' texture: two halves of the guides' points.
 	guide_image = Image::create_empty(points, g * 2, false, Image::FORMAT_RGBAF);
 	guide_texture = ImageTexture::create_from_image(guide_image);
@@ -488,6 +533,207 @@ void FellowHair3D::_update_material() {
 	material->set_shader_parameter("transmission", transmission);
 	material->set_shader_parameter("root_occlusion", root_occlusion);
 	material->set_shader_parameter("width_scale", width_scale);
+	if (self_shadow > 0.0f) {
+		material->set_shader_parameter("self_shadow", self_shadow);
+		material->set_shader_parameter("self_shadow_dir", self_shadow_dir);
+	}
+}
+
+// The material's shader: with self-shadowing or without (decision 0268; without, the shader of decision 0248 as it was).
+void FellowHair3D::_update_shader() {
+	if (material.is_null()) {
+		return;
+	}
+	material->set_shader(FellowSharedShaders::shader(shader_code(self_shadow > 0.0f)));
+	_update_material();
+}
+
+// The directional light the hair shadows itself from: self_shadow_light, or the scene's first visible
+// DirectionalLight3D (looked for again at most once a second while there is none).
+Node *FellowHair3D::_find_self_shadow_light() {
+	if (!self_shadow_light.is_empty()) {
+		Node *n = get_node_or_null(self_shadow_light);
+		return Object::cast_to<DirectionalLight3D>(n) ? n : nullptr;
+	}
+	DirectionalLight3D *cached = Object::cast_to<DirectionalLight3D>(ObjectDB::get_instance(self_shadow_light_id));
+	if (cached && cached->is_inside_tree() && cached->is_visible_in_tree()) {
+		return cached;
+	}
+	const uint64_t frame = Engine::get_singleton()->get_process_frames();
+	if (cached == nullptr && self_shadow_light_id.is_null() && frame < self_shadow_search_frame) {
+		return nullptr;
+	}
+	self_shadow_light_id = ObjectID();
+	self_shadow_search_frame = frame + 60;
+	if (!is_inside_tree()) {
+		return nullptr;
+	}
+	TypedArray<Node> lights = get_tree()->get_root()->find_children("*", "DirectionalLight3D", true, false);
+	for (int i = 0; i < lights.size(); i++) {
+		DirectionalLight3D *dl = Object::cast_to<DirectionalLight3D>(lights[i]);
+		if (dl && dl->is_visible_in_tree()) {
+			self_shadow_light_id = dl->get_instance_id();
+			return dl;
+		}
+	}
+	return nullptr;
+}
+
+// On the main thread: the light the hair shadows itself from this frame, its direction (the material's too) and the
+// node's scale; false when there is none.
+bool FellowHair3D::_prepare_self_shadow() {
+	self_shadow_ready = false;
+	self_shadow_lit = false;
+	if (self_shadow <= 0.0f || !built || !positions_valid) {
+		return false;
+	}
+	Node3D *light = Object::cast_to<Node3D>(_find_self_shadow_light());
+	if (light == nullptr) {
+		return false;
+	}
+	const Vector3 dir = light->get_global_transform().basis.get_column(2).normalized();
+	if (!dir.is_finite() || dir.is_zero_approx()) {
+		return false;
+	}
+	if (!dir.is_equal_approx(self_shadow_dir) && material.is_valid()) {
+		material->set_shader_parameter("self_shadow_dir", dir);
+	}
+	self_shadow_dir = dir;
+	const Vector3 sc = get_global_transform().basis.get_scale();
+	ss_scale = MAX((Math::abs(sc.x) + Math::abs(sc.y) + Math::abs(sc.z)) / 3.0f, 1e-6f);
+	self_shadow_lit = true;
+	return true;
+}
+
+// On any thread, after _prepare_self_shadow(): the points' shares of the light from this frame's points.
+void FellowHair3D::_self_shadow_step() {
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	const uint32_t n = x.size();
+	ss_points.resize(n);
+	for (uint32_t i = 0; i < n; i++) {
+		ss_points[i] = x[i];
+	}
+	ss_through.resize(n);
+	_self_shadow(self_shadow_dir, ss_through.ptr());
+	self_shadow_ready = true;
+	last_self_shadow_usec = OS::get_singleton()->get_ticks_usec() - t0;
+}
+
+void FellowHair3D::_self_shadow_task(uint32_t p_index, FellowHair3D *const *p_list) {
+	p_list[p_index]->_self_shadow_step();
+}
+
+// The share of the light each guide's point (ss_points, global) gets through the hair towards p_to_light: a deep opacity
+// map on the CPU — a grid of cells across the light, each cut into SS_SLICES slices along it from the hair's side nearest
+// the light; every point's strands splatted into it (bilinearly across, into its slice), what they cover of a cell's
+// area: its guide's share of the strands times its segment's length, the strands' width and their tips' fade there and
+// the segment's sine to the light (a lock along the light hides little of itself); summed along each cell's slices from
+// the front, a point's optical depth is what lies in front of it in its cells (half a slice of bias). exp(-density × it).
+static constexpr int SS_SLICES = 32;
+
+void FellowHair3D::_self_shadow(const Vector3 &p_to_light, float *r_transmittance) {
+	const uint32_t n = ss_points.size();
+	const int g = int(guide_root.size());
+	if (n == 0 || g == 0 || points < 2 || n != uint32_t(g * points)) {
+		return;
+	}
+	const Vector3 l = p_to_light;
+	const Vector3 e1 = l.cross(Math::abs(l.y) < 0.9f ? Vector3(0, 1, 0) : Vector3(1, 0, 0)).normalized();
+	const Vector3 e2 = l.cross(e1);
+	const float scale = ss_scale;
+	float cell = self_shadow_cell * scale;
+	float umin = 1e30f, umax = -1e30f, vmin = 1e30f, vmax = -1e30f, dmin = 1e30f, dmax = -1e30f;
+	ss_uv.resize(n);
+	ss_depth.resize(n);
+	for (uint32_t i = 0; i < n; i++) {
+		const Vector3 &p = ss_points[i];
+		const Vector2 uv(e1.dot(p), e2.dot(p));
+		const float d = l.dot(p);
+		ss_uv[i] = uv;
+		ss_depth[i] = d;
+		umin = MIN(umin, uv.x);
+		umax = MAX(umax, uv.x);
+		vmin = MIN(vmin, uv.y);
+		vmax = MAX(vmax, uv.y);
+		dmin = MIN(dmin, d);
+		dmax = MAX(dmax, d);
+	}
+	cell = MAX(cell, MAX(umax - umin, vmax - vmin) / 126.0f); // at most 128 cells a side
+	const int nu = int((umax - umin) / cell) + 2;
+	const int nv = int((vmax - vmin) / cell) + 2;
+	const float slice = MAX((dmax - dmin) / float(SS_SLICES), 1e-6f);
+	// What a point's strands cover of a cell.
+	const int strands = instance_data.size() / FLOATS_PER_STRAND;
+	const float per_guide = float(strands) / float(g);
+	const float inv_area = 1.0f / (cell * cell);
+	ss_mass.resize(n);
+	for (int i = 0; i < g; i++) {
+		const float seg = (i < int(seg_rest.size()) ? seg_rest[i] : length / float(points - 1)) * scale;
+		for (int k = 0; k < points; k++) {
+			const float t = float(k) / float(points - 1);
+			const float width = Math::lerp(root_width, tip_width, t) * 0.001f;
+			const float fade = 1.0f - 0.7f * Math::smoothstep(0.8f, 1.0f, t);
+			const float ends = (k == 0 || k == points - 1) ? 0.5f : 1.0f;
+			const Vector3 along = ss_points[i * points + MIN(k + 1, points - 1)] - ss_points[i * points + MAX(k - 1, 0)];
+			const float al = along.length();
+			const float sine = al > 1e-9f ? along.cross(l).length() / al : 1.0f;
+			ss_mass[i * points + k] = per_guide * seg * ends * width * fade * sine * inv_area;
+		}
+	}
+	// The map: each point's mass into its four cells' slice, then summed from the front along each cell.
+	const int columns = nu * nv;
+	ss_prefix.resize(columns * (SS_SLICES + 1));
+	memset(ss_prefix.ptr(), 0, sizeof(float) * ss_prefix.size());
+	ss_cell.resize(n);
+	ss_weight.resize(n * 4);
+	for (uint32_t i = 0; i < n; i++) {
+		const float fu = (ss_uv[i].x - umin) / cell;
+		const float fv = (ss_uv[i].y - vmin) / cell;
+		const int iu = MIN(int(fu), nu - 2);
+		const int iv = MIN(int(fv), nv - 2);
+		const float tu = CLAMP(fu - float(iu), 0.0f, 1.0f);
+		const float tv = CLAMP(fv - float(iv), 0.0f, 1.0f);
+		ss_cell[i] = iv * nu + iu;
+		float *w = ss_weight.ptr() + i * 4;
+		w[0] = (1.0f - tu) * (1.0f - tv);
+		w[1] = tu * (1.0f - tv);
+		w[2] = (1.0f - tu) * tv;
+		w[3] = tu * tv;
+		const int sl = MIN(int((dmax - ss_depth[i]) / slice), SS_SLICES - 1);
+		const int base = ss_cell[i];
+		const int cells[4] = { base, base + 1, base + nu, base + nu + 1 };
+		for (int a = 0; a < 4; a++) {
+			ss_prefix[cells[a] * (SS_SLICES + 1) + sl + 1] += w[a] * ss_mass[i];
+		}
+	}
+	for (int c = 0; c < columns; c++) {
+		float *col = ss_prefix.ptr() + c * (SS_SLICES + 1);
+		for (int k = 1; k <= SS_SLICES; k++) {
+			col[k] += col[k - 1]; // col[k]: what lies in the slices before slice k
+		}
+	}
+	// Each point's optical depth: its cells' sums to half a slice in front of it (linear between the slices' ends).
+	float tmin = 1.0f;
+	double tsum = 0.0;
+	for (uint32_t i = 0; i < n; i++) {
+		const float f = CLAMP((dmax - ss_depth[i]) / slice - 0.5f, 0.0f, float(SS_SLICES));
+		const int k = MIN(int(f), SS_SLICES - 1);
+		const float fr = f - float(k);
+		const int base = ss_cell[i];
+		const int cells[4] = { base, base + 1, base + nu, base + nu + 1 };
+		const float *w = ss_weight.ptr() + i * 4;
+		float tau = 0.0f;
+		for (int a = 0; a < 4; a++) {
+			const float *col = ss_prefix.ptr() + cells[a] * (SS_SLICES + 1);
+			tau += w[a] * (col[k] + (col[k + 1] - col[k]) * fr);
+		}
+		const float t = Math::exp(-self_shadow_density * tau);
+		r_transmittance[i] = t;
+		tmin = MIN(tmin, t);
+		tsum += t;
+	}
+	last_self_shadow_min = tmin;
+	last_self_shadow_mean = float(tsum / double(n));
 }
 
 Vector3 FellowHair3D::_rest_global(int p_guide, int p_point, const Transform3D &p_xform) const {
@@ -693,9 +939,25 @@ void FellowHair3D::_group_process(double p_delta) {
 		WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &FellowHair3D::_group_task, (FellowHair3D *const *)run.ptr(), run.size(), -1, true, SNAME("FellowHair3D"));
 		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
 	}
+	// Self-shadowing (decision 0268): the lights read here, the hair's maps on the worker threads.
+	LocalVector<FellowHair3D *> shade;
+	for (FellowHair3D *h : all) {
+		if (h->_prepare_self_shadow()) {
+			shade.push_back(h);
+		}
+	}
+	if (shade.size() == 1) {
+		shade[0]->_self_shadow_step();
+	} else if (shade.size() > 1) {
+		WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &FellowHair3D::_self_shadow_task, (FellowHair3D *const *)shade.ptr(), shade.size(), -1, true, SNAME("FellowHair3D self-shadow"));
+		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
+	}
 	for (FellowHair3D *h : all) {
 		if (h->prep_run) {
 			global_stats.simulate_usec += h->last_simulate_usec;
+		}
+		if (h->self_shadow_ready) {
+			global_stats.self_shadow_usec += h->last_self_shadow_usec;
 		}
 		h->_upload();
 	}
@@ -724,6 +986,16 @@ void FellowHair3D::_upload() {
 			o[1] = p.y;
 			o[2] = p.z;
 			o[3] = 1.0f;
+		}
+	}
+	// Self-shadowing (decision 0268): each point's share of the light through the hair, in its fourth channel (computed
+	// on the worker threads with the simulation; in the editor, here).
+	if (self_shadow > 0.0f && Engine::get_singleton()->is_editor_hint() && _prepare_self_shadow()) {
+		_self_shadow_step();
+	}
+	if (self_shadow > 0.0f && self_shadow_ready && int(ss_through.size()) == g * points) {
+		for (int i = 0; i < g * points; i++) {
+			px[(parity * g * points + i) * 4 + 3] = ss_through[i];
 		}
 	}
 	if (!positions_valid) {
@@ -793,6 +1065,10 @@ Dictionary FellowHair3D::get_stats() const {
 	d["visible_strands"] = visible_strands < 0 ? int(instance_data.size() / FLOATS_PER_STRAND) : visible_strands; // milestone 125
 	d["width_scale"] = width_scale;
 	d["simulated"] = simulated; // the last frame (not beyond simulation_distance, simulating on)
+	d["self_shadow_usec"] = int64_t(last_self_shadow_usec); // decision 0268: the last upload's
+	d["self_shadow_lit"] = self_shadow_lit; // a directional light found
+	d["self_shadow_min"] = last_self_shadow_min; // the least and the mean share of the light a guide's point got
+	d["self_shadow_mean"] = last_self_shadow_mean;
 	return d;
 }
 
@@ -804,6 +1080,7 @@ Dictionary FellowHair3D::get_global_stats() {
 	d["simulate_usec"] = int64_t(global_stats.simulate_usec);
 	d["upload_usec"] = int64_t(global_stats.upload_usec);
 	d["simulated"] = int64_t(global_stats.simulated);
+	d["self_shadow_usec"] = int64_t(global_stats.self_shadow_usec); // decision 0268
 	return d;
 }
 
@@ -978,6 +1255,33 @@ FELLOW_HAIR_LOOK_SETTER(specular_sharpness, float, MAX(1.0f, p_value))
 FELLOW_HAIR_LOOK_SETTER(transmission, float, MAX(0.0f, p_value))
 FELLOW_HAIR_LOOK_SETTER(root_occlusion, float, CLAMP(p_value, 0.0f, 1.0f))
 
+void FellowHair3D::set_self_shadow(float p_self_shadow) {
+	const float v = CLAMP(p_self_shadow, 0.0f, 1.0f);
+	const bool switched = (v > 0.0f) != (self_shadow > 0.0f);
+	self_shadow = v;
+	if (switched) {
+		_update_shader();
+		if (built && Engine::get_singleton()->is_editor_hint()) {
+			_upload(); // the points' shares written (or 1 again); in a game, the next frame's upload
+		}
+	} else {
+		_update_material();
+	}
+}
+
+void FellowHair3D::set_self_shadow_density(float p_density) {
+	self_shadow_density = MAX(0.0f, p_density);
+	if (built && self_shadow > 0.0f && Engine::get_singleton()->is_editor_hint()) {
+		_upload();
+	}
+}
+
+void FellowHair3D::set_self_shadow_light(const NodePath &p_light) {
+	self_shadow_light = p_light;
+	self_shadow_light_id = ObjectID();
+	self_shadow_search_frame = 0;
+}
+
 void FellowHair3D::set_simulating(bool p_simulating) {
 	simulating = p_simulating;
 	if (!simulating) {
@@ -1037,6 +1341,9 @@ void FellowHair3D::_bind_methods() {
 	FELLOW_HAIR_BIND(specular_sharpness, get_specular_sharpness)
 	FELLOW_HAIR_BIND(transmission, get_transmission)
 	FELLOW_HAIR_BIND(root_occlusion, get_root_occlusion)
+	FELLOW_HAIR_BIND(self_shadow, get_self_shadow)
+	FELLOW_HAIR_BIND(self_shadow_density, get_self_shadow_density)
+	FELLOW_HAIR_BIND(self_shadow_light, get_self_shadow_light)
 #undef FELLOW_HAIR_BIND
 
 	ADD_GROUP("Scalp", "");
@@ -1080,4 +1387,8 @@ void FellowHair3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "specular_sharpness", PROPERTY_HINT_RANGE, "1,1000,1"), "set_specular_sharpness", "get_specular_sharpness");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "transmission", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_transmission", "get_transmission");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "root_occlusion", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_root_occlusion", "get_root_occlusion");
+	ADD_GROUP("Self Shadow", "");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "self_shadow", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_self_shadow", "get_self_shadow");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "self_shadow_density", PROPERTY_HINT_RANGE, "0,8,0.01,or_greater"), "set_self_shadow_density", "get_self_shadow_density");
+	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "self_shadow_light", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "DirectionalLight3D"), "set_self_shadow_light", "get_self_shadow_light");
 }

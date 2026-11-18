@@ -2,6 +2,7 @@ extends SceneTree
 ## FellowEngine milestone 126 check (decision 0250): many FellowHair3D nodes stepped on the worker threads at once.
 ##
 ##   godot --headless --path benchmarks/project --fixed-fps 60 -s res://bench/hair_crowd_check.gd -- --out=<dir> [--heads=24]
+##     [--self_shadow=1] (milestone 144: a sun, each head's hair shadowing itself from it, decision 0268)
 ##
 ## Heads with hair (160 guides each) in a grid within the simulation distance, each turning its own way; 240 frames.
 ## Reported: the main thread's time for the whole group a frame (preparing, waiting for the workers, uploading) against
@@ -39,6 +40,12 @@ func _build() -> void:
 	cam.current = true
 	cam.look_at_from_position(Vector3(0, 3, 8), Vector3(0, 1.6, 0))
 	var n := int(_arg("heads", "24"))
+	# Milestone 144 (decision 0268): --self_shadow=1 shadows each head's hair from a sun by itself (on the workers too).
+	var ss := float(_arg("self_shadow", "0"))
+	if ss > 0.0:
+		var sun := DirectionalLight3D.new()
+		sun.rotation_degrees = Vector3(-35, 140, 0)
+		root3d.add_child(sun)
 	for i in n:
 		var head := Node3D.new()
 		head.position = Vector3((i % 6) * 0.8 - 2.0, 1.6, -(i / 6) * 0.8)
@@ -46,6 +53,7 @@ func _build() -> void:
 		var hair := FellowHair3D.new()
 		hair.strand_count = 2000
 		hair.seed = i
+		hair.self_shadow = ss
 		head.add_child(hair)
 		heads.append(head)
 		hairs.append(hair)
@@ -81,11 +89,12 @@ func _finish() -> void:
 		"group_ms_per_frame": snappedf(g.group_usec / 1000.0 / frames, 0.001),
 		"steps_ms_per_frame_summed": snappedf(g.simulate_usec / 1000.0 / frames, 0.001),
 		"upload_ms_per_frame": snappedf(g.upload_usec / 1000.0 / frames, 0.001),
+		"self_shadow_ms_per_frame_summed": snappedf(g.self_shadow_usec / 1000.0 / frames, 0.001),
 		"heads_stepped_per_frame": snappedf(float(g.simulated) / frames, 0.01),
 		"processors": OS.get_processor_count(),
 		"max_stretch": snappedf(worst, 0.0001),
 	}
-	result["speedup"] = snappedf(result.steps_ms_per_frame_summed / maxf(0.001, result.group_ms_per_frame - result.upload_ms_per_frame), 0.01)
+	result["speedup"] = snappedf((result.steps_ms_per_frame_summed + result.self_shadow_ms_per_frame_summed) / maxf(0.001, result.group_ms_per_frame - result.upload_ms_per_frame), 0.01)
 	var failures := []
 	if result.heads_stepped_per_frame < hairs.size() - 0.01:
 		failures.append("not every head stepped")

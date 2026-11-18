@@ -61,6 +61,7 @@ public:
 		uint64_t simulate_usec = 0; // the steps' time, summed over the nodes (on the workers)
 		uint64_t upload_usec = 0;
 		uint64_t simulated = 0; // node-frames stepped
+		uint64_t self_shadow_usec = 0; // decision 0268: the self-shadowing's maps' time, summed over the nodes (on the workers)
 		uint64_t guides = 0;
 		uint64_t strands = 0;
 	};
@@ -140,6 +141,37 @@ private:
 	float specular_sharpness = 120.0f;
 	float transmission = 0.35f;
 	float root_occlusion = 0.6f;
+	// Self-shadowing (decision 0268): the share of a directional light each guide's point gets through the hair between
+	// it and the light — the guides' points splatted into a deep opacity map on the CPU (cells across the light, slices
+	// along it), each point's optical depth the strands in front of it — in the guides' texture's fourth channel; the
+	// strands between three guides take theirs. 0: off (the material without it).
+	float self_shadow = 0.0f;
+	float self_shadow_density = 0.5f;
+	NodePath self_shadow_light; // empty: the scene's first visible DirectionalLight3D
+	ObjectID self_shadow_light_id;
+	uint64_t self_shadow_search_frame = 0;
+	bool self_shadow_lit = false; // a light found at the last upload
+	Vector3 self_shadow_dir = Vector3(0, 1, 0); // towards the light (global), as the material has it
+	float self_shadow_cell = 0.0f; // the grid's cell (m): twice the guides' mean spacing at their roots
+	uint64_t last_self_shadow_usec = 0;
+	float last_self_shadow_min = 1.0f;
+	float last_self_shadow_mean = 1.0f;
+	LocalVector<Vector3> ss_points;
+	LocalVector<int32_t> ss_cell; // a point's first cell (its four: +1, +columns, +columns + 1)
+	LocalVector<float> ss_weight; // 4 a point
+	LocalVector<float> ss_depth;
+	LocalVector<float> ss_mass;
+	LocalVector<float> ss_prefix; // the map: a cell's slices' sums from the front
+	LocalVector<Vector2> ss_uv;
+	LocalVector<float> ss_through;
+	bool self_shadow_ready = false; // ss_through holds this frame's shares
+	float ss_scale = 1.0f;
+	Node *_find_self_shadow_light();
+	bool _prepare_self_shadow();
+	void _self_shadow_step();
+	void _self_shadow_task(uint32_t p_index, FellowHair3D *const *p_list);
+	void _self_shadow(const Vector3 &p_to_light, float *r_transmittance);
+	void _update_shader();
 
 	// The guides: root (node space) and normal, rest points in the node's space, the simulated points (global).
 	LocalVector<Vector3> guide_root;
@@ -179,7 +211,7 @@ protected:
 	static void _bind_methods();
 
 public:
-	static String shader_code();
+	static String shader_code(bool p_self_shadow = false);
 	virtual AABB get_aabb() const override;
 	PackedStringArray get_configuration_warnings() const override;
 
@@ -263,6 +295,12 @@ public:
 	float get_transmission() const { return transmission; }
 	void set_root_occlusion(float p_occlusion);
 	float get_root_occlusion() const { return root_occlusion; }
+	void set_self_shadow(float p_self_shadow);
+	float get_self_shadow() const { return self_shadow; }
+	void set_self_shadow_density(float p_density);
+	float get_self_shadow_density() const { return self_shadow_density; }
+	void set_self_shadow_light(const NodePath &p_light);
+	NodePath get_self_shadow_light() const { return self_shadow_light; }
 
 	FellowHair3D();
 	~FellowHair3D();

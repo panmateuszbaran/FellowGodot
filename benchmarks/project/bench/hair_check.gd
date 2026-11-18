@@ -7,7 +7,8 @@ extends SceneTree
 ## a second; then the head turns 70 degrees left and back over a second, then a wind blows. Pictures: front, side and
 ## back after settling, and mid-turn. Checks: no guide's segment longer or shorter than its rest by more than 1 %, no
 ## point inside the head, the roots on the scalp, the tips swinging after the head when it turns, and moving in the wind.
-## One JSON line: HAIR_CHECK {...}; exit code 1 when a check fails.
+## One JSON line: HAIR_CHECK {...}; exit code 1 when a check fails. Milestone 144: --self_shadow=<0-1> (and
+## --self_shadow_density) shadows the hair from the sun by itself (decision 0268).
 
 var args := {}
 var out_dir := ""
@@ -121,6 +122,10 @@ func _build() -> void:
 	hair.length = 0.32
 	hair.strand_count = int(_arg("strands", "10000"))
 	hair.guide_count = int(_arg("guides", "160"))
+	# Milestone 144 (decision 0268): the hair shadowing itself from the sun (--self_shadow=<0-1>, --self_shadow_density).
+	hair.self_shadow = float(_arg("self_shadow", "0"))
+	if args.has("self_shadow_density"):
+		hair.self_shadow_density = float(_arg("self_shadow_density", "0.5"))
 	head.add_child(hair)
 	hair.colliders = [hair.get_path_to(bcs)]
 	cam = Camera3D.new()
@@ -243,6 +248,8 @@ func _finish() -> void:
 		failures.append("no wind motion")
 	if st.strands < hair.strand_count * 0.9:
 		failures.append("strands")
+	if hair.self_shadow > 0.0 and (not st.self_shadow_lit or st.self_shadow_min > 0.5):
+		failures.append("self shadow") # no light found, or no point of the hair in its own shade
 	result["failures"] = failures
 	print("HAIR_CHECK " + JSON.stringify(result))
 	var f := FileAccess.open(out_dir.path_join("hair_check.json"), FileAccess.WRITE)
