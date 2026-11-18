@@ -3,7 +3,7 @@ extends SceneTree
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 640x360 -s res://bench/terrain_check.gd
 ##       -- --out=<dir> [--size=1025] [--spacing=1] [--patch=16] [--frames=12] [--debug_view=1] [--snow=<0..1>]
-##       [--foliage=1]
+##       [--foliage=1] [--shadow_distance=<metres>] [--foliage_kinds=grass,trees,rocks] [--grass_range=<metres>]
 ##
 ## For each camera: a PNG, and the share of the ground's pixels where the sky (pure red) shows through (cracks between
 ## levels of detail; the camera looks down, so every pixel below the horizon should be ground). Then physics rays cast
@@ -52,6 +52,9 @@ func _initialize() -> void:
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-40, 35, 0)
 	sun.shadow_enabled = true
+	# Milestone 147: a longer reach of the sun's shadows (its cascades beyond the foliage's ranges).
+	if args.has("shadow_distance"):
+		sun.directional_shadow_max_distance = float(args["shadow_distance"])
 	root3d.add_child(sun)
 
 	var noise := FastNoiseLite.new()
@@ -121,10 +124,12 @@ func _initialize() -> void:
 		g.mesh = grass_mesh
 		g.layer = 0
 		g.density = 2.0
-		g.range = 60.0
+		g.range = float(args.get("grass_range", "60"))
 		g.sink = -0.25
 		g.slope_max = 35.0
-		kinds.append(g)
+		var only: PackedStringArray = args.get("foliage_kinds", "grass,trees,rocks").split(",")
+		if only.has("grass"):
+			kinds.append(g)
 		var tr = ClassDB.instantiate("FellowTerrainFoliage")
 		tr.mesh = tree_mesh
 		tr.layer = 0
@@ -132,7 +137,8 @@ func _initialize() -> void:
 		tr.range = 500.0
 		tr.sink = -3.4
 		tr.slope_max = 30.0
-		kinds.append(tr)
+		if only.has("trees"):
+			kinds.append(tr)
 		var rk = ClassDB.instantiate("FellowTerrainFoliage")
 		rk.mesh = rock_mesh
 		rk.layer = 1
@@ -141,7 +147,8 @@ func _initialize() -> void:
 		rk.range = 200.0
 		rk.align_to_normal = 1.0
 		rk.sink = 0.2
-		kinds.append(rk)
+		if only.has("rocks"):
+			kinds.append(rk)
 		terrain.foliage = kinds
 	t0 = Time.get_ticks_usec()
 	root3d.add_child(terrain)
@@ -262,5 +269,8 @@ func _process(_delta: float) -> bool:
 		return false
 	result["physics"] = _rays()
 	result["stats"] = terrain.get_stats()
+	if RenderingServer.has_method("fellow_get_stats"):
+		# Milestone 147: the directional cascades the foliage's instances were left out of (beyond their range).
+		result["shadow_range_skips"] = RenderingServer.call("fellow_get_stats").get("shadow_range_skips", 0)
 	print("TERRAIN_CHECK ", JSON.stringify(result))
 	return true

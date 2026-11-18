@@ -196,6 +196,7 @@ D = {
     "profiling/pass_timestamps": "Profiling: the renderer's per-pass timestamps kept on (the visual profiler's and the benchmarks' pass times).",
     "profiling/list_markers": "Profiling: extra timestamps inside the render list and cull steps (they split stock's regions).",
     # ---------------------------------------------------------------- shadows
+    "shadows/instance_range_cascades": "Directional shadows: instances with an instance range (the terrain's foliage, HLOD's instanced proxies and impostors) are left out of the cascades that begin beyond the range's end — none of them is drawn that far, so none casts a shadow there (the cascade's own receivers are all beyond it). Per cascade, as HLOD's hand-over: what a cascade draws does not depend on where the camera is, and the shadow cache keeps it. FellowEngine's statistics count the instances left out ([code]shadow_range_skips[/code]). Decision 0272.",
     "shadows/directional_cache": "Directional shadows: each cascade's static casters cached in a guard-banded map, the moving ones drawn over a copy each frame. " + EXACT + " Decision 0004.",
     "shadows/directional_cache_guard_texels": "The cached cascade's guard band on each side, in texels: how far the cascade moves before its cache is rebuilt (and its memory).",
     "shadows/directional_cache_static_frames": "Frames a caster must stay unchanged to count as static (cached).",

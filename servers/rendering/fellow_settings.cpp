@@ -207,6 +207,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/profiling/list_markers", false);
 	GLOBAL_DEF("rendering/fellow/shadows/enabled", true);
 	GLOBAL_DEF("rendering/fellow/shadows/directional_cache", true);
+	// Milestone 147 (decision 0272): a directional cascade beginning beyond an instance range's end (the terrain's
+	// foliage, HLOD's instanced proxies) leaves those instances out.
+	GLOBAL_DEF("rendering/fellow/shadows/instance_range_cascades", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/directional_cache_guard_texels", PROPERTY_HINT_RANGE, "16,1024,16"), 256);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/directional_cache_static_frames", PROPERTY_HINT_RANGE, "1,600,1"), 60);
 	// Decision 0125: casters moved only by the wind are cached from this directional cascade on (their far shadows keep
@@ -618,6 +621,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["material_uniform_sets_created"] = s.material_uniform_sets_created.get(); // decision 0269
 	d["sync_log_anomalies"] = s.sync_log_anomalies.get(); // decision 0270
 	d["late_fences"] = s.late_fences.get(); // decision 0270
+	d["shadow_range_skips"] = s.shadow_range_skips.get(); // milestone 147
 	d["draw_particles_probes_usec"] = s.draw_particles_probes_usec.get();
 	d["draw_viewports_usec"] = s.draw_viewports_usec.get();
 	d["draw_end_frame_usec"] = s.draw_end_frame_usec.get();

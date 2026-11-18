@@ -1400,6 +1400,7 @@ struct Stats {
 	SafeNumeric<uint64_t> draw_setup_usec; // texture streaming, the scene's and canvas's updates
 	SafeNumeric<uint64_t> material_uniform_sets_created; // materials' parameter uniform sets made (decision 0269: a streamed texture's swap remakes its materials')
 	SafeNumeric<uint64_t> sync_log_anomalies; // queue operations the Vulkan driver's sync log found wrong (decision 0270, rendering/fellow/debug/sync_log)
+	SafeNumeric<uint64_t> shadow_range_skips; // milestone 147: instances not drawn in directional cascades beyond their instance range
 	SafeNumeric<uint64_t> late_fences; // frame fences not signalled within rendering/fellow/debug/late_fence_report_s (decision 0270)
 	SafeNumeric<uint64_t> draw_particles_probes_usec; // particles, reflection probes
 	SafeNumeric<uint64_t> draw_viewports_usec; // the viewports drawn

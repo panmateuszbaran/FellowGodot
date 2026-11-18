@@ -3695,6 +3695,8 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 	const Vector3 fellow_cam_origin = cull_data.cam_transform.origin;
 	uint64_t fellow_contribution_count = 0;
 	uint64_t fellow_caster_count = 0;
+	uint64_t fellow_range_skips = 0; // milestone 147: instances × cascades beyond their instance range
+	const bool fellow_range_cascades = Fellow::shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/instance_range_cascades");
 	auto fellow_contribution_culled = [&](const InstanceData &p_idata, const InstanceBounds &p_bounds) -> bool {
 		const uint32_t base_type = p_idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
 		if ((base_type != RSE::INSTANCE_MESH && base_type != RSE::INSTANCE_MULTIMESH) || (p_idata.flags & (InstanceData::FLAG_IGNORE_OCCLUSION_CULLING | InstanceData::FLAG_IGNORE_ALL_CULLING))) {
@@ -4063,6 +4065,16 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 							continue; // decision 0121: too small for this cascade's texels
 						}
 					}
+					if (fellow_range_cascades && idata.instance->fellow_range_end > 0.0f && k > 0) {
+						// FellowEngine (milestone 147): an instance range (the terrain's foliage, decision 0172; HLOD's
+						// instanced proxies, decision 0122) that ends before a cascade begins: none of its instances is
+						// drawn that far, so none casts a shadow there — per cascade, as the HLOD's hand-over below: what
+						// a cascade draws does not depend on where the camera is (the shadow cache keeps it).
+						if (cull_data.cull->shadows[j].cascades[k - 1].split >= (real_t)(idata.instance->fellow_range_end + idata.instance->fellow_range_end_margin)) {
+							fellow_range_skips++;
+							continue;
+						}
+					}
 					if (fellow_hlod) {
 						const real_t begin = k == 0 ? (real_t)0.0 : cull_data.cull->shadows[j].cascades[k - 1].split;
 						const bool far_cascade = begin >= (real_t)idata.instance->fellow_hlod_distance;
@@ -4165,6 +4177,9 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 	}
 	if (fellow_contribution_count > 0) {
 		Fellow::stats().geometry_contribution_culled.add(fellow_contribution_count);
+	}
+	if (fellow_range_skips > 0) {
+		Fellow::stats().shadow_range_skips.add(fellow_range_skips);
 	}
 	if (fellow_caster_count > 0) {
 		Fellow::stats().shadow_contribution_culled.add(fellow_caster_count);
