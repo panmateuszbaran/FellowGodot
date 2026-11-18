@@ -3339,6 +3339,9 @@ Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	}
 	if (fence_status == VK_NOT_READY) {
 		VkResult err = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
+		if (err == VK_ERROR_DEVICE_LOST) {
+			on_device_lost(); // FellowEngine (decision 0270): what VK_EXT_device_fault says, as a lost submission prints it
+		}
 		ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't wait for Vulkan fence (VkResult error %d).", err));
 	}
 

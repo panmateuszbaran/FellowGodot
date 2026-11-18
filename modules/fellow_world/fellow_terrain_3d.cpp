@@ -436,10 +436,15 @@ void layer_#(vec3 pl, vec3 dpdx, vec3 dpdy, vec3 nw, vec3 blend, out vec4 r_albe
 	code += R"(
 void fragment() {
 )";
+	// The discard of a hole's fragments comes at the end (milestone 146): the texture fetches and dFdx() below take their
+	// derivatives from the fragment's quad, undefined where one of its invocations has been discarded — on Intel's GPU
+	// the holes' rims differed from frame to frame.
+	const String hole_end = p_holes ? "\tif (hole) {\n\t\tdiscard;\n\t}\n" : "";
 	if (p_holes) {
 		// The triangle under the fragment (the mesh's: the diagonal from (x + 1, z) to (x, z + 1), as the collision's) is
 		// not drawn when one of its vertices is a hole.
-		code += R"(	{
+		code += R"(	bool hole;
+	{
 		vec2 g = v_local.xz / spacing;
 		vec2 c = floor(g);
 		vec2 f = g - c;
@@ -448,9 +453,7 @@ void fragment() {
 		float hb = texelFetch(holemap, clamp(i + ivec2(1, 0), ivec2(0), hi), 0).r;
 		float hc = texelFetch(holemap, clamp(i + ivec2(0, 1), ivec2(0), hi), 0).r;
 		float ho = texelFetch(holemap, clamp(f.x + f.y <= 1.0 ? i : i + ivec2(1, 1), ivec2(0), hi), 0).r;
-		if (max(ho, max(hb, hc)) > 0.5) {
-			discard;
-		}
+		hole = max(ho, max(hb, hc)) > 0.5;
 	}
 )";
 	}
@@ -505,8 +508,8 @@ void fragment() {
 	ALBEDO = albedo;
 	ROUGHNESS = rough;
 	NORMAL = normalize((VIEW_MATRIX * vec4(nf, 0.0)).xyz);
-}
 )";
+		code += hole_end + "}\n";
 		return code;
 	}
 	code += R"(	vec2 uv = map_uv(v_local.xz);
@@ -577,8 +580,8 @@ void fragment() {
 	ALBEDO = albedo;
 	ROUGHNESS = rough;
 	NORMAL = normalize((VIEW_MATRIX * vec4(nf, 0.0)).xyz);
-}
 )";
+	code += hole_end + "}\n";
 	return code;
 }
 
