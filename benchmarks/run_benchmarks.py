@@ -467,9 +467,17 @@ def main() -> int:
         os.makedirs(sd, exist_ok=True)
         log(f"heat soak {args.heat_soak:.0f} s ({scenes[0]} {resolutions[-1]} {b0}, discarded)")
         s0 = len(sampler.samples)
-        run_godot(exes[b0], ["--fixed-fps", "60", "--disable-vsync", "--resolution", resolutions[-1], "--position", "0,0"],
-                  [f"--scene={scenes[0]}", "--mode=perf", f"--res={resolutions[-1]}", "--tag=heatsoak", f"--out={sd}",
-                   f"--warmup={args.heat_soak}", "--measure=1", f"--preset={args.preset}"], args.heat_soak + 600, os.path.join(sd, "heatsoak.log"))
+        # The first build as it will run (milestone 143): its engine arguments (another GPU: f487's soak heated the RTX
+        # while the Intel GPU was measured), toggles, arguments and setting overrides.
+        soak_user = [f"--scene={scenes[0]}", "--mode=perf", f"--res={resolutions[-1]}", "--tag=heatsoak", f"--out={sd}",
+                     f"--warmup={args.heat_soak}", "--measure=1", f"--preset={args.preset}"]
+        if toggles_for(b0):
+            soak_user.append(f"--fellow={toggles_for(b0)}")
+        soak_user.extend(specs[b0][2])
+        write_override_cfg(specs[b0][4])
+        run_godot(exes[b0], ["--fixed-fps", "60", "--disable-vsync", "--resolution", resolutions[-1], "--position", "0,0", *specs[b0][3]],
+                  soak_user, args.heat_soak + 600, os.path.join(sd, "heatsoak.log"))
+        write_override_cfg([])
         tele = GpuSampler()
         tele.samples = sampler.samples[s0:]
         soak = tele.summary()
