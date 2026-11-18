@@ -19,6 +19,7 @@ Another Mesa or LLVM version renders slightly differently: compare with --tolera
     python tools/fellow_regression/regression.py bless --godot bin/godot.linuxbsd.editor.x86_64 [--only ...]
     python tools/fellow_regression/regression.py bless|run --godot ... --goldens DIR     # another GPU: its own goldens
         [--wait-pipelines]   # draws wait for their pipelines: pictures independent of how fast the GPU compiles
+        [--sync-log]         # the Vulkan driver's record of its queue operations on: what it finds wrong is an error
     python tools/fellow_regression/regression.py far --godot <build> [--offset 100000,0,100000] [--only ...]
         [--importer <an editor build, when --godot is a release template>]
 
@@ -168,6 +169,8 @@ def group_settings(spec, args):
     settings = dict(spec.get("settings", {}))
     if getattr(args, "wait_pipelines", False):
         settings["rendering/fellow/debug/wait_pipelines"] = True
+    if getattr(args, "sync_log", False):
+        settings["rendering/fellow/debug/sync_log"] = True
     return settings
 
 
@@ -276,6 +279,7 @@ def main() -> int:
     ap.add_argument("--goldens", default="", help="a directory of goldens instead of the repository's (another GPU or driver: bless into it, then run against it)")
     ap.add_argument("--offset", default="100000,0,100000", help="far: where the scenes are moved (metres)")
     ap.add_argument("--importer", default="", help="far: an editor build to import the project with first (when --godot is a release template)")
+    ap.add_argument("--sync-log", action="store_true", help="every group with rendering/fellow/debug/sync_log (milestone 146, decision 0270): the Vulkan driver checks each semaphore wait against the signals before it and each fence wait against the submissions; what it finds is printed as an error, so a scene fails on it (the pictures are the same)")
     ap.add_argument("--wait-pipelines", action="store_true", help="every group with rendering/fellow/debug/wait_pipelines: draws wait for their pipelines instead of the ubershader (milestone 136: on a GPU that compiles slowly the pictures otherwise depend on the compile threads' timing)")
     args = ap.parse_args()
     if args.command == "far":

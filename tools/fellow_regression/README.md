@@ -81,3 +81,10 @@ The pictures are the same as without it. Expected: nothing but `VUID-VkShaderMod
 layer of Ubuntu 24.04 cannot parse the ray-traced scenes' ray-query SPIR-V). The bench's labs the same way: the same
 `VK_LAYER_SETTINGS_PATH` and `--gpu-validation` on a FellowBench run on lavapipe (`benchmarks/tools/lavapipe/`; the
 milestone swept Slice Lab with ray-traced GI and the sky's atmosphere and clouds, Rain, Water, Fire and Lights Lab).
+
+**With the Vulkan driver's record of its queue operations** (milestone 146, decision 0270: after changes to
+submissions, semaphores, fences, the present or submit threads, the transfer workers): `run --sync-log` turns on
+`rendering/fellow/debug/sync_log` in every group — each semaphore wait is checked against the signals submitted before
+it, each fence wait against the submissions, on every queue in the order the driver made them; what it finds is printed
+as an engine error, so the scene fails (the pictures are the same). On a GPU (the laptop's jobs) the same setting on a
+FellowBench run, with `debug/late_fence_report_s` (on by default) reporting any frame fence 2 s late.
