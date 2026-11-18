@@ -51,6 +51,10 @@ namespace {
 const float SPEED_OF_SOUND = 343.0f;
 const float COMB_DELAY = 0.031f; // the reverb's combs' mean delay (s): its decay from their feedback
 const char *SKIP_GROUP = "fellow_no_acoustics";
+// Milestone 148 (decision 0277): round an edge.
+const float EDGE_PROBE = 0.6f; // m along the line each way: a ray past the occluder's face there or not
+const float EDGE_MARGIN = 0.15f; // m past the edge the path turns
+const int EDGE_REFRESH = 4; // tests a path round an edge is kept while both its legs stay clear
 
 // The physics bodies a node sits in (its ancestors'): the rays from and to it pass through them.
 void exclude_bodies(const Node *p_node, HashSet<RID> &r_exclude) {
@@ -587,11 +591,153 @@ void FellowAcoustics3D::_portal_path(Source &r_source, const Vector3 &p_at, cons
 	}
 }
 
+// Milestone 148 (decision 0277): a path round the edge of what blocks the line — its sides and its top. From where the
+// line is blocked, rays along the line step out across it (each side, and up) to where they pass the occluder; the edge
+// found between (halved three times), a point EDGE_MARGIN past it, carried along the line through a thick occluder until both
+// legs are clear. The shortest clear path is heard as an opening's is: its extra length, its bend (edge_diffraction_db a
+// quarter turn), the highs by its bend, from its direction — when louder than through the occluder.
+void FellowAcoustics3D::_edge_path(Source &r_source, const Vector3 &p_at, const Vector3 &p_pos, float p_range, const HashSet<RID> &p_exclude, PhysicsDirectSpaceState3D *p_space, int &r_budget) {
+	const float direct = p_at.distance_to(p_pos);
+	if (direct < 0.05f || r_budget < 12) {
+		return;
+	}
+	auto blocked = [&](const Vector3 &p_from, const Vector3 &p_to, Vector3 *r_hit) -> bool {
+		r_budget--;
+		last_rays++;
+		PhysicsDirectSpaceState3D::RayParameters rq;
+		rq.from = p_from;
+		rq.to = p_to;
+		rq.exclude = p_exclude;
+		rq.collision_mask = collision_mask;
+		PhysicsDirectSpaceState3D::RayResult rr;
+		if (!p_space->intersect_ray(rq, rr)) {
+			return false;
+		}
+		if (r_hit) {
+			*r_hit = rr.position;
+		}
+		return true;
+	};
+	float best_length = Math::INF;
+	Vector3 best_point;
+	if (r_source.edge_age >= 0 && r_source.edge_age < EDGE_REFRESH) {
+		// The last path, while both its legs stay clear (the listener and the source move little between tests).
+		const Vector3 e = r_source.edge_point;
+		const float length = p_at.distance_to(e) + e.distance_to(p_pos);
+		if (length <= p_range && !blocked(p_at, e, nullptr) && !blocked(e, p_pos, nullptr)) {
+			best_length = length;
+			best_point = e;
+			r_source.edge_age++;
+		}
+	}
+	if (best_length == Math::INF) {
+		r_source.edge_age = -1;
+		if (r_source.edge_miss > 0) {
+			r_source.edge_miss--; // nothing round an edge last time: not looked for again yet
+			return;
+		}
+		_edge_search(p_at, p_pos, direct, p_range, best_length, best_point, blocked, r_budget);
+		if (best_length == Math::INF) {
+			r_source.edge_miss = EDGE_REFRESH;
+			return;
+		}
+		r_source.edge_point = best_point;
+		r_source.edge_age = 0;
+	}
+	_edge_heard(r_source, p_at, p_pos, direct, best_length, best_point);
+}
+
+template <typename F>
+void FellowAcoustics3D::_edge_search(const Vector3 &p_at, const Vector3 &p_pos, float p_direct, float p_range, float &r_best_length, Vector3 &r_best_point, F &p_blocked, int &r_budget) {
+	auto &blocked = p_blocked;
+	float &best_length = r_best_length;
+	Vector3 &best_point = r_best_point;
+	Vector3 hit;
+	if (!blocked(p_at, p_pos, &hit)) {
+		return;
+	}
+	const Vector3 dir = (p_pos - p_at) / p_direct;
+	Vector3 side = dir.cross(Vector3(0, 1, 0));
+	if (side.length() < 0.1f) {
+		side = dir.cross(Vector3(1, 0, 0));
+	}
+	side.normalize();
+	Vector3 up = side.cross(dir).normalized();
+	if (up.y < 0.0f) {
+		up = -up;
+	}
+	const Vector3 across[3] = { side, -side, up };
+	static const float steps[4] = { 0.1f, 0.25f, 0.5f, 1.0f };
+	for (const Vector3 &d : across) {
+		if (r_budget < 8) {
+			break;
+		}
+		// Out across the line until a ray along it passes the occluder.
+		float lo = 0.0f;
+		float hi = -1.0f;
+		for (const float f : steps) {
+			const float s = edge_reach * f;
+			const Vector3 q = hit + d * s;
+			if (!blocked(q - dir * EDGE_PROBE, q + dir * EDGE_PROBE, nullptr)) {
+				hi = s;
+				break;
+			}
+			lo = s;
+		}
+		if (hi < 0.0f) {
+			continue; // no edge within reach this way
+		}
+		for (int k = 0; k < 3; k++) {
+			const float mid = 0.5f * (lo + hi);
+			const Vector3 q = hit + d * mid;
+			if (blocked(q - dir * EDGE_PROBE, q + dir * EDGE_PROBE, nullptr)) {
+				lo = mid;
+			} else {
+				hi = mid;
+			}
+		}
+		const Vector3 edge = hit + d * (hi + EDGE_MARGIN);
+		for (const float depth : { 0.0f, 0.5f, 1.0f }) {
+			const Vector3 e = edge + dir * depth;
+			const float length = p_at.distance_to(e) + e.distance_to(p_pos);
+			if (length >= best_length || length > p_range || r_budget < 2) {
+				break;
+			}
+			if (!blocked(p_at, e, nullptr) && !blocked(e, p_pos, nullptr)) {
+				best_length = length;
+				best_point = e;
+				break;
+			}
+		}
+	}
+}
+
+void FellowAcoustics3D::_edge_heard(Source &r_source, const Vector3 &p_at, const Vector3 &p_pos, float p_direct, float p_length, const Vector3 &p_point) {
+	const float direct = p_direct;
+	const float best_length = p_length;
+	const Vector3 best_point = p_point;
+	const Vector3 in = (best_point - p_at).normalized();
+	const Vector3 out = (p_pos - best_point).normalized();
+	const float bend = in.angle_to(out);
+	const float level_db = edge_diffraction_db * bend / float(Math::PI * 0.5);
+	const float bend_highs = CLAMP(bend / float(Math::PI), 0.0f, 1.0f);
+	const float path_db = Math::linear_to_db(direct / best_length) + level_db + 0.5f * bend_highs * occluded_shelf_db;
+	const float wall_db = r_source.target * occluded_volume_db + 0.5f * r_source.target_highs * occluded_shelf_db;
+	if (path_db > wall_db) {
+		r_source.target = occluded_volume_db < -0.01f ? CLAMP(level_db / occluded_volume_db, 0.0f, 1.0f) : 0.0f;
+		r_source.target_highs = bend_highs;
+		r_source.portal_point = p_at + in * best_length;
+		r_source.portal_target = 1.0f;
+		last_edge_paths++;
+	}
+}
+
 void FellowAcoustics3D::_step(float p_delta) {
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	last_rays = 0;
 	last_tests = 0;
 	last_portal_paths = 0;
+	last_edge_paths = 0;
 	Node3D *listener = _listener();
 	Ref<World3D> world = listener ? listener->get_world_3d() : Ref<World3D>();
 	PhysicsDirectSpaceState3D *space = world.is_valid() ? PhysicsServer3D::get_singleton()->space_get_direct_state(world->get_space()) : nullptr;
@@ -701,6 +847,9 @@ void FellowAcoustics3D::_step(float p_delta) {
 		s->portal_target = 0.0f;
 		if (portals && s->target > 0.01f) {
 			_portal_path(*s, at, pos, range, exclude, space, world.ptr(), budget);
+		}
+		if (edge_diffraction && s->target > 0.5f && s->portal_target <= 0.0f) {
+			_edge_path(*s, at, pos, range, exclude, space, budget);
 		}
 		if (!s->tested) {
 			s->occlusion = s->target;
@@ -875,6 +1024,7 @@ Dictionary FellowAcoustics3D::get_stats() const {
 	d["usec"] = int64_t(last_usec);
 	d["active"] = current == this;
 	d["portal_paths"] = last_portal_paths; // milestone 99: sources heard through an opening, tested this frame
+	d["edge_paths"] = last_edge_paths; // milestone 148: sources heard round an edge, tested this frame
 	d["portals"] = int(FellowAcousticPortal3D::get_portals().size());
 	int rooms_used = 0;
 	for (const RoomBus &rb : room_buses) {
@@ -972,6 +1122,12 @@ void FellowAcoustics3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_portal_diffraction_db"), &FellowAcoustics3D::get_portal_diffraction_db);
 	ClassDB::bind_method(D_METHOD("set_max_portals", "count"), &FellowAcoustics3D::set_max_portals);
 	ClassDB::bind_method(D_METHOD("get_max_portals"), &FellowAcoustics3D::get_max_portals);
+	ClassDB::bind_method(D_METHOD("set_edge_diffraction", "enabled"), &FellowAcoustics3D::set_edge_diffraction);
+	ClassDB::bind_method(D_METHOD("has_edge_diffraction"), &FellowAcoustics3D::has_edge_diffraction);
+	ClassDB::bind_method(D_METHOD("set_edge_reach", "reach"), &FellowAcoustics3D::set_edge_reach);
+	ClassDB::bind_method(D_METHOD("get_edge_reach"), &FellowAcoustics3D::get_edge_reach);
+	ClassDB::bind_method(D_METHOD("set_edge_diffraction_db", "db"), &FellowAcoustics3D::set_edge_diffraction_db);
+	ClassDB::bind_method(D_METHOD("get_edge_diffraction_db"), &FellowAcoustics3D::get_edge_diffraction_db);
 	ClassDB::bind_method(D_METHOD("set_source_rooms", "count"), &FellowAcoustics3D::set_source_rooms);
 	ClassDB::bind_method(D_METHOD("get_source_rooms"), &FellowAcoustics3D::get_source_rooms);
 	ClassDB::bind_method(D_METHOD("get_source_room", "player"), &FellowAcoustics3D::get_source_room);
@@ -1000,6 +1156,9 @@ void FellowAcoustics3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "portals"), "set_portals", "has_portals");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "portal_diffraction_db", PROPERTY_HINT_RANGE, "-40,0,0.1,suffix:dB"), "set_portal_diffraction_db", "get_portal_diffraction_db");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_portals", PROPERTY_HINT_RANGE, "1,16,1"), "set_max_portals", "get_max_portals");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "edge_diffraction"), "set_edge_diffraction", "has_edge_diffraction");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "edge_reach", PROPERTY_HINT_RANGE, "0.1,50,0.1,suffix:m"), "set_edge_reach", "get_edge_reach");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "edge_diffraction_db", PROPERTY_HINT_RANGE, "-40,0,0.1,suffix:dB"), "set_edge_diffraction_db", "get_edge_diffraction_db");
 	ADD_GROUP("Reverb", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "reverb"), "set_reverb", "has_reverb");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "reverb_bus"), "set_reverb_bus", "get_reverb_bus");

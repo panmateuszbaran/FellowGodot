@@ -12,13 +12,17 @@ extends SceneTree
 ## the open (the room's enclosure, decay, predelay and the reverb send). With --listen=1 the sources play one after
 ## another and the master bus is captured: their loudness and highs (the stock mix with the occlusion's gain and
 ## shelf). One JSON line: ACOUSTICS_CHECK {...}; exit code 1 when a lane did otherwise than expected. --many=N: N
-## sources among walls, the node's time and rays a frame. One JSON line: ACOUSTICS_MANY {...}.
+## sources among walls, the node's time and rays a frame (--edges=1: edge_diffraction on). One JSON line:
+## ACOUSTICS_MANY {...}.
 ## Milestone 99 (decision 0207): three walls with doorways round the listener, a FellowAcousticPortal3D in each — one
 ## open (the source behind it heard through it, from its side), one closed (transmission 0), one shut by a door; then
 ## the door taken away and the closed one opened half. Milestone 111 (decision 0218): source_rooms 2 — the listener in
 ## the open, a source in a hall seen through its doorway and one in a closed closet (each sent to its own room's
 ## reverb), one in the open (the listener's); then the listener in the hall (its source the listener's, the closet's
-## and the open one's their own); then source_rooms 0 (every source the listener's again, the buses gone). With --listen=1 the open one heard with and without portals and
+## and the open one's their own); then source_rooms 0 (every source the listener's again, the buses gone). Milestone
+## 148 (decision 0277): edge_diffraction on — a source behind a pillar 2 m wide (heard round its side), one behind a
+## wall 2.2 m high (over its top), one behind a wall 40 m wide and 12 m high (no edge within reach: through it); then
+## edge_diffraction off (the pillar's source through it). With --listen=1 the open one heard with and without portals and
 ## stock (its level, highs and stereo balance). --portals=1 with --many: an opening beside each wall.
 
 var args := {}
@@ -40,6 +44,7 @@ var listen_plan := []
 var done := false
 const PORTALS_AT := Vector3(0, 0, -300)
 const ROOMS_AT := Vector3(600, 0, 0)
+const EDGES_AT := Vector3(-600, 0, 0)
 var south_portal: FellowAcousticPortal3D
 var door: StaticBody3D
 
@@ -239,6 +244,15 @@ func _build() -> void:
 	_box(closet + Vector3(0, 3.15, 0), Vector3(4.3, 0.3, 4.3))
 	_source("closet", closet + Vector3(0, 1.5, 0))
 	_source("open3", ra + Vector3(-6, 1.7, 0))
+	# Milestone 148 (decision 0277): far to the west, round edges. North: a pillar 2 m wide, 4 m high at 4 m; east: a wall
+	# 6 m wide, 2.2 m high at 4 m (the listener's ear and the source at 1.7 m); south: a wall 40 m wide, 12 m high at 4 m.
+	var ea := EDGES_AT
+	_box(ea + Vector3(0, 2, -4), Vector3(2, 4, 0.3))
+	_source("edge_pillar", ea + Vector3(0, 1.7, -8))
+	_box(ea + Vector3(4, 1.1, 0), Vector3(0.3, 2.2, 6))
+	_source("edge_top", ea + Vector3(8, 1.7, 0))
+	_box(ea + Vector3(0, 6, 4), Vector3(40, 12, 0.3))
+	_source("edge_none", ea + Vector3(0, 1.7, 8))
 	acoustics = FellowAcoustics3D.new()
 	root3d.add_child(acoustics)
 	if listen:
@@ -272,6 +286,11 @@ func _setup_listen() -> void:
 	# and 0 (the listener's: the open's, nothing).
 	listen_plan.append({"source": "hall", "fellow": true, "room": true, "at": ROOMS_AT, "rooms": 2})
 	listen_plan.append({"source": "hall", "fellow": true, "room": true, "at": ROOMS_AT, "rooms": 0, "no_rooms": true})
+	# Milestone 148: the source behind the pillar heard round its side (edge_diffraction on), through it (off), and stock
+	# (its stereo balance: the edge is to the right).
+	listen_plan.append({"source": "edge_pillar", "fellow": true, "at": EDGES_AT, "edges": true})
+	listen_plan.append({"source": "edge_pillar", "fellow": true, "at": EDGES_AT, "no_edges": true})
+	listen_plan.append({"source": "edge_pillar", "fellow": false, "at": EDGES_AT})
 
 
 func _measure(name: String, key: String, value) -> void:
@@ -313,7 +332,7 @@ func _listen_tick(dt: float) -> void:
 	if listen_step < 0 or listen_t >= length:
 		if listen_step >= 0:
 			var rms := sqrt(listen_acc.sum / maxf(1.0, listen_acc.n))
-			var tag := ("no_portals" if step.get("no_portals", false) else ("no_rooms" if step.get("no_rooms", false) else "fellow")) if step.fellow else "stock"
+			var tag := ("no_portals" if step.get("no_portals", false) else ("no_rooms" if step.get("no_rooms", false) else ("no_edges" if step.get("no_edges", false) else "fellow"))) if step.fellow else "stock"
 			_measure("listen_" + step.source, tag + "_db", snappedf(linear_to_db(maxf(rms, 1e-9)), 0.01))
 			if step.has("at"):
 				# Milestone 99: the right channel over the left (dB).
@@ -334,6 +353,7 @@ func _listen_tick(dt: float) -> void:
 		acoustics.reverb = next.get("room", false) and next.fellow
 		acoustics.portals = not next.get("no_portals", false)
 		acoustics.source_rooms = next.get("rooms", 0)
+		acoustics.edge_diffraction = next.get("edges", false)
 		cam.position = Vector3(300, 1.7, 0) if next.get("room", false) else Vector3(0, 1.7, 0)
 		if next.has("at"):
 			cam.position = next.at + Vector3(0, 1.7, 0)
@@ -421,6 +441,23 @@ func _on_frame() -> void:
 		elif frame == 1920:
 			acoustics.source_rooms = 0
 		else:
+			# Milestone 148: round edges.
+			cam.position = EDGES_AT + Vector3(0, 1.7, 0)
+			acoustics.edge_diffraction = true
+	if frame == 2130 or frame == 2250:
+		var tag := "" if frame == 2130 else "_off"
+		for n in ["edge_pillar", "edge_top", "edge_none"]:
+			var p: AudioStreamPlayer3D = sources[n]
+			var heard := acoustics.get_heard_position(p) - cam.position
+			_measure(n + tag, "occlusion", snappedf(acoustics.get_occlusion(p), 0.001))
+			_measure(n + tag, "occlusion_highs", snappedf(acoustics.get_occlusion_highs(p), 0.001))
+			_measure(n + tag, "path_weight", snappedf(acoustics.get_portal_weight(p), 0.001))
+			_measure(n + tag, "heard_from", [snappedf(heard.x, 0.01), snappedf(heard.y, 0.01), snappedf(heard.z, 0.01)])
+			_measure(n + tag, "heard_distance", snappedf(heard.length(), 0.01))
+		_measure("edge_stats" + tag, "stats", acoustics.get_stats())
+		if frame == 2130:
+			acoustics.edge_diffraction = false
+		else:
 			done = true
 			_finish.call_deferred()
 
@@ -441,6 +478,7 @@ func _build_many() -> void:
 		p.play()
 	acoustics = FellowAcoustics3D.new()
 	acoustics.source_rooms = int(_arg("rooms", "0"))  # milestone 111: --rooms=N
+	acoustics.edge_diffraction = _arg("edges", "0") == "1"  # milestone 148: --edges=1
 	root3d.add_child(acoustics)
 	physics_frame.connect(_on_frame)
 
@@ -448,6 +486,7 @@ func _build_many() -> void:
 var many_usec: PackedInt64Array = []
 var many_rays: PackedInt64Array = []
 var many_portal_paths := 0
+var many_edge_paths := 0
 
 
 func _many_tick() -> void:
@@ -458,6 +497,7 @@ func _many_tick() -> void:
 	many_usec.append(st.usec)
 	many_rays.append(st.rays)
 	many_portal_paths += st.portal_paths
+	many_edge_paths += st.edge_paths
 	if frame >= 30 + int(many_seconds * 60.0):
 		done = true
 		var s := 0
@@ -470,6 +510,7 @@ func _many_tick() -> void:
 		var res := {"sources": many, "frames": many_usec.size(), "usec_mean": snappedf(float(s) / many_usec.size(), 0.1),
 			"usec_max": mx, "rays_mean": snappedf(float(r) / many_rays.size(), 0.1), "stats": st,
 			"portal_paths_per_frame": snappedf(float(many_portal_paths) / many_usec.size(), 0.01),
+			"edge_paths_per_frame": snappedf(float(many_edge_paths) / many_usec.size(), 0.01), "edge_diffraction": acoustics.edge_diffraction,
 			"source_rooms": acoustics.source_rooms,
 			"physics_engine": ProjectSettings.get_setting("physics/3d/physics_engine")}
 		print("ACOUSTICS_MANY " + JSON.stringify(res))
@@ -510,6 +551,9 @@ func _finish() -> void:
 		# sound), more than 6 dB weaker without (only the listener's reverb: the open by a building, a little closed).
 		var lh: Dictionary = data["listen_hall"]
 		expect.call("listen_hall", lh.fellow_tail_db > lh.fellow_db - 40.0 and lh.no_rooms_tail_db < lh.fellow_tail_db - 6.0)
+		# Milestone 148: round the pillar louder and brighter than through it, from the right; stock and through it centred.
+		var lpi: Dictionary = data["listen_edge_pillar"]
+		expect.call("listen_edge_pillar", lpi.fellow_db > lpi.no_edges_db + 4.0 and lpi.fellow_high_share > lpi.no_edges_high_share * 2.0 and lpi.fellow_balance_db > 1.0 and absf(lpi.stock_balance_db) < 1.0 and absf(lpi.no_edges_balance_db) < 1.0)
 		var e: Dictionary = data["listen_edge"]
 		expect.call("listen_edge", e.fellow_db < e.stock_db - 1.0 and e.fellow_db > w.fellow_db - 0.5 + (w.stock_db - e.stock_db))
 	else:
@@ -557,6 +601,16 @@ func _finish() -> void:
 		for n in ["hall", "closet", "open3"]:
 			off_ok = off_ok and data["rooms_" + n + "_off"].bus == "FellowReverb"
 		expect.call("rooms_off", off_ok)
+		# Milestone 148: round the pillar's side (+X: the edge at 1 m), its bend about 36 degrees (-9 dB a quarter turn:
+		# about -3.6 dB, occlusion 0.3; the highs by the bend, 0.2), heard from the side 8.3 m away; over the top of the
+		# low wall (a bend of about 19 degrees: occlusion 0.16), heard from above the line; the wide high wall as before
+		# (through it); the pillar with edge_diffraction off: through it.
+		var ep: Dictionary = data.edge_pillar
+		expect.call("edge_pillar", ep.path_weight > 0.95 and absf(ep.occlusion - 0.3) < 0.04 and absf(ep.occlusion_highs - 0.2) < 0.03 and ep.heard_from[0] > 0.5 and absf(ep.heard_distance - 8.3) < 0.2)
+		var et: Dictionary = data.edge_top
+		expect.call("edge_top", et.path_weight > 0.95 and absf(et.occlusion - 0.16) < 0.03 and et.heard_from[1] > 0.2 and absf(et.heard_from[2]) < 0.05)
+		expect.call("edge_none", data.edge_none.occlusion > 0.99 and data.edge_none.path_weight < 0.01)
+		expect.call("edge_off", data.edge_pillar_off.occlusion > 0.99 and data.edge_pillar_off.path_weight < 0.01)
 	result["lanes"] = data
 	result["failures"] = failures
 	result["global"] = FellowAcoustics3D.get_global_stats()

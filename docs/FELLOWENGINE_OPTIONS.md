@@ -614,6 +614,12 @@ source, two rays each); `get_portal_weight(player)`, `get_heard_position(player)
 and `portals`. A blocked source is heard through the nearest open portal between it and the listener when both legs
 are clear and that way is louder: from the opening's direction at the path's length, its occlusion the bend's and the
 transmission's. Bench `bench/acoustics_check.gd` (`--portals=1` with `--many`).
+Round edges (milestone 148, decision 0277), on `FellowAcoustics3D`: `edge_diffraction` (off; "Add Acoustics" sets it on: a source still blocked
+with no opening found is heard round the edge of what blocks it — its side or its top — when louder that way, from the
+edge's direction at the path's length), `edge_reach` (4 m across the line, each way and up), `edge_diffraction_db`
+(−9 dB a quarter turn); the path kept while its legs stay clear (searched again every fourth test; a failed search
+waits four), up to about 45 rays a search from `max_rays_per_frame`; `get_portal_weight()` counts it, `get_stats()`
+adds `edge_paths`. Bench `bench/acoustics_check.gd` (`--edges=1` with `--many`).
 
 Each source's own room (milestone 111, decision 0218): `FellowAcoustics3D.source_rooms` (0: every source sent to the
 listener's reverb; "Add Acoustics" sets 2) — that many reverbs more, on buses named `reverb_bus` + "Room1"...; one

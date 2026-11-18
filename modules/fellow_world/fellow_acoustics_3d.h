@@ -73,6 +73,11 @@ class FellowAcoustics3D : public Node3D {
 		float portal_weight = 0.0f; // smoothed
 		Vector3 portal_point; // the apparent position (from the listener towards the opening, at the path's length)
 		Vector3 apparent;
+		// Milestone 148 (decision 0277): the last path round an edge (its turning point), tried first while it holds
+		// and searched again every EDGE_REFRESH tests (-1: none).
+		Vector3 edge_point;
+		int edge_age = -1;
+		int edge_miss = 0; // tests left before a search that found nothing is made again
 		// Milestone 111 (decision 0218): the source's own room, and the reverb it is sent to (-1: the listener's).
 		Room room;
 		bool room_measured = false;
@@ -124,6 +129,10 @@ class FellowAcoustics3D : public Node3D {
 	bool portals = true;
 	float portal_diffraction_db = -6.0f;
 	int max_portals = 2;
+	// Milestone 148 (decision 0277): round an occluder's edge (its side or its top).
+	bool edge_diffraction = false;
+	float edge_reach = 4.0f; // m across the line from where it is blocked, each way and up
+	float edge_diffraction_db = -9.0f; // a quarter turn round the edge
 	int source_rooms = 0; // milestone 111: the reverbs for other rooms (0: every source sent to the listener's)
 	LocalVector<RoomBus> room_buses;
 	uint32_t room_cursor = 0;
@@ -149,6 +158,7 @@ class FellowAcoustics3D : public Node3D {
 	int last_rays = 0;
 	int last_tests = 0;
 	int last_portal_paths = 0;
+	int last_edge_paths = 0;
 	uint64_t last_usec = 0;
 
 	void _node_added(Node *p_node);
@@ -169,6 +179,10 @@ class FellowAcoustics3D : public Node3D {
 	void _release_room_buses();
 	void _source_rooms(float p_delta, const Room &p_listener, PhysicsDirectSpaceState3D *p_space, const HashSet<RID> &p_listener_exclude, int &r_budget);
 	void _portal_path(Source &r_source, const Vector3 &p_at, const Vector3 &p_pos, float p_range, const HashSet<RID> &p_exclude, PhysicsDirectSpaceState3D *p_space, const World3D *p_world, int &r_budget);
+	void _edge_path(Source &r_source, const Vector3 &p_at, const Vector3 &p_pos, float p_range, const HashSet<RID> &p_exclude, PhysicsDirectSpaceState3D *p_space, int &r_budget);
+	template <typename F>
+	void _edge_search(const Vector3 &p_at, const Vector3 &p_pos, float p_direct, float p_range, float &r_best_length, Vector3 &r_best_point, F &p_blocked, int &r_budget);
+	void _edge_heard(Source &r_source, const Vector3 &p_at, const Vector3 &p_pos, float p_direct, float p_length, const Vector3 &p_point);
 
 protected:
 	void _notification(int p_what);
@@ -220,6 +234,12 @@ public:
 	float get_portal_diffraction_db() const { return portal_diffraction_db; }
 	void set_max_portals(int p_count) { max_portals = CLAMP(p_count, 1, 16); }
 	int get_max_portals() const { return max_portals; }
+	void set_edge_diffraction(bool p_enabled) { edge_diffraction = p_enabled; }
+	bool has_edge_diffraction() const { return edge_diffraction; }
+	void set_edge_reach(float p_reach) { edge_reach = CLAMP(p_reach, 0.1f, 50.0f); }
+	float get_edge_reach() const { return edge_reach; }
+	void set_edge_diffraction_db(float p_db) { edge_diffraction_db = CLAMP(p_db, -40.0f, 0.0f); }
+	float get_edge_diffraction_db() const { return edge_diffraction_db; }
 	void set_source_rooms(int p_count);
 	int get_source_rooms() const { return source_rooms; }
 	Dictionary get_source_room(Node *p_player) const;

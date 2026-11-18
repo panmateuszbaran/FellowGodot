@@ -9,7 +9,7 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
-## Milestone 148 — free climbing (2026-11-18, in progress)
+## Milestone 148 — free climbing; sound round edges (2026-11-18, in progress)
 
 - Decision 0276: `FellowTraversal3D.free_climb` — a body pushing at a climbable face (`climb_mask`) with nothing to
   mantle onto climbs it: up and down, along it (the wish held turning with the face), round towers and corners, over
@@ -19,6 +19,10 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   slab's face and on a sloping top's plane. `climb_check.gd`'s ten new lanes on both physics engines; the earlier
   lanes, `traversal_check.gd` and the regression scenes `traversal` and `climb` as before; 18 µs a climbing body a
   frame.
+- Decision 0277: `FellowAcoustics3D.edge_diffraction` (opt-in) — a blocked source with no opening is heard round the
+  edge of what blocks it (its side or its top) when louder that way, from the edge's direction; `edge_reach`,
+  `edge_diffraction_db`. A source behind a 2 m pillar −21.3 dB with 46 % of its highs, from the right, instead of
+  −40 dB through it; 64 sources +45 µs a frame.
 
 ## Milestone 147 — tracked vehicles and two-wheelers; the far shadow cascades without instances out of range; a garment's backstop (2026-11-18)
 
