@@ -224,6 +224,12 @@ private:
 	bool tracks = false; // each side's wheels turn together (a track links them)
 	float skid_now = 0.0f; // the steering eased (STEERING_SKID)
 	float skid_k_last = 1.0f; // the inner side's speed over the outer's last step (STEERING_SKID)
+	// Milestone 147 (decision 0275): a two-wheeler balanced by its rider.
+	bool balance = false;
+	float max_lean = 45.0f; // degrees
+	float lean_now = 0.0f; // radians, to the left
+	float lean_target = 0.0f;
+	bool fallen = false;
 	// Body.
 	float anti_roll = 8000.0f; // N/m between the wheels of an axle
 	float drag_area = 0.7f; // Cd·A, m²
@@ -324,6 +330,14 @@ public:
 	float get_skid_turn_drive() const { return skid_turn_drive; }
 	void set_tracks(bool p_enable) { tracks = p_enable; }
 	bool has_tracks() const { return tracks; }
+	void set_balance(bool p_enable) {
+		balance = p_enable;
+		update_configuration_warnings();
+	}
+	bool has_balance() const { return balance; }
+	void set_max_lean(float p_degrees) { max_lean = CLAMP(p_degrees, 0.0f, 70.0f); }
+	float get_max_lean() const { return max_lean; }
+	bool is_fallen() const { return fallen; }
 	void set_brake_torque(float p_torque) { brake_torque = MAX(0.0f, p_torque); }
 	float get_brake_torque() const { return brake_torque; }
 	void set_handbrake_torque(float p_torque) { handbrake_torque = MAX(0.0f, p_torque); }

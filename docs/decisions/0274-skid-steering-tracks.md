@@ -67,4 +67,4 @@ KEEP, opt-in (`steering_mode` `STEERING_WHEELS` by default; `tracks` off): a car
   of it (1.0 of the grip still spun it out; 0.7 held: 0.43 g at 30 km/h).
 * **A track's own geometry** (its links, its sag over the road wheels, its contact patch as a strip): the wheels'
   rays or cylinders stand for it; a visible track is the game's mesh, animated by the wheels' `get_rpm()`.
-* **Two-wheelers** (a motorcycle's lean and countersteering): not in this change.
+* **Two-wheelers**: not in this change (decision 0275).

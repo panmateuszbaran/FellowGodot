@@ -9,7 +9,7 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
-## Milestone 147 — the far shadow cascades without instances out of range; a garment's backstop; tracked vehicles (2026-11-18, in progress)
+## Milestone 147 — the far shadow cascades without instances out of range; a garment's backstop; tracked vehicles and two-wheelers (2026-11-18, in progress)
 
 - Decision 0272: a directional cascade that begins beyond an instance range's end (the terrain's foliage, HLOD's
   instanced proxies and impostors) leaves those instances out — none of them is drawn that far (Frontier's and Slice's
@@ -24,6 +24,11 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   holds), `tracks` (each side's wheels turning together), `skid_turn_drive`; the FellowEngine menu's "Add Tracked
   Vehicle". `vehicle_check.gd`'s tracked vehicle: straight to 0.000°, 26°/s on the spot, 0.43 g at 30 km/h with full
   steering; the car's lanes as before.
+- Decision 0275: `FellowVehicle3D.balance` / `max_lean` / `is_fallen()` — a two-wheeler balanced by its rider: the
+  steering asks for a lean (within the grip and the lock), held by a torque about the forward axis, the front wheel
+  turned to the turn the lean balances; upright at a standstill. The FellowEngine menu's "Add Motorcycle".
+  `vehicle_check.gd`'s motorcycle: the lean as asked (19.35° for 19.33°, 38.66° for 38.66°), the turn's g the lean's
+  tangent within 3 %, righted after a push that topples it without balance; GodotPhysics3D and Jolt alike.
 - Decision 0270 continued: GPU checkpoints (`debug/gpu_checkpoints`) and the render graph's reordering and full
   barriers as settings (`debug/graph_reorder`, `debug/graph_full_barriers`); the hang caught again with the reordering
   off and with checkpoints — the GPU stopped inside one draw list (command 69 of its frame); a draw list's checkpoint

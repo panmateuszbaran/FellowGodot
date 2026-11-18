@@ -28,12 +28,15 @@ extends SceneTree
 ## 147 (decision 0274): a 2 000 kg vehicle on three wheels a side with skid steering and tracks — straight under
 ## throttle (no yaw, each side's wheels at one speed), a turn on the spot each way with the steering alone (turning,
 ## not moving off, the two the same), half and full steering at 30 km/h and full steering at 60 km/h (turning as the
-## grip allows: the full steering the tighter, under 0.7 g, not sliding sideways). One JSON
+## grip allows: the full steering the tighter, under 0.7 g, not sliding sideways); milestone 147 (decision 0275): a
+## 260 kg motorcycle balanced by its rider — straight, turning at 60 km/h with half the lean and at 40 km/h with all of
+## it (the lean balancing the turn), stopping from 60 km/h (upright at a standstill), turning at walking pace, and one
+## without balance (falling over). One JSON
 ## line:
 ## VEHICLE_CHECK {...}; exit
 ## code 1 when a lane did otherwise than expected. --many=N: N cars driving circles, the vehicles' step a frame and the
-## frame's (headless; --damage=1: each with a FellowVehicleDamage3D, every feature on; --tank=1: the tracked vehicles of
-## milestone 147 instead). One JSON line: VEHICLE_MANY {...}.
+## frame's (headless; --damage=1: each with a FellowVehicleDamage3D, every feature on; --tank=1 or --bike=1: the tracked
+## vehicles or motorcycles of milestone 147 instead). One JSON line: VEHICLE_MANY {...}.
 
 const RUN_SECONDS := 26.0
 
@@ -215,6 +218,71 @@ func _tank(pos: Vector3, color: Color) -> FellowVehicle3D:
 	return car
 
 
+# Milestone 147 (decision 0275): a motorcycle — 260 kg with its rider (the centre of mass 0.65 m up), two wheels in
+# line 1.45 m apart (the front steering, the rear driven), 100 N·m to 11 000 rpm, balance on.
+func _bike(pos: Vector3, color: Color) -> FellowVehicle3D:
+	var car := FellowVehicle3D.new()
+	car.mass = 260.0
+	car.center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
+	car.center_of_mass = Vector3(0, 0.65, 0)
+	car.position = pos
+	car.balance = true
+	car.max_steer = 30.0
+	car.max_torque = 100.0
+	car.idle_rpm = 1300.0
+	car.peak_rpm = 8500.0
+	car.max_rpm = 11000.0
+	car.shift_up_rpm = 10500.0
+	car.shift_down_rpm = 6000.0
+	car.gear_ratios = PackedFloat32Array([2.8, 2.0, 1.6, 1.35, 1.17, 1.04])
+	car.final_drive = 5.0
+	car.max_reverse_speed = 2.0
+	car.drag_area = 0.35
+	car.downforce_area = 0.0
+	car.engine_inertia = 0.05
+	var cs := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(0.4, 0.6, 1.6)
+	cs.shape = shape
+	cs.position = Vector3(0, 0.75, 0)
+	car.add_child(cs)
+	var body_mesh := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = shape.size
+	body_mesh.mesh = bm
+	body_mesh.material_override = _material(color)
+	body_mesh.position = cs.position
+	car.add_child(body_mesh)
+	var tyre := _material(Color(0.1, 0.1, 0.1))
+	for z in [-0.725, 0.725]:
+		var w := FellowWheel3D.new()
+		w.name = "Front" if z < 0.0 else "Rear"
+		w.position = Vector3(0, 0.31, z)
+		w.radius = 0.31
+		w.width = 0.16
+		w.suspension_length = 0.15
+		w.spring_rate = 25000.0
+		w.damping_compression = 1500.0
+		w.damping_rebound = 2000.0
+		w.inertia = 0.6
+		w.steering = z < 0.0
+		w.driven = z > 0.0
+		w.handbrake = z > 0.0
+		var wm := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.31
+		cyl.bottom_radius = 0.31
+		cyl.height = 0.16
+		cyl.radial_segments = 20
+		wm.mesh = cyl
+		wm.material_override = tyre
+		wm.rotation_degrees = Vector3(0, 0, 90)
+		w.add_child(wm)
+		car.add_child(w)
+	root3d.add_child(car)
+	return car
+
+
 # Milestone 147: the largest difference of the wheels' speeds within each side, and between the sides' means (rpm).
 func _side_rpm(car: FellowVehicle3D) -> Dictionary:
 	var sides := {"L": [], "R": []}
@@ -319,7 +387,8 @@ func _build() -> void:
 		var cols := int(ceil(sqrt(float(many))))
 		for i in many:
 			var at := Vector3(float(i % cols) * 60.0, 0.1, -float(i / cols) * 60.0)
-			var c := _tank(at, Color.from_hsv(float(i) / many, 0.6, 0.8)) if _arg("tank", "0") == "1" else _car(at, Color.from_hsv(float(i) / many, 0.6, 0.8))
+			var hue := Color.from_hsv(float(i) / many, 0.6, 0.8)
+			var c := _tank(at, hue) if _arg("tank", "0") == "1" else (_bike(at, hue) if _arg("bike", "0") == "1" else _car(at, hue))
 			c.throttle = 0.35
 			c.steering = 0.35
 			c.substeps = int(_arg("substeps", "4"))
@@ -540,6 +609,13 @@ func _build() -> void:
 	var tank_lanes := ["tank_straight", "tank_pivot_left", "tank_pivot_right", "tank_arc", "tank_arc_full", "tank_arc_fast"]
 	for k in tank_lanes.size():
 		_lane(tank_lanes[k], _tank(Vector3(-300.0 - k * 30.0, 0.1, 0), Color.from_hsv(0.3 + k * 0.05, 0.4, 0.5)))
+	# Milestone 147 (decision 0275): the motorcycles' lanes, on a row 300 m behind the others (the turns to the left).
+	var bike_lanes := {"bike_straight": -900.0, "bike_stop": -700.0, "bike_slow": -500.0, "bike_fall": -100.0, "bike_turn": 200.0, "bike_full": 600.0}
+	for name in bike_lanes:
+		var b := _bike(Vector3(bike_lanes[name], 0.05, 300.0), Color(0.85, 0.2, 0.2))
+		if name == "bike_fall":
+			b.balance = false
+		_lane(name, b)
 
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
@@ -833,6 +909,69 @@ func _drive(lane: Dictionary, dt: float) -> void:
 						d["skid_ratio"] = snappedf(car.get_stats().skid_ratio, 0.001)
 						# The radius the steering asks for at this speed (grip 1, friction 1: SKID_TURN_GRIP 0.7 of g).
 						d["radius_asked_m"] = snappedf(v.length_squared() / (0.7 * 9.8 * car.steering), 0.1)
+		"bike_straight", "bike_stop", "bike_slow", "bike_fall", "bike_turn", "bike_full":
+			# Milestone 147 (decision 0275): from 1 s — straight at 0.5 throttle for 10 s; to 60 km/h, braked to a stop
+			# at 8 s and held; at 5 km/h, then full steering; balance off, 0.3 throttle; at 60 km/h, then half steering;
+			# at 40 km/h, then full steering (each turn from 6 s to 14 s, measured from 9 s). The lean (to the left)
+			# from the body, the lateral acceleration from the yaw rate.
+			var st: Dictionary = car.get_stats()
+			var up := car.global_basis.y
+			var fwd := -car.global_basis.z
+			var fh := Vector3(fwd.x, 0, fwd.z).normalized()
+			var lean := rad_to_deg(atan2(up.dot(Vector3.UP.cross(fh)), up.dot(Vector3.UP)))
+			var yaw_rate := rad_to_deg(car.angular_velocity.y)
+			if t >= 1.0:
+				d["yaw_deg"] = d.get("yaw_deg", 0.0) + yaw_rate * dt
+				d["lean_max_deg"] = snappedf(maxf(d.get("lean_max_deg", 0.0), absf(lean)), 0.01)
+				d["fallen_ever"] = d.get("fallen_ever", false) or st.fallen
+			match lane.name:
+				"bike_straight":
+					car.throttle = 0.5 if t >= 1.0 else 0.0
+					if t >= 3.0 and not d.has("nudged"):
+						# A push from the side (as the fall lane's): the rider rights it.
+						car.apply_impulse(Vector3(-1, 0, 0) * 60.0, car.global_basis.y * 1.0)
+						d["nudged"] = true
+					if t >= 5.0:
+						d["lean_after_nudge_deg"] = snappedf(maxf(d.get("lean_after_nudge_deg", 0.0), absf(lean)), 0.01)
+					if t >= 11.0 and not d.has("kmh_11s"):
+						d["kmh_11s"] = snappedf(kmh, 0.1)
+						d["heading_change"] = snappedf(d.yaw_deg, 0.01)
+				"bike_stop":
+					if t >= 1.0 and t < 8.0:
+						_cruise(car, 60.0)
+						d["kmh_8s"] = snappedf(kmh, 0.1)
+					elif t >= 8.0:
+						car.throttle = 0.0
+						car.brake = 1.0
+						if absf(kmh) < 0.5 and not d.has("t_stopped"):
+							d["t_stopped"] = snappedf(t - 8.0, 0.01)
+							d["stop_m"] = snappedf(car.global_position.distance_to(d.get("p8", car.global_position)), 0.1)
+						if d.has("t_stopped") and t > 8.0 + d.t_stopped + 1.0:
+							d["lean_stopped_max_deg"] = snappedf(maxf(d.get("lean_stopped_max_deg", 0.0), absf(lean)), 0.01)
+					if t >= 8.0 and not d.has("p8"):
+						d["p8"] = car.global_position
+				"bike_fall":
+					car.throttle = 0.3 if t >= 1.0 else 0.0
+					if t >= 3.0 and not d.has("nudged"):
+						car.apply_impulse(Vector3(-1, 0, 0) * 60.0, car.global_basis.y * 1.0)
+						d["nudged"] = true
+				"bike_slow", "bike_turn", "bike_full":
+					var target: float = {"bike_slow": 5.0, "bike_turn": 60.0, "bike_full": 40.0}[lane.name]
+					if t >= 1.0:
+						_cruise(car, target)
+					car.steering = (0.5 if lane.name == "bike_turn" else 1.0) if t >= 6.0 and t < 14.0 else 0.0
+					if t >= 9.0 and t < 14.0:
+						var v := car.linear_velocity
+						d["turn_kmh"] = snappedf(kmh, 0.1)
+						d["lean_deg"] = snappedf(lean, 0.01)
+						d["lean_target_deg"] = snappedf(st.lean_target_deg, 0.01)
+						d["a_lat_g"] = snappedf(v.length() * deg_to_rad(yaw_rate) / 9.8, 0.001)
+						d["radius_m"] = snappedf(v.length() / maxf(absf(deg_to_rad(yaw_rate)), 0.001), 0.01)
+						d["lean_wobble_deg"] = snappedf(maxf(d.get("lean_wobble_deg", 0.0), absf(lean - d.get("lean_9s", lean))), 0.01)
+						if not d.has("lean_9s"):
+							d["lean_9s"] = lean
+					if t >= 14.0:
+						d["lean_after_deg"] = snappedf(lean, 0.01)
 		"straight", "bent", "bent_off", "engine", "repaired":
 			# Milestone 107: at rest, hit at 0.5 s — by the left ahead of the front-left wheel (bent, bent_off, repaired),
 			# at the front's middle (engine, repaired) — repaired at 0.6 s; from 1 s at 40 km/h with the steering at 0 for
@@ -1108,7 +1247,7 @@ func _finish() -> void:
 		var car: FellowVehicle3D = lane.car
 		var d: Dictionary = lane.data
 		var e := d.duplicate()
-		for k in ["v_prev", "a_smooth", "local0", "p0", "coast_t0", "comp_prev", "vy_prev", "t_stop", "gear_h0", "x0"]:
+		for k in ["v_prev", "a_smooth", "local0", "p0", "coast_t0", "comp_prev", "vy_prev", "t_stop", "gear_h0", "x0", "p8", "lean_9s", "nudged"]:
 			e.erase(k)
 		e["gears"] = lane.gears
 		e["end"] = [snappedf(car.global_position.x - lane.start.x, 0.1), snappedf(car.global_position.y, 0.01), snappedf(car.global_position.z, 0.1)]
@@ -1203,6 +1342,29 @@ func _finish() -> void:
 				e.erase("h0")
 				ok = ok and d.get("sag_fl", 0.0) > 0.02 and d.get("sag_fl", 1.0) <= 0.06 and d.get("sag_fr", 1.0) == 0.0 and dr[0] > 0.01 and dr[0] > dr[1] and dr[0] > dr[2] and dr[0] > dr[3]
 				ok = ok and rr.all(func(v): return absf(v) < 0.003) and d.get("length_repaired", 0.0) == 0.3
+			"bike_straight":
+				# Milestone 147 (decision 0275): pushed from the side at 3 s (60 N·s a metre up): leaning less than 10
+				# degrees, upright again (within 0.5 degrees) 2 s later; straight within 3 degrees over 10 s, above
+				# 50 km/h.
+				ok = ok and absf(d.get("heading_change", 99.0)) < 3.0 and d.get("lean_max_deg", 99.0) < 10.0 and d.get("lean_after_nudge_deg", 99.0) < 0.5 and d.get("kmh_11s", 0.0) > 50.0 and not d.get("fallen_ever", true)
+			"bike_stop":
+				# Stopped from 60 km/h within 50 m, upright (within 2 degrees) a second after.
+				ok = ok and d.get("kmh_8s", 0.0) > 55.0 and d.get("stop_m", 99.0) < 50.0 and d.get("lean_stopped_max_deg", 99.0) < 2.0 and not d.get("fallen_ever", true)
+			"bike_fall":
+				# Without balance, the same push: it falls over.
+				ok = d.get("lean_max_deg", 0.0) > 60.0
+			"bike_slow", "bike_turn", "bike_full":
+				# Leaning into the turn (left) as asked (within 3 degrees), the lean balancing the turn (its tangent
+				# within 15 % of the lateral acceleration in g), steady (within 2 degrees over 5 s), upright again after.
+				var lean: float = d.get("lean_deg", 0.0)
+				var a_lat: float = d.get("a_lat_g", 0.0)
+				var tan_lean := tan(deg_to_rad(lean))
+				ok = ok and not d.get("fallen_ever", true) and absf(lean - d.get("lean_target_deg", 99.0)) < 3.0 and absf(d.get("lean_after_deg", 99.0)) < 5.0 and d.get("lean_wobble_deg", 99.0) < 2.0
+				if lane.name == "bike_slow":
+					# At walking pace: hardly leaning, turning on the steering's lock (a radius under 5 m).
+					ok = ok and absf(lean) < 5.0 and d.get("radius_m", 99.0) < 5.0
+				else:
+					ok = ok and lean > 10.0 and absf(tan_lean - a_lat) < 0.15 * tan_lean
 			"tank_straight":
 				# Milestone 147 (decision 0274): straight within a degree over 9 s, moving (above 10 km/h), each side's
 				# wheels at one speed (tracks; within 0.5 rpm).

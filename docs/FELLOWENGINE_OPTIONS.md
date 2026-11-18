@@ -677,6 +677,13 @@ gives on its own near a standstill, gone by 4 m/s), `tracks` (off: each side's w
 them); `get_stats()`'s `skid` and `skid_ratio`. The FellowEngine menu's "Add Tracked Vehicle"; `vehicle_check.gd
 --many=N --tank=1`.
 
+Milestone 147 (decision 0275), on `FellowVehicle3D`: `balance` (off: a two-wheeler balanced by its rider — two wheels
+in line; the steering asks for a lean, the least of `max_lean`, what 0.8 of the grip holds and what the front wheel's
+lock turns at the speed, held by a torque about the body's forward axis, the front wheel turned to the turn the lean
+balances; upright at a standstill), `max_lean` (45°), `is_fallen()` (past `max_lean` by 25°: the rider lets it fall);
+`get_stats()`'s `lean_deg`, `lean_target_deg`, `fallen`. The FellowEngine menu's "Add Motorcycle"; `vehicle_check.gd
+--many=N --bike=1`.
+
 Contacts (milestone 101, decision 0209): on `FellowWheel3D`, `contact_shape` (`CONTACT_RAY`, the default;
 `CONTACT_SPHERE`; `CONTACT_CYLINDER` of `radius` and `width`, 0.22 m, along the steered axle): the tyre's shape swept down
 the suspension — curbs met by the tyre's front, gaps narrower than it bridged; two queries a wheel a step on an edge,

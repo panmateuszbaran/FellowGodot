@@ -1207,6 +1207,61 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			}
 			_fellow_make("FellowVehicleEffects3D", "Effects", top);
 		} break;
+		case PRESET_MOTORCYCLE: {
+			// Milestone 147 (decision 0275): a 260 kg motorcycle with its rider (the centre of mass 0.65 m up), two wheels
+			// in line 1.45 m apart (the front steering, the rear driven), 100 N·m to 11 000 rpm, balanced by its rider
+			// (the steering a lean, up to 45 degrees); its effects; it faces -Z.
+			Node *made = _fellow_make("FellowVehicle3D", "Motorcycle", nullptr, Dictionary{ { "mass", 260.0 }, { "center_of_mass_mode", 1 }, { "center_of_mass", Vector3(0, 0.65, 0) }, { "balance", true }, { "max_steer", 30.0 }, { "max_torque", 100.0 }, { "idle_rpm", 1300.0 }, { "peak_rpm", 8500.0 }, { "max_rpm", 11000.0 }, { "shift_up_rpm", 10500.0 }, { "shift_down_rpm", 6000.0 }, { "gear_ratios", PackedFloat32Array({ 2.8f, 2.0f, 1.6f, 1.35f, 1.17f, 1.04f }) }, { "final_drive", 5.0 }, { "max_reverse_speed", 2.0 }, { "drag_area", 0.35 }, { "downforce_area", 0.0 }, { "engine_inertia", 0.05 } });
+			top = Object::cast_to<Node3D>(made);
+			if (!top) {
+				break;
+			}
+			Ref<StandardMaterial3D> paint;
+			paint.instantiate();
+			paint->set_albedo(Color(0.1, 0.25, 0.7));
+			paint->set_roughness(0.35);
+			paint->set_metallic(0.4);
+			Ref<StandardMaterial3D> rubber;
+			rubber.instantiate();
+			rubber->set_albedo(Color(0.08, 0.08, 0.08));
+			rubber->set_roughness(0.9);
+			CollisionShape3D *shape = memnew(CollisionShape3D);
+			shape->set_name("CollisionShape3D");
+			Ref<BoxShape3D> box_shape;
+			box_shape.instantiate();
+			box_shape->set_size(Vector3(0.4, 0.6, 1.6));
+			shape->set_shape(box_shape);
+			shape->set_position(Vector3(0, 0.75, 0));
+			top->add_child(shape);
+			MeshInstance3D *frame = memnew(MeshInstance3D);
+			frame->set_name("Frame");
+			Ref<BoxMesh> frame_box;
+			frame_box.instantiate();
+			frame_box->set_size(Vector3(0.4, 0.6, 1.6));
+			frame_box->set_material(paint);
+			frame->set_mesh(frame_box);
+			frame->set_position(Vector3(0, 0.75, 0));
+			top->add_child(frame);
+			Ref<CylinderMesh> tyre;
+			tyre.instantiate();
+			tyre->set_top_radius(0.31);
+			tyre->set_bottom_radius(0.31);
+			tyre->set_height(0.16);
+			tyre->set_material(rubber);
+			for (int i = 0; i < 2; i++) {
+				const bool front = i == 0;
+				Node *wheel = _fellow_make("FellowWheel3D", front ? "Front" : "Rear", top, Dictionary{ { "position", Vector3(0, 0.31, front ? -0.725 : 0.725) }, { "radius", 0.31 }, { "width", 0.16 }, { "suspension_length", 0.15 }, { "spring_rate", 25000.0 }, { "damping_compression", 1500.0 }, { "damping_rebound", 2000.0 }, { "inertia", 0.6 }, { "steering", front }, { "driven", !front }, { "handbrake", !front } });
+				if (!wheel) {
+					continue;
+				}
+				MeshInstance3D *mi = memnew(MeshInstance3D);
+				mi->set_name("Tyre");
+				mi->set_mesh(tyre);
+				mi->set_rotation_degrees(Vector3(0, 0, 90));
+				wheel->add_child(mi);
+			}
+			_fellow_make("FellowVehicleEffects3D", "Effects", top);
+		} break;
 		case PRESET_ACOUSTICS: {
 			// Milestone 78: the scene's 3D sounds heard through its geometry (occlusion, the listener's room's reverb);
 			// milestone 111: two reverbs more for the rooms the sources are in.
@@ -1471,6 +1526,7 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_item(TTR("Add Destructible Wall (breaks where hit, stands while supported)"), PRESET_DESTRUCTIBLE_WALL);
 	popup->add_item(TTR("Add Car (driven by its throttle, brake and steering)"), PRESET_CAR);
 	popup->add_item(TTR("Add Tracked Vehicle (skid-steered: turns on the spot)"), PRESET_TRACKED_VEHICLE);
+	popup->add_item(TTR("Add Motorcycle (balanced by its rider: the steering leans it)"), PRESET_MOTORCYCLE);
 	popup->add_separator();
 	popup->add_item(TTR("Add Acoustics (sound occluded by walls, rooms' reverb)"), PRESET_ACOUSTICS);
 	popup->add_item(TTR("Add Acoustic Portal (a doorway sound passes through)"), PRESET_ACOUSTIC_PORTAL);

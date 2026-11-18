@@ -42,6 +42,9 @@ const float ASSIST_SLIP = 0.15f; // the slip ratio the traction control and the 
 const float SKID_TURN_GRIP = 0.7f; // decision 0274: the share of the grip a skid-steered turn asks for sideways (the
 // tracks' push and drag take the rest)
 const float SKID_DRIVE_FADE = 4.0f; // decision 0274: m/s by which the skid steering's own drive is gone
+const float BALANCE_HZ = 2.0f; // decision 0275: the rider's balance, a critically damped spring of this frequency
+const float BALANCE_GRIP = 0.8f; // decision 0275: the share of the grip the lean asks for at most
+const float BALANCE_FALL = 25.0f; // decision 0275: degrees past max_lean at which the rider lets it fall
 const float REVERSE_DELAY = 0.5f; // seconds stopped with the brake held before the gearbox takes reverse
 const float ANCHOR_SPEED = 0.3f; // m/s: under this at its contact (along and across) a tyre holds where it stands
 const float ANCHOR_SLACK = 0.03f; // m: the anchor's spring gives the tyre's whole grip this far from it
@@ -487,7 +490,66 @@ void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 	// The steering, eased, less at speed.
 	speed = p_state->get_linear_velocity().dot(body_fwd);
 	const float steer_scale = Math::lerp(1.0f, steer_at_speed, CLAMP(Math::abs(speed) / 27.8f, 0.0f, 1.0f));
-	const float steer_target = steering_mode == STEERING_SKID ? 0.0f : steering_input * Math::deg_to_rad(max_steer) * steer_scale;
+	float steer_target = steering_mode == STEERING_SKID ? 0.0f : steering_input * Math::deg_to_rad(max_steer) * steer_scale;
+	// Milestone 147 (decision 0275): a two-wheeler's rider. The steering asks for a lean (a share of max_lean, of what
+	// the grip holds and of what the steering's lock can turn at the speed); the rider holds the body's roll there (a
+	// torque about the body's forward axis, as a rider's weight and countersteering would) and turns the front wheel
+	// to the turn the body's lean balances (slowly, the steering's own angle). Upright at a standstill (the rider's
+	// feet); past max_lean + BALANCE_FALL it falls.
+	Vector3 balance_axis;
+	float balance_inertia = 0.0f;
+	if (balance) {
+		Vector3 up_w = -p_state->get_total_gravity();
+		const float g = up_w.length();
+		up_w = g > 1e-4f ? up_w / g : Vector3(0, 1, 0);
+		balance_axis = body_fwd - up_w * body_fwd.dot(up_w);
+		if (balance_axis.length_squared() > 1e-6f) {
+			balance_axis.normalize();
+			const Vector3 left = up_w.cross(balance_axis);
+			lean_now = Math::atan2(body_up.dot(left), body_up.dot(up_w));
+			float z_min = 0.0f;
+			float z_max = 0.0f;
+			float grip_sum = 0.0f;
+			for (const FellowWheel3D *w : wheels) {
+				z_min = MIN(z_min, w->mount.origin.z);
+				z_max = MAX(z_max, w->mount.origin.z);
+				grip_sum += w->grip * (w->contact ? w->ground_friction : 1.0f);
+			}
+			const float base = MAX(z_max - z_min, 0.1f);
+			const float lock = Math::deg_to_rad(max_steer);
+			const float v2 = speed * speed;
+			float tan_cap = MIN(Math::tan(Math::deg_to_rad(max_lean)), BALANCE_GRIP * grip_sum / float(nw));
+			tan_cap = MIN(tan_cap, v2 * Math::tan(lock) / (base * MAX(g, 0.1f)));
+			lean_target = speed > 0.0f ? CLAMP(steering_input, -1.0f, 1.0f) * Math::atan(tan_cap) : 0.0f;
+			// The front wheel turns about the leaned body's axis: on the ground its angle is cos(lean) of it.
+			const float turn_steer = CLAMP(Math::atan(base * g * Math::tan(lean_now) / (MAX(v2, 0.01f) * MAX(Math::cos(lean_now), 0.2f))), -lock, lock);
+			steer_target = Math::lerp(steering_input * lock, turn_steer, CLAMP((speed - 1.0f) * 0.5f, 0.0f, 1.0f));
+			if (Math::abs(Math::rad_to_deg(lean_now)) > max_lean + BALANCE_FALL) {
+				fallen = true;
+			} else if (Math::abs(Math::rad_to_deg(lean_now)) < max_lean) {
+				fallen = false;
+			}
+			if (!fallen) {
+				// On the ground it rolls about its contacts' line: the inertia about it (the body's about its centre of
+				// mass, and its mass that high above it).
+				balance_inertia = 1.0f / MAX(balance_axis.dot(p_state->get_inverse_inertia_tensor().xform(balance_axis)), 1e-6f);
+				Vector3 contact_sum;
+				int touching = 0;
+				for (const FellowWheel3D *w : wheels) {
+					if (w->contact) {
+						contact_sum += w->contact_point;
+						touching++;
+					}
+				}
+				if (touching > 0) {
+					const Vector3 com = xf.origin + p_state->get_center_of_mass();
+					const Vector3 arm = com - contact_sum / float(touching);
+					const Vector3 across = arm - balance_axis * arm.dot(balance_axis);
+					balance_inertia += across.length_squared() / MAX(p_state->get_inverse_mass(), 1e-6f);
+				}
+			}
+		}
+	}
 	steer_now = Math::move_toward(steer_now, steer_target, steer_speed * dt);
 	// Milestone 147 (decision 0274): skid steering eased as the wheels would be turned (the same time to full lock).
 	skid_now = Math::move_toward(skid_now, steering_mode == STEERING_SKID ? CLAMP(steering_input, -1.0f, 1.0f) : 0.0f, steer_speed / MAX(Math::deg_to_rad(max_steer), 0.05f) * dt);
@@ -699,6 +761,7 @@ void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 			}
 		}
 	}
+	float roll_ahead = lean_now;
 	for (int s = 0; s < n; s++) {
 		// The engine: its rpm from the driven wheels (an idle clutch below idle), its torque to them; none past the
 		// reverse speed's limit.
@@ -882,6 +945,16 @@ void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 				}
 			}
 		}
+		if (balance_inertia > 0.0f) {
+			// Decision 0275: the rider's balance — the roll (about the forward axis, to the left) held at the lean asked
+			// for by a critically damped spring.
+			// The body's place stays over the substeps: its roll carried forward by its rate.
+			const float wn = float(Math::TAU) * BALANCE_HZ;
+			const float roll_rate = -p_state->get_angular_velocity().dot(balance_axis);
+			const float torque = balance_inertia * (wn * wn * (lean_target - roll_ahead) - 2.0f * wn * roll_rate);
+			p_state->apply_torque_impulse(-balance_axis * (torque * h));
+			roll_ahead -= p_state->get_angular_velocity().dot(balance_axis) * h;
+		}
 		if (tracks) {
 			// Decision 0274: each side's wheels turn together, as a track links them (their spins' momentum shared).
 			for (int side = -1; side <= 1; side += 2) {
@@ -965,6 +1038,9 @@ Dictionary FellowVehicle3D::get_stats() const {
 	d["steer_deg"] = Math::rad_to_deg(steer_now);
 	d["skid"] = skid_now;
 	d["skid_ratio"] = skid_k_last;
+	d["lean_deg"] = Math::rad_to_deg(lean_now);
+	d["lean_target_deg"] = Math::rad_to_deg(lean_target);
+	d["fallen"] = fallen;
 	d["step_usec"] = int64_t(last_step_usec);
 	Array ws;
 	for (const FellowWheel3D *w : wheels) {
@@ -1000,8 +1076,8 @@ void FellowVehicle3D::reset_global_stats() {
 
 PackedStringArray FellowVehicle3D::get_configuration_warnings() const {
 	PackedStringArray warnings = RigidBody3D::get_configuration_warnings();
-	if (wheels.size() < 3) {
-		warnings.push_back(RTR("A FellowVehicle3D stands on FellowWheel3D children: add at least three."));
+	if (wheels.size() < (balance ? 2u : 3u)) {
+		warnings.push_back(balance ? RTR("A balanced FellowVehicle3D stands on FellowWheel3D children: add at least two, in line.") : RTR("A FellowVehicle3D stands on FellowWheel3D children: add at least three (two with balance on)."));
 	}
 	bool any_driven = false;
 	for (const FellowWheel3D *w : wheels) {
@@ -1086,6 +1162,11 @@ void FellowVehicle3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_skid_turn_drive"), &FellowVehicle3D::get_skid_turn_drive);
 	ClassDB::bind_method(D_METHOD("set_tracks", "enable"), &FellowVehicle3D::set_tracks);
 	ClassDB::bind_method(D_METHOD("has_tracks"), &FellowVehicle3D::has_tracks);
+	ClassDB::bind_method(D_METHOD("set_balance", "enable"), &FellowVehicle3D::set_balance);
+	ClassDB::bind_method(D_METHOD("has_balance"), &FellowVehicle3D::has_balance);
+	ClassDB::bind_method(D_METHOD("set_max_lean", "degrees"), &FellowVehicle3D::set_max_lean);
+	ClassDB::bind_method(D_METHOD("get_max_lean"), &FellowVehicle3D::get_max_lean);
+	ClassDB::bind_method(D_METHOD("is_fallen"), &FellowVehicle3D::is_fallen);
 	ClassDB::bind_method(D_METHOD("set_brake_torque", "torque"), &FellowVehicle3D::set_brake_torque);
 	ClassDB::bind_method(D_METHOD("get_brake_torque"), &FellowVehicle3D::get_brake_torque);
 	ClassDB::bind_method(D_METHOD("set_handbrake_torque", "torque"), &FellowVehicle3D::set_handbrake_torque);
@@ -1140,6 +1221,8 @@ void FellowVehicle3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "steering_mode", PROPERTY_HINT_ENUM, "Wheels,Skid"), "set_steering_mode", "get_steering_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "skid_turn_drive", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_skid_turn_drive", "get_skid_turn_drive");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "tracks"), "set_tracks", "has_tracks");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "balance"), "set_balance", "has_balance");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_lean", PROPERTY_HINT_RANGE, "0,70,0.5,degrees"), "set_max_lean", "get_max_lean");
 	ADD_GROUP("Body", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "anti_roll", PROPERTY_HINT_RANGE, "0,100000,1,or_greater,suffix:N/m"), "set_anti_roll", "get_anti_roll");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "drag_area", PROPERTY_HINT_RANGE, "0,5,0.01,or_greater,suffix:m²"), "set_drag_area", "get_drag_area");
