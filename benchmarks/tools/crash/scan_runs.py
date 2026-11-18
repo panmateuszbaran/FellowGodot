@@ -1,5 +1,6 @@
-"""FellowEngine milestone 146 (decision 0270): a benchmark session's runs — each run's result (or none), its late fence reports and the
-Vulkan driver's sync log anomalies from its log, and FellowEngine's late_fences / sync_log_anomalies statistics.
+"""FellowEngine milestone 146 (decision 0270): a benchmark session's runs — each run's result (or none), its late
+fence reports and the Vulkan driver's sync log anomalies from its log, and FellowEngine's late_fences /
+sync_log_anomalies statistics.
 
     python3 scan_runs.py <benchmarks/results/raw/<session>> [--full]
 
