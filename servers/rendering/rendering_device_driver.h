@@ -865,6 +865,9 @@ public:
 	virtual QueryPoolID timestamp_query_pool_create(uint32_t p_query_count) = 0;
 	virtual void timestamp_query_pool_free(QueryPoolID p_pool_id) = 0;
 	virtual void timestamp_query_pool_get_results(QueryPoolID p_pool_id, uint32_t p_query_count, uint64_t *r_results) = 0;
+	// FellowEngine (decision 0270): which of the pool's first p_query_count timestamps have been written so far (without
+	// waiting): r_written[i] 1 or 0, r_results[i] its value when written. False: not supported.
+	virtual bool fellow_timestamp_query_pool_get_written(QueryPoolID p_pool_id, uint32_t p_query_count, uint64_t *r_results, uint8_t *r_written) { return false; }
 	virtual uint64_t timestamp_query_result_to_time(uint64_t p_result) = 0;
 
 	// Commands.

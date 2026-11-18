@@ -382,6 +382,7 @@ public:
 	virtual void fence_free(FenceID p_fence) override final;
 	virtual Error fellow_fence_wait_timeout(FenceID p_fence, uint64_t p_timeout_usec) override final;
 	virtual String fellow_fence_report(FenceID p_fence) override final;
+	virtual bool fellow_timestamp_query_pool_get_written(QueryPoolID p_pool_id, uint32_t p_query_count, uint64_t *r_results, uint8_t *r_written) override final;
 	virtual void fellow_sync_log_enable(bool p_enable) override final;
 
 	/********************/

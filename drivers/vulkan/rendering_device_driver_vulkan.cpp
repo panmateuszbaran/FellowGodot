@@ -7508,6 +7508,21 @@ void RenderingDeviceDriverVulkan::timestamp_query_pool_get_results(QueryPoolID p
 	vkGetQueryPoolResults(vk_device, (VkQueryPool)p_pool_id.id, 0, p_query_count, sizeof(uint64_t) * p_query_count, r_results, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
 }
 
+bool RenderingDeviceDriverVulkan::fellow_timestamp_query_pool_get_written(QueryPoolID p_pool_id, uint32_t p_query_count, uint64_t *r_results, uint8_t *r_written) {
+	// FellowEngine (decision 0270): each query's value and availability, without waiting (VK_NOT_READY when some are not).
+	LocalVector<uint64_t> pairs;
+	pairs.resize(p_query_count * 2);
+	const VkResult err = vkGetQueryPoolResults(vk_device, (VkQueryPool)p_pool_id.id, 0, p_query_count, sizeof(uint64_t) * 2 * p_query_count, pairs.ptr(), sizeof(uint64_t) * 2, VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+	if (err != VK_SUCCESS && err != VK_NOT_READY) {
+		return false;
+	}
+	for (uint32_t i = 0; i < p_query_count; i++) {
+		r_results[i] = pairs[i * 2];
+		r_written[i] = pairs[i * 2 + 1] != 0 ? 1 : 0;
+	}
+	return true;
+}
+
 uint64_t RenderingDeviceDriverVulkan::timestamp_query_result_to_time(uint64_t p_result) {
 	// This sucks because timestampPeriod multiplier is a float, while the timestamp is 64 bits nanosecs.
 	// So, in cases like nvidia which give you enormous numbers and 1 as multiplier, multiplying is next to impossible.

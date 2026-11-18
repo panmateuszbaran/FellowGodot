@@ -9375,6 +9375,46 @@ void RenderingDevice::_fellow_late_fence_report(uint32_t p_frame, double p_secon
 	} else {
 		print_error("  Transfer workers: their pool is held by another thread.");
 	}
+	// The GPU's progress in the slot's frame: which of its pass timestamps (rendering/fellow/profiling/pass_timestamps or
+	// the profiler) it has written — the work between the last one written and the first one not is where it stopped.
+	const uint32_t ts_count = frames[p_frame].timestamp_count;
+	if (ts_count > 0) {
+		LocalVector<uint64_t> values;
+		LocalVector<uint8_t> written;
+		values.resize(ts_count);
+		written.resize(ts_count);
+		if (driver->fellow_timestamp_query_pool_get_written(frames[p_frame].timestamp_pool, ts_count, values.ptr(), written.ptr())) {
+			uint32_t done = 0;
+			int last = -1;
+			int first_missing = -1;
+			for (uint32_t i = 0; i < ts_count; i++) {
+				if (written[i]) {
+					done++;
+					last = int(i);
+				} else if (first_missing < 0) {
+					first_missing = int(i);
+				}
+			}
+			// All written: past every pass — or not begun, the pool still holding the slot's previous frame (its reset is
+			// the frame's first command).
+			print_error(vformat("  GPU timestamps of the slot's frame: %d of %d written%s; the last written: %s; the first not: %s.", done, ts_count, done == ts_count ? " (past every pass, or the frame not begun)" : "",
+					last >= 0 ? "'" + frames[p_frame].timestamp_names[last] + "'" : String("none"),
+					first_missing >= 0 ? "'" + frames[p_frame].timestamp_names[first_missing] + "'" : String("none")));
+			String missing;
+			uint32_t listed = 0;
+			for (uint32_t i = 0; i < ts_count && listed < 12; i++) {
+				if (!written[i]) {
+					missing += (listed ? ", " : "") + frames[p_frame].timestamp_names[i];
+					listed++;
+				}
+			}
+			if (!missing.is_empty()) {
+				print_error("  Not written: " + missing + (done + listed < ts_count ? ", ..." : "."));
+			}
+		}
+	} else {
+		print_error("  No GPU timestamps in the slot's frame (rendering/fellow/profiling/pass_timestamps off).");
+	}
 	const Vector<String> lines = driver->fellow_fence_report(frames[p_frame].fence).split("\n");
 	for (const String &line : lines) {
 		print_error("  " + line);
