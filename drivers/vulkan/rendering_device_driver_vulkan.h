@@ -131,6 +131,9 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 
 		// Debug device fault.
 		PFN_vkGetDeviceFaultInfoEXT GetDeviceFaultInfoEXT = nullptr;
+		// FellowEngine (decision 0270): VK_NV_device_diagnostic_checkpoints, with rendering/fellow/debug/gpu_checkpoints.
+		PFN_vkCmdSetCheckpointNV CmdSetCheckpointNV = nullptr;
+		PFN_vkGetQueueCheckpointDataNV GetQueueCheckpointDataNV = nullptr;
 
 		// Raytracing extensions.
 		PFN_vkCreateAccelerationStructureKHR CreateAccelerationStructureKHR = nullptr;
@@ -384,6 +387,9 @@ public:
 	virtual String fellow_fence_report(FenceID p_fence) override final;
 	virtual bool fellow_timestamp_query_pool_get_written(QueryPoolID p_pool_id, uint32_t p_query_count, uint64_t *r_results, uint8_t *r_written) override final;
 	virtual void fellow_sync_log_enable(bool p_enable) override final;
+	virtual bool fellow_checkpoints_enabled() const override final { return device_functions.CmdSetCheckpointNV != nullptr; }
+	virtual void fellow_command_checkpoint(CommandBufferID p_cmd_buffer, uint64_t p_marker) override final;
+	virtual void fellow_queue_checkpoints(LocalVector<Pair<String, uint64_t>> &r_checkpoints) override final;
 
 	/********************/
 	/**** SEMAPHORES ****/

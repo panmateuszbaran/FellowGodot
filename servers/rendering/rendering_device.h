@@ -2004,6 +2004,7 @@ public:
 	void _fellow_late_fence_report(uint32_t p_frame, double p_seconds); // FellowEngine (decision 0270)
 	uint32_t fellow_late_fence_reports = 0;
 	bool fellow_late_fence_registered = false; // the setting exists (registered after the device is made)
+	bool fellow_graph_settings_registered = false; // decision 0270: debug/graph_reorder and graph_full_barriers exist
 	void _stall_for_previous_frames();
 	void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
 

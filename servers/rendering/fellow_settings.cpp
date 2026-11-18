@@ -324,6 +324,13 @@ void Fellow::register_settings() {
 	// its signal as it is submitted: start-up.
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/debug/late_fence_report_s", PROPERTY_HINT_RANGE, "0,60,0.1,suffix:s"), 2.0);
 	GLOBAL_DEF_RST("rendering/fellow/debug/sync_log", false);
+	// Decision 0270: GPU checkpoints (VK_NV_device_diagnostic_checkpoints) before each command of the frame, read by a late
+	// fence's report. Start-up.
+	GLOBAL_DEF_RST("rendering/fellow/debug/gpu_checkpoints", false);
+	// Decision 0270: the render graph's reordering (stock's RENDER_GRAPH_REORDER) and full barriers between its commands
+	// (RENDER_GRAPH_FULL_BARRIERS) as diagnostics.
+	GLOBAL_DEF("rendering/fellow/debug/graph_reorder", true);
+	GLOBAL_DEF("rendering/fellow/debug/graph_full_barriers", false);
 	GLOBAL_DEF("rendering/fellow/debug/hitch_sampler", false); // decision 0231: frame steps over the threshold sampled and reported at exit
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/debug/hitch_sampler_ms", PROPERTY_HINT_RANGE, "1,1000,0.1,suffix:ms"), 33.3);
 	FellowHitchSampler::register_debugger(); // decision 0238: the editor's debugger can start it

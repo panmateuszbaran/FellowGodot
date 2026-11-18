@@ -293,9 +293,7 @@ private:
 	};
 
 	struct ComputeInstructionList : InstructionList {
-#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
-		uint32_t breadcrumb;
-#endif
+		uint32_t breadcrumb = 0; // FellowEngine (decision 0270): in every build, for the GPU checkpoints
 	};
 
 	struct RaytracingInstructionList : InstructionList {
@@ -315,9 +313,7 @@ private:
 		LocalVector<AttachmentOperation> attachment_operations;
 		LocalVector<RDD::RenderPassClearValue> attachment_clear_values;
 
-#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
-		uint32_t breadcrumb;
-#endif
+		uint32_t breadcrumb = 0; // FellowEngine (decision 0270): in every build, for the GPU checkpoints
 		bool split_cmd_buffer = false;
 	};
 
@@ -441,9 +437,7 @@ private:
 		uint32_t clear_values_count = 0;
 		uint32_t trackers_count = 0;
 
-#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
-		uint32_t breadcrumb = 0;
-#endif
+		uint32_t breadcrumb = 0; // FellowEngine (decision 0270): in every build, for the GPU checkpoints
 		bool split_cmd_buffer = false;
 		// FellowEngine parallel recording: the segment starts in fellow_recorded_starts (count 0: none recorded).
 		uint32_t fellow_starts_first = 0;
@@ -860,6 +854,7 @@ private:
 	WorkaroundsState workarounds_state;
 	TightLocalVector<Frame> frames;
 	uint32_t frame = 0;
+	bool fellow_checkpoints = false; // decision 0270: the driver records GPU checkpoints
 
 #ifdef DEV_ENABLED
 	RBMap<ResourceTracker *, uint32_t> write_dependency_counters;
@@ -958,6 +953,12 @@ private:
 public:
 	RenderingDeviceGraph();
 	~RenderingDeviceGraph();
+	// FellowEngine (decision 0270): a GPU checkpoint's marker — the command's type, its breadcrumb (a draw or compute
+	// list's pass), the frame slot, the command's index in the frame — and its description.
+	static uint64_t fellow_checkpoint_marker(uint32_t p_type, uint32_t p_breadcrumb, uint32_t p_slot, uint32_t p_index) {
+		return (uint64_t(p_type & 0xFF) << 56) | (uint64_t(p_breadcrumb) << 24) | (uint64_t(p_slot & 0xF) << 20) | uint64_t(p_index & 0xFFFFF);
+	}
+	static String fellow_checkpoint_describe(uint64_t p_marker);
 	void initialize(RDD *p_driver, RenderPassCreationFunction p_render_pass_creation_function, uint32_t p_frame_count, RDD::CommandQueueFamilyID p_secondary_command_queue_family, uint32_t p_secondary_command_buffers_per_frame);
 	void finalize();
 	void begin();

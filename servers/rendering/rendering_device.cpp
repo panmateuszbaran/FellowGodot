@@ -8805,7 +8805,18 @@ void RenderingDevice::_end_frame() {
 	}
 
 	GodotProfileZoneGrouped(_profile_zone, "draw_graph.end");
-	draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, command_buffer, frames[frame].command_buffer_pool);
+	// FellowEngine (decision 0270): diagnostics — the graph's commands in their recorded order, or full barriers between
+	// them (Godot's compile-time switches as settings, rendering/fellow/debug/graph_reorder and graph_full_barriers).
+	bool fellow_reorder = RENDER_GRAPH_REORDER == 1;
+	bool fellow_full_barriers = RENDER_GRAPH_FULL_BARRIERS == 1;
+	if (!fellow_graph_settings_registered && is_main_instance) {
+		fellow_graph_settings_registered = ProjectSettings::get_singleton()->has_setting("rendering/fellow/debug/graph_reorder");
+	}
+	if (fellow_graph_settings_registered) {
+		fellow_reorder = fellow_reorder && GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/graph_reorder");
+		fellow_full_barriers = fellow_full_barriers || GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/graph_full_barriers");
+	}
+	draw_graph.end(fellow_reorder, fellow_full_barriers, command_buffer, frames[frame].command_buffer_pool);
 	GodotProfileZoneGrouped(_profile_zone, "driver->command_buffer_end");
 	driver->command_buffer_end(command_buffer);
 	GodotProfileZoneGrouped(_profile_zone, "driver->end_segment");
@@ -9414,6 +9425,18 @@ void RenderingDevice::_fellow_late_fence_report(uint32_t p_frame, double p_secon
 		}
 	} else {
 		print_error("  No GPU timestamps in the slot's frame (rendering/fellow/profiling/pass_timestamps off).");
+	}
+	// With rendering/fellow/debug/gpu_checkpoints: the last command each queue's stages passed (VK_NV_device_diagnostic_
+	// checkpoints, one before each command of the graph's replay, without the order the timestamps impose on it).
+	if (driver->fellow_checkpoints_enabled()) {
+		LocalVector<Pair<String, uint64_t>> checkpoints;
+		driver->fellow_queue_checkpoints(checkpoints);
+		if (checkpoints.is_empty()) {
+			print_error("  GPU checkpoints: none recorded by the queues.");
+		}
+		for (const Pair<String, uint64_t> &c : checkpoints) {
+			print_error(vformat("  GPU checkpoint, %s: %s.", c.first, RenderingDeviceGraph::fellow_checkpoint_describe(c.second)));
+		}
 	}
 	const Vector<String> lines = driver->fellow_fence_report(frames[p_frame].fence).split("\n");
 	for (const String &line : lines) {

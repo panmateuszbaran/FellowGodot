@@ -421,6 +421,13 @@ public:
 	// submission waits on and where each signal came from (rendering/fellow/debug/sync_log), the queues' swap chain
 	// semaphores. One line each. Default: nothing.
 	virtual String fellow_fence_report(FenceID p_fence) { return String(); }
+	// FellowEngine (decision 0270, rendering/fellow/debug/gpu_checkpoints): markers the GPU records as it passes them
+	// (VK_NV_device_diagnostic_checkpoints), one before each command of the render graph's replay; a late fence's report
+	// reads each queue's last ones. Default: unsupported.
+	virtual bool fellow_checkpoints_enabled() const { return false; }
+	virtual void fellow_command_checkpoint(CommandBufferID p_cmd_buffer, uint64_t p_marker) {}
+	// The last markers each queue's stages passed: (queue's name and stage, marker), pairs in r_checkpoints.
+	virtual void fellow_queue_checkpoints(LocalVector<Pair<String, uint64_t>> &r_checkpoints) {}
 	// FellowEngine (decision 0270, rendering/fellow/debug/sync_log): record every queue operation and check each
 	// semaphore wait against the signals submitted before it. Default: unsupported.
 	virtual void fellow_sync_log_enable(bool p_enable) {}

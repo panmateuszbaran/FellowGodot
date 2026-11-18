@@ -610,6 +610,10 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 	}
 #endif
 	_register_requested_device_extension(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, false);
+	// FellowEngine (decision 0270): the GPU's progress through a frame, read when a fence is late (diagnostics).
+	if (ProjectSettings::get_singleton()->has_setting("rendering/fellow/debug/gpu_checkpoints") && bool(ProjectSettings::get_singleton()->get_setting("rendering/fellow/debug/gpu_checkpoints"))) {
+		_register_requested_device_extension(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME, false);
+	}
 	// FellowEngine (milestone 120, decision 0240): the operating system's budget for the process's video memory and its
 	// usage (VK_EXT_memory_budget, read through the memory allocator).
 	if (bool(ProjectSettings::get_singleton()->get_setting("rendering/fellow/enabled", true))) {
@@ -1702,6 +1706,16 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 		// Debug device fault extension.
 		if (device_fault_support) {
 			device_functions.GetDeviceFaultInfoEXT = (PFN_vkGetDeviceFaultInfoEXT)functions.GetDeviceProcAddr(vk_device, "vkGetDeviceFaultInfoEXT");
+		}
+		if (enabled_device_extension_names.has(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME)) {
+			device_functions.CmdSetCheckpointNV = (PFN_vkCmdSetCheckpointNV)functions.GetDeviceProcAddr(vk_device, "vkCmdSetCheckpointNV");
+			device_functions.GetQueueCheckpointDataNV = (PFN_vkGetQueueCheckpointDataNV)functions.GetDeviceProcAddr(vk_device, "vkGetQueueCheckpointDataNV");
+			if (device_functions.CmdSetCheckpointNV == nullptr || device_functions.GetQueueCheckpointDataNV == nullptr) {
+				device_functions.CmdSetCheckpointNV = nullptr;
+				device_functions.GetQueueCheckpointDataNV = nullptr;
+			} else {
+				print_line("FellowEngine: GPU checkpoints on (rendering/fellow/debug/gpu_checkpoints).");
+			}
 		}
 
 		// Device raytracing extensions.
@@ -3419,6 +3433,38 @@ String RenderingDeviceDriverVulkan::fellow_fence_report(FenceID p_fence) {
 				queue->fellow_label, queue->queue_family, queue->queue_index, queue->image_semaphores.size(), queue->free_image_semaphores.size(), pending_execute, pending_fence, held);
 	}
 	return r;
+}
+
+void RenderingDeviceDriverVulkan::fellow_command_checkpoint(CommandBufferID p_cmd_buffer, uint64_t p_marker) {
+	if (device_functions.CmdSetCheckpointNV != nullptr) {
+		const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+		device_functions.CmdSetCheckpointNV(command_buffer->vk_command_buffer, (const void *)(uintptr_t)p_marker);
+	}
+}
+
+void RenderingDeviceDriverVulkan::fellow_queue_checkpoints(LocalVector<Pair<String, uint64_t>> &r_checkpoints) {
+	if (device_functions.GetQueueCheckpointDataNV == nullptr) {
+		return;
+	}
+	for (CommandQueue *queue : fellow_command_queues) {
+		Queue &device_queue = queue_families[queue->queue_family][queue->queue_index];
+		MutexLock lock(device_queue.submit_mutex); // the queue's other users (a transfer worker's submission)
+		uint32_t count = 0;
+		device_functions.GetQueueCheckpointDataNV(device_queue.queue, &count, nullptr);
+		LocalVector<VkCheckpointDataNV> data;
+		data.resize(count);
+		for (VkCheckpointDataNV &d : data) {
+			d.sType = VK_STRUCTURE_TYPE_CHECKPOINT_DATA_NV;
+			d.pNext = nullptr;
+		}
+		if (count > 0) {
+			device_functions.GetQueueCheckpointDataNV(device_queue.queue, &count, data.ptr());
+		}
+		for (uint32_t i = 0; i < count; i++) {
+			const char *stage = data[i].stage == VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT ? "top of pipe" : (data[i].stage == VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT ? "bottom of pipe" : "a stage");
+			r_checkpoints.push_back(Pair<String, uint64_t>(vformat("%s, %s (%x)", queue->fellow_label, stage, uint64_t(data[i].stage)), uint64_t(uintptr_t(data[i].pCheckpointMarker))));
+		}
+	}
 }
 
 void RenderingDeviceDriverVulkan::fellow_sync_log_enable(bool p_enable) {

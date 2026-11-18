@@ -1206,9 +1206,7 @@ void RenderingDeviceGraph::_add_draw_list_begin(FramebufferCache *p_framebuffer_
 
 	draw_instruction_list.split_cmd_buffer = p_split_cmd_buffer;
 
-#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
-	draw_instruction_list.breadcrumb = p_breadcrumb;
-#endif
+	draw_instruction_list.breadcrumb = p_breadcrumb; // FellowEngine (decision 0270): in every build
 }
 
 void RenderingDeviceGraph::_run_secondary_command_buffer_task(const SecondaryCommandBuffer *p_secondary) {
@@ -1233,6 +1231,18 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 		const uint32_t command_data_offset = command_data_offsets[command_index];
 		const RecordedCommand *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offset]);
 		_run_label_command_change(r_command_buffer, command->label_index, p_level, false, true, &p_sorted_commands[i], p_sorted_commands_count - i, r_current_label_index, r_current_label_level);
+
+		if (fellow_checkpoints) {
+			// FellowEngine (decision 0270): the GPU's progress, a marker before each command (its type, a draw list's
+			// breadcrumb, the frame slot, the command's index in the frame).
+			uint64_t breadcrumb = 0;
+			if (command->type == RecordedCommand::TYPE_DRAW_LIST) {
+				breadcrumb = reinterpret_cast<const RecordedDrawListCommand *>(command)->breadcrumb;
+			} else if (command->type == RecordedCommand::TYPE_COMPUTE_LIST) {
+				breadcrumb = reinterpret_cast<const RecordedComputeListCommand *>(command)->breadcrumb;
+			}
+			driver->fellow_command_checkpoint(r_command_buffer, fellow_checkpoint_marker(uint32_t(command->type), uint32_t(breadcrumb), frame, command_index));
+		}
 
 		switch (command->type) {
 			case RecordedCommand::TYPE_BOTTOM_LEVEL_ACCELERATION_STRUCTURE_BUILD: {
@@ -1887,6 +1897,7 @@ void RenderingDeviceGraph::initialize(RDD *p_driver, RenderPassCreationFunction 
 
 	driver = p_driver;
 	driver_workarounds = p_driver->get_driver_workarounds();
+	fellow_checkpoints = p_driver->fellow_checkpoints_enabled(); // FellowEngine (decision 0270)
 	render_pass_creation_function = p_render_pass_creation_function;
 	frames.resize(p_frame_count);
 
@@ -2229,9 +2240,7 @@ void RenderingDeviceGraph::add_raytracing_list_end() {
 
 void RenderingDeviceGraph::add_compute_list_begin(RDD::BreadcrumbMarker p_phase, uint32_t p_breadcrumb_data) {
 	compute_instruction_list.clear();
-#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
-	compute_instruction_list.breadcrumb = p_breadcrumb_data | (p_phase & ((1 << 16) - 1));
-#endif
+	compute_instruction_list.breadcrumb = p_breadcrumb_data | (p_phase & ((1 << 16) - 1)); // FellowEngine: every build
 	compute_instruction_list.index++;
 }
 
@@ -2330,6 +2339,7 @@ void RenderingDeviceGraph::add_compute_list_end() {
 	command->type = RecordedCommand::TYPE_COMPUTE_LIST;
 	command->self_stages = compute_instruction_list.stages;
 	command->instruction_data_size = instruction_data_size;
+	command->breadcrumb = compute_instruction_list.breadcrumb; // FellowEngine (decision 0270): the GPU checkpoints
 	memcpy(command->instruction_data(), compute_instruction_list.data.ptr(), instruction_data_size);
 	_add_command_to_graph(compute_instruction_list.command_trackers.ptr(), compute_instruction_list.command_tracker_usages.ptr(), compute_instruction_list.command_trackers.size(), command_index, command);
 }
@@ -2576,9 +2586,7 @@ void RenderingDeviceGraph::add_draw_list_end() {
 	command->instruction_data_size = instruction_data_size;
 	command->command_buffer_type = RDD::COMMAND_BUFFER_TYPE_PRIMARY;
 	command->region = draw_instruction_list.region;
-#if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
-	command->breadcrumb = draw_instruction_list.breadcrumb;
-#endif
+	command->breadcrumb = draw_instruction_list.breadcrumb; // FellowEngine (decision 0270): in every build
 	command->split_cmd_buffer = draw_instruction_list.split_cmd_buffer;
 	command->fellow_starts_first = 0;
 	command->fellow_starts_count = 0;
@@ -2803,6 +2811,20 @@ void RenderingDeviceGraph::add_capture_timestamp(RDD::QueryPoolID p_query_pool, 
 	command->pool = p_query_pool;
 	command->index = p_index;
 	_add_command_to_graph(nullptr, nullptr, 0, command_index, command);
+}
+
+String RenderingDeviceGraph::fellow_checkpoint_describe(uint64_t p_marker) {
+	// FellowEngine (decision 0270): a GPU checkpoint's marker in words.
+	static const char *types[] = { "none", "BLAS build", "TLAS build", "buffer clear", "buffer copy", "buffer read-back", "buffer update", "compute list", "ray tracing list", "draw list", "texture clear", "depth clear", "texture copy", "texture read-back", "texture resolve", "texture update", "timestamp", "driver callback" };
+	static const char *passes[] = { "-", "reflection probes", "sky", "lightmapper", "directional shadows", "cube shadows", "opaque", "alpha", "transparent", "post-processing", "blit", "UI", "debug" };
+	const uint32_t type = uint32_t(p_marker >> 56);
+	const uint32_t breadcrumb = uint32_t((p_marker >> 24) & 0xFFFFFFFFu);
+	const uint32_t pass = breadcrumb >> 16;
+	String s = vformat("command %d of slot %d's frame: %s", uint32_t(p_marker & 0xFFFFF), uint32_t((p_marker >> 20) & 0xF), type < sizeof(types) / sizeof(types[0]) ? types[type] : "?");
+	if (type == RecordedCommand::TYPE_DRAW_LIST || type == RecordedCommand::TYPE_COMPUTE_LIST) {
+		s += vformat(" (pass: %s, %x)", pass < sizeof(passes) / sizeof(passes[0]) ? passes[pass] : "?", breadcrumb);
+	}
+	return s;
 }
 
 void RenderingDeviceGraph::add_synchronization() {
