@@ -713,22 +713,13 @@ void FellowTextureStreaming::_schedule() {
 
 void FellowTextureStreaming::update() {
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
-	// Finished jobs: swap them in — at most texture_max_swaps_per_frame of them (decision 0269: each swap remakes the
-	// uniform sets of the materials that use the texture; the others wait for the next frames, finished).
-	const int max_swaps = MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_max_swaps_per_frame"));
-	int swapped = 0;
+	// Finished jobs: swap them in.
 	for (uint32_t i = 0; i < jobs.size();) {
 		Job *job = jobs[i];
 		if (job->result.load(std::memory_order_acquire) == 0 || !WorkerThreadPool::get_singleton()->is_task_completed(job->task)) {
 			i++;
 			continue;
 		}
-		if (max_swaps > 0 && swapped >= max_swaps) {
-			swap_deferrals++;
-			i++;
-			continue;
-		}
-		swapped++;
 		WorkerThreadPool::get_singleton()->wait_for_task_completion(job->task);
 		Texture *tex = nullptr;
 		if (job->texture.is_valid()) {
@@ -758,7 +749,6 @@ void FellowTextureStreaming::update() {
 	} else {
 		counts = Stats();
 	}
-	swaps_frame_max = MAX(swaps_frame_max, swapped);
 	update_usec += OS::get_singleton()->get_ticks_usec() - t0;
 	_update_snapshot();
 }
@@ -804,8 +794,6 @@ void FellowTextureStreaming::_update_snapshot() {
 	c.eval_references = eval_references;
 	c.update_usec = update_usec;
 	c.frames = frame;
-	c.swaps_frame_max = swaps_frame_max;
-	c.swap_deferrals = swap_deferrals;
 	Array details;
 	const bool with_details = GLOBAL_GET_CACHED(bool, "rendering/fellow/streaming/texture_info_details");
 	if (with_details) {
@@ -870,8 +858,6 @@ Dictionary FellowTextureStreaming::get_info() const {
 	d["update_usec"] = c.update_usec;
 	d["frames"] = c.frames;
 	d["materials"] = c.materials;
-	d["swaps_frame_max"] = c.swaps_frame_max; // decision 0269: the most finished loads swapped in one frame
-	d["swap_deferrals"] = c.swap_deferrals; // finished loads left for a later frame by texture_max_swaps_per_frame (a frame each)
 	// Settled: every texture at its target after at least two cycles, nothing in flight.
 	d["settled"] = c.cycles >= 2 && c.pending == 0 && c.jobs == 0;
 	return d;

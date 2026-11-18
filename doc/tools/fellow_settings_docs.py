@@ -335,7 +335,6 @@ D = {
     "streaming/texture_instances_per_frame": "Instances evaluated per frame for the levels their textures need.",
     "streaming/texture_max_jobs": "Texture loads at a time.",
     "streaming/texture_upload_mb_per_frame": "The most texture data uploaded per frame.",
-    "streaming/texture_max_swaps_per_frame": "At most this many finished texture loads take their texture's place in a frame; the others wait for the next frames (each swap remakes the uniform sets of the materials that use the texture). 0: every finished load in the frame it finishes. Decision 0269.",
     "streaming/texture_release_hold_s": "A texture needing fewer mips keeps them this long before they are released (unless over the budget).",
     "streaming/texture_unreferenced_hold_s": "A streamed texture no instance uses keeps its mips this long, then falls back to its resident mips.",
     "streaming/texture_info_details": "[method RenderingServer.fellow_get_texture_streaming_info] also lists every streamed texture.",
