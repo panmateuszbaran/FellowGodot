@@ -9,7 +9,7 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
-## Milestone 147 — the far shadow cascades without instances out of range; a garment's backstop; tracked vehicles and two-wheelers (2026-11-18, in progress)
+## Milestone 147 — tracked vehicles and two-wheelers; the far shadow cascades without instances out of range; a garment's backstop (2026-11-18)
 
 - Decision 0272: a directional cascade that begins beyond an instance range's end (the terrain's foliage, HLOD's
   instanced proxies and impostors) leaves those instances out — none of them is drawn that far (Frontier's and Slice's
