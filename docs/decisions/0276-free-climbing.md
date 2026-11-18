@@ -1,9 +1,9 @@
 # 0276 — Free climbing: FellowTraversal3D on any wall's face
 
 Status: **KEEP** (opt-in per node) · Branch `fellow/geometry` · Code: `modules/fellow_animation/fellow_traversal_3d.{h,cpp}`
-(`free_climb`, `climb_mask`, `climb_speed`, `climb_max_overhang`, `try_climb()`, `is_climbing()`, `KIND_CLIMB`,
-signals `climb_started`, `climb_finished`; `_climb_top()`; the mantle's path over a leaning face and a sloping top) ·
-Checks: `bench/climb_check.gd` (eight new lanes) on GodotPhysics3D and Jolt, `bench/traversal_check.gd`, the regression
+(`free_climb`, `climb_mask`, `climb_speed`, `climb_max_overhang`, `climb_jump_distance`, `try_climb()`, `is_climbing()`, `KIND_CLIMB`,
+signals `climb_started`, `climb_finished`, `climb_jumped`; `_climb_top()`; the mantle's path over a leaning face and a sloping top) ·
+Checks: `bench/climb_check.gd` (ten new lanes) on GodotPhysics3D and Jolt, `bench/traversal_check.gd`, the regression
 scenes `traversal` and `climb`.
 
 ## Problem
@@ -33,6 +33,10 @@ automatic mantle runs first), or caught against it in the air, climbs it (`try_c
   edge and in front of it as the ledge check asks. Room: a mantle from the climb; none on the top: hanging from the
   edge (milestone 75's hang). The ledge check itself took a slab's face (leaning back from the body) for a sloping top.
 * **The floor**: climbing down onto ground, standing; `release()` lets go.
+* **A lunge** (`hang_jump()` while climbing): over the face the way the wish goes (up without one) by up to
+  `climb_jump_distance` (1.2 m), as far as the face and room for the body go, sampled every 0.2 m (0.4 m at least):
+  out from the face a little and onto the place in 0.2 s + 0.15 s a metre, the hands ahead, the feet off the face;
+  signal `climb_jumped(distance)`.
 * **The pose**: the hands over the head and the feet on the face, a step (0.3 m) apart, changing over as it climbs,
   the torso towards a face that leans back; the FellowTraversalPose3D's two-bone IK as for hangs and ladders.
 * **The mantle's path, for every mantle**: over a top that slopes, the capsule's lower end kept on its plane (it went
@@ -52,6 +56,8 @@ automatic mantle runs first), or caught against it in the air, climbs it (`try_c
 | a round tower (radius 2 m): up, then left 2 s | turned 57.3° round it, its axis 2.43 m from the tower's (2 + 0.35 + 0.08) |
 | a 2 m block: up, then left past its corner | turned 90.0°, 0.43 m off the side face, on along it |
 | a slab leaning back 20° | climbed, mantled over its edge (4.69 m) onto its sloping top |
+| a 6 m wall: up, then a lunge | 1.2 m up in 0.38 s, climbing on |
+| a 2.7 m wall: a lunge from 0.4 m | 1.0 m (the face ends), then over the top, on it at 2.70 m |
 | free_climb off; outside climb_mask; an overhang of 30° | not climbed, standing at the foot |
 
 No frame of any lane with the capsule in the world; the hands and feet on their targets where they reach (0 cm). The
@@ -70,5 +76,5 @@ KEEP, opt-in (`free_climb` off: nothing changes).
   over the edge").
 * **A capsule leaning with the face**: the body's collision stays upright (a CharacterBody3D's capsule); the pose
   leans the torso.
-* **Stamina, a climbing jump (a lunge up the face), climbing on moving bodies, a clip set for climbing**: a game's
-  stamina ends the climb with `release()`; the others are later work.
+* **Stamina, climbing on moving bodies, a clip set for climbing**: a game's stamina ends the climb with `release()`;
+  the others are later work.

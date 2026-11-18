@@ -853,9 +853,11 @@ Free climbing (milestone 148, decision 0276), on `FellowTraversal3D`: `free_clim
 on a layer of `climb_mask` with nothing to mantle onto, or caught against it in the air, climbs it — up and down,
 along it, round towers and corners, onto inside corners, over the top as a mantle or a hang, down to the floor),
 `climb_mask` (1: the layers whose faces are climbable), `climb_speed` (1 m/s), `climb_max_overhang` (20°: a face
-leaning over the body more is not climbed; one less steep than `max_ledge_slope` is walked on). `try_climb(direction)`,
-`is_climbing()`; `set_climb_input()` and the intent steer it, `release()` lets go; signals `climb_started`,
-`climb_finished(at_top)`; `KIND_CLIMB`; the global stat `climbs`. Bench `bench/climb_check.gd` (eight lanes more).
+leaning over the body more is not climbed; one less steep than `max_ledge_slope` is walked on), `climb_jump_distance`
+(1.2 m: `hang_jump()` while climbing lunges over the face the way the wish goes, as far as the face and room go).
+`try_climb(direction)`, `is_climbing()`; `set_climb_input()` and the intent steer it, `release()` lets go; signals
+`climb_started`, `climb_finished(at_top)`, `climb_jumped(distance)`; `KIND_CLIMB`; the global stat `climbs`. Bench
+`bench/climb_check.gd` (ten lanes more).
 
 Faces (milestone 83, decision 0191): `FellowFaceAnimator` (a `Node`; nothing changes without it): `mesh_path` (the
 face's `MeshInstance3D`), `voice_path` (an `AudioStreamPlayer`, 2D or 3D), `voice_stream` and `voice_time` (−1: with a

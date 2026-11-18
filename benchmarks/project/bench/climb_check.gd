@@ -286,6 +286,8 @@ func _lane(name: String, start: Vector3, program: Array) -> Dictionary:
 		lane.events.append(["climb_started", snappedf(frame / 60.0, 0.01)]))
 	t.climb_finished.connect(func(at_top: bool) -> void:
 		lane.events.append(["climb_finished", at_top, snappedf(frame / 60.0, 0.01)]))
+	t.climb_jumped.connect(func(distance: float) -> void:
+		lane.events.append(["climb_jumped", snappedf(distance, 0.1), snappedf(frame / 60.0, 0.01)]))
 	sk.skeleton_updated.connect(_on_skeleton_updated.bind(lane))
 	lanes.append(lane)
 	return lane
@@ -453,6 +455,14 @@ func _build() -> void:
 	# A 2 m block, 6 m high: up, left past its corner (x 29) and on along its left side (the wish held).
 	_box(Vector3(30, 3.0, 9.0), Vector3(2.0, 6.0, 2.0), Color(0.62, 0.55, 0.48))
 	climb_lanes.append(_lane("climb_corner", Vector3(30, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [2.0, {"intent": Vector3(-1, 0, 0)}], [4.5, {"intent": Vector3()}]]))
+	# A 6 m wall: up 1 s, a lunge up (hang_jump), then still; and a 2.7 m wall: a lunge up from 0.4 m would reach past
+	# its top (it goes only as far as the face goes), then over it.
+	_box(Vector3(70, 3.0, 9.0), Vector3(3.0, 6.0, 2.0), Color(0.62, 0.55, 0.48))
+	climb_lanes.append(_lane("climb_jump", Vector3(70, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [2.0, {"intent": Vector3()}],
+			[2.5, {"call": "hang_jump"}], [3.5, {"intent": Vector3()}]]))
+	_box(Vector3(78, 1.35, 9.0), Vector3(3.0, 2.7, 2.0), Color(0.62, 0.55, 0.48))
+	climb_lanes.append(_lane("climb_jump_top", Vector3(78, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [1.4, {"intent": Vector3()}],
+			[1.8, {"call": "hang_jump"}], [2.6, {"intent": walk}], [3.6, {"intent": Vector3()}]]))
 	# A slab leaning back 20 degrees (its top about 4.7 m): up and over.
 	var slab := _box(Vector3(60, 2.0, 9.0), Vector3(3.0, 5.0, 2.0), Color(0.62, 0.55, 0.48))
 	slab.rotation_degrees = Vector3(-20, 0, 0)
@@ -598,6 +608,8 @@ func _on_physics() -> void:
 			lane.ladder_frames += 1
 		if t.is_climbing():
 			lane.climb_frames += 1
+			if lane.name == "climb_jump" and frame == int(2.45 * 60.0):
+				lane["y_before_jump"] = body.global_position.y
 			lane.climb_top = maxf(lane.climb_top, body.global_position.y)
 			var facing := -body.global_basis.z
 			facing.y = 0.0
@@ -729,6 +741,18 @@ func _finish() -> void:
 				e["turned_deg"] = snappedf(turned_k, 0.1)
 				e["from_side"] = snappedf(feet.x - (lane.x - 1.0), 0.01)
 				ok = ok and names.has("climb_started") and not names.has("climb_finished:false") and absf(turned_k - 90.0) < 5.0 and absf(feet.x - (lane.x - 1.0) + 0.43) < 0.05 and feet.z < 9.6
+			"climb_jump":
+				# A lunge of the whole climb_jump_distance (1.2 m) up, still climbing; higher by 1.2 m than before it.
+				e["climb_top"] = snappedf(lane.climb_top, 0.01)
+				ok = ok and names.has("climb_jumped:1.2") and not names.has("climb_finished:false") and absf(feet.y - (lane.get("y_before_jump", 0.0) + 1.2)) < 0.05
+			"climb_jump_top":
+				# The lunge stops short where the face ends (0.4-1 m): then over the top (2.7 m), on it.
+				var jumped := -1.0
+				for ev in lane.events:
+					if ev[0] == "climb_jumped":
+						jumped = ev[1]
+				e["jumped"] = jumped
+				ok = ok and jumped >= 0.4 and jumped < 1.1 and names.has("climb_finished:true") and absf(feet.y - 2.7) < 0.05
 			"climb_slab":
 				# Up the slab and over its top (4.69 m at its front edge, sloping down 20 degrees behind it).
 				ok = ok and names.has("climb_started") and names.has("climb_finished:true") and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and feet.y > 4.2

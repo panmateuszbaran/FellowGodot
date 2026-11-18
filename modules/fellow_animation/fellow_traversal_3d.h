@@ -173,6 +173,7 @@ private:
 	uint32_t climb_mask = 1; // the physics layers whose walls are climbable
 	float climb_speed = 1.0f;
 	float climb_max_overhang = 20.0f; // degrees past vertical the face may lean over the body
+	float climb_jump_distance = 1.2f; // m: a lunge over the face (hang_jump() while climbing)
 
 	// The body's capsule (body space), from its first CollisionShape3D child.
 	float radius = 0.35f;
@@ -242,6 +243,13 @@ private:
 	bool climb_hold = false;
 	Vector3 climb_hold_intent;
 	Vector3 climb_hold_normal;
+	// A lunge over the face (hang_jump() while climbing): the chest's point from one place on it to another.
+	struct ClimbLunge {
+		bool active = false;
+		double t = 0.0;
+		double duration = 0.35;
+		Vector3 from_point, from_normal, to_point, to_normal;
+	} lunge;
 
 	// The debug drawing (debug_draw).
 	MeshInstance3D *debug_instance = nullptr;
@@ -417,6 +425,8 @@ public:
 	float get_climb_speed() const { return climb_speed; }
 	void set_climb_max_overhang(float p_degrees) { climb_max_overhang = CLAMP(p_degrees, 0.0f, 60.0f); }
 	float get_climb_max_overhang() const { return climb_max_overhang; }
+	void set_climb_jump_distance(float p_distance) { climb_jump_distance = MAX(0.0f, p_distance); }
+	float get_climb_jump_distance() const { return climb_jump_distance; }
 
 	FellowTraversal3D();
 	~FellowTraversal3D();

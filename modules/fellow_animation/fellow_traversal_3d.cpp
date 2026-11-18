@@ -1828,6 +1828,7 @@ bool FellowTraversal3D::_start_climb(const Vector3 &p_point, const Vector3 &p_no
 	climb_facing = -flat(p_normal).normalized();
 	climb_travel = 0.0f;
 	climb_hold = false;
+	lunge.active = false;
 	start_xf = body->get_global_transform();
 	start_feet = _feet_of(start_xf);
 	time = 0.0;
@@ -1895,6 +1896,70 @@ void FellowTraversal3D::_step_climb(double p_delta) {
 	}
 	HashSet<RID> exclude;
 	exclude.insert(body->get_rid());
+	if (jump_requested) {
+		// A lunge the way the wish goes (up without one), as far as climb_jump_distance finds the face and room for
+		// the body (sampled every 0.2 m: up to the last place it does).
+		jump_requested = false;
+		Vector3 dir = t_up * wish.y + left * wish.x;
+		dir = dir.length() > 0.1f ? dir.normalized() : t_up;
+		Vector3 best_point, best_normal;
+		float best = 0.0f;
+		for (float d = 0.2f; d <= climb_jump_distance + 1e-3f; d += 0.2f) {
+			Vector3 jp, jn;
+			ObjectID jc;
+			const Vector3 at = climb_point + dir * d;
+			if (!_probe_wall(at + n * 0.6f, -n, 1.2f, jp, jn, jc) || !_climbable(jn, jc) || !_capsule_free(_climb_feet(jp, jn) + UP * 0.02f, radius * 0.95f, height - 0.04f, exclude)) {
+				break;
+			}
+			best = d;
+			best_point = jp;
+			best_normal = jn;
+		}
+		if (best >= 0.4f && hold_time >= CLIMB_GRAB) {
+			lunge.active = true;
+			lunge.t = 0.0;
+			lunge.duration = 0.2 + 0.15 * best;
+			lunge.from_point = climb_point;
+			lunge.from_normal = n;
+			lunge.to_point = best_point;
+			lunge.to_normal = best_normal;
+			emit_signal(SNAME("climb_jumped"), best);
+		}
+	}
+	if (lunge.active) {
+		// Out from the face a little and onto the place, the hands ahead; no other move meanwhile.
+		lunge.t += p_delta;
+		const float u = float(CLAMP(lunge.t / lunge.duration, 0.0, 1.0));
+		const float e = smooth(u);
+		climb_travel += lunge.from_point.lerp(lunge.to_point, e).distance_to(climb_point);
+		climb_point = lunge.from_point.lerp(lunge.to_point, e);
+		climb_normal = lunge.from_normal.slerp(lunge.to_normal, e).normalized();
+		n = climb_normal;
+		nf = flat(n).normalized();
+		const Vector3 feet = _climb_feet(climb_point, n) + flat(n).normalized() * (0.12f * Math::sin(float(Math::PI) * u));
+		climb_facing = -nf;
+		_place(body, feet, climb_facing, p_delta);
+		if (u >= 1.0f) {
+			lunge.active = false;
+		}
+		t_up = UP - n * UP.dot(n);
+		t_up.normalize();
+		const Vector3 l2 = n.cross(t_up).normalized();
+		hints.active = true;
+		hints.kind = KIND_CLIMB;
+		hints.inward = -nf;
+		hints.left = flat(l2).normalized();
+		for (int s = 0; s < 2; s++) {
+			const float side = s == 0 ? 1.0f : -1.0f;
+			hints.hand[s] = lunge.to_point + t_up * (CLIMB_HANDS - CLIMB_CHEST + CLIMB_STEP * 0.5f) + l2 * (0.25f * side) + n * 0.04f;
+			hints.hand_weight[s] = 1.0f;
+			hints.foot[s] = climb_point + t_up * (CLIMB_FEET - CLIMB_CHEST) + l2 * (0.15f * side) + n * 0.08f;
+			hints.foot_weight[s] = 1.0f - Math::sin(float(Math::PI) * u);
+			hints.foot_follow[s] = 0.0f;
+		}
+		hints.lean = Math::asin(CLAMP(n.y, -1.0f, 1.0f));
+		return;
+	}
 	// Down onto the floor: standing.
 	if (wish.y < -0.1f) {
 		Vector3 fp, fn;
@@ -2436,6 +2501,8 @@ void FellowTraversal3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_climb_speed"), &FellowTraversal3D::get_climb_speed);
 	ClassDB::bind_method(D_METHOD("set_climb_max_overhang", "degrees"), &FellowTraversal3D::set_climb_max_overhang);
 	ClassDB::bind_method(D_METHOD("get_climb_max_overhang"), &FellowTraversal3D::get_climb_max_overhang);
+	ClassDB::bind_method(D_METHOD("set_climb_jump_distance", "distance"), &FellowTraversal3D::set_climb_jump_distance);
+	ClassDB::bind_method(D_METHOD("get_climb_jump_distance"), &FellowTraversal3D::get_climb_jump_distance);
 
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "body_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "CollisionObject3D"), "set_body_path", "get_body_path");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "enabled"), "set_enabled", "is_enabled");
@@ -2488,6 +2555,7 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "climb_mask", PROPERTY_HINT_LAYERS_3D_PHYSICS), "set_climb_mask", "get_climb_mask");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "climb_speed", PROPERTY_HINT_RANGE, "0,5,0.01,suffix:m/s"), "set_climb_speed", "get_climb_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "climb_max_overhang", PROPERTY_HINT_RANGE, "0,60,0.5,degrees"), "set_climb_max_overhang", "get_climb_max_overhang");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "climb_jump_distance", PROPERTY_HINT_RANGE, "0,4,0.01,suffix:m"), "set_climb_jump_distance", "get_climb_jump_distance");
 	ADD_GROUP("", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_draw"), "set_debug_draw", "is_debug_draw");
 
@@ -2500,6 +2568,7 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("ladder_started", PropertyInfo(Variant::OBJECT, "ladder", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "FellowLadder3D")));
 	ADD_SIGNAL(MethodInfo("ladder_finished", PropertyInfo(Variant::BOOL, "at_top")));
 	ADD_SIGNAL(MethodInfo("climb_started"));
+	ADD_SIGNAL(MethodInfo("climb_jumped", PropertyInfo(Variant::FLOAT, "distance")));
 	ADD_SIGNAL(MethodInfo("climb_finished", PropertyInfo(Variant::BOOL, "at_top")));
 
 	BIND_ENUM_CONSTANT(KIND_NONE);
