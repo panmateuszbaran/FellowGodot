@@ -53,7 +53,7 @@ class FellowHeadMotion3D : public SkeletonModifier3D {
 	float idle_sway_degrees = 0.5f;
 	float sway_frequency = 0.3f; // Hz
 	int64_t seed = 0;
-	// Milestone 148 (decision 0278): the head turned towards what the face looks at, the eyes the rest.
+	// Milestone 149 (decision 0278): the head turned towards what the face looks at, the eyes the rest.
 	bool follow_gaze = false;
 	float gaze_dead_zone = 10.0f; // degrees the eyes turn alone
 	float gaze_follow = 0.7f; // of the angle past the dead zone the head takes

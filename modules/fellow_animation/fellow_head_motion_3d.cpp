@@ -132,7 +132,7 @@ void FellowHeadMotion3D::_process_modification(double p_delta) {
 		yaw = a * float(0.6 * Math::sin(0.83 * w + phases[2]) + 0.4 * Math::sin(2.13 * w + phases[3]));
 		roll = a * 0.5f * float(0.6 * Math::sin(0.71 * w + phases[4]) + 0.4 * Math::sin(1.37 * w + phases[5]));
 	}
-	// Milestone 148 (decision 0278): towards what the face looks at — past gaze_dead_zone, gaze_follow of the rest, up to
+	// Milestone 149 (decision 0278): towards what the face looks at — past gaze_dead_zone, gaze_follow of the rest, up to
 	// max_head_yaw and max_head_pitch, eased over gaze_follow_time; the face told, its eyes turning the rest.
 	Vector2 gaze_goal;
 	FellowFaceAnimator *gaze_face = follow_gaze ? _face() : nullptr;

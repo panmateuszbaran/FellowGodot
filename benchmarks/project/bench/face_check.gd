@@ -15,7 +15,7 @@ extends SceneTree
 ## --listen=1 the voice played by an AudioStreamPlayer under Movie Maker and the face's blend shapes followed: the mouth
 ## leads the sound by the anticipation, its blend shapes are its channels. Milestone 100 (decision 0208): expressions
 ## faded in, crossfaded, a custom one, cleared; the brows raised on each of the voice's sounds after a silence.
-## Milestone 148 (decision 0278): a head turned towards what its face looks at (follow_gaze) — 60 degrees to the left,
+## Milestone 149 (decision 0278): a head turned towards what its face looks at (follow_gaze) — 60 degrees to the left,
 ## 5, 30 up, 150 round — and one not.
 ## Milestone 104 (decision 0212): FellowHeadMotion3D — a head nodding at each of those sounds, a head swaying (more
 ## while the voice speaks), a head with every amount 0 (its bones untouched).
@@ -67,7 +67,7 @@ var nod_trace := []  # [frame, pitch from get_head_angles, pitch measured on the
 var sway_motion: FellowHeadMotion3D
 var sway_trace := []  # [frame, pitch, yaw, roll]
 var still_motion: FellowHeadMotion3D
-# Milestone 148 (decision 0278): heads turned towards what their faces look at (follow_gaze), and one not.
+# Milestone 149 (decision 0278): heads turned towards what their faces look at (follow_gaze), and one not.
 var look_heads := []
 var look_reads := {}
 var still_poses := []
@@ -395,7 +395,7 @@ func _build() -> void:
 		var sk: Skeleton3D = still_motion.get_skeleton()
 		if frame % 50 == 0:
 			still_poses.append([sk.get_bone_pose_rotation(0), sk.get_bone_pose_rotation(1)]))
-	# Milestone 148 (decision 0278): two heads (the head bone 1.62 m up) whose faces look at a target that moves — one
+	# Milestone 149 (decision 0278): two heads (the head bone 1.62 m up) whose faces look at a target that moves — one
 	# turned towards it (follow_gaze), one not; their face meshes beside the skeletons, not moving with the head (as a
 	# face skinned to the skeleton), the eyes' centre at the head bone.
 	for k in 2:
@@ -555,7 +555,7 @@ func _on_frame() -> void:
 		if lid > 0.9 and not blink_closed:
 			blink_log.append(frame / 60.0)
 		blink_closed = lid > 0.9
-		# Milestone 148: the target 3 m from the head bone — 60 degrees to the left, 5 degrees, 30 degrees up, 150 degrees
+		# Milestone 149: the target 3 m from the head bone — 60 degrees to the left, 5 degrees, 30 degrees up, 150 degrees
 		# round to the left — each read two seconds later (the head's turn, the eyes', the head bone's facing).
 		var look_spots := {60: ["left60", 60.0, 0.0], 180: ["ahead5", 5.0, 0.0], 300: ["up30", 0.0, 30.0], 420: ["behind150", 150.0, 0.0]}
 		if look_spots.has(frame):
@@ -708,7 +708,7 @@ func _finish() -> void:
 		out["speech_brows"] = {"peaks": peaks, "emphases": brow_face.get_stats().emphases, "signals": brow_signals, "sounds_raised": sounds_raised,
 			"ok": brow_face.get_stats().emphases == 6 and brow_signals.size() == 6 and sounds_raised == 6 and brow_peaks[0] != null and brow_peaks[0] < 0.001}
 		_head_lanes(out)
-		# Milestone 148 (decision 0278): 60 degrees left — the head (60 - 10) x 0.7 = 35, its bone facing so, the eyes the
+		# Milestone 149 (decision 0278): 60 degrees left — the head (60 - 10) x 0.7 = 35, its bone facing so, the eyes the
 		# rest (25); 5 degrees — the eyes alone (the head back from 35, eased); 30 up — the head 14 up, the eyes 16; 150 round — the head at its 70, the
 		# eyes at their 30; the head not following — still, the eyes at their 30 for the 60 degrees.
 		var lr := look_reads

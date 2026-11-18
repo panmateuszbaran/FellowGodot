@@ -567,7 +567,7 @@ void FellowFaceAnimator::_update(double p_delta) {
 			const Transform3D xf = face->get_global_transform();
 			const Vector3 d = xf.basis.inverse().xform(target->get_global_position() - xf.xform(eye_center));
 			if (d.length() > 1e-4f) {
-				// Milestone 148 (decision 0278): less what a head turned towards the target already turns (a face
+				// Milestone 149 (decision 0278): less what a head turned towards the target already turns (a face
 				// skinned to the skeleton does not move with the head's bone).
 				goal.x = Math::rad_to_deg(Math::atan2(d.x, d.z)) - head_turn.x;
 				goal.y = Math::rad_to_deg(Math::atan2(d.y, Vector2(d.x, d.z).length())) - head_turn.y;

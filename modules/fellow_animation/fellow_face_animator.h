@@ -123,7 +123,7 @@ private:
 	// Milestone 89 (decision 0197): the gaze.
 	bool gaze = true;
 	NodePath look_target_path;
-	Vector2 head_turn; // milestone 148: degrees the head has turned towards the gaze (left, up): the eyes the rest
+	Vector2 head_turn; // milestone 149: degrees the head has turned towards the gaze (left, up): the eyes the rest
 	Vector3 eye_center; // in the face mesh's space
 	float eye_spacing = 0.0f; // m between the eyes (milestone 94: they converge on a near target); 0: parallel
 	float gaze_range_horizontal = 30.0f; // degrees: the eyes fully out or in

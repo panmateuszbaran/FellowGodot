@@ -7,7 +7,7 @@
 		A modifier of the character's [Skeleton3D] (after the animation's: an [AnimationTree] or [AnimationPlayer] plays under it). It follows a [FellowFaceAnimator] ([member face_animator_path]) and turns the head and neck bones over whatever the animation plays:
 		- a [b]nod[/b] at each of the voice's stressed syllables (each [signal FellowFaceAnimator.emphasized]): the head tipped down by [member nod_degrees] times the syllable's strength, its lowest point [member nod_time] after it, back in about half a second (a critically damped pulse); [method nod] adds one from the game;
 		- a [b]sway[/b]: a slow turn about the three axes (two sines each at frequencies that never repeat together, about [member sway_frequency]), [member idle_sway_degrees] at rest and up to [member speech_sway_degrees] more while the face speaks ([method FellowFaceAnimator.get_speech_activity]).
-		- with [member follow_gaze] (milestone 148), a [b]turn towards what the face looks at[/b], the eyes turning the rest.
+		- with [member follow_gaze] (milestone 149), a [b]turn towards what the face looks at[/b], the eyes turning the rest.
 		The rotation is in the skeleton's space — the face looks along [member forward], up is +Y — and shared between the neck ([member neck_share]) and the head. With every amount 0 the bones are left as the animation posed them. See [code]docs/decisions/0212-head-motion.md[/code].
 		[codeblock]
 		# Under the character's Skeleton3D, its face's FellowFaceAnimator elsewhere in the character:
@@ -50,7 +50,7 @@
 			The [FellowFaceAnimator] whose stressed syllables the head nods at and whose speech makes it sway more. Without one the head sways at rest (and nods when [method nod] is called).
 		</member>
 		<member name="follow_gaze" type="bool" setter="set_follow_gaze" getter="is_follow_gaze" default="false">
-			If [code]true[/code], the head turns towards what the [FellowFaceAnimator] looks at ([member FellowFaceAnimator.look_target_path], with its [member FellowFaceAnimator.gaze] on): past [member gaze_dead_zone], [member gaze_follow] of the rest, up to [member max_head_yaw] and [member max_head_pitch], eased over [member gaze_follow_time]; the face is told ([method FellowFaceAnimator.set_head_turn]) and its eyes turn the rest. Milestone 148, see [code]docs/decisions/0278-head-follows-gaze.md[/code].
+			If [code]true[/code], the head turns towards what the [FellowFaceAnimator] looks at ([member FellowFaceAnimator.look_target_path], with its [member FellowFaceAnimator.gaze] on): past [member gaze_dead_zone], [member gaze_follow] of the rest, up to [member max_head_yaw] and [member max_head_pitch], eased over [member gaze_follow_time]; the face is told ([method FellowFaceAnimator.set_head_turn]) and its eyes turn the rest. Milestone 149, see [code]docs/decisions/0278-head-follows-gaze.md[/code].
 		</member>
 		<member name="forward" type="Vector3" setter="set_forward" getter="get_forward" default="Vector3(0, 0, 1)">
 			The direction the face looks in the skeleton's space (Godot's humanoid profile: +Z): a nod tips it down.
