@@ -803,7 +803,9 @@ directional light (`self_shadow_light`, or the scene's first visible `Directiona
 its guides' points made on the worker threads each frame (about 75 µs a head on one core), `self_shadow_density` (0.5:
 how opaque the strands are to light crossing them); `get_stats()` adds `self_shadow_usec`, `self_shadow_lit`,
 `self_shadow_min`, `self_shadow_mean`, `get_global_stats()` `self_shadow_usec`. `hair_check.gd --self_shadow=1`,
-`hair_crowd_check.gd --self_shadow=1`.
+`hair_crowd_check.gd --self_shadow=1`. Milestone 149 (decision 0280): `self_shadow_light` may be an `OmniLight3D` or a
+`SpotLight3D` (the map along the direction towards it from the hair's centre, the material dimming the light that is
+not directional within about 18° of it); `hair_check.gd --lamp=<m>`.
 
 ## Traversal: mantling and vaulting (milestone 72)
 

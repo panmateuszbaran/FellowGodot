@@ -9,7 +9,7 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
-## Milestone 149 — the head following the gaze; a jump round a corner (2026-11-18, in progress)
+## Milestone 149 — the head following the gaze; a jump round a corner; hair shadowed by lamps (2026-11-18, in progress)
 
 - Decision 0278: `FellowHeadMotion3D.follow_gaze` (opt-in) — the head turns towards what its face looks at (past
   `gaze_dead_zone`, `gaze_follow` of the rest, up to `max_head_yaw` / `max_head_pitch`, eased over
@@ -20,6 +20,9 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   on the side of the wall past the corner, the body round it in the air (`TRANSFER_JUMP_CORNER`), turning a quarter,
   the wish held going on along the new edge. `climb_check.gd`'s `hang_jump_corner`; the other lanes and the regression
   scenes `climb` and `ledge_corners` as before.
+- Decision 0280: `FellowHair3D.self_shadow_light` may be an omni or spot light — the hair's deep opacity map along the
+  direction towards it, the material dimming that light: a lamp where the sun was, the same map and the hair dimmed as
+  by the sun. `hair_check.gd --lamp=<m>`; the regression scene `hair` exact.
 
 ## Milestone 148 — free climbing; sound round edges (2026-11-18)
 

@@ -194,7 +194,7 @@ void light() {
 	// Self-shadowing (decision 0268): the guides' points' share of the light through the hair (the guides' texture's
 	// fourth channel), along the strand's guides and across them as its position is; the directional light it was
 	// computed for dimmed by it (diffuse, specular and the light through the hair from behind).
-	code = code.replace("uniform float width_scale = 1.0;\n", "uniform float width_scale = 1.0;\nuniform float self_shadow = 0.0;\nuniform vec3 self_shadow_dir = vec3(0.0, 1.0, 0.0);\n");
+	code = code.replace("uniform float width_scale = 1.0;\n", "uniform float width_scale = 1.0;\nuniform float self_shadow = 0.0;\nuniform vec3 self_shadow_dir = vec3(0.0, 1.0, 0.0);\nuniform bool self_shadow_point = false;\n");
 	code = code.replace("varying float hair_seed;\n", "varying float hair_seed;\nvarying float hair_through;\n");
 	code = code.replace("void vertex() {\n", R"(// The share of the light a guide's points get through the hair, at u along it.
 float guide_light(int g, int row_base, float u) {
@@ -208,7 +208,9 @@ float guide_light(int g, int row_base, float u) {
 void vertex() {
 )");
 	code = code.replace("\thair_tangent = tv;\n}", "\thair_tangent = tv;\n\thair_through = clamp(w0 * guide_light(g0, row_base, u) + w1 * guide_light(g1, row_base, u) + w2 * guide_light(g2, row_base, u), 0.0, 1.0);\n}");
-	code = code.replace("\tvec3 lc = LIGHT_COLOR * ATTENUATION;\n", "\tfloat through = LIGHT_IS_DIRECTIONAL && dot(LIGHT, normalize(mat3(VIEW_MATRIX) * self_shadow_dir)) > 0.999 ? mix(1.0, hair_through, self_shadow) : 1.0;\n\tvec3 lc = LIGHT_COLOR * ATTENUATION * through;\n");
+	// Milestone 149 (decision 0280): an omni or spot light's too — the light that is not directional whose direction at the
+	// fragment is within about 18 degrees of the one the map was made for (towards the light from the hair's centre).
+	code = code.replace("\tvec3 lc = LIGHT_COLOR * ATTENUATION;\n", "\tfloat ss_dot = dot(LIGHT, normalize(mat3(VIEW_MATRIX) * self_shadow_dir));\n\tfloat through = (self_shadow_point ? (!LIGHT_IS_DIRECTIONAL && ss_dot > 0.95) : (LIGHT_IS_DIRECTIONAL && ss_dot > 0.999)) ? mix(1.0, hair_through, self_shadow) : 1.0;\n\tvec3 lc = LIGHT_COLOR * ATTENUATION * through;\n");
 	code = code.replace("mix(ATTENUATION, 1.0, 0.5) * back;", "mix(ATTENUATION, 1.0, 0.5) * back * through;");
 	return code;
 }
@@ -536,6 +538,7 @@ void FellowHair3D::_update_material() {
 	if (self_shadow > 0.0f) {
 		material->set_shader_parameter("self_shadow", self_shadow);
 		material->set_shader_parameter("self_shadow_dir", self_shadow_dir);
+		material->set_shader_parameter("self_shadow_point", self_shadow_point);
 	}
 }
 
@@ -552,8 +555,9 @@ void FellowHair3D::_update_shader() {
 // DirectionalLight3D (looked for again at most once a second while there is none).
 Node *FellowHair3D::_find_self_shadow_light() {
 	if (!self_shadow_light.is_empty()) {
+		// Milestone 149 (decision 0280): a directional, omni or spot light.
 		Node *n = get_node_or_null(self_shadow_light);
-		return Object::cast_to<DirectionalLight3D>(n) ? n : nullptr;
+		return Object::cast_to<DirectionalLight3D>(n) || Object::cast_to<OmniLight3D>(n) || Object::cast_to<SpotLight3D>(n) ? n : nullptr;
 	}
 	DirectionalLight3D *cached = Object::cast_to<DirectionalLight3D>(ObjectDB::get_instance(self_shadow_light_id));
 	if (cached && cached->is_inside_tree() && cached->is_visible_in_tree()) {
@@ -591,13 +595,20 @@ bool FellowHair3D::_prepare_self_shadow() {
 	if (light == nullptr) {
 		return false;
 	}
-	const Vector3 dir = light->get_global_transform().basis.get_column(2).normalized();
+	// Milestone 149 (decision 0280): an omni or spot light from where it is — the direction towards it from the hair's
+	// centre (the map one view of it: the light far against the head's size).
+	const bool point = Object::cast_to<DirectionalLight3D>(light) == nullptr;
+	const Vector3 dir = point ? (light->get_global_position() - get_global_position()).normalized() : light->get_global_transform().basis.get_column(2).normalized();
 	if (!dir.is_finite() || dir.is_zero_approx()) {
 		return false;
 	}
 	if (!dir.is_equal_approx(self_shadow_dir) && material.is_valid()) {
 		material->set_shader_parameter("self_shadow_dir", dir);
 	}
+	if (point != self_shadow_point && material.is_valid()) {
+		material->set_shader_parameter("self_shadow_point", point);
+	}
+	self_shadow_point = point;
 	self_shadow_dir = dir;
 	const Vector3 sc = get_global_transform().basis.get_scale();
 	ss_scale = MAX((Math::abs(sc.x) + Math::abs(sc.y) + Math::abs(sc.z)) / 3.0f, 1e-6f);
@@ -1390,5 +1401,5 @@ void FellowHair3D::_bind_methods() {
 	ADD_GROUP("Self Shadow", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "self_shadow", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_self_shadow", "get_self_shadow");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "self_shadow_density", PROPERTY_HINT_RANGE, "0,8,0.01,or_greater"), "set_self_shadow_density", "get_self_shadow_density");
-	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "self_shadow_light", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "DirectionalLight3D"), "set_self_shadow_light", "get_self_shadow_light");
+	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "self_shadow_light", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "DirectionalLight3D,OmniLight3D,SpotLight3D"), "set_self_shadow_light", "get_self_shadow_light");
 }

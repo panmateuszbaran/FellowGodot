@@ -10,7 +10,8 @@ extends SceneTree
 ## One JSON line: HAIR_CHECK {...}; exit code 1 when a check fails. Milestone 144: --self_shadow=<0-1> (and
 ## --self_shadow_density) shadows the hair from the sun by itself (decision 0268). Milestone 146: --scalp_mesh=1 grows
 ## the hair from the skull's mesh painted where the scalp is (`scalp_mesh`, milestone 125) instead of the sphere's cap;
-## --sun_turn=<degrees> turns the sun about the vertical that far between the head's turn and the wind (another picture,
+## --lamp=<metres> (milestone 149) lights it from an omni light that far away where the sun shines from instead (the sun
+## off), the hair shadowing itself from the lamp. --sun_turn=<degrees> turns the sun about the vertical that far between the head's turn and the wind (another picture,
 ## "sun", and the hair's mean share of the light before and after: with self_shadow the shade follows the sun).
 
 var args := {}
@@ -144,6 +145,17 @@ func _build() -> void:
 	if args.has("self_shadow_density"):
 		hair.self_shadow_density = float(_arg("self_shadow_density", "0.5"))
 	head.add_child(hair)
+	# Milestone 149 (decision 0280): --lamp=<metres> — the sun off, an omni light that far from the head where the sun
+	# shines from (the same direction), the hair shadowing itself from it.
+	if args.has("lamp"):
+		sun.visible = false
+		var lamp := OmniLight3D.new()
+		lamp.omni_range = 20.0
+		lamp.light_energy = 2.2 * float(_arg("lamp", "3")) * float(_arg("lamp", "3"))
+		lamp.omni_attenuation = 2.0
+		root3d.add_child(lamp)
+		lamp.global_position = head.global_position + sun.global_transform.basis.z * float(_arg("lamp", "3"))
+		hair.self_shadow_light = hair.get_path_to(lamp)
 	hair.colliders = [hair.get_path_to(bcs)]
 	cam = Camera3D.new()
 	cam.fov = 35

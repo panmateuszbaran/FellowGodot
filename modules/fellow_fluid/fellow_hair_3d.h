@@ -152,6 +152,7 @@ private:
 	uint64_t self_shadow_search_frame = 0;
 	bool self_shadow_lit = false; // a light found at the last upload
 	Vector3 self_shadow_dir = Vector3(0, 1, 0); // towards the light (global), as the material has it
+	bool self_shadow_point = false; // milestone 149: the light an omni or spot light (the material told)
 	float self_shadow_cell = 0.0f; // the grid's cell (m): twice the guides' mean spacing at their roots
 	uint64_t last_self_shadow_usec = 0;
 	float last_self_shadow_min = 1.0f;
