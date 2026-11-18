@@ -734,6 +734,9 @@ are kept within `skin_max_distance` (m; 0: anywhere) of theirs; past `simulation
 share of `skin_max_distance`: `SKIN_DISTANCE_UNIFORM` (the default, all of it), `SKIN_DISTANCE_FROM_PINS` (growing
 along the cloth from the pins: none at a pin, all of it at the farthest particle — a skirt's waist on the hips and its
 hem free, nothing to paint), `SKIN_DISTANCE_VERTEX_COLOR` (painted in the source mesh's vertex colours' green).
+Milestone 147 (decision 0273): `skin_backstop` (off) — no free particle more than `skin_backstop_distance` (m, 0)
+behind its skinned place along its skinned normal (into the body): a garment kept on the body without colliders where
+its rest shape follows it; `get_stats()`' `skin_backstopped`, `skin_behind`.
 
 Milestone 112 (decision 0220): tearing. `tear(position, radius)` breaks every edge passing within the radius (a shot, a
 cut: a line of calls); `tear_strain` (0: off) breaks an edge stretched past that fraction of its length (0.5: half

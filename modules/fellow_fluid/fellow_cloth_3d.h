@@ -149,6 +149,10 @@ private:
 	bool follow_skin = false;
 	float skin_max_distance = 0.0f;
 	SkinDistanceMode skin_distance_mode = SKIN_DISTANCE_UNIFORM;
+	// Milestone 147 (decision 0273): a backstop — a free particle kept from going more than skin_backstop_distance behind
+	// its skinned place along its skinned normal (into the body the garment is on), without colliders.
+	bool skin_backstop = false;
+	float skin_backstop_distance = 0.0f;
 	Ref<Skin> skin; // the binds' bones and poses (none: bone i, the inverse of its global rest)
 	// Level of detail.
 	float simulation_distance = 100.0f;
@@ -281,6 +285,10 @@ private:
 	LocalVector<Vector3> skin_from;
 	LocalVector<Vector3> skin_to;
 	int skin_limited = 0; // free particles held at the distance in the last frame's last substep
+	LocalVector<Vector3> skin_normal_from; // decision 0273: each particle's skinned normal, last frame and this one
+	LocalVector<Vector3> skin_normal_to;
+	int skin_backstopped = 0; // free particles pushed out by the backstop in the last frame's last substep
+	float skin_behind = 0.0f; // the deepest a free particle was behind its skinned place after the last frame's steps
 	LocalVector<float> skin_distance_scale; // decision 0232: each particle's share of skin_max_distance (empty: all of it)
 	float normal_sign = 1.0f;
 	bool has_tangents = false;
@@ -425,6 +433,10 @@ public:
 	bool is_following_skin() const { return follow_skin; }
 	void set_skin_max_distance(float p_distance) { skin_max_distance = MAX(0.0f, p_distance); }
 	float get_skin_max_distance() const { return skin_max_distance; }
+	void set_skin_backstop(bool p_enable) { skin_backstop = p_enable; }
+	bool is_skin_backstop() const { return skin_backstop; }
+	void set_skin_backstop_distance(float p_distance) { skin_backstop_distance = MAX(0.0f, p_distance); }
+	float get_skin_backstop_distance() const { return skin_backstop_distance; }
 	void set_skin_distance_mode(SkinDistanceMode p_mode);
 	SkinDistanceMode get_skin_distance_mode() const { return skin_distance_mode; }
 	void set_skin(const Ref<Skin> &p_skin);

@@ -838,10 +838,13 @@ bool FellowCloth3D::_bind_skin(Skeleton3D *p_skeleton) {
 	const uint32_t np = rest_local.size();
 	skin_from.resize(np);
 	skin_to.resize(np);
+	skin_normal_from.resize(np);
+	skin_normal_to.resize(np);
 	skin_active = true;
 	_skin_places(p_skeleton);
 	for (uint32_t i = 0; i < np; i++) {
 		skin_from[i] = skin_to[i];
+		skin_normal_from[i] = skin_normal_to[i];
 	}
 	return true;
 }
@@ -857,17 +860,27 @@ void FellowCloth3D::_skin_places(Skeleton3D *p_skeleton) {
 	}
 	const uint32_t np = rest_local.size();
 	const Transform3D *M = skin_matrix.ptr();
+	// Decision 0273: with the normals at rest, each particle's skinned normal too (the bones' rotations blended).
+	const bool normals = particle_rest_normal.size() == np && skin_normal_to.size() == np;
 	for (uint32_t i = 0; i < np; i++) {
 		skin_from[i] = skin_to[i];
 		Vector3 p;
+		Vector3 n;
 		for (int k = 0; k < 4; k++) {
 			const float wt = skin_weights[i * 4 + k];
 			const int32_t b = skin_binds[i * 4 + k];
 			if (wt > 0.0f && b >= 0 && uint32_t(b) < nb) {
 				p += M[b].xform(rest_local[i]) * wt;
+				if (normals) {
+					n += M[b].basis.xform(particle_rest_normal[i]) * wt;
+				}
 			}
 		}
 		skin_to[i] = p;
+		if (normals) {
+			skin_normal_from[i] = skin_normal_to[i];
+			skin_normal_to[i] = n.length_squared() > 1e-20f ? n.normalized() : skin_normal_from[i];
+		}
 	}
 }
 
@@ -1483,6 +1496,32 @@ void FellowCloth3D::_substep(float p_h, const Transform3D &p_pin_xf, float p_f) 
 		}
 		skin_limited = limited;
 	}
+	if (skin_active && skin_backstop && skin_normal_to.size() == np) {
+		// Decision 0273: the backstop — a free particle no farther than skin_backstop_distance behind its skinned place
+		// along the skinned normal (both interpolated over the substeps), pushed back out along it.
+		const Vector3 *SF = skin_from.ptr();
+		const Vector3 *ST = skin_to.ptr();
+		const Vector3 *NF = skin_normal_from.ptr();
+		const Vector3 *NT = skin_normal_to.ptr();
+		int pushed = 0;
+		for (uint32_t i = 0; i < np; i++) {
+			if (W[i] <= 0.0f) {
+				continue;
+			}
+			const Vector3 n = NF[i].lerp(NT[i], p_f);
+			const float n2 = n.length_squared();
+			if (n2 < 1e-12f) {
+				continue;
+			}
+			const Vector3 nn = n / Math::sqrt(n2);
+			const float depth = (X[i] - SF[i].lerp(ST[i], p_f)).dot(nn);
+			if (depth < -skin_backstop_distance) {
+				X[i] += nn * (-skin_backstop_distance - depth);
+				pushed++;
+			}
+		}
+		skin_backstopped = pushed;
+	}
 	if (!colliders_now.is_empty()) {
 		for (uint32_t i = 0; i < np; i++) {
 			if (W[i] > 0.0f) {
@@ -1542,6 +1581,16 @@ void FellowCloth3D::_simulate() {
 		for (int s = 0; s < steps_now; s++) {
 			const real_t f = real_t(s + 1) / real_t(steps_now);
 			_substep(h, xf_prev.interpolate_with(xf_cur, f), float(f));
+		}
+		if (skin_active && skin_normal_to.size() == np) {
+			// Decision 0273: how deep behind their skinned places the free particles ended (the backstop's measure).
+			float behind = 0.0f;
+			for (uint32_t i = 0; i < np; i++) {
+				if (w[i] > 0.0f) {
+					behind = MAX(behind, -(x[i] - skin_to[i]).dot(skin_normal_to[i]));
+				}
+			}
+			skin_behind = behind;
 		}
 		global_stats.substeps.add(steps_now);
 		global_stats.particles.add(np);
@@ -2482,6 +2531,8 @@ Dictionary FellowCloth3D::get_stats() const {
 	d["bone_pins"] = bone_pins;
 	d["skin_particles"] = skin_active ? int(rest_local.size()) : 0;
 	d["skin_limited"] = skin_active ? skin_limited : 0;
+	d["skin_backstopped"] = skin_active && skin_backstop ? skin_backstopped : 0; // decision 0273
+	d["skin_behind"] = skin_active ? skin_behind : 0.0f;
 	d["torn_edges"] = torn_edges;
 	d["triangles_all"] = int(tris_all.size() / 3);
 	int nl = 0;
@@ -2639,6 +2690,10 @@ void FellowCloth3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_following_skin"), &FellowCloth3D::is_following_skin);
 	ClassDB::bind_method(D_METHOD("set_skin_max_distance", "distance"), &FellowCloth3D::set_skin_max_distance);
 	ClassDB::bind_method(D_METHOD("get_skin_max_distance"), &FellowCloth3D::get_skin_max_distance);
+	ClassDB::bind_method(D_METHOD("set_skin_backstop", "enable"), &FellowCloth3D::set_skin_backstop);
+	ClassDB::bind_method(D_METHOD("is_skin_backstop"), &FellowCloth3D::is_skin_backstop);
+	ClassDB::bind_method(D_METHOD("set_skin_backstop_distance", "distance"), &FellowCloth3D::set_skin_backstop_distance);
+	ClassDB::bind_method(D_METHOD("get_skin_backstop_distance"), &FellowCloth3D::get_skin_backstop_distance);
 	ClassDB::bind_method(D_METHOD("set_skin_distance_mode", "mode"), &FellowCloth3D::set_skin_distance_mode);
 	ClassDB::bind_method(D_METHOD("get_skin_distance_mode"), &FellowCloth3D::get_skin_distance_mode);
 	ClassDB::bind_method(D_METHOD("set_skin", "skin"), &FellowCloth3D::set_skin);
@@ -2713,6 +2768,8 @@ void FellowCloth3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_STRING_ARRAY, "pin_bones"), "set_pin_bones", "get_pin_bones");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "follow_skin"), "set_follow_skin", "is_following_skin");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "skin_max_distance", PROPERTY_HINT_RANGE, "0,1,0.001,or_greater,suffix:m"), "set_skin_max_distance", "get_skin_max_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "skin_backstop"), "set_skin_backstop", "is_skin_backstop");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "skin_backstop_distance", PROPERTY_HINT_RANGE, "0,0.2,0.001,or_greater,suffix:m"), "set_skin_backstop_distance", "get_skin_backstop_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "skin_distance_mode", PROPERTY_HINT_ENUM, "Uniform,From Pins,Vertex Color"), "set_skin_distance_mode", "get_skin_distance_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "skin", PROPERTY_HINT_RESOURCE_TYPE, "Skin"), "set_skin", "get_skin");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial"), "set_material", "get_material");
