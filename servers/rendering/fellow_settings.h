@@ -1398,6 +1398,7 @@ struct Stats {
 	SafeNumeric<uint64_t> rs_queue_flush_commands; // its commands
 	SafeNumeric<uint64_t> draw_begin_frame_usec; // RenderingServer::draw() by phase (milestone 69): the RenderingDevice's frame begun (fences, frees)
 	SafeNumeric<uint64_t> draw_setup_usec; // texture streaming, the scene's and canvas's updates
+	SafeNumeric<uint64_t> material_uniform_sets_created; // materials' parameter uniform sets made (decision 0269: a streamed texture's swap remakes its materials')
 	SafeNumeric<uint64_t> draw_particles_probes_usec; // particles, reflection probes
 	SafeNumeric<uint64_t> draw_viewports_usec; // the viewports drawn
 	SafeNumeric<uint64_t> draw_end_frame_usec; // the frame ended (graph replay, submission, presentation)

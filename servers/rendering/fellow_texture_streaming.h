@@ -166,12 +166,15 @@ private:
 		int max_pending = 0;
 		float budget_bias = 0.0f;
 		uint64_t cycles = 0, loads = 0, downgrades = 0, failures = 0, bytes_read = 0, eval_usec = 0, eval_references = 0, update_usec = 0, frames = 0;
+		uint64_t swaps_frame_max = 0, swap_deferrals = 0; // decision 0269
 	};
 	Stats counts; // the render thread's, from the last schedule
 	mutable Mutex info_mutex;
 	Stats info_stats; // copied under the mutex every update
 	Array info_details;
 	uint64_t update_usec = 0;
+	uint64_t swaps_frame_max = 0; // decision 0269
+	uint64_t swap_deferrals = 0;
 
 	static void _job_run(void *p_job);
 	void _finish_job(Texture *p_tex, Job *p_job);

@@ -440,6 +440,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/streaming/texture_instances_per_frame", PROPERTY_HINT_RANGE, "64,1000000,1"), 2048);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/streaming/texture_max_jobs", PROPERTY_HINT_RANGE, "1,64,1"), 4);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/streaming/texture_upload_mb_per_frame", PROPERTY_HINT_RANGE, "1,4096,1,suffix:MiB"), 64);
+	// Decision 0269: at most this many finished loads swapped in a frame (each swap rebuilds the uniform sets of the
+	// materials that use the texture); 0: every finished load in the frame it finishes.
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/streaming/texture_max_swaps_per_frame", PROPERTY_HINT_RANGE, "0,64,1"), 0);
 	// A texture needing fewer mips keeps them this long before they are released (unless over the budget).
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/streaming/texture_release_hold_s", PROPERTY_HINT_RANGE, "0,600,0.1,suffix:s"), 2.0);
 	// A streamed texture no instance uses any more keeps its mips this long, then falls back to its resident tail.
@@ -602,6 +605,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["rs_queue_flush_commands"] = s.rs_queue_flush_commands.get();
 	d["draw_begin_frame_usec"] = s.draw_begin_frame_usec.get();
 	d["draw_setup_usec"] = s.draw_setup_usec.get();
+	d["material_uniform_sets_created"] = s.material_uniform_sets_created.get(); // decision 0269
 	d["draw_particles_probes_usec"] = s.draw_particles_probes_usec.get();
 	d["draw_viewports_usec"] = s.draw_viewports_usec.get();
 	d["draw_end_frame_usec"] = s.draw_end_frame_usec.get();
