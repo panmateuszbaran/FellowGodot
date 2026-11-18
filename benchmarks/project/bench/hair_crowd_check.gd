@@ -9,6 +9,8 @@ extends SceneTree
 ## the steps' time summed over the heads (what one thread would spend), and the processors available. Checked: every
 ## head stepped every frame; the hair's lengths kept (each head's guides within 1 % of their segments).
 ## One JSON line: HAIR_CROWD_CHECK {...}; exit code 1 when a check fails.
+## Not headless (milestone 146): the root viewport's GPU and CPU render times and the frames' wall time are measured too
+## (run with --disable-vsync for the frame time; 1920x1080 by --resolution).
 
 var args := {}
 var out_dir := ""
@@ -16,6 +18,10 @@ var heads := []
 var hairs := []
 var frame := 0
 var done := false
+var gpu_ms := 0.0
+var render_cpu_ms := 0.0
+var wall_from := 0
+var measured := 0
 
 
 func _arg(name: String, default: String) -> String:
@@ -39,6 +45,7 @@ func _build() -> void:
 	root3d.add_child(cam)
 	cam.current = true
 	cam.look_at_from_position(Vector3(0, 3, 8), Vector3(0, 1.6, 0))
+	RenderingServer.viewport_set_measure_render_time(get_root().get_viewport_rid(), true)
 	var n := int(_arg("heads", "24"))
 	# Milestone 144 (decision 0268): --self_shadow=1 shadows each head's hair from a sun by itself (on the workers too).
 	var ss := float(_arg("self_shadow", "0"))
@@ -68,6 +75,12 @@ func _on_frame() -> void:
 		(heads[i] as Node3D).rotation.y = deg_to_rad(40.0) * sin(frame / 30.0 + i)
 	if frame == 30:
 		FellowHair3D.reset_global_stats()
+		wall_from = Time.get_ticks_usec()
+	elif frame > 30:
+		var vp := get_root().get_viewport_rid()
+		gpu_ms += RenderingServer.viewport_get_measured_render_time_gpu(vp)
+		render_cpu_ms += RenderingServer.viewport_get_measured_render_time_cpu(vp)
+		measured += 1
 	if frame == 270:
 		done = true
 		_finish.call_deferred()
@@ -94,6 +107,11 @@ func _finish() -> void:
 		"processors": OS.get_processor_count(),
 		"max_stretch": snappedf(worst, 0.0001),
 	}
+	if DisplayServer.get_name() != "headless" and measured > 0:
+		result["gpu_ms"] = snappedf(gpu_ms / measured, 0.001)
+		result["render_cpu_ms"] = snappedf(render_cpu_ms / measured, 0.001)
+		result["frame_ms"] = snappedf((Time.get_ticks_usec() - wall_from) / 1000.0 / measured, 0.001)
+		result["resolution"] = "%dx%d" % [get_root().size.x, get_root().size.y]
 	result["speedup"] = snappedf((result.steps_ms_per_frame_summed + result.self_shadow_ms_per_frame_summed) / maxf(0.001, result.group_ms_per_frame - result.upload_ms_per_frame), 0.01)
 	var failures := []
 	if result.heads_stepped_per_frame < hairs.size() - 0.01:
