@@ -8,7 +8,10 @@ extends SceneTree
 ## back after settling, and mid-turn. Checks: no guide's segment longer or shorter than its rest by more than 1 %, no
 ## point inside the head, the roots on the scalp, the tips swinging after the head when it turns, and moving in the wind.
 ## One JSON line: HAIR_CHECK {...}; exit code 1 when a check fails. Milestone 144: --self_shadow=<0-1> (and
-## --self_shadow_density) shadows the hair from the sun by itself (decision 0268).
+## --self_shadow_density) shadows the hair from the sun by itself (decision 0268). Milestone 146: --scalp_mesh=1 grows
+## the hair from the skull's mesh painted where the scalp is (`scalp_mesh`, milestone 125) instead of the sphere's cap;
+## --sun_turn=<degrees> turns the sun about the vertical that far between the head's turn and the wind (another picture,
+## "sun", and the hair's mean share of the light before and after: with self_shadow the shade follows the sun).
 
 var args := {}
 var out_dir := ""
@@ -26,6 +29,8 @@ var tip_lag_max := 0.0
 var wind_motion := 0.0
 var tips_before_wind := PackedVector3Array()
 var times := []
+var sun: DirectionalLight3D
+var sun_shares := []
 
 
 func _arg(name: String, default: String) -> String:
@@ -63,7 +68,7 @@ func _build() -> void:
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.environment = e
 	root3d.add_child(env)
-	var sun := DirectionalLight3D.new()
+	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-35, 140, 0)
 	sun.light_energy = 2.2
 	sun.shadow_enabled = true
@@ -119,6 +124,18 @@ func _build() -> void:
 	hair = FellowHair3D.new()
 	hair.scalp_radius = 0.1
 	hair.scalp_center = Vector3(0, 0.012, 0)
+	if _arg("scalp_mesh", "0") == "1":
+		# The skull's sphere as a mesh, its vertices painted (red) where the scalp shader paints the hair's colour.
+		var arrays := sm.get_mesh_arrays()
+		var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		var colors := PackedColorArray()
+		for nv in normals:
+			var h := smoothstep(-0.2, 0.05, nv.y) * (1.0 - smoothstep(0.55, 0.75, -nv.z))
+			colors.push_back(Color(1, 1, 1) if h > 0.5 else Color(0, 0, 0))
+		arrays[Mesh.ARRAY_COLOR] = colors
+		var painted := ArrayMesh.new()
+		painted.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		hair.scalp_mesh = painted
 	hair.length = 0.32
 	hair.strand_count = int(_arg("strands", "10000"))
 	hair.guide_count = int(_arg("guides", "160"))
@@ -210,6 +227,18 @@ func _on_frame() -> void:
 	if frame == 100:
 		_shot("turning")
 		get_root().debug_draw = Viewport.DEBUG_DRAW_DISABLED
+	# Milestone 146: the sun turned about the vertical (--sun_turn), the hair's share of its light before and after.
+	var turn := float(_arg("sun_turn", "0"))
+	if turn != 0.0:
+		if frame == 130 or frame == 189:
+			sun_shares.append(snappedf(hair.get_stats().get("self_shadow_mean", 1.0), 0.001))
+		if frame > 130 and frame <= 180:
+			sun.rotation_degrees.y = 140.0 + turn * float(frame - 130) / 50.0
+		if frame == 186:
+			_view("side")
+		if frame == 188:
+			_shot("sun")
+			_view("front")
 	# Then a wind (a FellowWind3D, 6 m/s from the right).
 	if frame == 190:
 		tips_before_wind = _tips()
@@ -239,6 +268,9 @@ func _finish() -> void:
 	result["wind_tip_motion"] = snappedf(wind_motion, 0.001)
 	result["frame_usec_median"] = times[times.size() / 2] if not times.is_empty() else 0
 	result["frame_usec_max"] = times[times.size() - 1] if not times.is_empty() else 0
+	if not sun_shares.is_empty():
+		result["self_shadow_mean_before_after_sun_turn"] = sun_shares
+	result["scalp"] = "mesh" if hair.scalp_mesh != null else "sphere"
 	var failures := []
 	if max_stretch > 0.01:
 		failures.append("stretch")
