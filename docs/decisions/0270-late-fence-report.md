@@ -59,11 +59,15 @@ One of the 12 runs with the record on hung (the others' 23 runs none), 14 548 fr
 * the queue's two acquisition semaphores both held by fences not yet waited for; the next frame (`#59404`-`#59407`)
   acquired, submitted and presented behind it.
 
-The main queue is waiting on the acquisition's semaphore: the presentation engine has not released the image it gave
-the frame (IMMEDIATE present mode, `--disable-vsync`; two frames in flight). Every operation before it was
-well-formed by the record's checks. Next: whether the acquisition's fence is signalled in such a hang, and whether
-stock Godot (FellowEngine off) and FellowEngine without its present and submit threads hang the same way
-(`m146_f504`, 20 runs each).
+It looked like the main queue waiting on the acquisition's semaphore (the presentation engine not releasing the image).
+`m146_f504` caught the second hang (the FellowEngine arm's second run) with each acquisition's fence recorded — **at the
+same frame** (14 542 by the hang report, 14 548 frames drawn by the device, in both) — and there the acquisition's
+fence *was* signalled (image 0 released), as were both transfer submissions' fences: every wait of the stuck
+submission had been signalled. The GPU stopped inside the frame's own work, not at a wait between submissions. The
+runner's telemetry over a hung run: about 15-20 W and 340-880 MHz against 80 W and 1 600 MHz in play — the GPU nearly
+idle, not looping at full power. The swap chain: 3 images (2 at least), IMMEDIATE present mode (`--disable-vsync`),
+two frames in flight; the presentation of each frame its own image (0, 1, 2 in turn), nothing returned an error.
+Next: where in the frame the GPU stops (the frame's pass timestamps written so far, `m146_f506`).
 
 ## Decision
 
