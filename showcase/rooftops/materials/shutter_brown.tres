@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://rooftops/shaders/wood.gdshader" id="1_sh7af"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_sh7af")
+shader_parameter/color = null
+shader_parameter/bleach = null
+shader_parameter/board_width = null
+shader_parameter/louvres = true
+shader_parameter/paint = Color(0.4, 0.21, 0.12, 1)
+shader_parameter/wear = 0.3
+shader_parameter/seed = 5.0

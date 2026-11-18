@@ -72,3 +72,56 @@ scripts in `scripts/` are the game: `showcase.gd` (the clock, the weather keys, 
 starts at a time, weather and place; `--showcase_walk=<s>`, `--showcase_run=1`, `--showcase_jump=<s>`,
 `--showcase_roll=<s>`, `--showcase_spin=<°/s>` (the camera turning round the player) and `--showcase_tilt=<°/s>`
 (its pitch swept between the mouse's limits) are for tests and pictures.
+
+## The rooftops (`rooftops/rooftops.tscn`)
+
+A Renaissance square at the golden hour, in the manner of Assassin's Creed's Florence: palazzi and houses round it, a
+bell tower 38 m high with a beam out over a hay cart, a fountain, market stalls, banners and laundry in the wind,
+pigeons that burst up when someone runs at them, swifts over the roofs; the city beyond (its blocks, a cathedral's dome,
+towers, its walls and gate) and the Tuscan hills round it (fields, vineyards, olive groves, cypress avenues, stone
+pines, farms). Play it with `godot --path showcase res://rooftops/rooftops.tscn`; watch its demo with
+`godot --path showcase res://rooftops/rooftops.tscn -- --demo` (`--demo_from=<shot>`, `--demo_quit`; with
+`--write-movie <file> --fixed-fps 30` it is the showcase's video).
+
+| keys | |
+|---|---|
+| WASD or the left stick, the mouse or the right stick | run (camera-relative), look |
+| Shift (right shoulder) held | free-run: sprint, and climb any wall you run at (the buildings' faces are climbable) |
+| Ctrl | walk |
+| Space (A) | jump; hanging or climbing, a jump along, up or round a corner (`hang_jump()`) |
+| C (B) | let go of a wall or a ledge; running, a roll |
+| E (Y) | at the bell tower's beam's end: perch (the camera swirls round, "synchronizing"); then Space: the leap of faith into the hay |
+
+What it shows of FellowEngine: `FellowTraversal3D` (mantles and vaults with the mannequin's own clips and their root
+motion scaled onto the ledge, hanging, shimmying, free climbing past string courses, cornices and plinths — decision
+0281 —, the climb's lunge, into the belfry's arch), `FellowTraversalPose3D` (the hands on the stone, the feet on the
+wall over the clips), `FellowCloth3D` (banners, awnings, laundry) in `FellowWind3D`, the atmosphere, clouds, light
+shafts, bloom and contact shadows, `FellowPipelineWarmer3D`.
+
+Everything in it is made by code, in two steps:
+
+```
+python tools/blender/build_rooftops_models.py <dir>     # Blender's Python (or the bpy module): the buildings, the props
+python tools/blender/build_mannequin.py <dir>           # the mannequin, its skeleton and its 20 clips
+godot --headless --path showcase -s res://tools/build_rooftops.gd -- <dir>
+```
+
+* `tools/blender/ac_buildings.py`: the buildings — façades as walls round their openings (no booleans): rusticated
+  ground floors with arched doors and shops, steps and stone benches, string courses, quoins, framed windows with
+  sills, cornices, pediments and shutters, balconies, eaves on rafters, roofs of coppi, chimneys, terraces with an
+  altana; the bell tower (its plinth, courses, clock, open belfry, bell, beam, pyramid roof), the hay cart, the
+  fountain, the stalls, the props, the city round the square and its walls. Each model's collision is convex pieces
+  (`ac_common.Collider`). UVs in metres.
+* `tools/blender/mannequin.py`, `mannequin_rig.py`, `mannequin_anims.py`: the mannequin (lofted shells, ball joints,
+  hands with fingers) on a skeleton named as Godot's humanoid profile; its clips posed by forward kinematics and
+  two-bone IK — locomotion cycles from a gait (the feet planted, the heels and toes rolling), the rest keyed.
+* `tools/build_rooftops.gd`: the Godot side — the models' meshes with the scene's materials (procedural shaders in
+  `rooftops/shaders`: plaster with its stains and fallen patches, masonry, roof tiles, wood and shutters, window glass
+  with rooms behind, hay, cloth, the ground's paving by zone, the country's patchwork), the ground, pavements and
+  kerbs, the landscape, its trees (instances made at the start: `scripts/rooftops_multimesh.gd`), the farms, the
+  cloth, the lamps, the birds, the dust, the light and the sky, the player (`rooftops/player.tscn`: the mannequin,
+  an `AnimationTree`, `FellowTraversal3D` with the clips) and the camera.
+* `scripts/rooftops_player.gd` (the controller), `rooftops_camera.gd` (the camera: damped springs, look-ahead,
+  sprint pull-back, sphere-cast collision, the swirl and the leap's shots), `rooftops_demo.gd` (the demo's shots),
+  `rooftops_birds.gd`, `rooftops.gd` (the scene's sky).
+

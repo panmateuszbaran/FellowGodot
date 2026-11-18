@@ -1,0 +1,1780 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/rooftops.gd" id="1_lwrs2"]
+[ext_resource type="Shader" path="res://shaders/atmosphere_sky.gdshader" id="2_3s6me"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/ground.res" id="3_onnt8"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/pavements.res" id="4_d75uj"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/PalazzoOcra.res" id="5_aj08m"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/Campanile.res" id="6_rk3in"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/CasaCrema.res" id="7_b7e1f"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/PalazzoSiena.res" id="8_nwsw1"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/CasaBianca.res" id="9_hgx13"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/CasaOcraBassa.res" id="10_moa2d"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/CasaRosa.res" id="11_on4i8"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/Fountain.res" id="12_8cmhj"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/StallA.res" id="13_018s4"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/StallB.res" id="14_lfoas"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/HayCart.res" id="15_bfsvh"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/Bollard.res" id="16_knjjh"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/Barrel.res" id="17_2b57j"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/Crate.res" id="18_871ml"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/Drain.res" id="19_efcgc"]
+[ext_resource type="Shader" path="res://rooftops/shaders/banner_cloth.gdshader" id="20_rcgbi"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/Skyline.res" id="21_11qxh"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/landscape.res" id="22_j8s1d"]
+[ext_resource type="Script" path="res://scripts/rooftops_multimesh.gd" id="23_ewxw0"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/trees_cypress_mesh.res" id="24_enajw"]
+[ext_resource type="Resource" path="res://rooftops/models/trees_cypress_instances.res" id="25_x82en"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/trees_olive_mesh.res" id="26_44osr"]
+[ext_resource type="Resource" path="res://rooftops/models/trees_olive_instances.res" id="27_2sqf1"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/trees_pine_mesh.res" id="28_c1kjp"]
+[ext_resource type="Resource" path="res://rooftops/models/trees_pine_instances.res" id="29_5uga2"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/trees_broadleaf_mesh.res" id="30_bi2jg"]
+[ext_resource type="Resource" path="res://rooftops/models/trees_broadleaf_instances.res" id="31_h8htv"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/villas.res" id="32_putlg"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/trees_villa_cypress_mesh.res" id="33_6nt63"]
+[ext_resource type="Resource" path="res://rooftops/models/trees_villa_cypress_instances.res" id="34_q1tea"]
+[ext_resource type="Script" path="res://scripts/rooftops_birds.gd" id="35_y1qd4"]
+[ext_resource type="PackedScene" path="res://rooftops/player.tscn" id="36_0jdgb"]
+[ext_resource type="Script" path="res://scripts/rooftops_player.gd" id="37_6ojm6"]
+[ext_resource type="Script" path="res://scripts/rooftops_camera.gd" id="38_utdpc"]
+[ext_resource type="Script" path="res://scripts/rooftops_demo.gd" id="39_tp3tq"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_10rq0"]
+shader = ExtResource("2_3s6me")
+shader_parameter/intensity = null
+shader_parameter/sun_disk_scale = null
+shader_parameter/energy_scale = null
+shader_parameter/star_brightness = null
+
+[sub_resource type="Sky" id="Sky_ctwoi"]
+sky_material = SubResource("ShaderMaterial_10rq0")
+process_mode = 2
+
+[sub_resource type="Environment" id="Environment_vk6ql"]
+background_mode = 2
+sky = SubResource("Sky_ctwoi")
+ambient_light_source = 3
+reflected_light_source = 2
+tonemap_mode = 4
+ssr_enabled = true
+ssr_max_steps = 56
+ssr_fade_in = 0.1
+ssao_enabled = true
+ssao_intensity = 1.8
+ssao_detail = 0.6
+ssil_enabled = true
+ssil_radius = 4.0
+ssil_intensity = 1.2
+fog_enabled = true
+fog_light_color = Color(0.85, 0.72, 0.58, 1)
+fog_density = 0.0
+fog_sky_affect = 0.3
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.0016
+volumetric_fog_albedo = Color(0.92, 0.93, 0.96, 1)
+volumetric_fog_anisotropy = 0.7
+volumetric_fog_sky_affect = 0.0
+adjustment_enabled = true
+adjustment_contrast = 1.05
+adjustment_saturation = 1.1
+
+[sub_resource type="CameraAttributesPractical" id="CameraAttributesPractical_cq0vd"]
+
+[sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_f63lg"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_jndk2"]
+size = Vector3(16.6, 0.08, 12.599999)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_l05y8"]
+size = Vector3(8.84, 0.08, 8.84)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_h17mt"]
+size = Vector3(11, 0.08, 10.599999)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_u75la"]
+size = Vector3(13.599999, 0.08, 12.2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_gwo0l"]
+size = Vector3(11.599999, 0.08, 10)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_5mwhn"]
+size = Vector3(13.599999, 0.08, 10.599999)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_fvwcj"]
+size = Vector3(12.599999, 0.08, 11.599999)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_mofwb"]
+points = PackedVector3Array(-3.0833333, 0, 5.08, -3.0833333, 0.47, 5.08, 3.6333334, 0, 5.08, -3.0833333, 0, 5.55, -3.0833333, 0.47, 5.55, 3.6333334, 0.47, 5.08, 3.6333334, 0, 5.55, 3.6333334, 0.47, 5.55)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_rkfft"]
+points = PackedVector3Array(0.54999995, 4.25, 4.995, 0.54999995, 4.4300003, 4.995, 2.95, 4.25, 4.995, 0.54999995, 4.25, 5.9449997, 0.54999995, 4.4300003, 5.9449997, 2.95, 4.4300003, 4.995, 2.95, 4.25, 5.9449997, 2.95, 4.4300003, 5.9449997)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_41fjh"]
+points = PackedVector3Array(-7.1, 0, -5.1, -7.1, 4.4, -5.1, 7.1, 0, -5.1, -7.1, 0, 5.1, -7.1, 4.4, 5.1, 7.1, 4.4, -5.1, 7.1, 0, 5.1, 7.1, 4.4, 5.1)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_cxnyi"]
+points = PackedVector3Array(7, 14.6, 5, 7, 14.6, -5, -7, 14.6, 5, 7, 4.4, 5, 7, 4.4, -5, -7, 14.6, -5, -7, 4.4, 5, -7, 4.4, -5)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_af0nl"]
+points = PackedVector3Array(-7.13, 7.7000003, -5.13, -7.13, 7.9, -5.13, 7.13, 7.7000003, -5.13, -7.13, 7.7000003, 5.13, -7.13, 7.9, 5.13, 7.13, 7.9, -5.13, 7.13, 7.7000003, 5.13, 7.13, 7.9, 5.13)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_bp7sb"]
+points = PackedVector3Array(-7.13, 11.099999, -5.13, -7.13, 11.3, -5.13, 7.13, 11.099999, -5.13, -7.13, 11.099999, 5.13, -7.13, 11.3, 5.13, 7.13, 11.3, -5.13, 7.13, 11.099999, 5.13, 7.13, 11.3, 5.13)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_dsej2"]
+points = PackedVector3Array(-7.85, 14.68, -5.85, -7.85, 14.68, 5.85, -2.0009203, 16.925385, -0.0011453629, 7.85, 14.68, -5.85, 7.85, 14.68, 5.85, 1.9993834, 16.925385, -0.0011453629)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_7tu7l"]
+points = PackedVector3Array(0.5196874, 14.68, 0.09271386, 0.5196874, 14.68, 0.69271386, 0.5196874, 17.58791, 0.09271386, 1.2196873, 14.68, 0.09271386, 1.2196873, 14.68, 0.69271386, 0.5196874, 17.58791, 0.69271386, 1.2196873, 17.58791, 0.09271386, 1.2196873, 17.58791, 0.69271386)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_tk4po"]
+points = PackedVector3Array(-4.22495, 14.679999, -2.6134076, -4.22495, 14.679999, -2.0134077, -4.22495, 17.668648, -2.6134076, -3.5249498, 14.679999, -2.6134076, -3.5249498, 14.679999, -2.0134077, -4.22495, 17.668648, -2.0134077, -3.5249498, 17.668648, -2.6134076, -3.5249498, 17.668648, -2.0134077)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_j5rdd"]
+points = PackedVector3Array(-7.24, 14.24, -5.24, -7.24, 14.559999, -5.24, 7.2385826, 14.24, -5.24, -7.24, 14.24, 5.2389746, -7.24, 14.559999, 5.2389746, 7.2385826, 14.559999, -5.24, 7.2385826, 14.24, 5.2389746, 7.2385826, 14.559999, 5.2389746)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_bktrm"]
+points = PackedVector3Array(-1.1099999, 26.900002, 5.5, -1.1099999, 26.68, 5.5, -1.1099999, 26.900002, 1.7999998, -1.3699999, 26.900002, 5.5, -1.3699999, 26.68, 5.5, -1.1099999, 26.68, 1.7999998, -1.3699999, 26.900002, 1.7999998, -1.3699999, 26.68, 1.7999998)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_ah5as"]
+points = PackedVector3Array(-3.45, 32.2, -3.45, -3.45, 32.2, 3.45, -0.00067543983, 38.2, -0.00067543983, 3.45, 32.2, -3.45, 3.45, 32.2, 3.45)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_7m85k"]
+points = PackedVector3Array(-3.22, 0, -3.22, -3.22, 4, -3.22, 3.22, 0, -3.22, -3.22, 0, 3.22, -3.22, 4, 3.22, 3.22, 4, -3.22, 3.22, 0, 3.22, 3.22, 4, 3.22)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_kxcyj"]
+points = PackedVector3Array(-3.1, 4, -3.1, -3.1, 4, 3.1, -3.1, 25.999998, -3.1, 3.1, 4, -3.1, 3.1, 4, 3.1, -3.1, 25.999998, 3.1, 3.1, 25.999998, -3.1, 3.1, 25.999998, 3.1)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_ub5i3"]
+points = PackedVector3Array(-3.3, 9.75, -3.3, -3.3, 10.01, -3.3, 3.3, 9.75, -3.3, -3.3, 9.75, 3.3, -3.3, 10.01, 3.3, 3.3, 10.01, -3.3, 3.3, 9.75, 3.3, 3.3, 10.01, 3.3)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_uv6jb"]
+points = PackedVector3Array(-3.3, 15.75, -3.3, -3.3, 16.01, -3.3, 3.3, 15.75, -3.3, -3.3, 15.75, 3.3, -3.3, 16.01, 3.3, 3.3, 16.01, -3.3, 3.3, 15.75, 3.3, 3.3, 16.01, 3.3)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_75c12"]
+points = PackedVector3Array(-3.3, 21.75, -3.3, -3.3, 22.009998, -3.3, 3.3, 21.75, -3.3, -3.3, 21.75, 3.3, -3.3, 22.009998, 3.3, 3.3, 22.009998, -3.3, 3.3, 21.75, 3.3, 3.3, 22.009998, 3.3)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_5mjbt"]
+points = PackedVector3Array(-3.3, 25.75, -3.3, -3.3, 26.009998, -3.3, 3.3, 25.75, -3.3, -3.3, 25.75, 3.3, -3.3, 26.009998, 3.3, 3.3, 26.009998, -3.3, 3.3, 25.75, 3.3, 3.3, 26.009998, 3.3)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_4aopr"]
+points = PackedVector3Array(-3.1, 26, -3.1, -3.1, 26.900002, -3.1, 3.1, 26, -3.1, -3.1, 26, 3.1, -3.1, 26.900002, 3.1, 3.1, 26.900002, -3.1, 3.1, 26, 3.1, 3.1, 26.900002, 3.1)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_hctuk"]
+points = PackedVector3Array(-3.1, 26, 2.4, -3.1, 26, 3.1, -3.1, 32, 2.4, -2.0899997, 26, 2.4, -2.0899997, 26, 3.1, -3.1, 32, 3.1, -2.0899997, 32, 2.4, -2.0899997, 32, 3.1)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_647or"]
+points = PackedVector3Array(-0.39, 26, 2.4, -0.39, 26, 3.1, -0.39, 32, 2.4, 0.38992363, 26, 2.4, 0.38992363, 26, 3.1, -0.39, 32, 3.1, 0.38992363, 32, 2.4, 0.38992363, 32, 3.1)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_2k485"]
+points = PackedVector3Array(2.0900002, 26, 2.4, 2.0900002, 26, 3.1, 2.0900002, 32, 2.4, 3.1000004, 26, 2.4, 3.1000004, 26, 3.1, 2.0900002, 32, 3.1, 3.1000004, 32, 2.4, 3.1000004, 32, 3.1)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_mcs1y"]
+points = PackedVector3Array(3.1, 31.999893, 3.1, 3.1, 31.999893, 2.4, -3.1, 31.999893, 3.1, 3.1, 30.900002, 3.1, 3.1, 30.900002, 2.4, -3.1, 31.999893, 2.4, -3.1, 30.900002, 3.1, -3.1, 30.900002, 2.4)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_nmodu"]
+points = PackedVector3Array(3.1, 32, 3.1, 2.4, 32, 3.1, 3.1, 26, 3.1, 3.1, 32, 2.0899997, 2.4, 32, 2.0899997, 2.4, 26, 3.1, 3.1, 26, 2.0899997, 2.4, 26, 2.0899997)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_cts62"]
+points = PackedVector3Array(3.1, 32, 0.38992372, 2.4, 32, 0.38992372, 3.1, 26, 0.38992372, 3.1, 32, -0.39000002, 2.4, 32, -0.39000002, 2.4, 26, 0.38992372, 3.1, 26, -0.39000002, 2.4, 26, -0.39000002)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_xs385"]
+points = PackedVector3Array(3.1, 32, -2.0900002, 2.4, 32, -2.0900002, 3.1, 26, -2.0900002, 3.1, 32, -3.1000004, 2.4, 32, -3.1000004, 2.4, 26, -2.0900002, 3.1, 26, -3.1000004, 2.4, 26, -3.1000004)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_2bais"]
+points = PackedVector3Array(2.3999999, 30.900002, -3.1, 3.1000001, 30.900002, -3.1, 2.3999999, 30.900002, 3.1, 2.3999999, 31.999893, -3.1, 3.1000001, 31.999893, -3.1, 3.0999317, 30.900002, 3.1, 2.3999999, 31.999893, 3.1, 3.0999317, 31.999893, 3.1)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_y4uwp"]
+points = PackedVector3Array(2.0899997, 26, -3.1, 2.0899997, 26, -2.4, 2.0899997, 32, -3.1, 3.1, 26, -3.1, 3.0999012, 26, -2.4, 2.0899997, 32, -2.4, 3.1, 32, -3.1, 3.0999012, 32, -2.4)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_qp1iq"]
+points = PackedVector3Array(-0.39000002, 26, -3.1, -0.39000002, 26, -2.4, -0.39000002, 32, -3.1, 0.38992372, 26, -3.1, 0.38992372, 26, -2.4, -0.39000002, 32, -2.4, 0.38992372, 32, -3.1, 0.38992372, 32, -2.4)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_tv3ji"]
+points = PackedVector3Array(-3.1000004, 26, -3.1, -3.1000004, 26, -2.4, -3.1000004, 32, -3.1, -2.0900002, 26, -3.1, -2.0900989, 26, -2.4, -3.1000004, 32, -2.4, -2.0900002, 32, -3.1, -2.0900989, 32, -2.4)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_sx1xm"]
+points = PackedVector3Array(3.1, 31.999893, -2.3999996, 3.1, 31.999893, -3.1000004, -3.1, 31.999893, -2.4000683, 3.1, 30.900002, -2.3999996, 3.1, 30.900002, -3.1000004, -3.1, 31.999893, -3.1000004, -3.1, 30.900002, -2.4000683, -3.1, 30.900002, -3.1000004)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_ng1c6"]
+points = PackedVector3Array(-2.4, 32, -2.0899997, -3.1, 32, -2.0899997, -2.4, 26, -2.0899997, -2.4, 32, -3.1, -3.1, 32, -3.1, -3.1, 26, -2.0899997, -2.4, 26, -3.1, -3.1, 26, -3.1)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_d4i1g"]
+points = PackedVector3Array(-2.4, 32, 0.38992372, -3.1, 32, 0.38992372, -2.4, 26, 0.38992372, -2.4, 32, -0.39000002, -3.1, 32, -0.39000002, -3.1, 26, 0.38992372, -2.4, 26, -0.39000002, -3.1, 26, -0.39000002)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_h1bem"]
+points = PackedVector3Array(-2.4, 32, 3.1000004, -3.1, 32, 3.1000004, -2.4, 26, 3.1000004, -2.4, 32, 2.0900002, -3.1, 32, 2.0900002, -3.1, 26, 3.1000004, -2.4, 26, 2.0900002, -3.1, 26, 2.0900002)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_vxayw"]
+points = PackedVector3Array(-3.1000001, 30.900002, -3.1, -2.3999999, 30.900002, -3.1, -3.1000001, 30.900002, 3.1, -3.1000001, 31.999893, -3.1, -2.3999999, 31.999893, -3.1, -2.4000683, 30.900002, 3.1, -3.1000001, 31.999893, 3.1, -2.4000683, 31.999893, 3.1)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_xdt6v"]
+points = PackedVector3Array(-3.55, 31.999998, -3.55, -3.55, 32.199978, -3.55, 3.55, 31.999998, -3.55, -3.55, 31.999998, 3.55, -3.55, 32.199978, 3.55, 3.55, 32.199978, -3.55, 3.55, 31.999998, 3.55, 3.55, 32.199978, 3.55)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_n3hts"]
+points = PackedVector3Array(-4.3, 0, -4.1, -4.3, 4.4, -4.1, 4.3, 0, -4.1, -4.3, 0, 4.1, -4.3, 4.4, 4.1, 4.3, 4.4, -4.1, 4.3, 0, 4.1, 4.3, 4.4, 4.1)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_rw3xc"]
+points = PackedVector3Array(-4.2, 4.4, -4, -4.2, 11.200001, -4, 4.2, 4.4, -4, -4.2, 4.4, 4, -4.2, 11.200001, 4, 4.2, 11.200001, -4, 4.2, 4.4, 4, 4.2, 11.200001, 4)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_651xj"]
+points = PackedVector3Array(-4.33, 7.7000003, -4.13, -4.33, 7.9, -4.13, 4.33, 7.7000003, -4.13, -4.33, 7.7000003, 4.13, -4.33, 7.9, 4.13, 4.33, 7.9, -4.13, 4.33, 7.7000003, 4.13, 4.33, 7.9, 4.13)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_v4r0d"]
+points = PackedVector3Array(-5.05, 11.28, -4.85, -5.05, 13.141741, -0.0009493828, 5.049999, 11.28, -4.85, -5.05, 11.28, 4.85, 5.049999, 13.141741, -0.0009493828, 5.049999, 11.28, 4.85)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_ljy08"]
+points = PackedVector3Array(1.5985707, 11.28, -1.1061856, 1.5985707, 11.28, -0.50618553, 1.5985707, 13.820401, -1.1061856, 2.2985706, 11.28, -1.1061856, 2.2985706, 11.28, -0.50618553, 1.5985707, 13.820401, -0.50618553, 2.2985706, 13.820401, -1.1061856, 2.2985706, 13.820401, -0.50618553)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_shmkx"]
+points = PackedVector3Array(-4.44, 10.84, -4.24, -4.44, 11.16, -4.24, 4.44, 10.84, -4.24, -4.44, 10.84, 4.24, -4.44, 11.16, 4.24, 4.44, 11.16, -4.24, 4.44, 10.84, 4.24, 4.44, 11.16, 4.24)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_jub6c"]
+points = PackedVector3Array(-0.79999995, 0, 5.58, -0.79999995, 0.47, 5.58, 1.3500001, 0, 5.58, -0.79999995, 0, 6.05, -0.79999995, 0.47, 6.05, 1.3500001, 0.47, 5.58, 1.3500001, 0, 6.05, 1.3500001, 0.47, 6.05)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_6vf1n"]
+points = PackedVector3Array(4.9, 4.4, 5.598904, 4.9, 0, 5.598904, 4.9, 4.4, -5.6, -4.9, 4.4, 5.598904, -4.9, 0, 5.598904, 4.9, 0, -5.6, -4.9, 4.4, -5.6, -4.9, 0, -5.6)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_36uo7"]
+points = PackedVector3Array(4.8, 18, 5.499999, -4.8, 18, 5.499999, 4.8, 4.3999996, 5.499999, 4.8, 18, -5.5, -4.8, 18, -5.5, -4.8, 4.3999996, 5.499999, 4.8, 4.3999996, -5.5, -4.8, 4.3999996, -5.5)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_5ynpb"]
+points = PackedVector3Array(4.93, 7.9, 5.63, 4.93, 7.7000003, 5.63, 4.93, 7.9, -5.63, -4.93, 7.9, 5.63, -4.93, 7.7000003, 5.63, 4.93, 7.7000003, -5.63, -4.93, 7.9, -5.63, -4.93, 7.7000003, -5.63)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_mc1e7"]
+points = PackedVector3Array(4.93, 11.3, 5.63, 4.93, 11.099999, 5.63, 4.93, 11.3, -5.63, -4.93, 11.3, 5.63, -4.93, 11.099999, 5.63, 4.93, 11.099999, -5.63, -4.93, 11.3, -5.63, -4.93, 11.099999, -5.63)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_q4css"]
+points = PackedVector3Array(4.93, 14.700001, 5.63, 4.93, 14.5, 5.63, 4.93, 14.700001, -5.63, -4.93, 14.700001, 5.63, -4.93, 14.5, 5.63, 4.93, 14.5, -5.63, -4.93, 14.700001, -5.63, -4.93, 14.5, -5.63)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_aoyay"]
+points = PackedVector3Array(5.65, 18.08, 6.35, -5.65, 18.08, 6.35, 5.65, 18.08, -6.35, -0.0011062622, 20.248833, 0.6986494, -5.65, 18.08, -6.35, -0.0011062622, 20.248833, -0.70113516)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_0fmmw"]
+points = PackedVector3Array(-0.8182745, 18.08, 0.0032806098, -0.8182745, 18.08, 0.60328066, -0.8182745, 20.902906, 0.0032806098, -0.118342996, 18.08, 0.0032806098, -0.118342996, 18.08, 0.60328066, -0.8182745, 20.902906, 0.60328066, -0.118342996, 20.902906, 0.0032806098, -0.118342996, 20.902906, 0.60328066)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_l67ku"]
+points = PackedVector3Array(1.427174, 18.08, 1.5045507, 1.427174, 18.08, 2.1045508, 1.427174, 20.85886, 1.5045507, 2.127174, 18.08, 1.5045507, 2.127174, 18.08, 2.1045508, 1.427174, 20.85886, 2.1045508, 2.127174, 20.85886, 1.5045507, 2.127174, 20.85886, 2.1045508)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_dugt0"]
+points = PackedVector3Array(5.039999, 17.96, 5.74, 5.039999, 17.64, 5.74, 5.039999, 17.96, -5.74, -5.04, 17.96, 5.74, -5.04, 17.64, 5.74, 5.039999, 17.64, -5.74, -5.04, 17.96, -5.74, -5.04, 17.64, -5.74)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_jrhbj"]
+points = PackedVector3Array(3.799256, 4.4, 4.6, 3.799256, 0, 4.6, 3.799256, 4.4, -4.6, -3.8, 4.4, 4.6, -3.8, 0, 4.6, 3.799256, 0, -4.6, -3.8, 4.4, -4.6, -3.8, 0, -4.6)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_j8ppx"]
+points = PackedVector3Array(3.7, 11.200001, 4.5, 3.7, 4.4, 4.5, 3.7, 11.200001, -4.5, -3.7, 11.200001, 4.5, -3.7, 4.4, 4.5, 3.7, 4.4, -4.5, -3.7, 11.200001, -4.5, -3.7, 4.4, -4.5)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_dkemq"]
+points = PackedVector3Array(3.83, 7.9, 4.63, 3.83, 7.7000003, 4.63, 3.83, 7.9, -4.63, -3.83, 7.9, 4.63, -3.83, 7.7000003, 4.63, 3.83, 7.7000003, -4.63, -3.83, 7.9, -4.63, -3.83, 7.7000003, -4.63)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_qccbv"]
+points = PackedVector3Array(3.7, 12.2699995, 4.58, 3.7, 12.2699995, 4.16, -3.7, 12.2699995, 4.58, 3.7, 11.2, 4.58, 3.7, 11.2, 4.16, -3.7, 12.2699995, 4.16, -3.7, 11.2, 4.58, -3.7, 11.2, 4.16)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_fjfsx"]
+points = PackedVector3Array(3.36, 11.2, -4.5, 3.7800004, 11.2, -4.5, 3.36, 11.2, 4.5, 3.36, 12.2699995, -4.5, 3.7800004, 12.2699995, -4.5, 3.7799592, 11.2, 4.5, 3.36, 12.2699995, 4.5, 3.7799592, 12.2699995, 4.5)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_tmiiu"]
+points = PackedVector3Array(3.7, 12.2699995, -4.1599994, 3.7, 12.2699995, -4.5800004, -3.7, 12.2699995, -4.1600404, 3.7, 11.2, -4.1599994, 3.7, 11.2, -4.5800004, -3.7, 12.2699995, -4.5800004, -3.7, 11.2, -4.1600404, -3.7, 11.2, -4.5800004)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_58713"]
+points = PackedVector3Array(-3.7800004, 11.2, -4.5, -3.36, 11.2, -4.5, -3.7800004, 11.2, 4.5, -3.7800004, 12.2699995, -4.5, -3.36, 12.2699995, -4.5, -3.3600411, 11.2, 4.5, -3.7800004, 12.2699995, 4.5, -3.3600411, 12.2699995, 4.5)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_0d4yj"]
+points = PackedVector3Array(-5.6, 0, -4.1, -5.6, 4.4, -4.1, 5.598904, 0, -4.1, -5.6, 0, 4.1, -5.6, 4.4, 4.1, 5.598904, 4.4, -4.1, 5.598904, 0, 4.1, 5.598904, 4.4, 4.1)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_ot350"]
+points = PackedVector3Array(-5.5, 4.3999996, -4, -5.5, 7.8, -4, 5.499999, 4.3999996, -4, -5.5, 4.3999996, 4, -5.5, 7.8, 4, 5.499999, 7.8, -4, 5.499999, 4.3999996, 4, 5.499999, 7.8, 4)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_o3ac1"]
+points = PackedVector3Array(-6.35, 7.88, -4.85, -6.35, 7.88, 4.85, -1.5004797, 9.74174, -0.0009493828, 6.35, 7.88, -4.85, 6.35, 7.88, 4.85, 1.4992366, 9.74174, -0.0009493828)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_dt6vc"]
+points = PackedVector3Array(-0.7121247, 7.88, -1.7571688, -0.7121247, 7.88, -1.1571689, -0.7121247, 10.350133, -1.7571688, -0.012193203, 7.88, -1.7571688, -0.012193203, 7.88, -1.1571689, -0.7121247, 10.350133, -1.1571689, -0.012193203, 10.350133, -1.7571688, -0.012193203, 10.350133, -1.1571689)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_tf0er"]
+points = PackedVector3Array(-5.74, 7.44, -4.24, -5.74, 7.7599998, -4.24, 5.74, 7.44, -4.24, -5.74, 7.44, 4.24, -5.74, 7.7599998, 4.24, 5.74, 7.7599998, -4.24, 5.74, 7.44, 4.24, 5.74, 7.7599998, 4.24)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_qgw3m"]
+points = PackedVector3Array(-5.1, 0, -4.6, -5.1, 4.4, -4.6, 5.1, 0, -4.6, -5.1, 0, 4.6, -5.1, 4.4, 4.6, 5.1, 4.4, -4.6, 5.1, 0, 4.6, 5.1, 4.4, 4.6)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_6fopl"]
+points = PackedVector3Array(-5, 4.4, -4.5, -5, 11.200001, -4.5, 5, 4.4, -4.5, -5, 4.4, 4.5, -5, 11.200001, 4.5, 5, 11.200001, -4.5, 5, 4.4, 4.5, 5, 11.200001, 4.5)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_t21ru"]
+points = PackedVector3Array(-5.13, 7.7000003, -4.63, -5.13, 7.9, -4.63, 5.13, 7.7000003, -4.63, -5.13, 7.7000003, 4.63, -5.13, 7.9, 4.63, 5.13, 7.9, -4.63, 5.13, 7.7000003, 4.63, 5.13, 7.9, 4.63)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_p0q8f"]
+points = PackedVector3Array(5, 12.2699995, 4.58, 5, 12.2699995, 4.16, -5, 12.2699995, 4.58, 5, 11.2, 4.58, 5, 11.2, 4.16, -5, 12.2699995, 4.16, -5, 11.2, 4.58, -5, 11.2, 4.16)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_42qeo"]
+points = PackedVector3Array(4.6599994, 11.2, -4.5, 5.0800004, 11.2, -4.5, 4.6599994, 11.2, 4.5, 4.6599994, 12.2699995, -4.5, 5.0800004, 12.2699995, -4.5, 5.0799594, 11.2, 4.5, 4.6599994, 12.2699995, 4.5, 5.0799594, 12.2699995, 4.5)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_cl4sk"]
+points = PackedVector3Array(5, 12.2699995, -4.1599994, 5, 12.2699995, -4.5800004, -5, 12.2699995, -4.1600404, 5, 11.2, -4.1599994, 5, 11.2, -4.5800004, -5, 12.2699995, -4.5800004, -5, 11.2, -4.1600404, -5, 11.2, -4.5800004)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_qg8a7"]
+points = PackedVector3Array(-5.08, 11.2, -4.5, -4.66, 11.2, -4.5, -5.08, 11.2, 4.5, -5.08, 12.2699995, -4.5, -4.66, 12.2699995, -4.5, -4.66, 11.2, 4.5, -5.08, 12.2699995, 4.5, -4.66, 12.2699995, 4.5)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_7qdtl"]
+points = PackedVector3Array(0.59000003, 13.8, 4.09, 0.41, 13.8, 4.09, 0.59000003, 11.2, 4.09, 0.59000003, 13.8, 3.91, 0.41, 13.8, 3.91, 0.41, 11.2, 4.09, 0.59000003, 11.2, 3.91, 0.41, 11.2, 3.91)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_vd7ss"]
+points = PackedVector3Array(0.59000003, 13.8, -3.91, 0.41, 13.8, -3.91, 0.59000003, 11.2, -3.91, 0.59000003, 13.8, -4.09, 0.41, 13.8, -4.09, 0.41, 11.2, -3.91, 0.59000003, 11.2, -4.09, 0.41, 11.2, -4.09)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_jjugf"]
+points = PackedVector3Array(2.59, 13.8, 4.09, 2.41, 13.8, 4.09, 2.59, 11.2, 4.09, 2.59, 13.8, 3.91, 2.41, 13.8, 3.91, 2.41, 11.2, 4.09, 2.59, 11.2, 3.91, 2.41, 11.2, 3.91)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_yebai"]
+points = PackedVector3Array(2.59, 13.8, -3.91, 2.41, 13.8, -3.91, 2.59, 11.2, -3.91, 2.59, 13.8, -4.09, 2.41, 13.8, -4.09, 2.41, 11.2, -3.91, 2.59, 11.2, -4.09, 2.41, 11.2, -4.09)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_tag5u"]
+points = PackedVector3Array(4.41, 11.2, 3.91, 4.41, 11.2, 4.09, 4.41, 13.8, 3.91, 4.59, 11.2, 3.91, 4.59, 11.2, 4.09, 4.41, 13.8, 4.09, 4.59, 13.8, 3.91, 4.59, 13.8, 4.09)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_bi26k"]
+points = PackedVector3Array(4.41, 11.2, -4.09, 4.41, 11.2, -3.91, 4.41, 13.8, -4.09, 4.59, 11.2, -4.09, 4.59, 11.2, -3.91, 4.41, 13.8, -3.91, 4.59, 13.8, -4.09, 4.59, 13.8, -3.91)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_60fmd"]
+points = PackedVector3Array(5, 13.96, 4.5, 0, 13.96, 4.5, 5, 13.96, -4.5, 2.4995105, 14.96, 1.999804, 0, 13.96, -4.5, 2.4995105, 14.96, -2.0006852)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_b2igk"]
+points = PackedVector3Array(-1.1481571, 0, -2.7716386, -2.7716386, 0, -1.1481574, -1.1481571, 0.75, -2.7716386, 1.147615, 0, -2.7716386, -2.7716386, 0.75, -1.1481574, -2.7716386, 0, 1.1476145, 1.147615, 0.75, -2.7716386, 2.7710965, 0, -1.1481574, -2.7716386, 0.75, 1.1476145, -1.1481571, 0, 2.7716386, 2.7710965, 0.75, -1.1481574, 2.7710965, 0, 1.1476145, -1.1481571, 0.75, 2.7716386, 1.147615, 0, 2.7716386, 2.7710965, 0.75, 1.1476145, 1.147615, 0.75, 2.7716386)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_g03ui"]
+points = PackedVector3Array(1.4497163, 0.94, 0.85, 1.4497163, 0.94, 0.25, -1.45, 0.94, 0.85, 1.4497163, 0, 0.85, 1.4497163, 0, 0.25, -1.45, 0.94, 0.25, -1.45, 0, 0.85, -1.45, 0, 0.25)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_1j2qo"]
+points = PackedVector3Array(1.4497163, 0.94, 0.85, 1.4497163, 0.94, 0.25, -1.45, 0.94, 0.85, 1.4497163, 0, 0.85, 1.4497163, 0, 0.25, -1.45, 0.94, 0.25, -1.45, 0, 0.85, -1.45, 0, 0.25)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_k0tna"]
+points = PackedVector3Array(-1.3, 0.39999998, -0.75, -1.3, 1.4, -0.75, 1.3, 0.39999998, -0.75, -1.3, 0.39999998, 0.75, -1.3, 1.4, 0.75, 1.3, 1.4, -0.75, 1.3, 0.39999998, 0.75, 1.3, 1.4, 0.75)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_x0fwf"]
+points = PackedVector3Array(-0.15, 0, -2.9370189e-05, -0.10606892, 0, -0.10606892, -0.10606892, 0, 0.106039554, -0.15, 0.62, -2.9370189e-05, -0.10606892, 0.62, -0.10606892, -2.9370189e-05, 0, -0.15, -2.9370189e-05, 0, 0.15, -0.10606892, 0.62, 0.106039554, -2.9370189e-05, 0.62, -0.15, 0.106039554, 0, -0.10606892, 0.106039554, 0, 0.106039554, -2.9370189e-05, 0.62, 0.15, 0.106039554, 0.62, -0.10606892, 0.15, 0, -2.9370189e-05, 0.106039554, 0.62, 0.106039554, 0.15, 0.62, -2.9370189e-05)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_kbh3x"]
+points = PackedVector3Array(-0.28, 0, -5.480647e-05, -0.1979953, 0, -0.1979953, -0.1979953, 0, 0.1979405, -0.28, 0.85, -5.480647e-05, -0.1979953, 0.85, -0.1979953, -5.480647e-05, 0, -0.28, -5.480647e-05, 0, 0.28, -0.1979953, 0.85, 0.1979405, -5.480647e-05, 0.85, -0.28, 0.1979405, 0, -0.1979953, 0.1979405, 0, 0.1979405, -5.480647e-05, 0.85, 0.28, 0.1979405, 0.85, -0.1979953, 0.28, 0, -5.480647e-05, 0.1979405, 0.85, 0.1979405, 0.28, 0.85, -5.480647e-05)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_fu807"]
+points = PackedVector3Array(-0.3, 0, -0.3, -0.3, 0.5, -0.3, 0.3, 0, -0.3, -0.3, 0, 0.3, -0.3, 0.5, 0.3, 0.3, 0.5, -0.3, 0.3, 0, 0.3, 0.3, 0.5, 0.3)
+
+[sub_resource type="Shader" id="Shader_e7345"]
+code = "shader_type spatial;
+render_mode diffuse_burley, specular_schlick_ggx;
+// The fountain's water: dark and clear, rings spreading from where the jet falls.
+#include \"res://rooftops/shaders/rooftops_common.gdshaderinc\"
+varying vec3 world_pos;
+void vertex() { world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+	vec2 p = world_pos.xz;
+	vec2 c = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xz;
+	float d = length(p - c);
+	float h = 0.004 * sin(d * 18.0 - TIME * 5.0) * exp(-d * 0.5);
+	h += 0.0015 * rt_noise(p * 6.0 + TIME * 0.6) + 0.001 * rt_noise(p * 14.0 - TIME * 0.9);
+	ALBEDO = vec3(0.03, 0.05, 0.05);
+	ROUGHNESS = 0.03;
+	SPECULAR = 0.6;
+	NORMAL = rt_bump(NORMAL, VERTEX, h, 1.0);
+}
+"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_5vde1"]
+render_priority = 0
+shader = SubResource("Shader_e7345")
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_ecuj8"]
+material = SubResource("ShaderMaterial_5vde1")
+top_radius = 2.5
+bottom_radius = 2.5
+height = 0.02
+radial_segments = 32
+rings = 1
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_r3rt5"]
+emission_shape = 1
+emission_sphere_radius = 0.05
+direction = Vector3(0, 1, 0)
+spread = 14.0
+initial_velocity_min = 2.6
+initial_velocity_max = 3.2
+scale_min = 0.6
+scale_max = 1.3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_txasn"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0.85, 0.92, 1, 0.45)
+billboard_mode = 3
+billboard_keep_scale = true
+particles_anim_h_frames = 1
+particles_anim_v_frames = 1
+particles_anim_loop = false
+
+[sub_resource type="QuadMesh" id="QuadMesh_ooa64"]
+material = SubResource("StandardMaterial3D_txasn")
+size = Vector2(0.03, 0.09)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_xu3an"]
+render_priority = 0
+shader = ExtResource("20_rcgbi")
+shader_parameter/field = Color(0.58, 0.07, 0.06, 1)
+shader_parameter/band = Color(0.86, 0.66, 0.24, 1)
+shader_parameter/pattern = 0
+shader_parameter/stripe_width = null
+shader_parameter/size = Vector2(1.05, 2.9)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_q3oyn"]
+render_priority = 0
+shader = ExtResource("20_rcgbi")
+shader_parameter/field = Color(0.1, 0.16, 0.38, 1)
+shader_parameter/band = Color(0.86, 0.72, 0.3, 1)
+shader_parameter/pattern = 0
+shader_parameter/stripe_width = null
+shader_parameter/size = Vector2(1.05, 2.9)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_bh55o"]
+render_priority = 0
+shader = ExtResource("20_rcgbi")
+shader_parameter/field = Color(0.12, 0.3, 0.16, 1)
+shader_parameter/band = Color(0.9, 0.82, 0.6, 1)
+shader_parameter/pattern = 0
+shader_parameter/stripe_width = null
+shader_parameter/size = Vector2(1.05, 2.9)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_nhe8o"]
+render_priority = 0
+shader = ExtResource("20_rcgbi")
+shader_parameter/field = Color(0.58, 0.07, 0.06, 1)
+shader_parameter/band = Color(0.86, 0.66, 0.24, 1)
+shader_parameter/pattern = 0
+shader_parameter/stripe_width = null
+shader_parameter/size = Vector2(1.05, 2.9)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_6s3or"]
+render_priority = 0
+shader = ExtResource("20_rcgbi")
+shader_parameter/field = Color(0.8, 0.74, 0.6, 1)
+shader_parameter/band = Color(0.62, 0.14, 0.1, 1)
+shader_parameter/pattern = 1
+shader_parameter/stripe_width = 0.32
+shader_parameter/size = Vector2(2.9, 1.816282)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wa3on"]
+render_priority = 0
+shader = ExtResource("20_rcgbi")
+shader_parameter/field = Color(0.78, 0.72, 0.58, 1)
+shader_parameter/band = Color(0.18, 0.3, 0.45, 1)
+shader_parameter/pattern = 1
+shader_parameter/stripe_width = 0.32
+shader_parameter/size = Vector2(2.9, 1.8162819)
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_c1gsu"]
+emission_shape = 3
+emission_box_extents = Vector3(18, 5, 18)
+spread = 180.0
+initial_velocity_min = 0.02
+initial_velocity_max = 0.12
+gravity = Vector3(0, -0.02, 0)
+scale_min = 0.5
+scale_max = 1.4
+turbulence_enabled = true
+turbulence_noise_strength = 0.4
+turbulence_noise_scale = 6.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_erxod"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+albedo_color = Color(1, 0.85, 0.6, 0.35)
+billboard_mode = 3
+particles_anim_h_frames = 1
+particles_anim_v_frames = 1
+particles_anim_loop = false
+
+[sub_resource type="QuadMesh" id="QuadMesh_aarfx"]
+material = SubResource("StandardMaterial3D_erxod")
+size = Vector2(0.018, 0.018)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_crkdw"]
+albedo_color = Color(0.5, 0.45, 0.36, 1)
+roughness = 0.9
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_412fs"]
+material = SubResource("StandardMaterial3D_crkdw")
+top_radius = 0.008
+bottom_radius = 0.008
+height = 4.527693
+radial_segments = 5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2sbfr"]
+cull_mode = 2
+albedo_color = Color(0.92, 0.9, 0.84, 1)
+roughness = 0.95
+backlight_enabled = true
+backlight = Color(0.46, 0.45, 0.42, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_e5i6i"]
+cull_mode = 2
+albedo_color = Color(0.72, 0.78, 0.86, 1)
+roughness = 0.95
+backlight_enabled = true
+backlight = Color(0.36, 0.39, 0.43, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_iske8"]
+cull_mode = 2
+albedo_color = Color(0.86, 0.8, 0.62, 1)
+roughness = 0.95
+backlight_enabled = true
+backlight = Color(0.43, 0.4, 0.31, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_odora"]
+cull_mode = 2
+albedo_color = Color(0.7, 0.3, 0.25, 1)
+roughness = 0.95
+backlight_enabled = true
+backlight = Color(0.35, 0.15, 0.125, 0.5)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_7cm4x"]
+material = SubResource("StandardMaterial3D_crkdw")
+top_radius = 0.008
+bottom_radius = 0.008
+height = 4.5376205
+radial_segments = 5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mufik"]
+cull_mode = 2
+albedo_color = Color(0.95, 0.94, 0.9, 1)
+roughness = 0.95
+backlight_enabled = true
+backlight = Color(0.475, 0.47, 0.45, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kq21g"]
+cull_mode = 2
+albedo_color = Color(0.92, 0.9, 0.84, 1)
+roughness = 0.95
+backlight_enabled = true
+backlight = Color(0.46, 0.45, 0.42, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_20d1x"]
+cull_mode = 2
+albedo_color = Color(0.72, 0.78, 0.86, 1)
+roughness = 0.95
+backlight_enabled = true
+backlight = Color(0.36, 0.39, 0.43, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_a2mmu"]
+cull_mode = 2
+albedo_color = Color(0.86, 0.8, 0.62, 1)
+roughness = 0.95
+backlight_enabled = true
+backlight = Color(0.43, 0.4, 0.31, 0.5)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_qgjda"]
+material = SubResource("StandardMaterial3D_crkdw")
+top_radius = 0.008
+bottom_radius = 0.008
+height = 2.5396852
+radial_segments = 5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6dial"]
+cull_mode = 2
+albedo_color = Color(0.7, 0.3, 0.25, 1)
+roughness = 0.95
+backlight_enabled = true
+backlight = Color(0.35, 0.15, 0.125, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1yae0"]
+cull_mode = 2
+albedo_color = Color(0.95, 0.94, 0.9, 1)
+roughness = 0.95
+backlight_enabled = true
+backlight = Color(0.475, 0.47, 0.45, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5gtxq"]
+albedo_color = Color(1, 0.8, 0.5, 1)
+emission_enabled = true
+emission = Color(1, 0.68, 0.35, 1)
+emission_energy_multiplier = 3.0
+
+[sub_resource type="SphereMesh" id="SphereMesh_pwi13"]
+material = SubResource("StandardMaterial3D_5gtxq")
+radius = 0.07
+height = 0.14
+
+[node name="Rooftops" type="Node3D" unique_id=103072162]
+script = ExtResource("1_lwrs2")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=904988135]
+environment = SubResource("Environment_vk6ql")
+camera_attributes = SubResource("CameraAttributesPractical_cq0vd")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=187182317]
+transform = Transform3D(0.76604444, 0.1879329, -0.61470085, 0, 0.9563048, 0.2923717, 0.6427876, -0.22396971, 0.73257196, 0, 0, 0)
+light_color = Color(1, 0.9, 0.78, 1)
+light_energy = 2.8
+light_volumetric_fog_energy = 1.2
+light_angular_distance = 0.6
+shadow_enabled = true
+shadow_blur = 1.2
+directional_shadow_blend_splits = true
+directional_shadow_max_distance = 140.0
+
+[node name="Ground" type="StaticBody3D" parent="." unique_id=1562586745]
+collision_mask = 0
+
+[node name="Collision" type="CollisionShape3D" parent="Ground" unique_id=887675252]
+shape = SubResource("WorldBoundaryShape3D_f63lg")
+
+[node name="Mesh" type="MeshInstance3D" parent="Ground" unique_id=63327097]
+mesh = ExtResource("3_onnt8")
+
+[node name="Pavements" type="StaticBody3D" parent="." unique_id=910925279]
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Pavements" unique_id=2020373785]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 0.04, -18)
+shape = SubResource("BoxShape3D_jndk2")
+
+[node name="Collision1" type="CollisionShape3D" parent="Pavements" unique_id=256358770]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0.04, -16.1)
+shape = SubResource("BoxShape3D_l05y8")
+
+[node name="Collision2" type="CollisionShape3D" parent="Pavements" unique_id=491233506]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.2, 0.04, -17)
+shape = SubResource("BoxShape3D_h17mt")
+
+[node name="Collision3" type="CollisionShape3D" parent="Pavements" unique_id=1401404156]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 22.5, 0.04, -3)
+shape = SubResource("BoxShape3D_u75la")
+
+[node name="Collision4" type="CollisionShape3D" parent="Pavements" unique_id=735919040]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 21.5, 0.04, 8)
+shape = SubResource("BoxShape3D_gwo0l")
+
+[node name="Collision5" type="CollisionShape3D" parent="Pavements" unique_id=1708129306]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0.04, 18)
+shape = SubResource("BoxShape3D_5mwhn")
+
+[node name="Collision6" type="CollisionShape3D" parent="Pavements" unique_id=1684873873]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 0.04, 18.5)
+shape = SubResource("BoxShape3D_fvwcj")
+
+[node name="Mesh" type="MeshInstance3D" parent="Pavements" unique_id=1805182797]
+mesh = ExtResource("4_d75uj")
+
+[node name="Town" type="Node3D" parent="." unique_id=1273813741]
+
+[node name="PalazzoOcra" type="StaticBody3D" parent="Town" unique_id=195040146]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 0, -18)
+collision_layer = 3
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/PalazzoOcra" unique_id=1911061041]
+shape = SubResource("ConvexPolygonShape3D_mofwb")
+
+[node name="Collision1" type="CollisionShape3D" parent="Town/PalazzoOcra" unique_id=8017488]
+shape = SubResource("ConvexPolygonShape3D_rkfft")
+
+[node name="Collision2" type="CollisionShape3D" parent="Town/PalazzoOcra" unique_id=1821797853]
+shape = SubResource("ConvexPolygonShape3D_41fjh")
+
+[node name="Collision3" type="CollisionShape3D" parent="Town/PalazzoOcra" unique_id=1375318748]
+shape = SubResource("ConvexPolygonShape3D_cxnyi")
+
+[node name="Collision4" type="CollisionShape3D" parent="Town/PalazzoOcra" unique_id=1756615828]
+shape = SubResource("ConvexPolygonShape3D_af0nl")
+
+[node name="Collision5" type="CollisionShape3D" parent="Town/PalazzoOcra" unique_id=1966123635]
+shape = SubResource("ConvexPolygonShape3D_bp7sb")
+
+[node name="Collision6" type="CollisionShape3D" parent="Town/PalazzoOcra" unique_id=1021015865]
+shape = SubResource("ConvexPolygonShape3D_dsej2")
+
+[node name="Collision7" type="CollisionShape3D" parent="Town/PalazzoOcra" unique_id=748100485]
+shape = SubResource("ConvexPolygonShape3D_7tu7l")
+
+[node name="Collision8" type="CollisionShape3D" parent="Town/PalazzoOcra" unique_id=229050994]
+shape = SubResource("ConvexPolygonShape3D_tk4po")
+
+[node name="Collision9" type="CollisionShape3D" parent="Town/PalazzoOcra" unique_id=90559241]
+shape = SubResource("ConvexPolygonShape3D_j5rdd")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/PalazzoOcra" unique_id=481879723]
+mesh = ExtResource("5_aj08m")
+
+[node name="Campanile" type="StaticBody3D" parent="Town" unique_id=1518112626]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0, -16.1)
+collision_layer = 3
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Campanile" unique_id=774636998]
+shape = SubResource("ConvexPolygonShape3D_bktrm")
+
+[node name="Collision1" type="CollisionShape3D" parent="Town/Campanile" unique_id=1019572550]
+shape = SubResource("ConvexPolygonShape3D_ah5as")
+
+[node name="Collision2" type="CollisionShape3D" parent="Town/Campanile" unique_id=1401998225]
+shape = SubResource("ConvexPolygonShape3D_7m85k")
+
+[node name="Collision3" type="CollisionShape3D" parent="Town/Campanile" unique_id=820601004]
+shape = SubResource("ConvexPolygonShape3D_kxcyj")
+
+[node name="Collision4" type="CollisionShape3D" parent="Town/Campanile" unique_id=397647951]
+shape = SubResource("ConvexPolygonShape3D_ub5i3")
+
+[node name="Collision5" type="CollisionShape3D" parent="Town/Campanile" unique_id=1726012376]
+shape = SubResource("ConvexPolygonShape3D_uv6jb")
+
+[node name="Collision6" type="CollisionShape3D" parent="Town/Campanile" unique_id=1050387017]
+shape = SubResource("ConvexPolygonShape3D_75c12")
+
+[node name="Collision7" type="CollisionShape3D" parent="Town/Campanile" unique_id=90722714]
+shape = SubResource("ConvexPolygonShape3D_5mjbt")
+
+[node name="Collision8" type="CollisionShape3D" parent="Town/Campanile" unique_id=1080260531]
+shape = SubResource("ConvexPolygonShape3D_4aopr")
+
+[node name="Collision9" type="CollisionShape3D" parent="Town/Campanile" unique_id=1435720756]
+shape = SubResource("ConvexPolygonShape3D_hctuk")
+
+[node name="Collision10" type="CollisionShape3D" parent="Town/Campanile" unique_id=422563193]
+shape = SubResource("ConvexPolygonShape3D_647or")
+
+[node name="Collision11" type="CollisionShape3D" parent="Town/Campanile" unique_id=877664702]
+shape = SubResource("ConvexPolygonShape3D_2k485")
+
+[node name="Collision12" type="CollisionShape3D" parent="Town/Campanile" unique_id=1679438799]
+shape = SubResource("ConvexPolygonShape3D_mcs1y")
+
+[node name="Collision13" type="CollisionShape3D" parent="Town/Campanile" unique_id=1388288457]
+shape = SubResource("ConvexPolygonShape3D_nmodu")
+
+[node name="Collision14" type="CollisionShape3D" parent="Town/Campanile" unique_id=1208317990]
+shape = SubResource("ConvexPolygonShape3D_cts62")
+
+[node name="Collision15" type="CollisionShape3D" parent="Town/Campanile" unique_id=1234005421]
+shape = SubResource("ConvexPolygonShape3D_xs385")
+
+[node name="Collision16" type="CollisionShape3D" parent="Town/Campanile" unique_id=647331373]
+shape = SubResource("ConvexPolygonShape3D_2bais")
+
+[node name="Collision17" type="CollisionShape3D" parent="Town/Campanile" unique_id=1877000246]
+shape = SubResource("ConvexPolygonShape3D_y4uwp")
+
+[node name="Collision18" type="CollisionShape3D" parent="Town/Campanile" unique_id=1485111410]
+shape = SubResource("ConvexPolygonShape3D_qp1iq")
+
+[node name="Collision19" type="CollisionShape3D" parent="Town/Campanile" unique_id=1994805196]
+shape = SubResource("ConvexPolygonShape3D_tv3ji")
+
+[node name="Collision20" type="CollisionShape3D" parent="Town/Campanile" unique_id=2013336484]
+shape = SubResource("ConvexPolygonShape3D_sx1xm")
+
+[node name="Collision21" type="CollisionShape3D" parent="Town/Campanile" unique_id=1438240352]
+shape = SubResource("ConvexPolygonShape3D_ng1c6")
+
+[node name="Collision22" type="CollisionShape3D" parent="Town/Campanile" unique_id=1422388167]
+shape = SubResource("ConvexPolygonShape3D_d4i1g")
+
+[node name="Collision23" type="CollisionShape3D" parent="Town/Campanile" unique_id=1805830249]
+shape = SubResource("ConvexPolygonShape3D_h1bem")
+
+[node name="Collision24" type="CollisionShape3D" parent="Town/Campanile" unique_id=1911269034]
+shape = SubResource("ConvexPolygonShape3D_vxayw")
+
+[node name="Collision25" type="CollisionShape3D" parent="Town/Campanile" unique_id=728528290]
+shape = SubResource("ConvexPolygonShape3D_xdt6v")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Campanile" unique_id=1282693503]
+mesh = ExtResource("6_rk3in")
+
+[node name="CasaCrema" type="StaticBody3D" parent="Town" unique_id=166611081]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.2, 0, -17)
+collision_layer = 3
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/CasaCrema" unique_id=132447919]
+shape = SubResource("ConvexPolygonShape3D_n3hts")
+
+[node name="Collision1" type="CollisionShape3D" parent="Town/CasaCrema" unique_id=112936710]
+shape = SubResource("ConvexPolygonShape3D_rw3xc")
+
+[node name="Collision2" type="CollisionShape3D" parent="Town/CasaCrema" unique_id=779984893]
+shape = SubResource("ConvexPolygonShape3D_651xj")
+
+[node name="Collision3" type="CollisionShape3D" parent="Town/CasaCrema" unique_id=340755386]
+shape = SubResource("ConvexPolygonShape3D_v4r0d")
+
+[node name="Collision4" type="CollisionShape3D" parent="Town/CasaCrema" unique_id=1509471617]
+shape = SubResource("ConvexPolygonShape3D_ljy08")
+
+[node name="Collision5" type="CollisionShape3D" parent="Town/CasaCrema" unique_id=1733010711]
+shape = SubResource("ConvexPolygonShape3D_shmkx")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/CasaCrema" unique_id=1765135869]
+mesh = ExtResource("7_b7e1f")
+
+[node name="PalazzoSiena" type="StaticBody3D" parent="Town" unique_id=1663471550]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 22.5, 0, -3)
+collision_layer = 3
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/PalazzoSiena" unique_id=358828606]
+shape = SubResource("ConvexPolygonShape3D_jub6c")
+
+[node name="Collision1" type="CollisionShape3D" parent="Town/PalazzoSiena" unique_id=309783060]
+shape = SubResource("ConvexPolygonShape3D_6vf1n")
+
+[node name="Collision2" type="CollisionShape3D" parent="Town/PalazzoSiena" unique_id=1056898367]
+shape = SubResource("ConvexPolygonShape3D_36uo7")
+
+[node name="Collision3" type="CollisionShape3D" parent="Town/PalazzoSiena" unique_id=623012937]
+shape = SubResource("ConvexPolygonShape3D_5ynpb")
+
+[node name="Collision4" type="CollisionShape3D" parent="Town/PalazzoSiena" unique_id=255950010]
+shape = SubResource("ConvexPolygonShape3D_mc1e7")
+
+[node name="Collision5" type="CollisionShape3D" parent="Town/PalazzoSiena" unique_id=709845295]
+shape = SubResource("ConvexPolygonShape3D_q4css")
+
+[node name="Collision6" type="CollisionShape3D" parent="Town/PalazzoSiena" unique_id=713090608]
+shape = SubResource("ConvexPolygonShape3D_aoyay")
+
+[node name="Collision7" type="CollisionShape3D" parent="Town/PalazzoSiena" unique_id=517037037]
+shape = SubResource("ConvexPolygonShape3D_0fmmw")
+
+[node name="Collision8" type="CollisionShape3D" parent="Town/PalazzoSiena" unique_id=67285537]
+shape = SubResource("ConvexPolygonShape3D_l67ku")
+
+[node name="Collision9" type="CollisionShape3D" parent="Town/PalazzoSiena" unique_id=811392008]
+shape = SubResource("ConvexPolygonShape3D_dugt0")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/PalazzoSiena" unique_id=1598071777]
+mesh = ExtResource("8_nwsw1")
+
+[node name="CasaBianca" type="StaticBody3D" parent="Town" unique_id=1872869261]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 21.5, 0, 8)
+collision_layer = 3
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/CasaBianca" unique_id=724983847]
+shape = SubResource("ConvexPolygonShape3D_jrhbj")
+
+[node name="Collision1" type="CollisionShape3D" parent="Town/CasaBianca" unique_id=1993603469]
+shape = SubResource("ConvexPolygonShape3D_j8ppx")
+
+[node name="Collision2" type="CollisionShape3D" parent="Town/CasaBianca" unique_id=341899018]
+shape = SubResource("ConvexPolygonShape3D_dkemq")
+
+[node name="Collision3" type="CollisionShape3D" parent="Town/CasaBianca" unique_id=457148977]
+shape = SubResource("ConvexPolygonShape3D_qccbv")
+
+[node name="Collision4" type="CollisionShape3D" parent="Town/CasaBianca" unique_id=1476351235]
+shape = SubResource("ConvexPolygonShape3D_fjfsx")
+
+[node name="Collision5" type="CollisionShape3D" parent="Town/CasaBianca" unique_id=1706975263]
+shape = SubResource("ConvexPolygonShape3D_tmiiu")
+
+[node name="Collision6" type="CollisionShape3D" parent="Town/CasaBianca" unique_id=1539946581]
+shape = SubResource("ConvexPolygonShape3D_58713")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/CasaBianca" unique_id=940747244]
+mesh = ExtResource("9_hgx13")
+
+[node name="CasaOcraBassa" type="StaticBody3D" parent="Town" unique_id=250466851]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 6, 0, 18)
+collision_layer = 3
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/CasaOcraBassa" unique_id=2115606710]
+shape = SubResource("ConvexPolygonShape3D_0d4yj")
+
+[node name="Collision1" type="CollisionShape3D" parent="Town/CasaOcraBassa" unique_id=1054898681]
+shape = SubResource("ConvexPolygonShape3D_ot350")
+
+[node name="Collision2" type="CollisionShape3D" parent="Town/CasaOcraBassa" unique_id=245466644]
+shape = SubResource("ConvexPolygonShape3D_o3ac1")
+
+[node name="Collision3" type="CollisionShape3D" parent="Town/CasaOcraBassa" unique_id=1286682550]
+shape = SubResource("ConvexPolygonShape3D_dt6vc")
+
+[node name="Collision4" type="CollisionShape3D" parent="Town/CasaOcraBassa" unique_id=189134408]
+shape = SubResource("ConvexPolygonShape3D_tf0er")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/CasaOcraBassa" unique_id=1569933877]
+mesh = ExtResource("10_moa2d")
+
+[node name="CasaRosa" type="StaticBody3D" parent="Town" unique_id=465110170]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -9, 0, 18.5)
+collision_layer = 3
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=1209138638]
+shape = SubResource("ConvexPolygonShape3D_qgw3m")
+
+[node name="Collision1" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=694993277]
+shape = SubResource("ConvexPolygonShape3D_6fopl")
+
+[node name="Collision2" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=425649130]
+shape = SubResource("ConvexPolygonShape3D_t21ru")
+
+[node name="Collision3" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=749888819]
+shape = SubResource("ConvexPolygonShape3D_p0q8f")
+
+[node name="Collision4" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=948121794]
+shape = SubResource("ConvexPolygonShape3D_42qeo")
+
+[node name="Collision5" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=181209940]
+shape = SubResource("ConvexPolygonShape3D_cl4sk")
+
+[node name="Collision6" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=1502382650]
+shape = SubResource("ConvexPolygonShape3D_qg8a7")
+
+[node name="Collision7" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=1119484489]
+shape = SubResource("ConvexPolygonShape3D_7qdtl")
+
+[node name="Collision8" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=171051143]
+shape = SubResource("ConvexPolygonShape3D_vd7ss")
+
+[node name="Collision9" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=377539222]
+shape = SubResource("ConvexPolygonShape3D_jjugf")
+
+[node name="Collision10" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=177163319]
+shape = SubResource("ConvexPolygonShape3D_yebai")
+
+[node name="Collision11" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=755592496]
+shape = SubResource("ConvexPolygonShape3D_tag5u")
+
+[node name="Collision12" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=497721273]
+shape = SubResource("ConvexPolygonShape3D_bi26k")
+
+[node name="Collision13" type="CollisionShape3D" parent="Town/CasaRosa" unique_id=1779939727]
+shape = SubResource("ConvexPolygonShape3D_60fmd")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/CasaRosa" unique_id=1786689097]
+mesh = ExtResource("11_on4i8")
+
+[node name="Fountain" type="StaticBody3D" parent="Town" unique_id=1517284476]
+transform = Transform3D(0.9238795, 0, 0.38268346, 0, 1, 0, -0.38268346, 0, 0.9238795, -3.5, 0, 1)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Fountain" unique_id=872429460]
+shape = SubResource("ConvexPolygonShape3D_b2igk")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Fountain" unique_id=315869817]
+mesh = ExtResource("12_8cmhj")
+
+[node name="StallA" type="StaticBody3D" parent="Town" unique_id=493115479]
+transform = Transform3D(0.17364822, 0, 0.9848077, 0, 1, 0, -0.9848077, 0, 0.17364822, -12.5, 0, 4)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/StallA" unique_id=953916009]
+shape = SubResource("ConvexPolygonShape3D_g03ui")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/StallA" unique_id=1680222039]
+mesh = ExtResource("13_018s4")
+
+[node name="StallB" type="StaticBody3D" parent="Town" unique_id=1787465245]
+transform = Transform3D(-0.25881904, 0, -0.9659258, 0, 1, 0, 0.9659258, 0, -0.25881904, 11, 0, 7.5)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/StallB" unique_id=41984510]
+shape = SubResource("ConvexPolygonShape3D_1j2qo")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/StallB" unique_id=619867782]
+mesh = ExtResource("14_lfoas")
+
+[node name="HayCart" type="StaticBody3D" parent="Town" unique_id=1036357939 groups=["hay"]]
+transform = Transform3D(0.10452842, 0, 0.9945219, 0, 1, 0, -0.9945219, 0, 0.10452842, 3.6600003, 0, -7.35)
+collision_layer = 5
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/HayCart" unique_id=1519285917]
+shape = SubResource("ConvexPolygonShape3D_k0tna")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/HayCart" unique_id=657125580]
+mesh = ExtResource("15_bfsvh")
+
+[node name="Bollard0" type="StaticBody3D" parent="Town" unique_id=936450463]
+transform = Transform3D(0.80424315, 0, 0.5943004, 0, 1, 0, -0.5943004, 0, 0.80424315, -17.6, 0, -24.6)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard0" unique_id=805640959]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard0" unique_id=287695661]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard1" type="StaticBody3D" parent="Town" unique_id=697320228]
+transform = Transform3D(0.6226046, 0, -0.7825366, 0, 1, 0, 0.7825366, 0, 0.6226046, -17.6, 0, -11.4)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard1" unique_id=20391528]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard1" unique_id=1941783360]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard2" type="StaticBody3D" parent="Town" unique_id=1150955016]
+transform = Transform3D(-0.45430773, 0, 0.8908448, 0, 1, 0, -0.8908448, 0, -0.45430773, -0.4000001, 0, -24.6)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard2" unique_id=1368095554]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard2" unique_id=799194207]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard3" type="StaticBody3D" parent="Town" unique_id=1629518927]
+transform = Transform3D(-0.8209633, 0, 0.57098097, 0, 1, 0, -0.57098097, 0, -0.8209633, -2.22, 0, -20.82)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard3" unique_id=1688369460]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard3" unique_id=1303684101]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard4" type="StaticBody3D" parent="Town" unique_id=1775593917]
+transform = Transform3D(0.9914622, 0, 0.13039473, 0, 1, 0, -0.13039473, 0, 0.9914622, -2.22, 0, -11.38)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard4" unique_id=1403749393]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard4" unique_id=642157840]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard5" type="StaticBody3D" parent="Town" unique_id=172076631]
+transform = Transform3D(-0.50551003, 0, -0.8628207, 0, 1, 0, 0.8628207, 0, -0.50551003, 7.2200003, 0, -20.82)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard5" unique_id=431626951]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard5" unique_id=486349863]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard6" type="StaticBody3D" parent="Town" unique_id=781937961]
+transform = Transform3D(0.24254374, 0, -0.97014046, 0, 1, 0, 0.97014046, 0, 0.24254374, 7.2200003, 0, -11.38)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard6" unique_id=957792597]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard6" unique_id=734206380]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard7" type="StaticBody3D" parent="Town" unique_id=1444201517]
+transform = Transform3D(0.56175005, 0, 0.827307, 0, 1, 0, -0.827307, 0, 0.56175005, 6.3999996, 0, -22.6)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard7" unique_id=638863756]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard7" unique_id=1723910988]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard8" type="StaticBody3D" parent="Town" unique_id=1190351535]
+transform = Transform3D(-0.8889669, 0, -0.45797142, 0, 1, 0, 0.45797142, 0, -0.8889669, 6.3999996, 0, -11.4)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard8" unique_id=651340465]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard8" unique_id=1083490176]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard9" type="StaticBody3D" parent="Town" unique_id=1229364373]
+transform = Transform3D(-0.8806912, 0, -0.47369087, 0, 1, 0, 0.47369087, 0, -0.8806912, 18, 0, -22.6)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard9" unique_id=40003368]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard9" unique_id=1133824583]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard10" type="StaticBody3D" parent="Town" unique_id=2027928495]
+transform = Transform3D(-0.26440755, 0, -0.964411, 0, 1, 0, 0.964411, 0, -0.26440755, 18, 0, -11.4)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard10" unique_id=1299778486]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard10" unique_id=1083586456]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard11" type="StaticBody3D" parent="Town" unique_id=74088637]
+transform = Transform3D(-0.9134079, 0, 0.4070454, 0, 1, 0, -0.4070454, 0, -0.9134079, 15.4, 0, -9.4)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard11" unique_id=1615391796]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard11" unique_id=1463200398]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard12" type="StaticBody3D" parent="Town" unique_id=870626348]
+transform = Transform3D(0.9970605, 0, -0.07661867, 0, 1, 0, 0.07661867, 0, 0.9970605, 15.4, 0, 3.4)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard12" unique_id=967533444]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard12" unique_id=1012210457]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard13" type="StaticBody3D" parent="Town" unique_id=615062765]
+transform = Transform3D(0.97636944, 0, -0.21610816, 0, 1, 0, 0.21610816, 0, 0.97636944, 29.6, 0, -9.4)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard13" unique_id=1165742767]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard13" unique_id=1451989804]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard14" type="StaticBody3D" parent="Town" unique_id=186132986]
+transform = Transform3D(0.96919733, 0, -0.24628556, 0, 1, 0, 0.24628556, 0, 0.96919733, 29.6, 0, 3.4)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard14" unique_id=384107530]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard14" unique_id=455743901]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard15" type="StaticBody3D" parent="Town" unique_id=113569720]
+transform = Transform3D(0.29076156, 0, 0.9567956, 0, 1, 0, -0.9567956, 0, 0.29076156, 15.4, 0, 2.7)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard15" unique_id=661847036]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard15" unique_id=598405020]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard16" type="StaticBody3D" parent="Town" unique_id=1447092112]
+transform = Transform3D(0.4336408, 0, 0.90108585, 0, 1, 0, -0.90108585, 0, 0.4336408, 15.4, 0, 13.3)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard16" unique_id=1631026920]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard16" unique_id=556199517]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard17" type="StaticBody3D" parent="Town" unique_id=1771530700]
+transform = Transform3D(0.9627227, 0, -0.27049026, 0, 1, 0, 0.27049026, 0, 0.9627227, 27.6, 0, 2.7)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard17" unique_id=1791653521]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard17" unique_id=41794720]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard18" type="StaticBody3D" parent="Town" unique_id=1169400463]
+transform = Transform3D(-0.6601388, 0, -0.75114363, 0, 1, 0, 0.75114363, 0, -0.6601388, 27.6, 0, 13.3)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard18" unique_id=2069767269]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard18" unique_id=716210215]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard19" type="StaticBody3D" parent="Town" unique_id=1365846951]
+transform = Transform3D(-0.8869421, 0, 0.46188062, 0, 1, 0, -0.46188062, 0, -0.8869421, -1.0999999, 0, 12.4)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard19" unique_id=1219731981]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard19" unique_id=783038448]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard20" type="StaticBody3D" parent="Town" unique_id=1284395617]
+transform = Transform3D(-0.8811679, 0, -0.4728035, 0, 1, 0, 0.4728035, 0, -0.8811679, -1.0999999, 0, 23.6)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard20" unique_id=137654429]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard20" unique_id=1181907372]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard21" type="StaticBody3D" parent="Town" unique_id=1727620820]
+transform = Transform3D(0.4227573, 0, 0.90624297, 0, 1, 0, -0.90624297, 0, 0.4227573, 13.1, 0, 12.4)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard21" unique_id=331201936]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard21" unique_id=298667252]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard22" type="StaticBody3D" parent="Town" unique_id=1977768935]
+transform = Transform3D(-0.87083656, 0, 0.49157262, 0, 1, 0, -0.49157262, 0, -0.87083656, 13.1, 0, 23.6)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard22" unique_id=1663085929]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard22" unique_id=682641722]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard23" type="StaticBody3D" parent="Town" unique_id=204153941]
+transform = Transform3D(0.31903866, 0, 0.9477417, 0, 1, 0, -0.9477417, 0, 0.31903866, -15.6, 0, 12.4)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard23" unique_id=305833273]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard23" unique_id=547784286]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard24" type="StaticBody3D" parent="Town" unique_id=1867257440]
+transform = Transform3D(0.97065973, 0, -0.24045713, 0, 1, 0, 0.24045713, 0, 0.97065973, -15.6, 0, 24.6)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard24" unique_id=590275043]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard24" unique_id=1047226225]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard25" type="StaticBody3D" parent="Town" unique_id=1212434186]
+transform = Transform3D(0.98235637, 0, 0.18701854, 0, 1, 0, -0.18701854, 0, 0.98235637, -2.4, 0, 12.4)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard25" unique_id=987109356]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard25" unique_id=2023079703]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard26" type="StaticBody3D" parent="Town" unique_id=1542639572]
+transform = Transform3D(-0.8357125, 0, 0.5491672, 0, 1, 0, -0.5491672, 0, -0.8357125, -2.4, 0, 24.6)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard26" unique_id=362669235]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard26" unique_id=2046659732]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard27" type="StaticBody3D" parent="Town" unique_id=987688315]
+transform = Transform3D(0.47387514, 0, -0.88059205, 0, 1, 0, 0.88059205, 0, 0.47387514, -3.2, 0, 13.3)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard27" unique_id=1910093433]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard27" unique_id=979848332]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard28" type="StaticBody3D" parent="Town" unique_id=1515223392]
+transform = Transform3D(-0.048059527, 0, -0.99884444, 0, 1, 0, 0.99884444, 0, -0.048059527, -0.3, 0, 13.3)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard28" unique_id=1382925254]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard28" unique_id=361776039]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard29" type="StaticBody3D" parent="Town" unique_id=1208193410]
+transform = Transform3D(-0.7360575, 0, -0.67691904, 0, 1, 0, 0.67691904, 0, -0.7360575, -18, 0, -9)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard29" unique_id=1521502170]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard29" unique_id=1819114892]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard30" type="StaticBody3D" parent="Town" unique_id=1774212121]
+transform = Transform3D(0.028006718, 0, -0.99960774, 0, 1, 0, 0.99960774, 0, 0.028006718, -18, 0, -5.5)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard30" unique_id=388262992]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard30" unique_id=202365438]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard31" type="StaticBody3D" parent="Town" unique_id=874878510]
+transform = Transform3D(0.81543267, 0, 0.57885194, 0, 1, 0, -0.57885194, 0, 0.81543267, -18, 0, -2)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard31" unique_id=799359306]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard31" unique_id=2000788856]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard32" type="StaticBody3D" parent="Town" unique_id=709119805]
+transform = Transform3D(0.22517069, 0, 0.97431934, 0, 1, 0, -0.97431934, 0, 0.22517069, -18, 0, 1.5)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard32" unique_id=1114925053]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard32" unique_id=602469832]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard33" type="StaticBody3D" parent="Town" unique_id=1090091992]
+transform = Transform3D(-0.950547, 0, 0.31058073, 0, 1, 0, -0.31058073, 0, -0.950547, -18, 0, 5)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard33" unique_id=1710004362]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard33" unique_id=287476670]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard34" type="StaticBody3D" parent="Town" unique_id=1498686425]
+transform = Transform3D(-0.2081945, 0, 0.9780874, 0, 1, 0, -0.9780874, 0, -0.2081945, -18, 0, 8.5)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard34" unique_id=1900514827]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard34" unique_id=2045040179]
+mesh = ExtResource("16_knjjh")
+
+[node name="Bollard35" type="StaticBody3D" parent="Town" unique_id=33749914]
+transform = Transform3D(0.42119673, 0, -0.9069693, 0, 1, 0, 0.9069693, 0, 0.42119673, -18, 0, 12)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Bollard35" unique_id=835976524]
+shape = SubResource("ConvexPolygonShape3D_x0fwf")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Bollard35" unique_id=1191517540]
+mesh = ExtResource("16_knjjh")
+
+[node name="Barrel36" type="StaticBody3D" parent="Town" unique_id=1402791137]
+transform = Transform3D(0.9728144, 0, 0.23158617, 0, 1, 0, -0.23158617, 0, 0.9728144, -13.4, 0, 1.6)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Barrel36" unique_id=1916354736]
+shape = SubResource("ConvexPolygonShape3D_kbh3x")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Barrel36" unique_id=1216549645]
+mesh = ExtResource("17_2b57j")
+
+[node name="Barrel37" type="StaticBody3D" parent="Town" unique_id=1996451765]
+transform = Transform3D(0.2503574, 0, -0.9681535, 0, 1, 0, 0.9681535, 0, 0.2503574, -12.8, 0, 1.2)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Barrel37" unique_id=633088085]
+shape = SubResource("ConvexPolygonShape3D_kbh3x")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Barrel37" unique_id=1303230780]
+mesh = ExtResource("17_2b57j")
+
+[node name="Crate38" type="StaticBody3D" parent="Town" unique_id=1548317405]
+transform = Transform3D(0.9777177, 0, -0.20992391, 0, 1, 0, 0.20992391, 0, 0.9777177, -13.6, 0, 6.6)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Crate38" unique_id=440725687]
+shape = SubResource("ConvexPolygonShape3D_fu807")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Crate38" unique_id=594692230]
+mesh = ExtResource("18_871ml")
+
+[node name="Crate39" type="StaticBody3D" parent="Town" unique_id=1178275971]
+transform = Transform3D(0.8560542, 0, -0.51688606, 0, 1, 0, 0.51688606, 0, 0.8560542, -13.5, 0.5, 6.5)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Crate39" unique_id=246496865]
+shape = SubResource("ConvexPolygonShape3D_fu807")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Crate39" unique_id=531943396]
+mesh = ExtResource("18_871ml")
+
+[node name="Barrel40" type="StaticBody3D" parent="Town" unique_id=1957101861]
+transform = Transform3D(-0.045244012, 0, -0.998976, 0, 1, 0, 0.998976, 0, -0.045244012, 12.6, 0, 9.6)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Barrel40" unique_id=2053747966]
+shape = SubResource("ConvexPolygonShape3D_kbh3x")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Barrel40" unique_id=1032162385]
+mesh = ExtResource("17_2b57j")
+
+[node name="Crate41" type="StaticBody3D" parent="Town" unique_id=1655920548]
+transform = Transform3D(0.83082, 0, 0.5565412, 0, 1, 0, -0.5565412, 0, 0.83082, 9.7, 0, 9.8)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Crate41" unique_id=453592374]
+shape = SubResource("ConvexPolygonShape3D_fu807")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Crate41" unique_id=313672090]
+mesh = ExtResource("18_871ml")
+
+[node name="Barrel42" type="StaticBody3D" parent="Town" unique_id=341987743]
+transform = Transform3D(-0.19016989, 0, -0.9817512, 0, 1, 0, 0.9817512, 0, -0.19016989, -6, 0.08, -12.2)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Barrel42" unique_id=1782064276]
+shape = SubResource("ConvexPolygonShape3D_kbh3x")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Barrel42" unique_id=1340299028]
+mesh = ExtResource("17_2b57j")
+
+[node name="Crate43" type="StaticBody3D" parent="Town" unique_id=974519413]
+transform = Transform3D(0.9994068, 0, -0.0344383, 0, 1, 0, 0.0344383, 0, 0.9994068, 15.1, 0.08, -12.2)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Crate43" unique_id=1746441903]
+shape = SubResource("ConvexPolygonShape3D_fu807")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Crate43" unique_id=1892319245]
+mesh = ExtResource("18_871ml")
+
+[node name="Barrel44" type="StaticBody3D" parent="Town" unique_id=279140964]
+transform = Transform3D(-0.90289205, 0, -0.4298673, 0, 1, 0, 0.4298673, 0, -0.90289205, 15.9, 0.08, 2.9)
+collision_mask = 0
+
+[node name="Collision0" type="CollisionShape3D" parent="Town/Barrel44" unique_id=301138739]
+shape = SubResource("ConvexPolygonShape3D_kbh3x")
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Barrel44" unique_id=1013433729]
+mesh = ExtResource("17_2b57j")
+
+[node name="Drain0" type="Node3D" parent="Town" unique_id=181458147]
+transform = Transform3D(0.70710677, 0, 0.70710677, 0, 1, 0, -0.70710677, 0, 0.70710677, 2.5811183, 0.002, 7.081118)
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Drain0" unique_id=1883125273]
+mesh = ExtResource("19_efcgc")
+
+[node name="Drain1" type="Node3D" parent="Town" unique_id=1948212354]
+transform = Transform3D(-0.70710677, 0, 0.70710677, 0, 1, 0, -0.70710677, 0, -0.70710677, -9.581119, 0.002, 7.081118)
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Drain1" unique_id=954706547]
+mesh = ExtResource("19_efcgc")
+
+[node name="Drain2" type="Node3D" parent="Town" unique_id=316666154]
+transform = Transform3D(-0.7071068, 0, -0.7071067, 0, 1, 0, 0.7071067, 0, -0.7071068, -9.581119, 0.002, -5.081118)
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Drain2" unique_id=774887647]
+mesh = ExtResource("19_efcgc")
+
+[node name="Drain3" type="Node3D" parent="Town" unique_id=2112820727]
+transform = Transform3D(0.70710665, 0, -0.7071069, 0, 1, 0, 0.7071069, 0, 0.70710665, 2.5811183, 0.002, -5.081118)
+
+[node name="Mesh" type="MeshInstance3D" parent="Town/Drain3" unique_id=1350056001]
+mesh = ExtResource("19_efcgc")
+
+[node name="FountainWater" type="MeshInstance3D" parent="Town" unique_id=1842425427]
+transform = Transform3D(0.9238795, 0, 0.38268346, 0, 1, 0, -0.38268346, 0, 0.9238795, -3.5, 0.55, 1)
+cast_shadow = 0
+mesh = SubResource("CylinderMesh_ecuj8")
+
+[node name="FountainJet" type="GPUParticles3D" parent="Town" unique_id=1278282219]
+transform = Transform3D(0.9238795, 0, 0.38268346, 0, 1, 0, -0.38268346, 0, 0.9238795, -3.5, 2.72, 1)
+amount = 600
+lifetime = 1.4
+fixed_fps = 0
+visibility_aabb = AABB(-3, -1, -3, 6, 5, 6)
+process_material = SubResource("ParticleProcessMaterial_r3rt5")
+draw_pass_1 = SubResource("QuadMesh_ooa64")
+
+[node name="Banner0" type="FellowCloth3D" parent="Town" unique_id=423514434]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -12.8, 10.67, -12.9)
+size = Vector2(1.05, 2.9)
+resolution = 20
+material = SubResource("ShaderMaterial_xu3an")
+collide_with_world = false
+
+[node name="Banner1" type="FellowCloth3D" parent="Town" unique_id=509625542]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -5.2, 10.67, -12.9)
+size = Vector2(1.05, 2.9)
+resolution = 20
+material = SubResource("ShaderMaterial_q3oyn")
+collide_with_world = false
+
+[node name="Banner2" type="FellowCloth3D" parent="Town" unique_id=1707021388]
+transform = Transform3D(-1, 0, 4.371139e-08, 0, 1, 0, -4.371139e-08, 0, -1, 16.9, 14.070001, -3.0000002)
+size = Vector2(1.05, 2.9)
+resolution = 20
+material = SubResource("ShaderMaterial_bh55o")
+collide_with_world = false
+
+[node name="Banner3" type="FellowCloth3D" parent="Town" unique_id=1891716297]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -14.1, 10.67, 18.5)
+size = Vector2(1.05, 2.9)
+resolution = 20
+material = SubResource("ShaderMaterial_nhe8o")
+collide_with_world = false
+
+[node name="Awning0" type="FellowCloth3D" parent="Town" unique_id=871014918]
+transform = Transform3D(0.17364822, -0.9586288, 0.2255597, 0, 0.22903933, 0.97341716, -0.9848077, -0.16903216, 0.039772272, -13.588877, 2.72, 5.28037)
+size = Vector2(2.9, 1.816282)
+resolution = 16
+pin_mode = 4
+material = SubResource("ShaderMaterial_6s3or")
+collide_with_world = false
+
+[node name="Awning1" type="FellowCloth3D" parent="Town" unique_id=2048497464]
+transform = Transform3D(-0.25881904, 0.9402488, -0.221235, 0, 0.22903934, 0.97341716, 0.9659258, 0.2519389, -0.059279744, 12.196324, 2.72, 6.3194036)
+size = Vector2(2.9, 1.8162819)
+resolution = 16
+pin_mode = 4
+material = SubResource("ShaderMaterial_wa3on")
+collide_with_world = false
+
+[node name="Dust" type="GPUParticles3D" parent="Town" unique_id=1586428819]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 5, 0)
+amount = 500
+lifetime = 14.0
+preprocess = 14.0
+visibility_aabb = AABB(-20, -1, -20, 40, 12, 40)
+process_material = SubResource("ParticleProcessMaterial_c1gsu")
+draw_pass_1 = SubResource("QuadMesh_aarfx")
+
+[node name="LaundryLine0" type="MeshInstance3D" parent="Town" unique_id=478475066]
+transform = Transform3D(-0.08853971, 0.9938837, 0.065998636, 0, -0.066258855, 0.9978025, 0.99607265, 0.08834514, 0.00586654, -1.75, 8.05, 15.2)
+mesh = SubResource("CylinderMesh_412fs")
+
+[node name="Laundry0" type="FellowCloth3D" parent="Town" unique_id=16608631]
+transform = Transform3D(0.9938837, 0.06599863, -0.08853972, -0.066258855, 0.9978025, -4.3656845e-10, 0.08834514, 0.00586654, 0.99607265, -3.880734, 8.192049, 15.010601)
+size = Vector2(1.0320255, 0.6784082)
+resolution = 12
+material = SubResource("StandardMaterial3D_2sbfr")
+collide_with_world = false
+
+[node name="Laundry1" type="FellowCloth3D" parent="Town" unique_id=1173685437]
+transform = Transform3D(0.9938837, 0.06599863, -0.08853972, -0.066258855, 0.9978025, -4.3656845e-10, 0.08834514, 0.00586654, 0.99607265, -2.4796364, 8.098642, 15.135143)
+size = Vector2(0.88915014, 1.1006159)
+resolution = 12
+material = SubResource("StandardMaterial3D_e5i6i")
+collide_with_world = false
+
+[node name="Laundry2" type="FellowCloth3D" parent="Town" unique_id=1218002960]
+transform = Transform3D(0.9938837, 0.06599863, -0.08853972, -0.066258855, 0.9978025, -4.3656845e-10, 0.08834514, 0.00586654, 0.99607265, -1.3960817, 8.026405, 15.23146)
+size = Vector2(1.0208609, 1.0174122)
+resolution = 12
+material = SubResource("StandardMaterial3D_iske8")
+collide_with_world = false
+
+[node name="Laundry3" type="FellowCloth3D" parent="Town" unique_id=1553112515]
+transform = Transform3D(0.9938837, 0.06599863, -0.08853972, -0.066258855, 0.9978025, -4.3656845e-10, 0.08834514, 0.00586654, 0.99607265, -0.123740196, 7.9415827, 15.344556)
+size = Vector2(1.0453383, 1.0907071)
+resolution = 12
+material = SubResource("StandardMaterial3D_odora")
+collide_with_world = false
+
+[node name="LaundryLine1" type="MeshInstance3D" parent="Town" unique_id=1946713928]
+transform = Transform3D(0.11043153, 0.99170923, -0.06570962, 0, 0.06611399, 0.9978121, 0.9938837, -0.110189915, 0.00730107, -1.75, 6.25, 17.35)
+mesh = SubResource("CylinderMesh_7cm4x")
+
+[node name="Laundry4" type="FellowCloth3D" parent="Town" unique_id=440734883]
+transform = Transform3D(0.99170923, -0.06570962, 0.11043153, 0.06611399, 0.9978121, -4.6566134e-10, -0.110189915, 0.0073010693, 0.9938837, -3.8809948, 6.1079335, 17.586777)
+size = Vector2(0.67945915, 0.6640802)
+resolution = 12
+material = SubResource("StandardMaterial3D_mufik")
+collide_with_world = false
+
+[node name="Laundry5" type="FellowCloth3D" parent="Town" unique_id=1504829784]
+transform = Transform3D(0.99170923, -0.06570962, 0.11043153, 0.06611399, 0.9978121, -4.6566134e-10, -0.110189915, 0.0073010693, 0.9938837, -2.9608197, 6.1692786, 17.484535)
+size = Vector2(0.67878664, 0.88630277)
+resolution = 12
+material = SubResource("StandardMaterial3D_kq21g")
+collide_with_world = false
+
+[node name="Laundry6" type="FellowCloth3D" parent="Town" unique_id=270496245]
+transform = Transform3D(0.99170923, -0.06570962, 0.11043153, 0.06611399, 0.9978121, -4.6566134e-10, -0.110189915, 0.0073010693, 0.9938837, -2.0334835, 6.231101, 17.381498)
+size = Vector2(1.0217012, 0.6970892)
+resolution = 12
+material = SubResource("StandardMaterial3D_20d1x")
+collide_with_world = false
+
+[node name="Laundry7" type="FellowCloth3D" parent="Town" unique_id=1269071483]
+transform = Transform3D(0.99170923, -0.06570962, 0.11043153, 0.06611399, 0.9978121, -4.6566134e-10, -0.110189915, 0.0073010693, 0.9938837, -0.8203056, 6.31198, 17.2467)
+size = Vector2(0.82355666, 1.1987828)
+resolution = 12
+material = SubResource("StandardMaterial3D_a2mmu")
+collide_with_world = false
+
+[node name="LaundryLine2" type="MeshInstance3D" parent="Town" unique_id=226775429]
+transform = Transform3D(-0.9874407, 0.15749969, 0.012441774, 0, -0.078750215, 0.9968944, 0.15799035, 0.98437405, 0.077761166, 19.2, 8.5, 3.0500002)
+mesh = SubResource("CylinderMesh_qgjda")
+
+[node name="Laundry8" type="FellowCloth3D" parent="Town" unique_id=1508578532]
+transform = Transform3D(0.15749969, 0.012441774, -0.98744065, -0.078750215, 0.99689436, 0, 0.98437405, 0.077761166, 0.15799034, 19.0189, 8.59055, 1.9181248)
+size = Vector2(0.6081275, 0.9544403)
+resolution = 12
+material = SubResource("StandardMaterial3D_6dial")
+collide_with_world = false
+
+[node name="Laundry9" type="FellowCloth3D" parent="Town" unique_id=1967581990]
+transform = Transform3D(0.15749969, 0.012441774, -0.98744065, -0.078750215, 0.99689436, 0, 0.98437405, 0.077761166, 0.15799034, 19.156609, 8.521695, 2.7788072)
+size = Vector2(0.9003906, 1.1783835)
+resolution = 12
+material = SubResource("StandardMaterial3D_1yae0")
+collide_with_world = false
+
+[node name="Lamp0" type="MeshInstance3D" parent="Town" unique_id=1577049933]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.0666661, 2.33, -12.450001)
+cast_shadow = 0
+mesh = SubResource("SphereMesh_pwi13")
+
+[node name="Light" type="OmniLight3D" parent="Town/Lamp0" unique_id=804339284]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+light_color = Color(1, 0.7, 0.4, 1)
+light_energy = 0.8
+
+[node name="Lamp1" type="MeshInstance3D" parent="Town" unique_id=1667933369]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10.200001, 2.33, -23.55)
+cast_shadow = 0
+mesh = SubResource("SphereMesh_pwi13")
+
+[node name="Light" type="OmniLight3D" parent="Town/Lamp1" unique_id=344050517]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+light_color = Color(1, 0.7, 0.4, 1)
+light_energy = 0.8
+
+[node name="Lamp2" type="MeshInstance3D" parent="Town" unique_id=323067796]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16.45, 2.33, 0.64999986)
+cast_shadow = 0
+mesh = SubResource("SphereMesh_pwi13")
+
+[node name="Light" type="OmniLight3D" parent="Town/Lamp2" unique_id=1454526680]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+light_color = Color(1, 0.7, 0.4, 1)
+light_energy = 0.8
+
+[node name="Lamp3" type="MeshInstance3D" parent="Town" unique_id=2064575086]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.533333, 2.33, 13.450001)
+cast_shadow = 0
+mesh = SubResource("SphereMesh_pwi13")
+
+[node name="Light" type="OmniLight3D" parent="Town/Lamp3" unique_id=595599942]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+light_color = Color(1, 0.7, 0.4, 1)
+light_energy = 0.8
+
+[node name="Lamp4" type="MeshInstance3D" parent="Town" unique_id=606215449]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.799999, 2.33, 13.450001)
+cast_shadow = 0
+mesh = SubResource("SphereMesh_pwi13")
+
+[node name="Light" type="OmniLight3D" parent="Town/Lamp4" unique_id=2133471796]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+light_color = Color(1, 0.7, 0.4, 1)
+light_energy = 0.8
+
+[node name="Lamp5" type="MeshInstance3D" parent="Town" unique_id=1480358298]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.049999714, 2.33, 17.150002)
+cast_shadow = 0
+mesh = SubResource("SphereMesh_pwi13")
+
+[node name="Light" type="OmniLight3D" parent="Town/Lamp5" unique_id=730370683]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+light_color = Color(1, 0.7, 0.4, 1)
+light_energy = 0.8
+
+[node name="Lamp6" type="MeshInstance3D" parent="Town" unique_id=670900669]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.049999237, 2.33, 21.25)
+cast_shadow = 0
+mesh = SubResource("SphereMesh_pwi13")
+
+[node name="Light" type="OmniLight3D" parent="Town/Lamp6" unique_id=2021461931]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+light_color = Color(1, 0.7, 0.4, 1)
+light_energy = 0.8
+
+[node name="Lamp7" type="MeshInstance3D" parent="Town" unique_id=1327154081]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.4666672, 2.33, 22.55)
+cast_shadow = 0
+mesh = SubResource("SphereMesh_pwi13")
+
+[node name="Light" type="OmniLight3D" parent="Town/Lamp7" unique_id=1245260185]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+light_color = Color(1, 0.7, 0.4, 1)
+light_energy = 0.8
+
+[node name="Skyline" type="Node3D" parent="." unique_id=829166162]
+
+[node name="Mesh" type="MeshInstance3D" parent="Skyline" unique_id=1396755091]
+cast_shadow = 0
+mesh = ExtResource("21_11qxh")
+
+[node name="Landscape" type="MeshInstance3D" parent="." unique_id=1100119330]
+cast_shadow = 0
+mesh = ExtResource("22_j8s1d")
+
+[node name="Trees_cypress" type="MultiMeshInstance3D" parent="." unique_id=1908464863]
+cast_shadow = 0
+script = ExtResource("23_ewxw0")
+mesh = ExtResource("24_enajw")
+instances = ExtResource("25_x82en")
+
+[node name="Trees_olive" type="MultiMeshInstance3D" parent="." unique_id=569641039]
+cast_shadow = 0
+script = ExtResource("23_ewxw0")
+mesh = ExtResource("26_44osr")
+instances = ExtResource("27_2sqf1")
+
+[node name="Trees_pine" type="MultiMeshInstance3D" parent="." unique_id=1792849958]
+cast_shadow = 0
+script = ExtResource("23_ewxw0")
+mesh = ExtResource("28_c1kjp")
+instances = ExtResource("29_5uga2")
+
+[node name="Trees_broadleaf" type="MultiMeshInstance3D" parent="." unique_id=192442732]
+cast_shadow = 0
+script = ExtResource("23_ewxw0")
+mesh = ExtResource("30_bi2jg")
+instances = ExtResource("31_h8htv")
+
+[node name="Villas" type="MeshInstance3D" parent="." unique_id=1772725447]
+cast_shadow = 0
+mesh = ExtResource("32_putlg")
+
+[node name="Trees_villa_cypress" type="MultiMeshInstance3D" parent="." unique_id=816029424]
+cast_shadow = 0
+script = ExtResource("23_ewxw0")
+mesh = ExtResource("33_6nt63")
+instances = ExtResource("34_q1tea")
+
+[node name="Wind" type="FellowWind3D" parent="." unique_id=819329374]
+speed = 3.5
+
+[node name="Birds" type="Node3D" parent="." unique_id=2085626567]
+script = ExtResource("35_y1qd4")
+
+[node name="ViewCamera" type="Camera3D" parent="." unique_id=1249886477]
+transform = Transform3D(0.9170701, -0.111432806, -0.3828384, 0, 0.9601539, -0.27947205, 0.3987261, 0.25629547, 0.88052833, -6, 1.7, 9)
+fov = 60.0
+far = 1500.0
+
+[node name="Viewpoint" type="Marker3D" parent="." unique_id=1158460623]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 1.2600001, 26.9, -10.75)
+
+[node name="Player" type="CharacterBody3D" parent="." unique_id=1007405290 instance=ExtResource("36_0jdgb")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 0.05, 8)
+collision_layer = 8
+floor_max_angle = 0.87266463
+floor_snap_length = 0.3
+script = ExtResource("37_6ojm6")
+viewpoint_path = NodePath("../Viewpoint")
+
+[node name="CameraRig" type="Node3D" parent="." unique_id=1525469673]
+script = ExtResource("38_utdpc")
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig" unique_id=1246087324]
+current = true
+fov = 62.0
+near = 0.08
+far = 1500.0
+
+[node name="Demo" type="Node" parent="." unique_id=847227902]
+script = ExtResource("39_tp3tq")
+
+[node name="PipelineWarmer" type="FellowPipelineWarmer3D" parent="." unique_id=1245550631]

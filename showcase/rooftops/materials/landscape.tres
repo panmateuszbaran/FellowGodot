@@ -1,0 +1,7 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://rooftops/shaders/landscape.gdshader" id="1_hwo8c"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_hwo8c")

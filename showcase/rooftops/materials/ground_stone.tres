@@ -1,0 +1,22 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://rooftops/shaders/masonry.gdshader" id="1_rqn6a"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_rqn6a")
+shader_parameter/color = Color(0.6, 0.57, 0.52, 1)
+shader_parameter/joint_color = Color(0.38, 0.36, 0.33, 1)
+shader_parameter/variation = 0.12
+shader_parameter/hue_variation = null
+shader_parameter/block_size = Vector2(0.95, 0.55)
+shader_parameter/row_offset = 0.38
+shader_parameter/joint_width = 0.012
+shader_parameter/joint_depth = 0.01
+shader_parameter/chamfer = 0.015
+shader_parameter/face_rough = 0.003
+shader_parameter/slab_tilt = 0.012
+shader_parameter/grime = 0.0
+shader_parameter/ground_dirt = 0.0
+shader_parameter/roughness = 0.78
+shader_parameter/seed = 5.0

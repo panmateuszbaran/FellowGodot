@@ -1,0 +1,13 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://rooftops/shaders/roof_tiles.gdshader" id="1_wmmlp"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_wmmlp")
+shader_parameter/color = null
+shader_parameter/variation = null
+shader_parameter/lichen = null
+shader_parameter/pitch = null
+shader_parameter/tile_length = null
+shader_parameter/seed = null

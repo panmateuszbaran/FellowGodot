@@ -1,0 +1,8 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://rooftops/shaders/hay.gdshader" id="1_4rdo4"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_4rdo4")
+shader_parameter/color = null

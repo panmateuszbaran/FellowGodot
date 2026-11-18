@@ -1,3 +1,4 @@
 # FellowEngine Showcase: what the editor makes, and MotionBricks files (not part of the repository, README.md).
 .godot/
 external/
+__pycache__/

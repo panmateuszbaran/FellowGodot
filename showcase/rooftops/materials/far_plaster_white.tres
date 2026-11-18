@@ -1,0 +1,15 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://rooftops/shaders/plaster.gdshader" id="1_ik1eh"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_ik1eh")
+shader_parameter/color = Color(0.86, 0.85, 0.8, 1)
+shader_parameter/variation = null
+shader_parameter/stains = null
+shader_parameter/fallen = 0.0
+shader_parameter/brick_color = null
+shader_parameter/ground_dirt = null
+shader_parameter/seed = 5.0
+shader_parameter/far_windows = true
