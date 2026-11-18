@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 144 — hair shadowing itself (2026-11-18)
+
+- Decision 0268: `FellowHair3D.self_shadow` (opt-in; on in the "Add Hair" preset) — the hair shadows itself from a
+  directional light: each frame its guides' points splatted into a deep opacity map across the light (cells twice the
+  guides' spacing, 32 slices along it; what each point's strands cover, by the segment's sine to the light), each
+  point's share of the light `exp(-self_shadow_density × the strands in front)` in the guides' texture, the strands
+  dimming that light's diffuse, specular and transmitted light by their guides' shares. On the worker threads with the
+  simulation, about 75 µs a head; without it the material and the pictures as before (the regression suite exact).
+  `hair_check.gd --self_shadow=1`, `hair_crowd_check.gd --self_shadow=1`.
+
 ## Milestone 142 — the frame under Vulkan's validation (2026-11-18)
 
 - Decision 0267: the image regression suite, PBR Lab and five labs run under the Khronos validation layer's core and

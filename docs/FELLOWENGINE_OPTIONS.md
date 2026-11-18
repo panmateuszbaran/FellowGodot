@@ -773,7 +773,13 @@ stays the collider), `lod_distance` (4 m: beyond it a share of the strands by th
 75-degree view, at least `min_strand_share`, wider in proportion), `simulation_distance` (40 m); `get_stats()` adds
 `simulated`, `visible_strands`, `width_scale`. Bench `bench/hair_lod_check.gd`. Milestone 126 (decision 0250): every
 hair node of a frame stepped on the worker threads at once; `FellowHair3D.get_global_stats()` (`group_usec`,
-`simulate_usec`, ...), `reset_global_stats()`. Bench `bench/hair_crowd_check.gd`.
+`simulate_usec`, ...), `reset_global_stats()`. Bench `bench/hair_crowd_check.gd`. Milestone 144 (decision 0268):
+`self_shadow` (0: off, the material as before; 0-1, on in the "Add Hair" preset) — the hair shadows itself from a
+directional light (`self_shadow_light`, or the scene's first visible `DirectionalLight3D`) through a deep opacity map of
+its guides' points made on the worker threads each frame (about 75 µs a head on one core), `self_shadow_density` (0.5:
+how opaque the strands are to light crossing them); `get_stats()` adds `self_shadow_usec`, `self_shadow_lit`,
+`self_shadow_min`, `self_shadow_mean`, `get_global_stats()` `self_shadow_usec`. `hair_check.gd --self_shadow=1`,
+`hair_crowd_check.gd --self_shadow=1`.
 
 ## Traversal: mantling and vaulting (milestone 72)
 
