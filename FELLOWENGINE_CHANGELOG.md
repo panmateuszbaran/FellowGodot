@@ -9,7 +9,7 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
-## Milestone 149 — the head following the gaze; a jump round a corner; hair shadowed by lamps (2026-11-18, in progress)
+## Milestone 149 — the head following the gaze; a jump round a corner; hair shadowed by lamps (2026-11-18)
 
 - Decision 0278: `FellowHeadMotion3D.follow_gaze` (opt-in) — the head turns towards what its face looks at (past
   `gaze_dead_zone`, `gaze_follow` of the rest, up to `max_head_yaw` / `max_head_pitch`, eased over
