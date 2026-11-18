@@ -1042,6 +1042,28 @@ bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector
 			}
 			break;
 		}
+		// Milestone 149 (decision 0279): nothing along the edge — round the corner past its end, to a ledge on the side of
+		// the wall where it turns away (or standing out of it), 0.3 m to hang_jump_distance back from the corner, at about
+		// this edge's height, both hands on it; the body out round the corner in the air, turning a quarter.
+		const float e_end = _edge_end(s);
+		const Vector3 corner = ledge.edge + left * (s * e_end);
+		const Vector3 side_in = -left * s;
+		for (float b = 0.3f; b <= hang_jump_distance + 1e-3f; b += 0.1f) {
+			if (!_probe_edge(corner + ledge.inward * b, side_in, 0.0f, l) || Math::abs(l.edge.y - ledge.edge.y) > 0.5f) {
+				continue;
+			}
+			if (!_probe_edge(l.edge, l.inward, 0.24f, hold) || !_probe_edge(l.edge, l.inward, -0.24f, hold)) {
+				continue;
+			}
+			const Vector3 to_feet = _hang_feet_at(l.edge, l.inward);
+			const Vector3 control = Vector3(corner.x, from_feet.y, corner.z) + left * (s * (radius + 0.35f)) - ledge.inward * (radius + 0.25f) + UP * 0.25f;
+			if (room(to_feet) && room(control) && room((control + to_feet) * 0.5f)) {
+				r_ledge = l;
+				r_control = control;
+				r_how = TRANSFER_JUMP_CORNER;
+				return true;
+			}
+		}
 	} else if (p_wish.y < -0.5f) {
 		// Milestone 86: down to a ledge below (let go of this one, caught there).
 		for (float h = 0.6f; h <= hang_jump_depth; h += 0.1f) {
@@ -1192,7 +1214,7 @@ void FellowTraversal3D::_start_transfer(const Ledge &p_to, const Vector3 &p_cont
 	transfer.from_inward = ledge.inward;
 	transfer.from_hands[0] = hints.hand[0];
 	transfer.from_hands[1] = hints.hand[1];
-	if (p_how == TRANSFER_JUMP_ALONG || p_how == TRANSFER_JUMP_UP || p_how == TRANSFER_JUMP_DOWN || p_how == TRANSFER_JUMP_DIAGONAL || p_how == TRANSFER_JUMP_BACK) {
+	if (p_how == TRANSFER_JUMP_ALONG || p_how == TRANSFER_JUMP_UP || p_how == TRANSFER_JUMP_DOWN || p_how == TRANSFER_JUMP_DIAGONAL || p_how == TRANSFER_JUMP_BACK || p_how == TRANSFER_JUMP_CORNER) {
 		shimmy_velocity = 0.0f;
 	}
 	global_stats.transfers.increment();
@@ -1222,7 +1244,7 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 	hang_feet = feet;
 	const Vector3 left = UP.cross(inward).normalized();
 	const Vector3 to_left = UP.cross(transfer.to.inward).normalized();
-	const bool jump = transfer.how == TRANSFER_JUMP_ALONG || transfer.how == TRANSFER_JUMP_UP || transfer.how == TRANSFER_JUMP_DOWN || transfer.how == TRANSFER_JUMP_DIAGONAL || transfer.how == TRANSFER_JUMP_BACK;
+	const bool jump = transfer.how == TRANSFER_JUMP_ALONG || transfer.how == TRANSFER_JUMP_UP || transfer.how == TRANSFER_JUMP_DOWN || transfer.how == TRANSFER_JUMP_DIAGONAL || transfer.how == TRANSFER_JUMP_BACK || transfer.how == TRANSFER_JUMP_CORNER;
 	hints.active = true;
 	hints.kind = KIND_HANG;
 	hints.inward = inward;
@@ -1335,7 +1357,15 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 		Vector3 control;
 		int how = 0;
 		if (hold_time > 0.25 && _find_jump(wish, to, control, how)) {
-			_start_transfer(to, control, how, how == TRANSFER_JUMP_UP ? 0.45 : (how == TRANSFER_JUMP_DOWN ? 0.4 : (how == TRANSFER_JUMP_DIAGONAL ? 0.55 : (how == TRANSFER_JUMP_BACK ? 0.6 : 0.5))));
+			if (how == TRANSFER_JUMP_CORNER) {
+				// Milestone 149: round the corner, the wish held as it was goes on along the new edge (as after a corner).
+				const Vector3 f = flat(intent);
+				const float s = SIGN(wish.dot(UP.cross(ledge.inward).normalized()));
+				remap = f.length() > 0.3f;
+				remap_from = remap ? f.normalized() : Vector3();
+				remap_to = UP.cross(to.inward).normalized() * s;
+			}
+			_start_transfer(to, control, how, how == TRANSFER_JUMP_UP ? 0.45 : (how == TRANSFER_JUMP_DOWN ? 0.4 : (how == TRANSFER_JUMP_DIAGONAL ? 0.55 : (how == TRANSFER_JUMP_BACK || how == TRANSFER_JUMP_CORNER ? 0.6 : 0.5))));
 			_step_transfer(p_delta);
 			return;
 		}
@@ -2564,7 +2594,7 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("mantle_cancelled", PropertyInfo(Variant::INT, "kind")));
 	ADD_SIGNAL(MethodInfo("hang_started", PropertyInfo(Variant::DICTIONARY, "ledge")));
 	ADD_SIGNAL(MethodInfo("hang_finished", PropertyInfo(Variant::BOOL, "climbed")));
-	ADD_SIGNAL(MethodInfo("hang_transferred", PropertyInfo(Variant::DICTIONARY, "ledge"), PropertyInfo(Variant::INT, "how", PROPERTY_HINT_ENUM, "Outer Corner,Inner Corner,Jump Along,Jump Up,Drop,Jump Down,Jump Diagonal,Jump Back")));
+	ADD_SIGNAL(MethodInfo("hang_transferred", PropertyInfo(Variant::DICTIONARY, "ledge"), PropertyInfo(Variant::INT, "how", PROPERTY_HINT_ENUM, "Outer Corner,Inner Corner,Jump Along,Jump Up,Drop,Jump Down,Jump Diagonal,Jump Back,Jump Corner")));
 	ADD_SIGNAL(MethodInfo("ladder_started", PropertyInfo(Variant::OBJECT, "ladder", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "FellowLadder3D")));
 	ADD_SIGNAL(MethodInfo("ladder_finished", PropertyInfo(Variant::BOOL, "at_top")));
 	ADD_SIGNAL(MethodInfo("climb_started"));
@@ -2589,5 +2619,6 @@ void FellowTraversal3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_DOWN);
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_DIAGONAL);
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_BACK);
+	BIND_ENUM_CONSTANT(TRANSFER_JUMP_CORNER);
 	BIND_ENUM_CONSTANT(KIND_MAX);
 }

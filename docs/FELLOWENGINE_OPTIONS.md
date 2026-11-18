@@ -854,7 +854,9 @@ faster, it goes over); `try_drop(direction)`; `TRANSFER_DROP`. Bench `bench/clim
 to a ledge below (milestone 86, decision 0194): `hang_jump()` with the wish down, `hang_jump_depth` (2.6 m);
 `TRANSFER_JUMP_DOWN`. Diagonally (milestone 93, decision 0201): `hang_jump()` with the wish along and up or down;
 `TRANSFER_JUMP_DIAGONAL`. Back to the wall behind (milestone 95, decision 0203): `hang_jump()` with the wish away from
-the wall; `TRANSFER_JUMP_BACK`.
+the wall; `TRANSFER_JUMP_BACK`. Round a corner (milestone 149, decision 0279): `hang_jump()` with the wish along and no
+edge along it — a ledge on the side of the wall where it turns away, 0.3 m to `hang_jump_distance` back from the
+corner; `TRANSFER_JUMP_CORNER`.
 Free climbing (milestone 148, decision 0276), on `FellowTraversal3D`: `free_climb` (off: on, a body pushing at a face
 on a layer of `climb_mask` with nothing to mantle onto, or caught against it in the air, climbs it — up and down,
 along it, round towers and corners, onto inside corners, over the top as a mantle or a hang, down to the floor),

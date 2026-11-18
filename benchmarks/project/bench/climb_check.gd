@@ -277,7 +277,7 @@ func _lane(name: String, start: Vector3, program: Array) -> Dictionary:
 	t.hang_finished.connect(func(climbed: bool) -> void:
 		lane.events.append(["hang_finished", climbed, snappedf(frame / 60.0, 0.01)]))
 	t.hang_transferred.connect(func(_ledge: Dictionary, how: int) -> void:
-		lane.events.append(["hang_transferred", ["outer", "inner", "along", "up", "drop", "down", "diagonal", "back"][how], snappedf(frame / 60.0, 0.01)]))
+		lane.events.append(["hang_transferred", ["outer", "inner", "along", "up", "drop", "down", "diagonal", "back", "corner"][how], snappedf(frame / 60.0, 0.01)]))
 	t.ladder_started.connect(func(_ladder: Node3D) -> void:
 		lane.events.append(["ladder_started", snappedf(frame / 60.0, 0.01)]))
 	t.ladder_finished.connect(func(at_top: bool) -> void:
@@ -467,6 +467,14 @@ func _build() -> void:
 	var slab := _box(Vector3(60, 2.0, 9.0), Vector3(3.0, 5.0, 2.0), Color(0.62, 0.55, 0.48))
 	slab.rotation_degrees = Vector3(-20, 0, 0)
 	climb_lanes.append(_lane("climb_slab", Vector3(60, 0, 12.5), [[0.0, {"intent": walk, "speed": 1.5}], [5.4, {"intent": Vector3()}]]))
+	# Milestone 149 (decision 0279): a jump round a corner. A 2.5 m ledge (2 m long, 0.4 m deep) on a 6 m building; on the
+	# building's left side, 1 m back from the ledge's front, another 2.5 m ledge standing out 0.4 m (1.2 m long): hung
+	# from the front one, to its left end, hang_jump with the wish left: round the corner onto the side one.
+	_box(Vector3(88, 3.0, 7.6), Vector3(2.0, 6.0, 4.0), Color(0.6, 0.6, 0.66))
+	_box(Vector3(88, 1.25, 9.8), Vector3(2.0, 2.5, 0.4))
+	_box(Vector3(86.8, 1.25, 8.4), Vector3(0.4, 2.5, 1.2))
+	var ljc := _lane("hang_jump_corner", Vector3(88, 0, 12), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}], [1.4, {"intent": Vector3()}],
+			[2.0, {"intent": Vector3(-1, 0, 0)}], [3.6, {"call": "hang_jump"}], [4.6, {"intent": Vector3()}]])
 	# None: free_climb off; the wall outside climb_mask; an overhang of 30 degrees.
 	_box(Vector3(40, 2.25, 9.0), Vector3(3.0, 4.5, 2.0), Color(0.6, 0.6, 0.66))
 	_lane("climb_off", Vector3(40, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [4.0, {"intent": Vector3()}]])
@@ -718,6 +726,11 @@ func _finish() -> void:
 			"hang_jump_back":
 				# Round to the ledge behind (its face at z 0.4): hanging from it, 0.43 m off it, turned half round.
 				ok = ok and names.has("hang_started:2.5") and names.count("hang_transferred:back") == 1 and absf(feet.z - (0.4 - 0.43)) < 0.05 and absf(feet.y - 0.45) < 0.05 and turned > 170.0 and not names.has("hang_finished:false")
+			"hang_jump_corner":
+				# Milestone 149: round the corner onto the side ledge (its face at x 86.6): turned a quarter, hanging 0.43 m
+				# off it, along it (z 7.8 to 9.0).
+				e["from_side"] = snappedf(feet.x - 86.6, 0.01)
+				ok = ok and names.has("hang_started:2.5") and names.count("hang_transferred:corner") == 1 and absf(turned - 90.0) < 5.0 and absf(feet.x - 86.6 + 0.43) < 0.05 and feet.z > 7.8 and feet.z < 9.0 and not names.has("hang_finished:false")
 			"climb_up":
 				# Milestone 148 (decision 0276): up the face and over its top (4.5 m): on it.
 				ok = ok and names.has("climb_started") and names.has("climb_finished:true") and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 4.5) < 0.05

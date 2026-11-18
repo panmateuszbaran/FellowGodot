@@ -72,6 +72,7 @@ public:
 		TRANSFER_JUMP_DOWN, // milestone 86: down to a ledge below
 		TRANSFER_JUMP_DIAGONAL, // milestone 93: along and up or down at once
 		TRANSFER_JUMP_BACK, // milestone 95: to a ledge on the wall behind
+		TRANSFER_JUMP_CORNER, // milestone 149: round the corner past the edge's end, to a ledge on the side
 	};
 
 	// A check's result (global space).
