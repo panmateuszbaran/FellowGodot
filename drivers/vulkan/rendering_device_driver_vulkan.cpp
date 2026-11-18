@@ -1919,6 +1919,9 @@ bool RenderingDeviceDriverVulkan::_recreate_image_semaphore(CommandQueue *p_comm
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, false, vformat("Couldn't create Vulkan semaphore (VkResult error %d).", err));
 
 	// Indicate the semaphore is free again and destroy the previous one before storing the new one.
+	if (fellow_sync.is_enabled()) {
+		fellow_sync.forget_semaphore(p_command_queue->image_semaphores[p_semaphore_index]); // FellowEngine (decision 0270)
+	}
 	vkDestroySemaphore(vk_device, p_command_queue->image_semaphores[p_semaphore_index], VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SEMAPHORE));
 
 	p_command_queue->image_semaphores[p_semaphore_index] = semaphore;
@@ -3331,6 +3334,9 @@ RDD::FenceID RenderingDeviceDriverVulkan::fence_create() {
 Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	Fence *fence = (Fence *)(p_fence.id);
 	VkResult fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
+	if (fellow_sync.is_enabled()) {
+		fellow_sync.fence_waiting(fence->vk_fence, fence_status != VK_NOT_READY); // FellowEngine (decision 0270)
+	}
 	if (fence_status == VK_NOT_READY) {
 		VkResult err = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
 		ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't wait for Vulkan fence (VkResult error %d).", err));
@@ -3338,6 +3344,9 @@ Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 
 	VkResult err = vkResetFences(vk_device, 1, &fence->vk_fence);
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't reset Vulkan fence (VkResult error %d).", err));
+	if (fellow_sync.is_enabled()) {
+		fellow_sync.fence_waited(fence->vk_fence);
+	}
 
 	if (fence->queue_signaled_from != nullptr) {
 		MutexLock fellow_lock(fence->queue_signaled_from->fellow_mutex);
@@ -3362,8 +3371,58 @@ Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 
 void RenderingDeviceDriverVulkan::fence_free(FenceID p_fence) {
 	Fence *fence = (Fence *)(p_fence.id);
+	if (fellow_sync.is_enabled()) {
+		fellow_sync.forget_fence(fence->vk_fence); // FellowEngine (decision 0270)
+	}
 	vkDestroyFence(vk_device, fence->vk_fence, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE));
 	memdelete(fence);
+}
+
+Error RenderingDeviceDriverVulkan::fellow_fence_wait_timeout(FenceID p_fence, uint64_t p_timeout_usec) {
+	// FellowEngine (decision 0270): the wait of fence_wait() with a time limit; once signalled, fence_wait() resets it.
+	Fence *fence = (Fence *)(p_fence.id);
+	if (vkGetFenceStatus(vk_device, fence->vk_fence) == VK_NOT_READY) {
+		if (fellow_sync.is_enabled()) {
+			fellow_sync.fence_waiting(fence->vk_fence, false);
+		}
+		const VkResult err = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, p_timeout_usec * 1000);
+		if (err == VK_TIMEOUT) {
+			return ERR_TIMEOUT;
+		}
+	}
+	return fence_wait(p_fence);
+}
+
+String RenderingDeviceDriverVulkan::fellow_fence_report(FenceID p_fence) {
+	// FellowEngine (decision 0270): the sync log's account of the fence, then each queue's swap chain semaphores.
+	Fence *fence = (Fence *)(p_fence.id);
+	String r = fellow_sync.report(fence->vk_fence, vk_device);
+	if (fence->queue_signaled_from != nullptr) {
+		r += vformat("\nThe fence releases the swap chain semaphores of queue %s.", fence->queue_signaled_from->fellow_label);
+	}
+	for (CommandQueue *queue : fellow_command_queues) {
+		MutexLock lock(queue->fellow_mutex);
+		String pending_execute, pending_fence, held;
+		for (uint32_t index : queue->pending_semaphores_for_execute) {
+			pending_execute += vformat(" %d", index);
+		}
+		for (uint32_t index : queue->pending_semaphores_for_fence) {
+			pending_fence += vformat(" %d", index);
+		}
+		for (const Pair<Fence *, uint32_t> &pair : queue->image_semaphores_for_fences) {
+			held += vformat(" %d:%x", pair.second, uint64_t(uintptr_t(pair.first)));
+		}
+		r += vformat("\nQueue %s (family %d, index %d): %d swap chain semaphores, %d free; to be waited on by its next submission [%s ], released by its next fence [%s ], held by fences [%s ].",
+				queue->fellow_label, queue->queue_family, queue->queue_index, queue->image_semaphores.size(), queue->free_image_semaphores.size(), pending_execute, pending_fence, held);
+	}
+	return r;
+}
+
+void RenderingDeviceDriverVulkan::fellow_sync_log_enable(bool p_enable) {
+	fellow_sync.set_enabled(p_enable);
+	if (p_enable) {
+		print_line("FellowEngine: the Vulkan driver records its queue operations (rendering/fellow/debug/sync_log).");
+	}
 }
 
 /********************/
@@ -3381,6 +3440,9 @@ RDD::SemaphoreID RenderingDeviceDriverVulkan::semaphore_create() {
 }
 
 void RenderingDeviceDriverVulkan::semaphore_free(SemaphoreID p_semaphore) {
+	if (fellow_sync.is_enabled()) {
+		fellow_sync.forget_semaphore(VkSemaphore(p_semaphore.id)); // FellowEngine (decision 0270)
+	}
 	vkDestroySemaphore(vk_device, VkSemaphore(p_semaphore.id), VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SEMAPHORE));
 }
 
@@ -3462,7 +3524,16 @@ RDD::CommandQueueID RenderingDeviceDriverVulkan::command_queue_create(CommandQue
 		VulkanHooks::get_singleton()->set_direct_queue_family_and_index(family_index, picked_queue_index);
 	}
 
+	if (p_identify_as_main_queue) {
+		command_queue->fellow_label = "main";
+	}
+	fellow_command_queues.push_back(command_queue); // FellowEngine (decision 0270)
+
 	return CommandQueueID(command_queue);
+}
+
+void RenderingDeviceDriverVulkan::fellow_command_queue_label(CommandQueueID p_cmd_queue, const char *p_label) {
+	((CommandQueue *)(p_cmd_queue.id))->fellow_label = p_label;
 }
 
 // FellowEngine submit thread: submissions from that thread leave the pending memory flushes to the render thread.
@@ -3561,9 +3632,19 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		submit_info.pSignalSemaphores = signal_semaphores.ptr();
 
 		const uint64_t fellow_submit_from = OS::get_singleton()->get_ticks_usec();
+		const bool fellow_log = fellow_sync.is_enabled(); // decision 0270: recorded in the queues' order
+		if (fellow_log) {
+			fellow_sync.get_mutex().lock();
+		}
 		device_queue.submit_mutex.lock();
 		err = vkQueueSubmit(device_queue.queue, 1, &submit_info, vk_fence);
 		device_queue.submit_mutex.unlock();
+		if (fellow_log) {
+			if (err == VK_SUCCESS) {
+				fellow_sync.record(FellowVulkanSyncLog::KIND_SUBMIT, command_queue->fellow_label, wait_semaphores.ptr(), wait_semaphores.size(), signal_semaphores.ptr(), signal_semaphores.size(), vk_fence, command_buffers.size());
+			}
+			fellow_sync.get_mutex().unlock();
+		}
 		Fellow::stats().rd_vk_submit_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_submit_from);
 
 		if (err == VK_ERROR_DEVICE_LOST) {
@@ -3617,6 +3698,11 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		present_info.pResults = results.ptr();
 
 		const uint64_t fellow_present_from = OS::get_singleton()->get_ticks_usec();
+		if (fellow_sync.is_enabled()) {
+			// Decision 0270: recorded before (a presentation may block); its waits were signalled by submissions recorded.
+			MutexLock fellow_lock(fellow_sync.get_mutex());
+			fellow_sync.record(FellowVulkanSyncLog::KIND_PRESENT, command_queue->fellow_label, wait_semaphores.ptr(), wait_semaphores.size(), nullptr, 0, VK_NULL_HANDLE, 0);
+		}
 		device_queue.submit_mutex.lock();
 #if defined(SWAPPY_FRAME_PACING_ENABLED)
 		if (swappy_frame_pacer_enable) {
@@ -3705,6 +3791,10 @@ Error RenderingDeviceDriverVulkan::fellow_command_queue_present(CommandQueueID p
 	present_info.pResults = results.ptr();
 
 	const uint64_t fellow_present_from = OS::get_singleton()->get_ticks_usec();
+	if (fellow_sync.is_enabled()) {
+		MutexLock fellow_lock(fellow_sync.get_mutex()); // decision 0270
+		fellow_sync.record(FellowVulkanSyncLog::KIND_PRESENT, command_queue->fellow_label, wait_semaphores.ptr(), wait_semaphores.size(), nullptr, 0, VK_NULL_HANDLE, 0);
+	}
 	device_queue.submit_mutex.lock();
 	VkResult err = device_functions.QueuePresentKHR(device_queue.queue, &present_info);
 	device_queue.submit_mutex.unlock();
@@ -3731,9 +3821,13 @@ void RenderingDeviceDriverVulkan::command_queue_free(CommandQueueID p_cmd_queue)
 	DEV_ASSERT(p_cmd_queue);
 
 	CommandQueue *command_queue = (CommandQueue *)(p_cmd_queue.id);
+	fellow_command_queues.erase(command_queue); // FellowEngine (decision 0270)
 
 	// Erase all the semaphores used for image acquisition.
 	for (VkSemaphore semaphore : command_queue->image_semaphores) {
+		if (fellow_sync.is_enabled()) {
+			fellow_sync.forget_semaphore(semaphore);
+		}
 		vkDestroySemaphore(vk_device, semaphore, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SEMAPHORE));
 	}
 
@@ -4416,6 +4510,11 @@ RDD::FramebufferID RenderingDeviceDriverVulkan::swap_chain_acquire_framebuffer(C
 		// Swap chain failed to present but the reason is unknown.
 		// Refer to the comment in command_queue_present() as to why VK_SUBOPTIMAL_KHR is handled the same as VK_SUCCESS.
 		return FramebufferID();
+	}
+
+	if (fellow_sync.is_enabled()) {
+		MutexLock fellow_lock(fellow_sync.get_mutex()); // FellowEngine (decision 0270)
+		fellow_sync.record(FellowVulkanSyncLog::KIND_ACQUIRE, command_queue->fellow_label, nullptr, 0, &semaphore, 1, VK_NULL_HANDLE, 0);
 	}
 
 	// Indicate the command queue should wait on these semaphores on the next submission and that it should

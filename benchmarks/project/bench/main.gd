@@ -816,7 +816,9 @@ func _fellow_stats() -> Dictionary:
 func _dict_sub(a: Dictionary, b: Dictionary) -> Dictionary:
 	var o := {}
 	for k in a.keys():
-		o[k] = a[k] - b.get(k, 0)
+		var v = a[k]
+		# Counters subtracted; anything else (memory_budget_from_driver, a bool) as it is now.
+		o[k] = v - b.get(k, 0) if (v is int or v is float) else v
 	return o
 
 

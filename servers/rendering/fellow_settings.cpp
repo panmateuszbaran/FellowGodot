@@ -318,6 +318,12 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_stats", false);
 	GLOBAL_DEF("rendering/fellow/debug/wait_pipelines", false); // milestone 136
 	GLOBAL_DEF("rendering/fellow/debug/cloud_shadow_same_frame", false); // milestone 142: decision 0133's single map (diagnostics)
+	// Decision 0270: a frame's fence not signalled within this many seconds is reported (what its submission waits on,
+	// the present thread's and transfer workers' state, the Vulkan driver's record of the queue operations) and then waited
+	// for as before (0: no report). The Vulkan driver's record of every queue operation, each semaphore wait matched with
+	// its signal as it is submitted: start-up.
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/debug/late_fence_report_s", PROPERTY_HINT_RANGE, "0,60,0.1,suffix:s"), 2.0);
+	GLOBAL_DEF_RST("rendering/fellow/debug/sync_log", false);
 	GLOBAL_DEF("rendering/fellow/debug/hitch_sampler", false); // decision 0231: frame steps over the threshold sampled and reported at exit
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/debug/hitch_sampler_ms", PROPERTY_HINT_RANGE, "1,1000,0.1,suffix:ms"), 33.3);
 	FellowHitchSampler::register_debugger(); // decision 0238: the editor's debugger can start it
@@ -603,6 +609,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["draw_begin_frame_usec"] = s.draw_begin_frame_usec.get();
 	d["draw_setup_usec"] = s.draw_setup_usec.get();
 	d["material_uniform_sets_created"] = s.material_uniform_sets_created.get(); // decision 0269
+	d["sync_log_anomalies"] = s.sync_log_anomalies.get(); // decision 0270
+	d["late_fences"] = s.late_fences.get(); // decision 0270
 	d["draw_particles_probes_usec"] = s.draw_particles_probes_usec.get();
 	d["draw_viewports_usec"] = s.draw_viewports_usec.get();
 	d["draw_end_frame_usec"] = s.draw_end_frame_usec.get();

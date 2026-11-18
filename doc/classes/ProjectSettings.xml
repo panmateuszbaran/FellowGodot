@@ -3175,6 +3175,9 @@
 		<member name="rendering/fellow/debug/hitch_sampler_ms" type="float" setter="" getter="" default="33.3">
 			The hitch sampler's threshold: a frame step longer than this is reported; sampling starts at half of it.
 		</member>
+		<member name="rendering/fellow/debug/late_fence_report_s" type="float" setter="" getter="" default="2.0">
+			Diagnostics: a frame's fence the GPU has not signalled after this many seconds is reported once it is late, and then waited for as before: the frame slots, the present and submit thread's jobs, the transfer workers, the Vulkan driver's swap chain semaphores and, with [code]debug/sync_log[/code], the submission that signals the fence, what that submission waits on and where each of those signals came from. The first four late fences in a run; FellowEngine's statistics count them all ([code]late_fences[/code]). 0: no report. Changes no frame. Decision 0270.
+		</member>
 		<member name="rendering/fellow/debug/multimesh_stats" type="bool" setter="" getter="" default="false">
 			Diagnostics: MultiMesh culling's instance counts read back (a readback per frame).
 		</member>
@@ -3204,6 +3207,9 @@
 		</member>
 		<member name="rendering/fellow/debug/segment_barriers" type="int" setter="" getter="" default="1">
 			The render graph's barriers for a resource used again with the same usage after an earlier command buffer of the frame wrote it (0 off, 1 resources, 2 resources and full barriers). Decision 0054.
+		</member>
+		<member name="rendering/fellow/debug/sync_log" type="bool" setter="" getter="" default="false">
+			Diagnostics (read at start-up): the Vulkan driver records every submission, presentation and swap chain acquisition in the order it makes them, with the binary semaphores each one waits on and signals and the fence it signals, and checks each as it is made: a wait on a semaphore no signal is pending for, a semaphore signalled twice without a wait between, a fence submitted twice or waited for when nothing will signal it — any of which can leave a queue or the CPU waiting for ever — is printed when it happens (the first 32; [code]sync_log_anomalies[/code] counts them). A late fence's report ([code]debug/late_fence_report_s[/code]) then traces it to its submission. One lock is taken around every queue submission while it is on. Changes no frame. Decision 0270.
 		</member>
 		<member name="rendering/fellow/debug/tile_cull_pass_only" type="bool" setter="" getter="" default="false">
 			Diagnostics: light tile culling's pass runs, but the opaque pass does not read its masks.

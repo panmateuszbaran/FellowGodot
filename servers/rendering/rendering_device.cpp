@@ -9342,6 +9342,45 @@ void RenderingDevice::_execute_frame(bool p_present) {
 	}
 }
 
+void RenderingDevice::_fellow_late_fence_report(uint32_t p_frame, double p_seconds) {
+	// FellowEngine (decision 0270): a frame's fence not signalled in time — the GPU seconds behind, or its queue waiting for
+	// something that will not come. What the device and its driver know of it, printed (and so in a hang report's log)
+	// before the wait goes on. The first few only.
+	Fellow::stats().late_fences.increment();
+	if (fellow_late_fence_reports++ >= 4) {
+		return;
+	}
+	print_error(vformat("FellowEngine: frame slot %d's fence is not signalled after %.1f s (%d frames drawn; rendering/fellow/debug/late_fence_report_s).", p_frame, p_seconds, frames_drawn));
+	String slots;
+	for (uint32_t i = 0; i < frames.size(); i++) {
+		slots += vformat(" %d:%s%s", i, frames[i].fence_signaled ? "submitted" : "free", frames[i].fellow_early_submitted ? "+early" : "");
+	}
+	print_error(vformat("  Frame slots:%s (recording %d).", slots, frame));
+	if (fellow_present != nullptr) {
+		MutexLock lock(fellow_present->mutex);
+		const uint64_t ticket = p_frame < FellowPresentThread::MAX_FRAME_SLOTS ? fellow_present->frame_tickets[p_frame] : 0;
+		print_error(vformat("  Present/submit thread %d: %d jobs handed over, %d issued, %d not issued; the slot's job %d.", fellow_present->thread.get_id(), fellow_present->committed, fellow_present->issued, fellow_present->count, ticket));
+	}
+	if (transfer_worker_pool_mutex.try_lock()) {
+		for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
+			TransferWorker *worker = transfer_worker_pool[i];
+			String state = "busy";
+			if (worker->operations_mutex.try_lock()) {
+				state = vformat("operations %d counted, %d submitted, %d processed", worker->operations_counter, worker->operations_submitted, worker->operations_processed);
+				worker->operations_mutex.unlock();
+			}
+			print_error(vformat("  Transfer worker %d: %s%s%s, %s; the frame uses up to operation %d.", i, worker->recording ? "recording" : "not recording", worker->submitted ? ", submitted" : "", worker->fellow_own_submit ? ", submits on its own" : "", state, transfer_worker_operation_used_by_draw[i]));
+		}
+		transfer_worker_pool_mutex.unlock();
+	} else {
+		print_error("  Transfer workers: their pool is held by another thread.");
+	}
+	const Vector<String> lines = driver->fellow_fence_report(frames[p_frame].fence).split("\n");
+	for (const String &line : lines) {
+		print_error("  " + line);
+	}
+}
+
 void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 	thread_local PackedByteArray packed_byte_array;
 	// FellowEngine present/submit thread: the frame's fence must have been submitted. Only the job that submits it is
@@ -9358,7 +9397,16 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 	if (frames[p_frame].fence_signaled) {
 		GodotProfileZoneGroupedFirst(_profile_zone, "driver->fence_wait");
 		const uint64_t fellow_wait_from = OS::get_singleton()->get_ticks_usec();
-		driver->fence_wait(frames[p_frame].fence);
+		// FellowEngine (decision 0270): a fence late by rendering/fellow/debug/late_fence_report_s is reported, then waited
+		// for as before.
+		ProjectSettings *fellow_ps = ProjectSettings::get_singleton();
+		const double fellow_late_s = is_main_instance && fellow_ps->has_setting("rendering/fellow/debug/late_fence_report_s") ? GLOBAL_GET_CACHED(double, "rendering/fellow/debug/late_fence_report_s") : 0.0;
+		if (fellow_late_s <= 0.0) {
+			driver->fence_wait(frames[p_frame].fence);
+		} else if (driver->fellow_fence_wait_timeout(frames[p_frame].fence, uint64_t(fellow_late_s * 1000000.0)) == ERR_TIMEOUT) {
+			_fellow_late_fence_report(p_frame, fellow_late_s);
+			driver->fence_wait(frames[p_frame].fence);
+		}
 		frames[p_frame].fence_signaled = false;
 		fellow_stall_wait_usec += OS::get_singleton()->get_ticks_usec() - fellow_wait_from;
 
@@ -9656,6 +9704,17 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 			}
 			print_verbose(vformat("FellowEngine: async compute queue created (family %d, main family %d).", int64_t(fellow_async_queue_family.id) - 1, int64_t(main_queue_family.id) - 1));
 		}
+	}
+	// FellowEngine (decision 0270): the queues' names in the driver's reports, and its record of their operations.
+	driver->fellow_command_queue_label(transfer_queue, "transfer");
+	if (present_queue != main_queue) {
+		driver->fellow_command_queue_label(present_queue, "present");
+	}
+	if (fellow_async_queue && fellow_async_queue != main_queue) {
+		driver->fellow_command_queue_label(fellow_async_queue, "async compute");
+	}
+	if (is_main_instance && fellow_ps->has_setting("rendering/fellow/debug/sync_log") && bool(fellow_ps->get_setting("rendering/fellow/debug/sync_log"))) {
+		driver->fellow_sync_log_enable(true);
 	}
 
 	// Use the processor count as the max amount of transfer workers that can be created.

@@ -414,6 +414,16 @@ public:
 	virtual FenceID fence_create() = 0;
 	virtual Error fence_wait(FenceID p_fence) = 0;
 	virtual void fence_free(FenceID p_fence) = 0;
+	// FellowEngine (decision 0270): fence_wait() for at most p_timeout_usec: ERR_TIMEOUT, the fence left as it was, when it
+	// is not signalled by then. Default: fence_wait().
+	virtual Error fellow_fence_wait_timeout(FenceID p_fence, uint64_t p_timeout_usec) { return fence_wait(p_fence); }
+	// FellowEngine (decision 0270): what the driver knows of a late fence — the submission that signals it, what that
+	// submission waits on and where each signal came from (rendering/fellow/debug/sync_log), the queues' swap chain
+	// semaphores. One line each. Default: nothing.
+	virtual String fellow_fence_report(FenceID p_fence) { return String(); }
+	// FellowEngine (decision 0270, rendering/fellow/debug/sync_log): record every queue operation and check each
+	// semaphore wait against the signals submitted before it. Default: unsupported.
+	virtual void fellow_sync_log_enable(bool p_enable) {}
 
 	/********************/
 	/**** SEMAPHORES ****/
@@ -457,6 +467,8 @@ public:
 	virtual bool fellow_supports_submit_thread() const { return false; }
 	virtual void fellow_set_submit_thread() {}
 	virtual void fellow_flush_pending_memory() {}
+	// FellowEngine (decision 0270): the queue's name in the driver's reports ("main", "transfer", ...); a static string.
+	virtual void fellow_command_queue_label(CommandQueueID p_cmd_queue, const char *p_label) {}
 	virtual void command_queue_free(CommandQueueID p_cmd_queue) = 0;
 
 	// ----- POOL -----

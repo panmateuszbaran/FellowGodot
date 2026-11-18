@@ -37,6 +37,7 @@
 #include "core/templates/paged_allocator.h"
 #include "core/templates/rb_map.h"
 #include "drivers/vulkan/fellow_vulkan_profile.h"
+#include "drivers/vulkan/fellow_vulkan_sync_log.h"
 #include "drivers/vulkan/rendering_context_driver_vulkan.h"
 #include "drivers/vulkan/rendering_shader_container_vulkan.h"
 #include "servers/rendering/rendering_device_driver.h"
@@ -379,6 +380,9 @@ public:
 	virtual FenceID fence_create() override final;
 	virtual Error fence_wait(FenceID p_fence) override final;
 	virtual void fence_free(FenceID p_fence) override final;
+	virtual Error fellow_fence_wait_timeout(FenceID p_fence, uint64_t p_timeout_usec) override final;
+	virtual String fellow_fence_report(FenceID p_fence) override final;
+	virtual void fellow_sync_log_enable(bool p_enable) override final;
 
 	/********************/
 	/**** SEMAPHORES ****/
@@ -409,7 +413,11 @@ private:
 		// FellowEngine submit thread: the image semaphore lists above are touched by submissions (that thread) and by
 		// fence waits and acquisitions (the render thread), which may now overlap.
 		BinaryMutex fellow_mutex;
+		const char *fellow_label = "queue"; // decision 0270: its name in the reports
 	};
+	// FellowEngine (decision 0270): the queues made (for the late fence report) and the record of their operations.
+	LocalVector<CommandQueue *> fellow_command_queues;
+	FellowVulkanSyncLog fellow_sync;
 
 public:
 	virtual CommandQueueID command_queue_create(CommandQueueFamilyID p_cmd_queue_family, bool p_identify_as_main_queue = false) override final;
@@ -419,6 +427,7 @@ public:
 	virtual bool fellow_supports_submit_thread() const override final { return true; }
 	virtual void fellow_set_submit_thread() override final;
 	virtual void fellow_flush_pending_memory() override final;
+	virtual void fellow_command_queue_label(CommandQueueID p_cmd_queue, const char *p_label) override final;
 	virtual void command_queue_free(CommandQueueID p_cmd_queue) override final;
 
 private:
