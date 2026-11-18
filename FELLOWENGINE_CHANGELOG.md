@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 145 — Bistro streamed: the longer rare frames, and a hang (2026-11-18)
+
+- Decision 0269: Bistro exterior's streamed textures' churn (4 800 loads and 2 200 releases in a 30-second flight,
+  each swap remaking its materials' uniform sets) made its rare frames longer; releases held 10 s instead of 2 s:
+  p99 7.3 → 5.9 ms, the render thread's 3.6 → 2.7 ms, 50 MB more video memory. Not the swaps' bursts (a per-frame cap
+  tried and removed) nor the evaluation. The default stays 2 s: three of 28 runs held 10 s hung (a frame's fence never
+  signalled, the GPU idle), under investigation. FellowEngine's statistics count `material_uniform_sets_created`;
+  `benchmarks/tools/crash/minidump_stacks.py` reads every thread's call chain from a crash or hang report's minidump.
+- The terrain holes' differences on Intel are from frame to frame within a run too, with FellowEngine on only.
+
 ## Milestone 144 — hair shadowing itself (2026-11-18)
 
 - Decision 0268: `FellowHair3D.self_shadow` (opt-in; on in the "Add Hair" preset) — the hair shadows itself from a
