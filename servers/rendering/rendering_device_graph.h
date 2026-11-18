@@ -855,6 +855,7 @@ private:
 	TightLocalVector<Frame> frames;
 	uint32_t frame = 0;
 	bool fellow_checkpoints = false; // decision 0270: the driver records GPU checkpoints
+	LocalVector<LocalVector<uint64_t>> fellow_checkpoint_logs; // per frame slot: its markers in the order replayed
 
 #ifdef DEV_ENABLED
 	RBMap<ResourceTracker *, uint32_t> write_dependency_counters;
@@ -959,6 +960,8 @@ public:
 		return (uint64_t(p_type & 0xFF) << 56) | (uint64_t(p_breadcrumb) << 24) | (uint64_t(p_slot & 0xF) << 20) | uint64_t(p_index & 0xFFFFF);
 	}
 	static String fellow_checkpoint_describe(uint64_t p_marker);
+	// The frame slot's markers in the order its commands were replayed (empty without checkpoints).
+	const LocalVector<uint64_t> *fellow_checkpoint_log(uint32_t p_slot) const { return p_slot < fellow_checkpoint_logs.size() ? &fellow_checkpoint_logs[p_slot] : nullptr; }
 	void initialize(RDD *p_driver, RenderPassCreationFunction p_render_pass_creation_function, uint32_t p_frame_count, RDD::CommandQueueFamilyID p_secondary_command_queue_family, uint32_t p_secondary_command_buffers_per_frame);
 	void finalize();
 	void begin();

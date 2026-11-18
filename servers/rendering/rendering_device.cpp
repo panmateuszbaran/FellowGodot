@@ -9437,6 +9437,28 @@ void RenderingDevice::_fellow_late_fence_report(uint32_t p_frame, double p_secon
 		for (const Pair<String, uint64_t> &c : checkpoints) {
 			print_error(vformat("  GPU checkpoint, %s: %s.", c.first, RenderingDeviceGraph::fellow_checkpoint_describe(c.second)));
 		}
+		// The commands replayed around the last one the main queue's top of pipe reached, in their order.
+		const LocalVector<uint64_t> *cp_log = draw_graph.fellow_checkpoint_log(p_frame);
+		if (cp_log != nullptr && !checkpoints.is_empty()) {
+			uint64_t reached = 0;
+			for (const Pair<String, uint64_t> &c : checkpoints) {
+				if (c.first.begins_with("main") && c.first.contains("top of pipe")) {
+					reached = c.second;
+				}
+			}
+			int64_t at = -1;
+			for (uint32_t i = 0; i < cp_log->size(); i++) {
+				if ((*cp_log)[i] == reached) {
+					at = i;
+				}
+			}
+			if (at >= 0) {
+				print_error(vformat("  The slot's frame's commands around it (%d replayed):", cp_log->size()));
+				for (int64_t i = MAX(int64_t(0), at - 8); i < MIN(int64_t(cp_log->size()), at + 9); i++) {
+					print_error(vformat("    %s%s", i == at ? "> " : "  ", RenderingDeviceGraph::fellow_checkpoint_describe((*cp_log)[i])));
+				}
+			}
+		}
 	}
 	const Vector<String> lines = driver->fellow_fence_report(frames[p_frame].fence).split("\n");
 	for (const String &line : lines) {

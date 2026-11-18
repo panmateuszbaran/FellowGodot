@@ -1235,13 +1235,30 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 		if (fellow_checkpoints) {
 			// FellowEngine (decision 0270): the GPU's progress, a marker before each command (its type, a draw list's
 			// breadcrumb, the frame slot, the command's index in the frame).
-			uint64_t breadcrumb = 0;
+			uint32_t type = uint32_t(command->type);
+			uint32_t info = 0;
 			if (command->type == RecordedCommand::TYPE_DRAW_LIST) {
-				breadcrumb = reinterpret_cast<const RecordedDrawListCommand *>(command)->breadcrumb;
+				const RecordedDrawListCommand *dl = reinterpret_cast<const RecordedDrawListCommand *>(command);
+				info = dl->breadcrumb;
+				if (info == 0) {
+					// No breadcrumb (Forward+'s passes): the draw list's region, its recorded commands' size (log2 of
+					// the bytes) and whether it was recorded on worker threads (secondary command buffers).
+					uint32_t size_log2 = 0;
+					while (size_log2 < 31 && (1u << (size_log2 + 1)) <= dl->instruction_data_size) {
+						size_log2++;
+					}
+					const bool parallel = dl->fellow_starts_count > 0 || dl->command_buffer_type == RDD::COMMAND_BUFFER_TYPE_SECONDARY;
+					info = (uint32_t(MIN(dl->region.size.x, 4095)) << 20) | (uint32_t(MIN(dl->region.size.y, 4095)) << 8) | (size_log2 << 1) | (parallel ? 1u : 0u);
+					type |= 0x80; // the region form
+				}
 			} else if (command->type == RecordedCommand::TYPE_COMPUTE_LIST) {
-				breadcrumb = reinterpret_cast<const RecordedComputeListCommand *>(command)->breadcrumb;
+				info = reinterpret_cast<const RecordedComputeListCommand *>(command)->breadcrumb;
 			}
-			driver->fellow_command_checkpoint(r_command_buffer, fellow_checkpoint_marker(uint32_t(command->type), uint32_t(breadcrumb), frame, command_index));
+			const uint64_t marker = fellow_checkpoint_marker(type, info, frame, command_index);
+			driver->fellow_command_checkpoint(r_command_buffer, marker);
+			if (fellow_replay_slot < fellow_checkpoint_logs.size()) {
+				fellow_checkpoint_logs[fellow_replay_slot].push_back(marker);
+			}
 		}
 
 		switch (command->type) {
@@ -2817,11 +2834,14 @@ String RenderingDeviceGraph::fellow_checkpoint_describe(uint64_t p_marker) {
 	// FellowEngine (decision 0270): a GPU checkpoint's marker in words.
 	static const char *types[] = { "none", "BLAS build", "TLAS build", "buffer clear", "buffer copy", "buffer read-back", "buffer update", "compute list", "ray tracing list", "draw list", "texture clear", "depth clear", "texture copy", "texture read-back", "texture resolve", "texture update", "timestamp", "driver callback" };
 	static const char *passes[] = { "-", "reflection probes", "sky", "lightmapper", "directional shadows", "cube shadows", "opaque", "alpha", "transparent", "post-processing", "blit", "UI", "debug" };
-	const uint32_t type = uint32_t(p_marker >> 56);
+	const uint32_t type = uint32_t(p_marker >> 56) & 0x7F;
+	const bool region_form = (p_marker >> 63) != 0;
 	const uint32_t breadcrumb = uint32_t((p_marker >> 24) & 0xFFFFFFFFu);
 	const uint32_t pass = breadcrumb >> 16;
 	String s = vformat("command %d of slot %d's frame: %s", uint32_t(p_marker & 0xFFFFF), uint32_t((p_marker >> 20) & 0xF), type < sizeof(types) / sizeof(types[0]) ? types[type] : "?");
-	if (type == RecordedCommand::TYPE_DRAW_LIST || type == RecordedCommand::TYPE_COMPUTE_LIST) {
+	if (region_form) {
+		s += vformat(" (%dx%d, about %d bytes of commands%s)", breadcrumb >> 20, (breadcrumb >> 8) & 0xFFF, 1u << ((breadcrumb >> 1) & 0x1F), (breadcrumb & 1) ? ", recorded on worker threads" : "");
+	} else if (type == RecordedCommand::TYPE_DRAW_LIST || type == RecordedCommand::TYPE_COMPUTE_LIST) {
 		s += vformat(" (pass: %s, %x)", pass < sizeof(passes) / sizeof(passes[0]) ? passes[pass] : "?", breadcrumb);
 	}
 	return s;
@@ -3077,6 +3097,12 @@ void RenderingDeviceGraph::fellow_frame_begin(uint32_t p_frame_slot) {
 	}
 	fellow_replay_slot = p_frame_slot;
 	fellow_replay_slots[p_frame_slot].used = 0;
+	if (fellow_checkpoints) {
+		if (fellow_checkpoint_logs.size() <= p_frame_slot) {
+			fellow_checkpoint_logs.resize(p_frame_slot + 1);
+		}
+		fellow_checkpoint_logs[p_frame_slot].clear(); // decision 0270
+	}
 }
 
 uint32_t RenderingDeviceGraph::_fellow_draw_instruction_size(const uint8_t *p_instruction) {
