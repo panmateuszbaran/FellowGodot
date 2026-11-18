@@ -67,7 +67,24 @@ submission had been signalled. The GPU stopped inside the frame's own work, not 
 runner's telemetry over a hung run: about 15-20 W and 340-880 MHz against 80 W and 1 600 MHz in play — the GPU nearly
 idle, not looping at full power. The swap chain: 3 images (2 at least), IMMEDIATE present mode (`--disable-vsync`),
 two frames in flight; the presentation of each frame its own image (0, 1, 2 in turn), nothing returned an error.
-Next: where in the frame the GPU stops (the frame's pass timestamps written so far, `m146_f506`).
+`m146_f504`'s third arm and a third hang (run 7 of the same arm) at the same frame again: the frame is the 2 464th of
+the camera path's third flight (the warm-up's one and the measurement's two, 6 001 frames each) — the same view, and
+in the runs that did not hang the same view passed without a long GPU frame.
+
+| Bistro exterior streamed, releases held 10 s (RTX) | runs | hung |
+|---|---:|---:|
+| FellowEngine as is, the record on (`f502`, `f504`) | 32 | 3 (all at frame 14 548) |
+| the same, the record off (`f502`) | 12 | 0 |
+| without the present and submit threads (`f504`) | 20 | 0 |
+| FellowEngine off (`f504`: nothing streamed; two flights, not three) | 20 | 0 |
+| the record and the pass timestamps on (`f506`, `f507`) | 36 | 0 |
+| (milestone 145, `m145a`) held 10 s / 2 s | 34 / 27 | 4 / 0 |
+
+Too few to tell which of them matters (3 of 32 against none of 36 is p ≈ 0.1). The pass timestamps, meant to say
+where the GPU stops, may themselves keep it from stopping: they make the render graph keep each pass's commands
+together (a timestamp is adjacent to every command since the previous one), and the GPU drains its work at each.
+Next (`m146_f508`): GPU checkpoints (`debug/gpu_checkpoints`: NVIDIA's markers before each command, without
+constraining the order) and the render graph's reordering off (`debug/graph_reorder`), 20 runs each.
 
 ## Decision
 
