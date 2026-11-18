@@ -39,6 +39,7 @@
 #include "servers/audio/audio_stream.h"
 
 class MeshInstance3D;
+class Node3D;
 
 // FellowEngine (milestone 83, decision 0191): a face that speaks and blinks. The voice a player plays is analysed
 // ahead (its stream rendered once, shared by every face: its level and the energy in five bands every 10 ms); each
@@ -122,6 +123,7 @@ private:
 	// Milestone 89 (decision 0197): the gaze.
 	bool gaze = true;
 	NodePath look_target_path;
+	Vector2 head_turn; // milestone 148: degrees the head has turned towards the gaze (left, up): the eyes the rest
 	Vector3 eye_center; // in the face mesh's space
 	float eye_spacing = 0.0f; // m between the eyes (milestone 94: they converge on a near target); 0: parallel
 	float gaze_range_horizontal = 30.0f; // degrees: the eyes fully out or in
@@ -246,6 +248,9 @@ public:
 	void set_saccade_amplitude(float p_degrees) { saccade_amplitude = CLAMP(p_degrees, 0.0f, 20.0f); }
 	float get_saccade_amplitude() const { return saccade_amplitude; }
 	Vector2 get_gaze_angles() const { return gaze_now; }
+	void set_head_turn(const Vector2 &p_degrees) { head_turn = p_degrees; }
+	Vector2 get_head_turn() const { return head_turn; }
+	Node3D *get_look_target() const;
 	void set_eye_spacing(float p_spacing) { eye_spacing = MAX(0.0f, p_spacing); }
 	float get_eye_spacing() const { return eye_spacing; }
 	float get_vergence() const { return vergence_now; }

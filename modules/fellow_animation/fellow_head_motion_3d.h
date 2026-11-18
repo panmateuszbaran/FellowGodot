@@ -53,6 +53,14 @@ class FellowHeadMotion3D : public SkeletonModifier3D {
 	float idle_sway_degrees = 0.5f;
 	float sway_frequency = 0.3f; // Hz
 	int64_t seed = 0;
+	// Milestone 148 (decision 0278): the head turned towards what the face looks at, the eyes the rest.
+	bool follow_gaze = false;
+	float gaze_dead_zone = 10.0f; // degrees the eyes turn alone
+	float gaze_follow = 0.7f; // of the angle past the dead zone the head takes
+	float max_head_yaw = 70.0f;
+	float max_head_pitch = 35.0f;
+	float gaze_follow_time = 0.3f; // s
+	Vector2 gaze_turn; // degrees: yaw (left), pitch (down), eased
 
 	struct Nod {
 		double start = 0.0;
@@ -105,6 +113,19 @@ public:
 	float get_sway_frequency() const { return sway_frequency; }
 	void set_seed(int64_t p_seed);
 	int64_t get_seed() const { return seed; }
+	void set_follow_gaze(bool p_enabled) { follow_gaze = p_enabled; }
+	bool is_follow_gaze() const { return follow_gaze; }
+	void set_gaze_dead_zone(float p_degrees) { gaze_dead_zone = CLAMP(p_degrees, 0.0f, 60.0f); }
+	float get_gaze_dead_zone() const { return gaze_dead_zone; }
+	void set_gaze_follow(float p_share) { gaze_follow = CLAMP(p_share, 0.0f, 1.0f); }
+	float get_gaze_follow() const { return gaze_follow; }
+	void set_max_head_yaw(float p_degrees) { max_head_yaw = CLAMP(p_degrees, 0.0f, 120.0f); }
+	float get_max_head_yaw() const { return max_head_yaw; }
+	void set_max_head_pitch(float p_degrees) { max_head_pitch = CLAMP(p_degrees, 0.0f, 80.0f); }
+	float get_max_head_pitch() const { return max_head_pitch; }
+	void set_gaze_follow_time(float p_seconds) { gaze_follow_time = CLAMP(p_seconds, 0.0f, 3.0f); }
+	float get_gaze_follow_time() const { return gaze_follow_time; }
+	Vector2 get_gaze_turn() const { return gaze_turn; }
 
 	void nod(float p_strength = 1.0f);
 	Vector3 get_head_angles() const { return angles; }

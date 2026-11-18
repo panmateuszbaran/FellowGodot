@@ -889,7 +889,10 @@ The head (milestone 104, decision 0212): `FellowHeadMotion3D` (a `SkeletonModifi
 `face_animator_path`, `head_bone` (`Head`), `neck_bone` (`Neck`), `neck_share` (0.4), `forward` (+Z, the skeleton's
 space); nods `nod_degrees` (6°) at each stressed syllable, `nod_time` (0.12 s); sway `idle_sway_degrees` (0.5°),
 `speech_sway_degrees` (2°, × the speech activity), `sway_frequency` (0.3 Hz), `seed`; `nod(strength)`,
-`get_head_angles()`, `get_stats()`. Bench `bench/face_check.gd` (`--heads=1` with `--many`).
+`get_head_angles()`, `get_stats()`. Bench `bench/face_check.gd` (`--heads=1` with `--many`). Towards what the face looks
+at (milestone 148, decision 0278): `follow_gaze` (off), `gaze_dead_zone` (10°: the eyes alone), `gaze_follow` (0.7 of
+the angle past it), `max_head_yaw` (70°), `max_head_pitch` (35°), `gaze_follow_time` (0.3 s); `get_gaze_turn()`; the
+face told (`FellowFaceAnimator.set_head_turn()`, `get_head_turn()`), its eyes turning the rest.
 
 ## Crash reports (milestone 97)
 

@@ -132,6 +132,37 @@ void FellowHeadMotion3D::_process_modification(double p_delta) {
 		yaw = a * float(0.6 * Math::sin(0.83 * w + phases[2]) + 0.4 * Math::sin(2.13 * w + phases[3]));
 		roll = a * 0.5f * float(0.6 * Math::sin(0.71 * w + phases[4]) + 0.4 * Math::sin(1.37 * w + phases[5]));
 	}
+	// Milestone 148 (decision 0278): towards what the face looks at — past gaze_dead_zone, gaze_follow of the rest, up to
+	// max_head_yaw and max_head_pitch, eased over gaze_follow_time; the face told, its eyes turning the rest.
+	Vector2 gaze_goal;
+	FellowFaceAnimator *gaze_face = follow_gaze ? _face() : nullptr;
+	if (gaze_face && gaze_face->is_gaze()) {
+		const Node3D *target = gaze_face->get_look_target();
+		_find_bones(skeleton);
+		if (target && head_index >= 0) {
+			const Vector3 up(0, 1, 0);
+			const Vector3 f = forward.normalized();
+			const Vector3 l = up.cross(f).normalized();
+			const Vector3 d = skeleton->get_global_transform().affine_inverse().xform(target->get_global_position()) - skeleton->get_bone_global_pose(head_index).origin;
+			if (d.length() > 1e-4f && l.length_squared() > 1e-6f) {
+				const float yaw_to = Math::rad_to_deg(Math::atan2(d.dot(l), d.dot(f)));
+				const float pitch_to = -Math::rad_to_deg(Math::atan2(d.dot(up), Vector2(d.dot(l), d.dot(f)).length()));
+				const float yaw_turn = MIN(MAX(0.0f, Math::abs(yaw_to) - gaze_dead_zone) * gaze_follow, max_head_yaw);
+				const float pitch_turn = MIN(MAX(0.0f, Math::abs(pitch_to) - gaze_dead_zone) * gaze_follow, max_head_pitch);
+				gaze_goal = Vector2(SIGN(yaw_to) * yaw_turn, SIGN(pitch_to) * pitch_turn);
+			}
+		}
+	}
+	const float gk = gaze_follow_time > 0.0f ? 1.0f - Math::exp(-float(p_delta) / gaze_follow_time) : 1.0f;
+	gaze_turn += (gaze_goal - gaze_turn) * gk;
+	if (gaze_turn.length_squared() < 1e-8f) {
+		gaze_turn = Vector2();
+	}
+	if (gaze_face) {
+		gaze_face->set_head_turn(Vector2(gaze_turn.x, -gaze_turn.y));
+	}
+	pitch += gaze_turn.y;
+	yaw += gaze_turn.x;
 	angles = Vector3(pitch, yaw, roll);
 	frames++;
 	if (pitch == 0.0f && yaw == 0.0f && roll == 0.0f) {
@@ -252,6 +283,19 @@ void FellowHeadMotion3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_seed"), &FellowHeadMotion3D::get_seed);
 	ClassDB::bind_method(D_METHOD("nod", "strength"), &FellowHeadMotion3D::nod, DEFVAL(1.0f));
 	ClassDB::bind_method(D_METHOD("get_head_angles"), &FellowHeadMotion3D::get_head_angles);
+	ClassDB::bind_method(D_METHOD("set_follow_gaze", "enabled"), &FellowHeadMotion3D::set_follow_gaze);
+	ClassDB::bind_method(D_METHOD("is_follow_gaze"), &FellowHeadMotion3D::is_follow_gaze);
+	ClassDB::bind_method(D_METHOD("set_gaze_dead_zone", "degrees"), &FellowHeadMotion3D::set_gaze_dead_zone);
+	ClassDB::bind_method(D_METHOD("get_gaze_dead_zone"), &FellowHeadMotion3D::get_gaze_dead_zone);
+	ClassDB::bind_method(D_METHOD("set_gaze_follow", "share"), &FellowHeadMotion3D::set_gaze_follow);
+	ClassDB::bind_method(D_METHOD("get_gaze_follow"), &FellowHeadMotion3D::get_gaze_follow);
+	ClassDB::bind_method(D_METHOD("set_max_head_yaw", "degrees"), &FellowHeadMotion3D::set_max_head_yaw);
+	ClassDB::bind_method(D_METHOD("get_max_head_yaw"), &FellowHeadMotion3D::get_max_head_yaw);
+	ClassDB::bind_method(D_METHOD("set_max_head_pitch", "degrees"), &FellowHeadMotion3D::set_max_head_pitch);
+	ClassDB::bind_method(D_METHOD("get_max_head_pitch"), &FellowHeadMotion3D::get_max_head_pitch);
+	ClassDB::bind_method(D_METHOD("set_gaze_follow_time", "seconds"), &FellowHeadMotion3D::set_gaze_follow_time);
+	ClassDB::bind_method(D_METHOD("get_gaze_follow_time"), &FellowHeadMotion3D::get_gaze_follow_time);
+	ClassDB::bind_method(D_METHOD("get_gaze_turn"), &FellowHeadMotion3D::get_gaze_turn);
 	ClassDB::bind_method(D_METHOD("get_stats"), &FellowHeadMotion3D::get_stats);
 
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "face_animator_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "FellowFaceAnimator"), "set_face_animator_path", "get_face_animator_path");
@@ -267,6 +311,14 @@ void FellowHeadMotion3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "idle_sway_degrees", PROPERTY_HINT_RANGE, "0,20,0.1,degrees"), "set_idle_sway_degrees", "get_idle_sway_degrees");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sway_frequency", PROPERTY_HINT_RANGE, "0.01,5,0.01,suffix:Hz"), "set_sway_frequency", "get_sway_frequency");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "seed"), "set_seed", "get_seed");
+	ADD_GROUP("Gaze", "");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "follow_gaze"), "set_follow_gaze", "is_follow_gaze");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gaze_dead_zone", PROPERTY_HINT_RANGE, "0,60,0.1,degrees"), "set_gaze_dead_zone", "get_gaze_dead_zone");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gaze_follow", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_gaze_follow", "get_gaze_follow");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_head_yaw", PROPERTY_HINT_RANGE, "0,120,0.1,degrees"), "set_max_head_yaw", "get_max_head_yaw");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_head_pitch", PROPERTY_HINT_RANGE, "0,80,0.1,degrees"), "set_max_head_pitch", "get_max_head_pitch");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gaze_follow_time", PROPERTY_HINT_RANGE, "0,3,0.01,suffix:s"), "set_gaze_follow_time", "get_gaze_follow_time");
+	ADD_GROUP("", "");
 }
 
 FellowHeadMotion3D::FellowHeadMotion3D() {

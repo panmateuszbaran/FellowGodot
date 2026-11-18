@@ -15,6 +15,8 @@ extends SceneTree
 ## --listen=1 the voice played by an AudioStreamPlayer under Movie Maker and the face's blend shapes followed: the mouth
 ## leads the sound by the anticipation, its blend shapes are its channels. Milestone 100 (decision 0208): expressions
 ## faded in, crossfaded, a custom one, cleared; the brows raised on each of the voice's sounds after a silence.
+## Milestone 148 (decision 0278): a head turned towards what its face looks at (follow_gaze) — 60 degrees to the left,
+## 5, 30 up, 150 round — and one not.
 ## Milestone 104 (decision 0212): FellowHeadMotion3D — a head nodding at each of those sounds, a head swaying (more
 ## while the voice speaks), a head with every amount 0 (its bones untouched).
 ## --many=N: N faces, the time a frame (--heads=1: each with its head moving). One
@@ -65,6 +67,9 @@ var nod_trace := []  # [frame, pitch from get_head_angles, pitch measured on the
 var sway_motion: FellowHeadMotion3D
 var sway_trace := []  # [frame, pitch, yaw, roll]
 var still_motion: FellowHeadMotion3D
+# Milestone 148 (decision 0278): heads turned towards what their faces look at (follow_gaze), and one not.
+var look_heads := []
+var look_reads := {}
 var still_poses := []
 
 
@@ -390,6 +395,48 @@ func _build() -> void:
 		var sk: Skeleton3D = still_motion.get_skeleton()
 		if frame % 50 == 0:
 			still_poses.append([sk.get_bone_pose_rotation(0), sk.get_bone_pose_rotation(1)]))
+	# Milestone 148 (decision 0278): two heads (the head bone 1.62 m up) whose faces look at a target that moves — one
+	# turned towards it (follow_gaze), one not; their face meshes beside the skeletons, not moving with the head (as a
+	# face skinned to the skeleton), the eyes' centre at the head bone.
+	for k in 2:
+		var at := Vector3(12.0 + k * 6.0, 0, 0)
+		var lm := MeshInstance3D.new()
+		lm.mesh = _face_mesh()
+		lm.position = at
+		root3d.add_child(lm)
+		var lt := Node3D.new()
+		root3d.add_child(lt)
+		var lf := FellowFaceAnimator.new()
+		lf.blinks = false
+		lf.lip_sync = false
+		lf.saccades = false
+		lf.eye_center = Vector3(0, 1.62, 0)
+		root3d.add_child(lf)
+		lf.mesh_path = lf.get_path_to(lm)
+		lf.look_target_path = lf.get_path_to(lt)
+		var sk := Skeleton3D.new()
+		sk.position = at
+		sk.add_bone("Neck")
+		sk.set_bone_rest(0, Transform3D(Basis(), Vector3(0, 1.5, 0)))
+		sk.add_bone("Head")
+		sk.set_bone_parent(1, 0)
+		sk.set_bone_rest(1, Transform3D(Basis(), Vector3(0, 0.12, 0)))
+		sk.reset_bone_poses()
+		root3d.add_child(sk)
+		var hm := FellowHeadMotion3D.new()
+		hm.nod_degrees = 0.0
+		hm.idle_sway_degrees = 0.0
+		hm.speech_sway_degrees = 0.0
+		hm.follow_gaze = k == 0
+		sk.add_child(hm)
+		hm.face_animator_path = hm.get_path_to(lf)
+		var entry := {"head": hm, "face": lf, "target": lt, "skeleton": sk, "at": at, "bone_yaw": 0.0}
+		# The head bone's facing as the modifier leaves it (read while the modified pose is there).
+		hm.modification_processed.connect(func() -> void:
+			var q := sk.get_bone_pose_rotation(0) * sk.get_bone_pose_rotation(1)
+			var f := q * Vector3(0, 0, 1)
+			entry.bone_yaw = rad_to_deg(atan2(f.x, f.z)))
+		look_heads.append(entry)
 	physics_frame.connect(_on_frame)
 
 
@@ -508,6 +555,24 @@ func _on_frame() -> void:
 		if lid > 0.9 and not blink_closed:
 			blink_log.append(frame / 60.0)
 		blink_closed = lid > 0.9
+		# Milestone 148: the target 3 m from the head bone — 60 degrees to the left, 5 degrees, 30 degrees up, 150 degrees
+		# round to the left — each read two seconds later (the head's turn, the eyes', the head bone's facing).
+		var look_spots := {60: ["left60", 60.0, 0.0], 180: ["ahead5", 5.0, 0.0], 300: ["up30", 0.0, 30.0], 420: ["behind150", 150.0, 0.0]}
+		if look_spots.has(frame):
+			for lh in look_heads:
+				var yaw: float = deg_to_rad(look_spots[frame][1])
+				var pitch: float = deg_to_rad(look_spots[frame][2])
+				(lh.target as Node3D).position = (lh.at as Vector3) + Vector3(0, 1.62, 0) + Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * 3.0
+		if frame - 120 in look_spots:
+			var spot: String = look_spots[frame - 120][0]
+			for k in look_heads.size():
+				var lh: Dictionary = look_heads[k]
+				var hm: FellowHeadMotion3D = lh.head
+				var lf: FellowFaceAnimator = lh.face
+				var r := {"head_yaw": snappedf(hm.get_gaze_turn().x, 0.01), "head_pitch": snappedf(hm.get_gaze_turn().y, 0.01),
+					"bone_yaw": snappedf(lh.bone_yaw, 0.01), "eyes_yaw": snappedf(lf.get_gaze_angles().x, 0.01),
+					"eyes_pitch": snappedf(lf.get_gaze_angles().y, 0.01)}
+				look_reads[spot + ("" if k == 0 else "_still")] = r
 		if frame >= 3600:
 			done = true
 			_finish()
@@ -643,6 +708,18 @@ func _finish() -> void:
 		out["speech_brows"] = {"peaks": peaks, "emphases": brow_face.get_stats().emphases, "signals": brow_signals, "sounds_raised": sounds_raised,
 			"ok": brow_face.get_stats().emphases == 6 and brow_signals.size() == 6 and sounds_raised == 6 and brow_peaks[0] != null and brow_peaks[0] < 0.001}
 		_head_lanes(out)
+		# Milestone 148 (decision 0278): 60 degrees left — the head (60 - 10) x 0.7 = 35, its bone facing so, the eyes the
+		# rest (25); 5 degrees — the eyes alone (the head back from 35, eased); 30 up — the head 14 up, the eyes 16; 150 round — the head at its 70, the
+		# eyes at their 30; the head not following — still, the eyes at their 30 for the 60 degrees.
+		var lr := look_reads
+		var lok: bool = lr.size() == 8
+		if lok:
+			lok = absf(lr.left60.head_yaw - 35.0) < 0.5 and absf(lr.left60.bone_yaw - 35.0) < 0.5 and absf(lr.left60.eyes_yaw - 25.0) < 0.5
+			lok = lok and absf(lr.ahead5.head_yaw) < 0.1 and absf(lr.ahead5.eyes_yaw - 5.0) < 0.2
+			lok = lok and absf(lr.up30.head_pitch + 14.0) < 0.5 and absf(lr.up30.eyes_pitch - 16.0) < 0.5 and absf(lr.up30.head_yaw) < 0.1
+			lok = lok and absf(lr.behind150.head_yaw - 70.0) < 0.5 and absf(lr.behind150.eyes_yaw - 30.0) < 0.2
+			lok = lok and lr.left60_still.head_yaw == 0.0 and absf(lr.left60_still.bone_yaw) < 0.01 and absf(lr.left60_still.eyes_yaw - 30.0) < 0.2
+		out["head_gaze"] = {"reads": lr, "ok": lok}
 		out["blinks"] = {"count": blink_log.size(), "gap_min": gmin, "gap_max": gmax,
 			"ok": blink_log.size() >= 10 and blink_log.size() <= 25 and gmin >= 2.0 and gmax <= 6.3}
 	else:

@@ -567,8 +567,10 @@ void FellowFaceAnimator::_update(double p_delta) {
 			const Transform3D xf = face->get_global_transform();
 			const Vector3 d = xf.basis.inverse().xform(target->get_global_position() - xf.xform(eye_center));
 			if (d.length() > 1e-4f) {
-				goal.x = Math::rad_to_deg(Math::atan2(d.x, d.z));
-				goal.y = Math::rad_to_deg(Math::atan2(d.y, Vector2(d.x, d.z).length()));
+				// Milestone 148 (decision 0278): less what a head turned towards the target already turns (a face
+				// skinned to the skeleton does not move with the head's bone).
+				goal.x = Math::rad_to_deg(Math::atan2(d.x, d.z)) - head_turn.x;
+				goal.y = Math::rad_to_deg(Math::atan2(d.y, Vector2(d.x, d.z).length())) - head_turn.y;
 				// Milestone 94 (decision 0202): each eye turned in by half the angle the target subtends between them.
 				if (eye_spacing > 0.0f) {
 					vergence = Math::rad_to_deg(Math::atan2(eye_spacing * 0.5f, float(d.length())));
@@ -752,6 +754,10 @@ void FellowFaceAnimator::_notification(int p_what) {
 	}
 }
 
+Node3D *FellowFaceAnimator::get_look_target() const {
+	return look_target_path.is_empty() ? nullptr : Object::cast_to<Node3D>(get_node_or_null(look_target_path));
+}
+
 void FellowFaceAnimator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_mesh_path", "path"), &FellowFaceAnimator::set_mesh_path);
 	ClassDB::bind_method(D_METHOD("get_mesh_path"), &FellowFaceAnimator::get_mesh_path);
@@ -806,6 +812,8 @@ void FellowFaceAnimator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_saccade_amplitude", "degrees"), &FellowFaceAnimator::set_saccade_amplitude);
 	ClassDB::bind_method(D_METHOD("get_saccade_amplitude"), &FellowFaceAnimator::get_saccade_amplitude);
 	ClassDB::bind_method(D_METHOD("get_gaze_angles"), &FellowFaceAnimator::get_gaze_angles);
+	ClassDB::bind_method(D_METHOD("set_head_turn", "degrees"), &FellowFaceAnimator::set_head_turn);
+	ClassDB::bind_method(D_METHOD("get_head_turn"), &FellowFaceAnimator::get_head_turn);
 	ClassDB::bind_method(D_METHOD("set_eye_spacing", "spacing"), &FellowFaceAnimator::set_eye_spacing);
 	ClassDB::bind_method(D_METHOD("get_eye_spacing"), &FellowFaceAnimator::get_eye_spacing);
 	ClassDB::bind_method(D_METHOD("get_vergence"), &FellowFaceAnimator::get_vergence);

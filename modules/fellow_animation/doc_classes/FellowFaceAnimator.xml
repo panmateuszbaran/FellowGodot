@@ -79,6 +79,12 @@
 				Every face's: [code]frames[/code], [code]usec[/code], [code]analyses[/code] (voices seen), [code]analysis_usec[/code], [code]analysed_seconds[/code], [code]cached_voices[/code].
 			</description>
 		</method>
+		<method name="get_head_turn" qualifiers="const">
+			<return type="Vector2" />
+			<description>
+				See [method set_head_turn].
+			</description>
+		</method>
 		<method name="get_last_emphasis_strength" qualifiers="const">
 			<return type="float" />
 			<description>
@@ -124,6 +130,13 @@
 			<param index="2" name="fade" type="float" default="0.3" />
 			<description>
 				Fades an expression to [param weight] over [param fade] seconds (0: at once) (milestone 100). Expressions add up — each channel at most 1 — on top of the lip sync, the blinks and the gaze: [code]set_expression(&amp;"happy")[/code] smiles; [code]set_expression(&amp;"happy", 0.0, 0.5)[/code] with [code]set_expression(&amp;"sad", 1.0, 0.5)[/code] crossfades. The built-in ones follow the action units Ekman and Friesen give for the basic emotions (FACS): [code]happy[/code] (the cheeks raised, the corners pulled), [code]sad[/code] (the inner brows raised and drawn, the corners down), [code]angry[/code] (the brows down, the lids tightened, the lips pressed), [code]surprised[/code] (the brows up, the eyes wide, the jaw dropped), [code]afraid[/code], [code]disgusted[/code] (the nose wrinkled, the corners down); [member expressions] adds the game's own or changes these.
+			</description>
+		</method>
+		<method name="set_head_turn">
+			<return type="void" />
+			<param index="0" name="degrees" type="Vector2" />
+			<description>
+				The degrees a head has turned towards the look target ([code]x[/code] to the left, [code]y[/code] up), taken off the eyes' angles to it: the eyes turn the rest. A [FellowHeadMotion3D] with [member FellowHeadMotion3D.follow_gaze] sets it every frame; for a face mesh skinned to the skeleton (which does not move with the head's bone).
 			</description>
 		</method>
 	</methods>

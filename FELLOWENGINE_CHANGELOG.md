@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 149 — the head following the gaze (2026-11-18, in progress)
+
+- Decision 0278: `FellowHeadMotion3D.follow_gaze` (opt-in) — the head turns towards what its face looks at (past
+  `gaze_dead_zone`, `gaze_follow` of the rest, up to `max_head_yaw` / `max_head_pitch`, eased over
+  `gaze_follow_time`) and tells the face (`FellowFaceAnimator.set_head_turn()`), whose eyes turn the rest: a target
+  60° to the left, the head 34.9° and the eyes 25.1° (without it the eyes stop at 30°). `face_check.gd`'s
+  `head_gaze`; the earlier lanes and the regression scene `face` as before.
+
 ## Milestone 148 — free climbing; sound round edges (2026-11-18)
 
 - Decision 0276: `FellowTraversal3D.free_climb` — a body pushing at a climbable face (`climb_mask`) with nothing to

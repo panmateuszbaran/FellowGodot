@@ -7,6 +7,7 @@
 		A modifier of the character's [Skeleton3D] (after the animation's: an [AnimationTree] or [AnimationPlayer] plays under it). It follows a [FellowFaceAnimator] ([member face_animator_path]) and turns the head and neck bones over whatever the animation plays:
 		- a [b]nod[/b] at each of the voice's stressed syllables (each [signal FellowFaceAnimator.emphasized]): the head tipped down by [member nod_degrees] times the syllable's strength, its lowest point [member nod_time] after it, back in about half a second (a critically damped pulse); [method nod] adds one from the game;
 		- a [b]sway[/b]: a slow turn about the three axes (two sines each at frequencies that never repeat together, about [member sway_frequency]), [member idle_sway_degrees] at rest and up to [member speech_sway_degrees] more while the face speaks ([method FellowFaceAnimator.get_speech_activity]).
+		- with [member follow_gaze] (milestone 148), a [b]turn towards what the face looks at[/b], the eyes turning the rest.
 		The rotation is in the skeleton's space — the face looks along [member forward], up is +Y — and shared between the neck ([member neck_share]) and the head. With every amount 0 the bones are left as the animation posed them. See [code]docs/decisions/0212-head-motion.md[/code].
 		[codeblock]
 		# Under the character's Skeleton3D, its face's FellowFaceAnimator elsewhere in the character:
@@ -18,6 +19,12 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="get_gaze_turn" qualifiers="const">
+			<return type="Vector2" />
+			<description>
+				With [member follow_gaze]: the head's turn towards the face's look target now, in degrees ([code]x[/code] the yaw to the left, [code]y[/code] the pitch down), eased.
+			</description>
+		</method>
 		<method name="get_head_angles" qualifiers="const">
 			<return type="Vector3" />
 			<description>
@@ -42,14 +49,32 @@
 		<member name="face_animator_path" type="NodePath" setter="set_face_animator_path" getter="get_face_animator_path" default="NodePath(&quot;&quot;)">
 			The [FellowFaceAnimator] whose stressed syllables the head nods at and whose speech makes it sway more. Without one the head sways at rest (and nods when [method nod] is called).
 		</member>
+		<member name="follow_gaze" type="bool" setter="set_follow_gaze" getter="is_follow_gaze" default="false">
+			If [code]true[/code], the head turns towards what the [FellowFaceAnimator] looks at ([member FellowFaceAnimator.look_target_path], with its [member FellowFaceAnimator.gaze] on): past [member gaze_dead_zone], [member gaze_follow] of the rest, up to [member max_head_yaw] and [member max_head_pitch], eased over [member gaze_follow_time]; the face is told ([method FellowFaceAnimator.set_head_turn]) and its eyes turn the rest. Milestone 148, see [code]docs/decisions/0278-head-follows-gaze.md[/code].
+		</member>
 		<member name="forward" type="Vector3" setter="set_forward" getter="get_forward" default="Vector3(0, 0, 1)">
 			The direction the face looks in the skeleton's space (Godot's humanoid profile: +Z): a nod tips it down.
+		</member>
+		<member name="gaze_dead_zone" type="float" setter="set_gaze_dead_zone" getter="get_gaze_dead_zone" default="10.0">
+			With [member follow_gaze]: the angle (degrees) within which the eyes turn alone.
+		</member>
+		<member name="gaze_follow" type="float" setter="set_gaze_follow" getter="get_gaze_follow" default="0.7">
+			With [member follow_gaze]: the share of the angle past [member gaze_dead_zone] the head takes (the eyes the rest).
+		</member>
+		<member name="gaze_follow_time" type="float" setter="set_gaze_follow_time" getter="get_gaze_follow_time" default="0.3">
+			With [member follow_gaze]: how quickly the head turns towards the target (s: an exponential ease).
 		</member>
 		<member name="head_bone" type="StringName" setter="set_head_bone" getter="get_head_bone" default="&amp;&quot;Head&quot;">
 			The head's bone. Without it in the skeleton nothing is turned (a configuration warning says so).
 		</member>
 		<member name="idle_sway_degrees" type="float" setter="set_idle_sway_degrees" getter="get_idle_sway_degrees" default="0.5">
 			The sway's amplitude at rest, in degrees.
+		</member>
+		<member name="max_head_pitch" type="float" setter="set_max_head_pitch" getter="get_max_head_pitch" default="35.0">
+			With [member follow_gaze]: the most the head turns up or down (degrees).
+		</member>
+		<member name="max_head_yaw" type="float" setter="set_max_head_yaw" getter="get_max_head_yaw" default="70.0">
+			With [member follow_gaze]: the most the head turns to either side (degrees).
 		</member>
 		<member name="neck_bone" type="StringName" setter="set_neck_bone" getter="get_neck_bone" default="&amp;&quot;Neck&quot;">
 			The neck's bone, sharing the rotation with the head (empty or not found: the head turns alone).
