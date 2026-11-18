@@ -9439,8 +9439,10 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 		const uint64_t fellow_wait_from = OS::get_singleton()->get_ticks_usec();
 		// FellowEngine (decision 0270): a fence late by rendering/fellow/debug/late_fence_report_s is reported, then waited
 		// for as before.
-		ProjectSettings *fellow_ps = ProjectSettings::get_singleton();
-		const double fellow_late_s = is_main_instance && fellow_ps->has_setting("rendering/fellow/debug/late_fence_report_s") ? GLOBAL_GET_CACHED(double, "rendering/fellow/debug/late_fence_report_s") : 0.0;
+		if (!fellow_late_fence_registered && is_main_instance) {
+			fellow_late_fence_registered = ProjectSettings::get_singleton()->has_setting("rendering/fellow/debug/late_fence_report_s");
+		}
+		const double fellow_late_s = fellow_late_fence_registered ? GLOBAL_GET_CACHED(double, "rendering/fellow/debug/late_fence_report_s") : 0.0;
 		if (fellow_late_s <= 0.0) {
 			driver->fence_wait(frames[p_frame].fence);
 		} else if (driver->fellow_fence_wait_timeout(frames[p_frame].fence, uint64_t(fellow_late_s * 1000000.0)) == ERR_TIMEOUT) {

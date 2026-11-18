@@ -2003,6 +2003,7 @@ public:
 	void _stall_for_frame(uint32_t p_frame);
 	void _fellow_late_fence_report(uint32_t p_frame, double p_seconds); // FellowEngine (decision 0270)
 	uint32_t fellow_late_fence_reports = 0;
+	bool fellow_late_fence_registered = false; // the setting exists (registered after the device is made)
 	void _stall_for_previous_frames();
 	void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
 
