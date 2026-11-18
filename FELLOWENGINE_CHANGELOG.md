@@ -9,7 +9,7 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
-## Milestone 148 — free climbing; sound round edges (2026-11-18, in progress)
+## Milestone 148 — free climbing; sound round edges (2026-11-18)
 
 - Decision 0276: `FellowTraversal3D.free_climb` — a body pushing at a climbable face (`climb_mask`) with nothing to
   mantle onto climbs it: up and down, along it (the wish held turning with the face), round towers and corners, over
