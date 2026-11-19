@@ -1,16 +1,17 @@
 [gd_resource type="ShaderMaterial" format=3]
 
-[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_60bji"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/green_rough_planks_diff_2k.jpg" id="2_hpggk"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/green_rough_planks_arm_2k.jpg" id="3_h7vjg"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/green_rough_planks_nor_gl_2k.jpg" id="4_07fky"]
+[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_hpggk"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/green_rough_planks_diff_2k.jpg" id="2_h7vjg"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/green_rough_planks_arm_2k.jpg" id="3_07fky"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/green_rough_planks_disp_2k.jpg" id="4_ucpbg"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/green_rough_planks_nor_gl_2k.jpg" id="5_prig3"]
 
 [resource]
 render_priority = 0
-shader = ExtResource("1_60bji")
-shader_parameter/albedo_tex = ExtResource("2_hpggk")
-shader_parameter/normal_tex = ExtResource("4_07fky")
-shader_parameter/arm_tex = ExtResource("3_h7vjg")
+shader = ExtResource("1_hpggk")
+shader_parameter/albedo_tex = ExtResource("2_h7vjg")
+shader_parameter/normal_tex = ExtResource("5_prig3")
+shader_parameter/arm_tex = ExtResource("3_07fky")
 shader_parameter/tex_size = 1.5
 shader_parameter/tint = null
 shader_parameter/tint_strength = null
@@ -27,3 +28,10 @@ shader_parameter/seed = 9.0
 shader_parameter/instance_tint = null
 shader_parameter/fallen = null
 shader_parameter/patch_size = null
+shader_parameter/height_tex = ExtResource("4_ucpbg")
+shader_parameter/parallax_depth = null
+shader_parameter/height_lo = null
+shader_parameter/height_hi = null
+shader_parameter/cavity = null
+shader_parameter/albedo_soften = null
+shader_parameter/soften_lod = null

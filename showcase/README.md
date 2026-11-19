@@ -135,8 +135,11 @@ godot --headless --path showcase -s res://tools/build_rooftops.gd -- <dir>
   `python tools/fetch_textures.py` downloads them (about 105 MB, 2k; milestone 156: the houses' sandstone ashlar) into
   `rooftops/textures/` (not in git), the
   editor imports them, then the builder uses them (`rooftops/shaders/facade_pbr.gdshader`: tinted plaster with its
-  weathering, stone, rustication, brick, roof tiles, wood, shutters, sampled twice against tiling;
+  weathering, stone, rustication, brick, roof tiles, wood, shutters, sampled twice against tiling; from milestone 158 the
+  stone's and tiles' relief by parallax from their height maps;
   `paving_pbr.gdshader`: the ground by zone); without them the procedural shaders (`plaster`, `masonry`, `paving`, …).
+* `tools/reference_look.gd` (milestone 158): the demo's reference shot rendered at chosen frames of the owner's
+  reference video, each after the light has settled, beside the video's frames (`--frames=`, `--ref=<dir>`, `--out=`).
 * `scripts/rooftops_player.gd` (the controller), `rooftops_camera.gd` (the camera: damped springs, look-ahead,
   sprint pull-back, sphere-cast collision, the swirl and the leap's shots), `rooftops_demo.gd` (the demo's shots),
   `rooftops_birds.gd`, `rooftops_crowd.gd` (the people), `rooftops.gd` (the scene's sky).

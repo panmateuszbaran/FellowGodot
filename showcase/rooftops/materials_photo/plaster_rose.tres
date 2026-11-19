@@ -1,22 +1,23 @@
 [gd_resource type="ShaderMaterial" format=3]
 
-[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_cv5ul"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_diff_2k.jpg" id="2_wh6nh"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_arm_2k.jpg" id="3_j2cry"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_nor_gl_2k.jpg" id="4_0enj4"]
+[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_wh6nh"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_diff_2k.jpg" id="2_j2cry"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_arm_2k.jpg" id="3_0enj4"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_disp_2k.jpg" id="4_n0kv7"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_nor_gl_2k.jpg" id="5_wjut2"]
 
 [resource]
 render_priority = 0
-shader = ExtResource("1_cv5ul")
-shader_parameter/albedo_tex = ExtResource("2_wh6nh")
-shader_parameter/normal_tex = ExtResource("4_0enj4")
-shader_parameter/arm_tex = ExtResource("3_j2cry")
-shader_parameter/tex_size = 1.25
+shader = ExtResource("1_wh6nh")
+shader_parameter/albedo_tex = ExtResource("2_j2cry")
+shader_parameter/normal_tex = ExtResource("5_wjut2")
+shader_parameter/arm_tex = ExtResource("3_0enj4")
+shader_parameter/tex_size = 2.5
 shader_parameter/tint = Color(0.9105, 0.8465, 0.768, 1)
 shader_parameter/tint_strength = 0.3
 shader_parameter/tex_lum = 0.35650870436825244
 shader_parameter/brightness = 1.25
-shader_parameter/normal_strength = 0.55
+shader_parameter/normal_strength = 0.18
 shader_parameter/roughness_bias = 0.05
 shader_parameter/specular = 0.2
 shader_parameter/anti_tile = false
@@ -27,3 +28,10 @@ shader_parameter/seed = 2.0
 shader_parameter/instance_tint = null
 shader_parameter/fallen = null
 shader_parameter/patch_size = null
+shader_parameter/height_tex = ExtResource("4_n0kv7")
+shader_parameter/parallax_depth = 0.025
+shader_parameter/height_lo = 0.44
+shader_parameter/height_hi = 0.6
+shader_parameter/cavity = null
+shader_parameter/albedo_soften = 0.55
+shader_parameter/soften_lod = null

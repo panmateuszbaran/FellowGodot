@@ -5,6 +5,7 @@
 [resource]
 render_priority = 0
 shader = ExtResource("1_d4b3x")
-shader_parameter/lit_share = null
+shader_parameter/lit_share = 0.04
 shader_parameter/curtain_share = null
-shader_parameter/lamp_energy = null
+shader_parameter/lamp_energy = 0.3
+shader_parameter/lead_width = 0.0

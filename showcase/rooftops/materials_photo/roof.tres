@@ -1,21 +1,22 @@
 [gd_resource type="ShaderMaterial" format=3]
 
-[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_4vbpt"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/clay_roof_tiles_02_diff_2k.jpg" id="2_bdq25"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/clay_roof_tiles_02_arm_2k.jpg" id="3_vm52o"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/clay_roof_tiles_02_nor_gl_2k.jpg" id="4_8qdnx"]
+[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_bdq25"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/clay_roof_tiles_02_diff_2k.jpg" id="2_vm52o"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/clay_roof_tiles_02_arm_2k.jpg" id="3_8qdnx"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/clay_roof_tiles_02_disp_2k.jpg" id="4_yvthi"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/clay_roof_tiles_02_nor_gl_2k.jpg" id="5_eo6cl"]
 
 [resource]
 render_priority = 0
-shader = ExtResource("1_4vbpt")
-shader_parameter/albedo_tex = ExtResource("2_bdq25")
-shader_parameter/normal_tex = ExtResource("4_8qdnx")
-shader_parameter/arm_tex = ExtResource("3_vm52o")
+shader = ExtResource("1_bdq25")
+shader_parameter/albedo_tex = ExtResource("2_vm52o")
+shader_parameter/normal_tex = ExtResource("5_eo6cl")
+shader_parameter/arm_tex = ExtResource("3_8qdnx")
 shader_parameter/tex_size = 4.2
 shader_parameter/tint = Color(0.8, 0.62, 0.52, 1)
-shader_parameter/tint_strength = 0.35
+shader_parameter/tint_strength = 0.55
 shader_parameter/tex_lum = 0.1453264419716106
-shader_parameter/brightness = 1.15
+shader_parameter/brightness = 0.8
 shader_parameter/normal_strength = null
 shader_parameter/roughness_bias = 0.05
 shader_parameter/specular = 0.22
@@ -27,3 +28,10 @@ shader_parameter/seed = 6.0
 shader_parameter/instance_tint = null
 shader_parameter/fallen = null
 shader_parameter/patch_size = null
+shader_parameter/height_tex = ExtResource("4_yvthi")
+shader_parameter/parallax_depth = 0.06
+shader_parameter/height_lo = 0.2
+shader_parameter/height_hi = 0.85
+shader_parameter/cavity = 0.3
+shader_parameter/albedo_soften = null
+shader_parameter/soften_lod = null

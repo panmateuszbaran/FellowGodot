@@ -31,6 +31,25 @@ uniform float fallen = 0.0;
 uniform sampler2D patch_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D patch_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float patch_size = 3.0;
+// Milestone 158 (the owner's reference): the photograph's relief seen in depth — parallax occlusion over its height map
+// (Poly Haven's displacement): the joints between the blocks and the tiles' troughs sink, the faces stand, as the view
+// slants. The depth in metres (0: off); laid textures only (not with the anti-tiling's second, turned sample).
+uniform sampler2D height_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
+uniform float parallax_depth = 0.0;
+// The height map's levels taken as the bottom and the top of the relief (a dressed block's face flat over its joints:
+// the photograph's rough face left to the normal map).
+uniform float height_lo = 0.0;
+uniform float height_hi = 1.0;
+// How much darker the relief's bottom is (the joints', the troughs': less light reaches them).
+uniform float cavity = 0.55;
+// The photograph's fine contrast (its pits and grains) eased towards its colour over a few centimetres: a dressed,
+// weathered face (the reference's), not a rock-faced one.
+uniform float albedo_soften = 0.0;
+uniform float soften_lod = 5.0;
+
+float pom_depth(vec2 uv) {
+	return 1.0 - smoothstep(height_lo, height_hi, textureLod(height_tex, uv, 0.0).r);
+}
 
 varying vec3 world_pos;
 varying vec4 inst;
@@ -46,7 +65,40 @@ void fragment() {
 	vec3 tn = instance_tint ? inst.rgb : tint;
 	vec2 uv_m = UV + vec2(sd * 7.31, sd * 3.17);
 	vec2 uv_a = uv_m / tex_size;
+	mat3 tbn = rt_cotangent_frame(normalize(NORMAL), VERTEX, uv_a);
+	float pdepth = 0.0;
+	if (parallax_depth > 0.0 && !anti_tile) {
+		// The view in the texture's frame; marched into the height field (the texture's units: depth / size).
+		vec3 v = normalize(VIEW);
+		vec3 vt = vec3(dot(v, tbn[0]), dot(v, tbn[1]), dot(v, normalize(NORMAL)));
+		float d = parallax_depth / tex_size;
+		float n = mix(28.0, 8.0, clamp(vt.z, 0.0, 1.0));
+		float layer = 1.0 / n;
+		vec2 step_uv = vt.xy / max(vt.z, 0.15) * d / n;
+		vec2 cur = uv_a;
+		float cur_d = 0.0;
+		float h = pom_depth(cur);
+		for (int i = 0; i < 32; i++) {
+			if (cur_d >= h) {
+				break;
+			}
+			cur -= step_uv;
+			h = pom_depth(cur);
+			cur_d += layer;
+		}
+		vec2 prev = cur + step_uv;
+		float after = h - cur_d;
+		float before = pom_depth(prev) - cur_d + layer;
+		float w = after / min(after - before, -1e-5);
+		vec2 hit = mix(cur, prev, clamp(w, 0.0, 1.0));
+		pdepth = cur_d;
+		uv_m += (hit - uv_a) * tex_size;
+		uv_a = hit;
+	}
 	vec3 col = texture(albedo_tex, uv_a).rgb;
+	if (albedo_soften > 0.0) {
+		col = mix(col, textureLod(albedo_tex, uv_a, soften_lod).rgb, albedo_soften);
+	}
 	vec3 nrm = texture(normal_tex, uv_a).rgb;
 	vec3 arm = texture(arm_tex, uv_a).rgb;
 	if (anti_tile) {
@@ -94,8 +146,9 @@ void fragment() {
 	ALBEDO = clamp(col, 0.0, 1.0);
 	ROUGHNESS = rough;
 	SPECULAR = specular;
+	// Deep in the relief (the joints), darker: the light that reaches it is less.
+	ao *= 1.0 - cavity * smoothstep(0.35, 1.0, pdepth);
 	AO = ao;
 	AO_LIGHT_AFFECT = 0.25;
-	mat3 tbn = rt_cotangent_frame(normalize(NORMAL), VERTEX, uv_a);
 	NORMAL = rt_normal_from_map(tbn, nrm, nstr);
 }

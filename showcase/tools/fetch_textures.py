@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """FellowEngine showcase: downloads the rooftops scene's photographic textures from Poly Haven (polyhaven.com, CC0 — no
 attribution needed, free for any use) into showcase/rooftops/textures/ (not part of the repository: .gitignore). Each
-set: its colour, its normal map (OpenGL) and its AO/roughness/metal map, at 2K. Without them the scene's materials
-fall back to their procedural versions (tools/build_rooftops.gd).
+set: its colour, its normal map (OpenGL), its AO/roughness/metal map and its height (displacement), at 2K. Without
+them the scene's materials fall back to their procedural versions (tools/build_rooftops.gd).
 
     python showcase/tools/fetch_textures.py [--force]
 
@@ -34,7 +34,8 @@ SETS = {
     # Milestone 156: the owner's reference — a city of warm, rough-faced sandstone ashlar.
     "ashlar": "sandstone_blocks_05",
 }
-MAPS = {"Diffuse": "diff", "nor_gl": "nor_gl", "arm": "arm"}
+# Milestone 158: and its height (Poly Haven's displacement map): the parallax's depth (the stone's joints, the tiles').
+MAPS = {"Diffuse": "diff", "nor_gl": "nor_gl", "arm": "arm", "Displacement": "disp"}
 HEADERS = {"User-Agent": "FellowEngine-showcase/1.0 (fetch_textures.py)"}
 
 

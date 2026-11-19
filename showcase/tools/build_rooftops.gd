@@ -143,6 +143,8 @@ func _make_materials() -> void:
 			"block_size": Vector2(0.22, 0.15), "joint_width": 0.02, "joint_depth": 0.02, "chamfer": 0.03,
 			"face_rough": 0.004, "variation": 0.2, "grime": 0.0, "ground_dirt": 0.0, "seed": 6.0})
 	mats["roof"] = _shader_mat("roof_tiles", {})
+	# Milestone 158: the coppi over the roofs (ac_buildings.eaves), weathered terracotta.
+	mats["coppo"] = _shader_mat("plaster", {"color": Color(0.7, 0.43, 0.31), "fallen": 0.0, "seed": 9.0})
 	# The ground: the square's slabs and bands, the fan round the fountain, the pavements along the fronts, the streets'
 	# cobbles (rooftops/shaders/paving.gdshader), told where the houses stand.
 	var walls := PackedVector4Array()
@@ -157,7 +159,9 @@ func _make_materials() -> void:
 	mats["wood_dark"] = _shader_mat("wood", {"color": Color(0.24, 0.15, 0.09), "bleach": 0.15, "seed": 2.0})
 	mats["shutter_green"] = _shader_mat("wood", {"louvres": true, "paint": Color(0.2, 0.33, 0.24), "wear": 0.35})
 	mats["shutter_brown"] = _shader_mat("wood", {"louvres": true, "paint": Color(0.4, 0.21, 0.12), "wear": 0.3, "seed": 5.0})
-	mats["glass"] = _shader_mat("window_glass", {})
+	# Milestone 158: the windows' wooden casements give the panes; a lamp in fewer rooms, dimmer (one lit behind the
+	# climbed window had glowed white beside the reference's dark glass).
+	mats["glass"] = _shader_mat("window_glass", {"lead_width": 0.0, "lit_share": 0.04, "lamp_energy": 0.3})
 	mats["hay"] = _shader_mat("hay", {})
 	mats["cloth"] = _shader_mat("banner_cloth", {"pattern": 1})
 	var iron := StandardMaterial3D.new()
@@ -170,6 +174,12 @@ func _make_materials() -> void:
 	bronze.metallic = 1.0
 	bronze.roughness = 0.38
 	mats["bronze"] = bronze
+	# Milestone 158: the gutters' zinc, weathered grey.
+	var zinc := StandardMaterial3D.new()
+	zinc.albedo_color = Color(0.46, 0.46, 0.44)
+	zinc.metallic = 0.6
+	zinc.roughness = 0.55
+	mats["zinc"] = zinc
 	for n in mats:
 		_save(mats[n], "%s/materials/%s.tres" % [OUT, n])
 	_photo_materials(plaster)
@@ -208,12 +218,18 @@ func _texset(p_role: String) -> Array:
 				var c := img.get_pixel(x, y).srgb_to_linear()
 				sum += c.r * 0.3 + c.g * 0.55 + c.b * 0.15
 		lum = sum / 256.0
-	return [load(dir + maps["diff"]), load(dir + maps["nor_gl"]), load(dir + maps["arm"]), float(dims[0]) / 1000.0, lum]
+	# Milestone 158: its height map too, where it was fetched (the parallax's depth).
+	var disp: Texture2D = load(dir + maps["disp"]) if maps.has("disp") and ResourceLoader.exists(dir + maps["disp"]) else null
+	return [load(dir + maps["diff"]), load(dir + maps["nor_gl"]), load(dir + maps["arm"]), float(dims[0]) / 1000.0, lum, disp]
 
 
 func _photo(p_role: String, p_params: Dictionary) -> ShaderMaterial:
 	var t := _texset(p_role)
 	var params := {"albedo_tex": t[0], "normal_tex": t[1], "arm_tex": t[2], "tex_size": t[3], "tex_lum": t[4]}
+	if t[5] == null:
+		params["parallax_depth"] = 0.0
+	else:
+		params["height_tex"] = t[5]
 	params.merge(p_params, true)
 	return _shader_mat("facade_pbr", params)
 
@@ -235,12 +251,17 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 		# beige).
 		for n in p_plaster:
 			var shade: Color = Color(0.93, 0.89, 0.81).lerp(p_plaster[n][0], 0.15)
+			# Milestone 158 (the reference beside the replica, frame for frame): the blocks at the photograph's own scale
+			# halved to the reference's courses (some 29 cm: the climber's shin spans one and a half; at 1.25 m they had
+			# been 15 cm, a wall of bricks), dressed — their faces flat (the photograph's rock-faced relief left to a
+			# weaker normal map), the joints sunk 2.5 cm by the parallax.
 			photo[n] = _photo("ashlar", {"tint": shade, "tint_strength": 0.3, "brightness": 1.25, "seed": p_plaster[n][2],
-					"tex_size": 1.25, "normal_strength": 0.55, "specular": 0.2, "roughness_bias": 0.05, "stains": 0.25,
-					"variation": 0.08, "anti_tile": false})
+					"tex_size": 2.5, "normal_strength": 0.18, "specular": 0.2, "roughness_bias": 0.05, "stains": 0.25,
+					"variation": 0.08, "anti_tile": false, "parallax_depth": 0.025, "height_lo": 0.44, "height_hi": 0.6,
+					"albedo_soften": 0.55})
 		photo["far_plaster"] = _photo("ashlar", {"tint": Color(0.9, 0.84, 0.74), "tint_strength": 0.3, "brightness": 1.2,
-				"tex_size": 1.25, "normal_strength": 0.55, "specular": 0.2, "stains": 0.3, "variation": 0.1, "anti_tile": false,
-				"instance_tint": true})
+				"tex_size": 2.5, "normal_strength": 0.55, "specular": 0.2, "stains": 0.3, "variation": 0.1, "anti_tile": false,
+				"instance_tint": true, "parallax_depth": 0.0})
 	else:
 		for n in p_plaster:
 			photo[n] = _photo("plaster_smooth", {"tint": p_plaster[n][0], "tint_strength": 0.9, "brightness": 1.0, "seed": p_plaster[n][2],
@@ -251,13 +272,13 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 				"roughness_bias": 0.08, "stains": 0.5, "variation": 0.14, "instance_tint": true})
 	# Laid textures (blocks, bricks, tiles, boards) are not turned for the anti-tiling: their courses must stay level.
 	photo["stone"] = _photo("stone", {"tint": Color(0.8, 0.76, 0.66), "tint_strength": 0.45, "specular": 0.25, "stains": 0.3,
-			"anti_tile": false, "seed": 1.0})
+			"anti_tile": false, "seed": 1.0, "parallax_depth": 0.006})
 	photo["water_stone"] = _photo("stone", {"tint": Color(0.82, 0.8, 0.74), "tint_strength": 0.6, "specular": 0.25, "stains": 0.5,
 			"anti_tile": false, "seed": 2.0})
 	# The ground floors' rustication: the sandstone's blocks, larger and rougher, greyer than the dressings.
 	photo["stone_rustic"] = _photo("ashlar" if _tex.has("ashlar") else "stone", {"tint": Color(0.82, 0.76, 0.66), "tint_strength": 0.4, "specular": 0.22,
-			"stains": 0.4, "ground_dirt": 0.9, "normal_strength": 1.6, "tex_size": 2.2, "variation": 0.16, "anti_tile": false,
-			"seed": 3.0})
+			"stains": 0.4, "ground_dirt": 0.9, "normal_strength": 1.2, "tex_size": 3.4, "variation": 0.16, "anti_tile": false,
+			"seed": 3.0, "parallax_depth": 0.035, "height_lo": 0.44, "height_hi": 0.62})
 	photo["kerb"] = _photo("stone", {"tint": Color(0.62, 0.62, 0.6), "tint_strength": 0.7, "specular": 0.25, "anti_tile": false, "seed": 4.0})
 	photo["brick"] = _photo("brick", {"tint": Color(0.56, 0.38, 0.3), "tint_strength": 0.5, "normal_strength": 0.75, "specular": 0.2,
 			"stains": 0.3, "variation": 0.1, "anti_tile": false, "seed": 5.0})
@@ -265,14 +286,20 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 	# a fine shingle).
 	# And weathered as its tiles are: the photograph's orange pulled a third of the way to a dusty terracotta, lighter (it
 	# had been twice as colourful as the reference's roofs, and darker).
-	photo["roof"] = _photo("roof", {"tint": Color(0.8, 0.62, 0.52), "tint_strength": 0.35, "brightness": 1.15, "specular": 0.22,
+	# Milestone 158: the coppi themselves geometry (ac_buildings.eaves): the photograph under them the troughs, darker;
+	# on the coppi its colour spread wide (a coppo's own weathering, no tiles drawn on it).
+	photo["coppo"] = _photo("roof", {"tint": Color(0.74, 0.47, 0.36), "tint_strength": 0.75, "brightness": 1.05,
+			"specular": 0.22, "roughness_bias": 0.08, "stains": 0.35, "variation": 0.3, "ground_dirt": 0.0, "anti_tile": false,
+			"seed": 12.0, "tex_size": 6.0, "normal_strength": 0.25})
+	photo["roof"] = _photo("roof", {"tint": Color(0.8, 0.62, 0.52), "tint_strength": 0.55, "brightness": 0.8, "specular": 0.22,
 			"roughness_bias": 0.05, "stains": 0.25, "variation": 0.15, "ground_dirt": 0.0, "anti_tile": false, "seed": 6.0,
-			"tex_size": 4.2})
+			"tex_size": 4.2, "parallax_depth": 0.06, "height_lo": 0.2, "height_hi": 0.85, "cavity": 0.3})
 	photo["wood"] = _photo("wood", {"specular": 0.2, "stains": 0.0, "ground_dirt": 0.3, "anti_tile": false, "seed": 7.0})
 	photo["wood_dark"] = _photo("wood_dark", {"specular": 0.2, "brightness": 0.6, "stains": 0.0, "ground_dirt": 0.3, "anti_tile": false,
 			"seed": 8.0})
 	photo["shutter_green"] = _photo("shutter_green", {"specular": 0.25, "stains": 0.0, "anti_tile": false, "seed": 9.0})
-	photo["shutter_brown"] = _photo("shutter_painted", {"tint": Color(0.42, 0.22, 0.12), "tint_strength": 0.8, "specular": 0.25,
+	# Milestone 158: the reference's shutters' old brown, greyed (the paint's red-orange had stood out).
+	photo["shutter_brown"] = _photo("shutter_painted", {"tint": Color(0.3, 0.2, 0.14), "tint_strength": 0.85, "specular": 0.25,
 			"stains": 0.0, "anti_tile": false, "seed": 10.0})
 	photo["ground_stone"] = _photo("square_slabs", {"specular": 0.25, "stains": 0.0, "ground_dirt": 0.0, "seed": 11.0})
 	var walls := PackedVector4Array()
@@ -551,13 +578,13 @@ func _environment(p_root: Node3D) -> void:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_sky_contribution = 1.0
 	# Milestone 156 (the owner's reference): the shade lighter — the warm stone's light bounced into it and the sky's.
-	env.ambient_light_energy = 1.35
+	env.ambient_light_energy = 1.55
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_AGX
 	env.tonemap_exposure = 1.0
 	env.ssao_enabled = true
 	env.ssao_radius = 1.0
-	env.ssao_intensity = 1.8
+	env.ssao_intensity = 1.3
 	env.ssao_detail = 0.6
 	# No screen-space reflections: on rough stone and old glass they read as a sheen on everything; the puddles and
 	# windows reflect the sky's radiance.
@@ -586,8 +613,11 @@ func _environment(p_root: Node3D) -> void:
 	env.volumetric_fog_length = 64.0
 	env.volumetric_fog_sky_affect = 0.0
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.0
-	env.adjustment_contrast = 1.05
+	env.adjustment_saturation = 0.92
+	env.adjustment_contrast = 1.0
+	# Milestone 158 (the reference beside the scene): its softer light — AgX's contrast lower, the shade lighter, the
+	# colours a little less saturated.
+	env.tonemap_agx_contrast = 1.05
 	var we := WorldEnvironment.new()
 	we.environment = env
 	we.camera_attributes = CameraAttributesPractical.new()
@@ -1543,6 +1573,13 @@ func _reference_shot(p_root: Node3D) -> void:
 	_add(skel, body, "MannequinBody")
 	body.skeleton = NodePath("..")
 	var cam := Camera3D.new()
+	# Milestone 158: the video's lens: what is beyond the climber softly out of focus.
+	var attr := CameraAttributesPractical.new()
+	attr.dof_blur_far_enabled = true
+	attr.dof_blur_far_distance = 7.0
+	attr.dof_blur_far_transition = 9.0
+	attr.dof_blur_amount = 0.06
+	cam.attributes = attr
 	cam.fov = cam_src.fov
 	cam.keep_aspect = cam_src.keep_aspect
 	cam.near = cam_src.near

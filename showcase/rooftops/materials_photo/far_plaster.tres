@@ -1,17 +1,18 @@
 [gd_resource type="ShaderMaterial" format=3]
 
-[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_qa736"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_diff_2k.jpg" id="2_p3qnw"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_arm_2k.jpg" id="3_eu2gf"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_nor_gl_2k.jpg" id="4_x1kaq"]
+[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_p3qnw"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_diff_2k.jpg" id="2_eu2gf"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_arm_2k.jpg" id="3_x1kaq"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_disp_2k.jpg" id="4_fn0c7"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_nor_gl_2k.jpg" id="5_qg47l"]
 
 [resource]
 render_priority = 0
-shader = ExtResource("1_qa736")
-shader_parameter/albedo_tex = ExtResource("2_p3qnw")
-shader_parameter/normal_tex = ExtResource("4_x1kaq")
-shader_parameter/arm_tex = ExtResource("3_eu2gf")
-shader_parameter/tex_size = 1.25
+shader = ExtResource("1_p3qnw")
+shader_parameter/albedo_tex = ExtResource("2_eu2gf")
+shader_parameter/normal_tex = ExtResource("5_qg47l")
+shader_parameter/arm_tex = ExtResource("3_x1kaq")
+shader_parameter/tex_size = 2.5
 shader_parameter/tint = Color(0.9, 0.84, 0.74, 1)
 shader_parameter/tint_strength = 0.3
 shader_parameter/tex_lum = 0.35650870436825244
@@ -27,3 +28,10 @@ shader_parameter/seed = null
 shader_parameter/instance_tint = true
 shader_parameter/fallen = null
 shader_parameter/patch_size = null
+shader_parameter/height_tex = ExtResource("4_fn0c7")
+shader_parameter/parallax_depth = 0.0
+shader_parameter/height_lo = null
+shader_parameter/height_hi = null
+shader_parameter/cavity = null
+shader_parameter/albedo_soften = null
+shader_parameter/soften_lod = null

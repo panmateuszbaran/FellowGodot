@@ -9,6 +9,22 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 158 — the reference's house finished as the video's; its pelvis (2026-11-20)
+
+- Decision 0298: the replica of the reference's house, and the square's houses, beside the video's frames.
+  - Stone in relief: parallax occlusion mapping in `facade_pbr.gdshader` from Poly Haven's height maps
+    (`fetch_textures.py` fetches them), with the blocks at the video's size.
+  - Louvred shutters and casements on the windows; real coppi over every roof face, with their collision.
+  - Carved scroll corbels under the balconette; a thin zinc gutter; dark glass.
+  - A softer grade and the video's depth of field on its camera.
+  - `tools/reference_look.gd` sets the shot beside the video's frames.
+- Decision 0299: the reference's pelvis.
+  - The fit's pelvis had drifted up to 52° from the trunk, since its two landmarks cannot tell its tip. Now the
+    spine's bend and the hips' flexion are held to a body's reach: the bend is -7…+21° over the 96 frames, the hips at
+    most 129°, and the landmarks fit as before.
+  - The mannequin's pelvis is shallower behind, with smaller buttocks and the briefs cut higher.
+  - 38 of 38 animation gates.
+
 ## Milestone 157 — the owner's reference performed 1:1 (2026-11-19)
 
 - Decision 0297: the reference video's motion measured, not drawn by eye. In the cloud (MediaPipe Pose, OpenCV, SciPy;

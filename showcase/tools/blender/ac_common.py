@@ -34,6 +34,10 @@ MATERIALS = {
 	"cloth": (0.6, 0.15, 0.12, 0.9),
 	# Milestone 153: the city's houses beyond the square (instances), their plaster tinted per instance.
 	"far_plaster": (0.82, 0.70, 0.55, 0.9),
+	# Milestone 158: the coppi laid over the roofs (the roof's face under them its own material, the troughs between).
+	"coppo": (0.68, 0.40, 0.28, 0.75),
+	# and the gutters' weathered zinc
+	"zinc": (0.42, 0.42, 0.40, 0.5),
 }
 
 
@@ -46,7 +50,7 @@ def reset_scene():
 		if bsdf:
 			bsdf.inputs["Base Color"].default_value = (r, g, b, 1.0)
 			bsdf.inputs["Roughness"].default_value = rough
-			if name in ("iron", "bronze"):
+			if name in ("iron", "bronze", "zinc"):
 				bsdf.inputs["Metallic"].default_value = 1.0
 
 

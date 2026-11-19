@@ -285,11 +285,13 @@ def torso_weights(p):
 # exponent) from the crotch to the neck, cut into plates — a breastplate to the bottom of the ribs, the abdomen, the
 # pelvis cut like briefs — whose edges roll in over a dark core: thin dark seams.
 TORSO = [
-	(0.83, 0.15, 0.08, 0.098, 0.008, 2.4),
-	(0.87, 0.166, 0.09, 0.108, 0.008, 2.5),
-	(0.91, 0.173, 0.094, 0.112, 0.006, 2.6),
-	(0.95, 0.167, 0.094, 0.106, 0.004, 2.5),
-	(0.985, 0.152, 0.092, 0.094, 0.002, 2.35),
+	# Milestone 158 (the owner: "why does its backside stick out so?"): the pelvis's back as deep as its front, and the
+	# hips 7 mm narrower — beside the reference's silhouettes, frame for frame, it had stood out 2-3 cm behind.
+	(0.83, 0.146, 0.08, 0.086, 0.002, 2.4),
+	(0.87, 0.16, 0.09, 0.093, 0.0, 2.5),
+	(0.91, 0.166, 0.094, 0.095, -0.001, 2.6),
+	(0.95, 0.161, 0.094, 0.092, -0.001, 2.5),
+	(0.985, 0.149, 0.092, 0.087, 0.0, 2.35),
 	(1.02, 0.136, 0.09, 0.085, 0.0, 2.25),
 	(1.07, 0.123, 0.09, 0.08, -0.002, 2.25),
 	(1.11, 0.125, 0.091, 0.081, -0.002, 2.25),
@@ -389,10 +391,13 @@ def build_mesh(armature):
 		t = min(1.0, max(0.0, (p.z - (z_lo - RIM_H)) / (z_hi - z_lo)))
 		side_k = _smooth(0.3, 0.92, abs(p.x) / 0.17)
 		lift = 0.06 * side_k * (1.0 - _smooth(0.0, 1.0, (p.y - c.y) / 0.11) * 0.4)
+		# Milestone 158: and behind, higher, to the buttocks' crease (the reference's briefs from behind: small, the
+		# thighs' tops showing below them; ours had covered them, broad and low).
+		lift += 0.03 * _smooth(0.0, 0.08, p.y - c.y)
 		q.z = p.z + lift * (1.0 - t) ** 1.5
 		if p.y > c.y:
 			k = min(1.0, (p.y - c.y) / 0.1)
-			q.y += 0.022 * _gauss(abs(p.x) - 0.07, 0.05) * _gauss(q.z - 0.91, 0.045) * k * k
+			q.y += 0.008 * _gauss(abs(p.x) - 0.07, 0.05) * _gauss(q.z - 0.91, 0.045) * k * k
 		q.z += seam_dip(p, c)
 		return q
 
@@ -406,8 +411,8 @@ def build_mesh(armature):
 			shape_fn=chest_shape)
 	S.loft([
 		((0.0, 0.006, 0.826), Z, X, 0.03, 0.03, 0.03, 2.0),
-		((0.0, 0.006, 0.84), Z, X, 0.075, 0.06, 0.05, 2.0),
-		((0.0, 0.006, 0.87), Z, X, 0.13, 0.085, 0.07, 2.2),
+		((0.0, 0.006, 0.84), Z, X, 0.065, 0.055, 0.045, 2.0),
+		((0.0, 0.006, 0.87), Z, X, 0.11, 0.075, 0.06, 2.2),
 	], "Hips", 1, segments=28)
 	# The neck, dark, wider where it meets the shoulders.
 	S.loft([
@@ -492,9 +497,9 @@ def build_mesh(armature):
 		down = Vector((0, 0, -1))
 		thigh = [
 			(0.935, 0.075, 0.075, 0.075),
-			(0.915, 0.094, 0.1, 0.097),
-			(0.87, 0.1, 0.106, 0.1),
-			(0.8, 0.093, 0.1, 0.09),
+			(0.915, 0.092, 0.1, 0.086),
+			(0.87, 0.098, 0.106, 0.09),
+			(0.8, 0.092, 0.1, 0.085),
 			(0.72, 0.08, 0.086, 0.075),
 			(0.64, 0.067, 0.07, 0.062),
 			(0.59, 0.058, 0.06, 0.055),

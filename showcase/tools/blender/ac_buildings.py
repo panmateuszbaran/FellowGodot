@@ -119,6 +119,69 @@ def fbox(B, F, u0, u1, z0, z1, w0, w1, material, bevel=0.015):
 	B.box(c, (abs(u1 - u0), abs(w1 - w0), abs(z1 - z0)), material, bevel=bevel, rot_z=rot_z)
 
 
+def louvred_shutter(B, F, u0, u1, z0, z1, w0, w1, material, tilt=38.0, pitch=0.05):
+	"""Milestone 158 (the owner's reference: its shutters' slats): a louvred shutter, u0..u1 along the wall, z0..z1 up,
+	w0..w1 into it — stiles, rails top, middle and bottom, and between them slats every `pitch` tilted `tilt` degrees
+	(their shadows' lines across it)."""
+	import mathutils
+
+	rz = math.atan2(F.r.y, F.r.x)
+	sw = 0.05
+	fbox(B, F, u0, u0 + sw, z0, z1, w0, w1, material, bevel=0.004)
+	fbox(B, F, u1 - sw, u1, z0, z1, w0, w1, material, bevel=0.004)
+	zm = (z0 + z1) * 0.5
+	for a, b in ((z0, z0 + 0.07), (zm - 0.03, zm + 0.03), (z1 - 0.06, z1)):
+		fbox(B, F, u0 + sw, u1 - sw, a, b, w0, w1, material, bevel=0.004)
+	wm = (w0 + w1) * 0.5
+	for a, b in ((z0 + 0.07, zm - 0.03), (zm + 0.03, z1 - 0.06)):
+		n = max(1, int((b - a) / pitch))
+		for k in range(n):
+			zc = a + (k + 0.5) * (b - a) / n
+			c = F.p((u0 + u1) * 0.5, zc, wm)
+			rot = mathutils.Matrix.Rotation(rz, 4, "Z") @ mathutils.Matrix.Rotation(math.radians(-tilt), 4, "X")
+			B.box(c, (u1 - u0 - 2 * sw + 0.004, 0.009, (b - a) / n * 1.25), material, rot=rot)
+
+
+def corbel(B, F, u, z_top, depth, height, width, material="stone"):
+	"""Milestone 158 (the reference's balconette): a carved corbel under a slab — a scroll: flat under the slab, out to
+	`depth`, curving down and back to the wall with a curl at its foot; `width` across, centred at u."""
+	pts = [(0.0, 0.0), (depth, 0.0), (depth, 0.1 * height)]
+	for k in range(1, 9):
+		a = k / 8.0 * math.pi * 0.5
+		pts.append((0.38 * depth + 0.62 * depth * math.cos(a), 0.1 * height + 0.62 * height * math.sin(a)))
+	for k in range(1, 7):
+		a = math.pi * 0.5 + k / 6.0 * math.pi * 1.25
+		r = 0.12 * height
+		pts.append((0.38 * depth + r * 0.9 * math.cos(a) + 0.02, 0.72 * height + r + r * math.sin(a) * -1.0 + 0.0))
+	pts += [(0.18 * depth, height), (0.0, height)]
+	# the profile in the wall's (w out, z) plane, extruded across u0..u1
+	u0, u1 = u - width * 0.5, u + width * 0.5
+	ring0 = [F.p(u0, z_top - y, -x) for x, y in pts]
+	ring1 = [F.p(u1, z_top - y, -x) for x, y in pts]
+	B.poly(list(reversed(ring0)), material)
+	B.poly(ring1, material)
+	n = len(pts)
+	for k in range(n):
+		j = (k + 1) % n
+		B.poly([ring0[k], ring0[j], ring1[j], ring1[k]], material)
+
+
+def casement(B, F, x0, x1, z0, z1, depth=0.13, material="wood"):
+	"""Milestone 158: a window's wooden casement in its opening (the reference's: two leaves of three panes) — the frame,
+	the leaves' meeting stiles, two glazing bars across each."""
+	f = 0.055
+	w0, w1 = depth - 0.05, depth
+	fbox(B, F, x0, x0 + f, z0, z1, w0, w1, material, bevel=0.005)
+	fbox(B, F, x1 - f, x1, z0, z1, w0, w1, material, bevel=0.005)
+	fbox(B, F, x0 + f, x1 - f, z0, z0 + f * 1.3, w0, w1, material, bevel=0.005)
+	fbox(B, F, x0 + f, x1 - f, z1 - f, z1, w0, w1, material, bevel=0.005)
+	um = (x0 + x1) * 0.5
+	fbox(B, F, um - 0.035, um + 0.035, z0 + f, z1 - f, w0 - 0.01, w1, material, bevel=0.005)
+	for k in (1, 2):
+		zz = z0 + f * 1.3 + (z1 - z0 - f * 2.3) * k / 3.0
+		fbox(B, F, x0 + f, x1 - f, zz - 0.016, zz + 0.016, w0 + 0.01, w1, material, bevel=0.003)
+
+
 def window(B, F, u, z, w=1.0, h=1.8, kind="plain", shutters=None, shutters_closed=False, rng=None, Bc=None):
 	"""A window centred at u, its sill at z: the opening (to be cut by wall()), its stone frame, its sill (a handhold),
 	a cornice over it on the piano nobile, a hood over a plain one (handholds too), or a pediment; its shutters. With
@@ -188,16 +251,19 @@ def window(B, F, u, z, w=1.0, h=1.8, kind="plain", shutters=None, shutters_close
 		for k in range(3):
 			a, b = k, (k + 1) % 3
 			B.poly([front[b], front[a], back[a], back[b]], "stone")
+	if not arch:
+		casement(B, F, x0, x1, z, z + h)
 	if shutters:
 		t = 0.035
 		if shutters_closed:
-			fbox(B, F, x0 + 0.01, u - 0.005, z + 0.02, z + h - (0.02 if not arch else w * 0.5), 0.04, 0.04 + t, shutters, bevel=0.006)
-			fbox(B, F, u + 0.005, x1 - 0.01, z + 0.02, z + h - (0.02 if not arch else w * 0.5), 0.04, 0.04 + t, shutters, bevel=0.006)
+			hh = h - (0.02 if not arch else w * 0.5)
+			louvred_shutter(B, F, x0 + 0.01, u - 0.005, z + 0.02, z + hh, 0.04, 0.04 + t, shutters)
+			louvred_shutter(B, F, u + 0.005, x1 - 0.01, z + 0.02, z + hh, 0.04, 0.04 + t, shutters)
 		else:
 			sw = w * 0.5
 			hh = h if not arch else h - w * 0.5
-			fbox(B, F, x0 - f - sw - 0.02, x0 - f - 0.02, z + 0.02, z + hh, -0.05 - t, -0.05, shutters, bevel=0.006)
-			fbox(B, F, x1 + f + 0.02, x1 + f + sw + 0.02, z + 0.02, z + hh, -0.05 - t, -0.05, shutters, bevel=0.006)
+			louvred_shutter(B, F, x0 - f - sw - 0.02, x0 - f - 0.02, z + 0.02, z + hh, -0.05 - t, -0.05, shutters)
+			louvred_shutter(B, F, x1 + f + 0.02, x1 + f + sw + 0.02, z + 0.02, z + hh, -0.05 - t, -0.05, shutters)
 			# The hinges' pins, iron.
 			for zz in (z + 0.25, z + hh - 0.25):
 				fbox(B, F, x0 - f - 0.03, x0 - f, zz - 0.03, zz + 0.03, -0.07, -0.02, "iron", bevel=0.0)
@@ -310,7 +376,13 @@ def eaves(B, Bc, facades, w, d, zt, overhang, pitch_deg, kind, rng, chimneys=1, 
 				B.box((a + b) * 0.5, (0.08, dv.length, 0.22), "wood_dark", rot=mathutils.Matrix.Rotation(math.atan2(dv.z, dv.y), 4, "X"))
 	for f in faces:
 		B.poly(f, "roof", uv_slope=True)
-		Bc.poly(f, "roof")
+		# The collision at the coppi's mean height (milestone 158: they stand 3.5-12 cm over the face), so that hands and
+		# feet come down on them, not through them.
+		fv = [Vector(v) for v in f]
+		fn = (fv[1] - fv[0]).cross(fv[2] - fv[0]).normalized()
+		if fn.z < 0.0:
+			fn = -fn
+		Bc.poly([tuple(v + fn * 0.08) for v in fv], "roof")
 	# The fascia under the eaves' level edges, in the collision (milestone 152): the eave's lip a ledge to climb over
 	# onto the roof (its front a face, the tiles behind it a top).
 	for i in range(4):
@@ -322,25 +394,59 @@ def eaves(B, Bc, facades, w, d, zt, overhang, pitch_deg, kind, rng, chimneys=1, 
 		ix = -0.03 if mx > 0 and not along_x else (0.03 if mx < 0 and not along_x else 0.0)
 		iy = -0.03 if my > 0 and along_x else (0.03 if my < 0 and along_x else 0.0)
 		ln = abs(b[0] - a[0]) if along_x else abs(b[1] - a[1])
-		Bc.box((mx + ix, my + iy, (zt + z0) * 0.5), (ln, 0.06, z0 - zt + 0.04) if along_x else (0.06, ln, z0 - zt + 0.04), "wood_dark")
-	# The coppi: at the eaves, a row of half-tubes down the slope; along the ridges and the hips, a row of caps.
-	for i in range(4):
-		a, b = Vector((corners[i][0], corners[i][1], z0)), Vector((corners[(i + 1) % 4][0], corners[(i + 1) % 4][1], z0))
-		if kind == "gable" and i % 2 == 1:
-			continue
+		# (Milestone 158: up to the coppi's height, as the roof's collision now is: the lip's top meets the tiles' face.)
+		Bc.box((mx + ix, my + iy, (zt + z0 + 0.08) * 0.5), (ln, 0.06, z0 - zt + 0.08) if along_x else (0.06, ln, z0 - zt + 0.08), "wood_dark")
+	# The coppi (milestone 158, the owner's reference: the roofs covered with them, not only their eaves): on every face,
+	# columns 0.26 m apart up the slope, each a course of half-tubes 0.45 m long laid 0.38 m apart (each over the next's
+	# head), a little out of true; kept within the face (a hip's triangles), the eave's course standing out over the lip;
+	# along the ridges and the hips, a row of caps.
+	for f in faces:
+		pts = [Vector(v) for v in f]
+		# the face's eave: its lowest edge
+		lo = min(range(len(pts)), key=lambda k: pts[k].z + pts[(k + 1) % len(pts)].z)
+		a, b = pts[lo], pts[(lo + 1) % len(pts)]
 		along = b - a
-		length = along.length
-		t = along / length
+		t = along.normalized()
 		outward = t.cross(UP)
 		inward = -outward
 		slope = (inward + UP * tanp).normalized()
-		n = int(length / 0.26)
-		for k in range(1, n):
-			p = a + t * (length * k / n)
-			if kind == "hip" and (k * length / n < 0.5 or (n - k) * length / n < 0.5):
-				continue
-			base = p + UP * 0.03
-			B.half_tube(base - outward * 0.02, base + slope * 0.5, 0.085, "roof", up=(UP - slope * slope.dot(UP)).normalized(), segments=5)
+		nrm = t.cross(slope).normalized()
+		if nrm.z < 0.0:
+			nrm = -nrm
+		# the face in (t, s) coordinates from a
+		poly2 = [((q - a).dot(t), (q - a).dot(slope)) for q in pts]
+
+		def inside(x, y):
+			c = False
+			for k in range(len(poly2)):
+				x1, y1 = poly2[k]
+				x2, y2 = poly2[(k + 1) % len(poly2)]
+				if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1 + 1e-12) + x1:
+					c = not c
+			return c
+
+		xs = [q[0] for q in poly2]
+		ys = [q[1] for q in poly2]
+		col = 0.26
+		row = 0.38
+		ncol = int((max(xs) - min(xs)) / col)
+		x_start = min(xs) + ((max(xs) - min(xs)) - ncol * col) * 0.5
+		up = (UP - slope * slope.dot(UP)).normalized()
+		for ci in range(ncol + 1):
+			x = x_start + ci * col
+			y = -0.02
+			k = 0
+			while y < max(ys):
+				y0, y1 = y, y + 0.45
+				if inside(x, y0 + 0.05) and inside(x, min(y1, max(ys) - 0.02) - 0.05) and inside(x - 0.08, y0 + 0.2) and inside(x + 0.08, y0 + 0.2):
+					jx = rng.uniform(-0.012, 0.012)
+					base = a + t * (x + jx) + slope * y0 + nrm * (0.035 + rng.uniform(-0.004, 0.006))
+					tip = base + slope * (min(y1, max(ys) - 0.02) - y0) + nrm * 0.012 + t * rng.uniform(-0.01, 0.01)
+					if k == 0:
+						base = base - slope * 0.04
+					B.half_tube(base, tip, 0.082 + rng.uniform(-0.005, 0.004), "coppo", up=up, segments=5)
+				y += row
+				k += 1
 	for a, b in ridges:
 		B.half_tube(a + UP * 0.05, b + UP * 0.05, 0.12, "roof", up=UP, segments=6)
 	# Chimneys.
@@ -601,14 +707,16 @@ def casa_riferimento(name="CasaRiferimento", seed=17):
 	fbox(B, front, x1, x1 + f, sill, win_top + f, -0.05, 0.02, "stone")
 	fbox(B, front, x0, x1, win_top, win_top + f, -0.05, 0.02, "stone")
 	sw = ww * 0.5
+	casement(B, front, x0, x1, sill, win_top)
 	for a, b in ((x0 - f - sw - 0.02, x0 - f - 0.02), (x1 + f + 0.02, x1 + f + sw + 0.02)):
-		fbox(B, front, a, b, sill + 0.03, win_top, -0.09, -0.055, "shutter_brown", bevel=0.006)
+		louvred_shutter(B, front, a, b, sill + 0.03, win_top, -0.09, -0.055, "shutter_brown")
 	# The balconette: a slab on a carved frieze and three corbels (scrolls: two blocks each, the lower one shorter).
 	fbox(B, front, x0 - 0.3, x1 + 0.3, sill - 0.12, sill, -0.40, 0.02, "stone", bevel=0.025)
+	# its moulded edge: a roll under the slab's front
+	B.cylinder(front.p(x0 - 0.3, sill - 0.13, -0.37), front.p(x1 + 0.3, sill - 0.13, -0.37), 0.025, "stone", segments=8)
 	fbox(B, front, x0 - 0.22, x1 + 0.22, sill - 0.24, sill - 0.12, -0.30, 0.02, "stone", bevel=0.02)
 	for bu in (x0 - 0.12, u1, x1 + 0.12):
-		fbox(B, front, bu - 0.08, bu + 0.08, sill - 0.46, sill - 0.24, -0.26, 0.02, "stone", bevel=0.03)
-		fbox(B, front, bu - 0.07, bu + 0.07, sill - 0.62, sill - 0.46, -0.14, 0.02, "stone", bevel=0.03)
+		corbel(B, front, bu, sill - 0.24, 0.28, 0.5, 0.15)
 	fbox(Bc, front, x0 - 0.3, x1 + 0.3, sill - 0.24, sill, -0.40, 0.0, "stone", bevel=0.0)
 	# The bench along the front between the door and the climbed window (Florence's panche di via).
 	fbox(B, front, 2.4, 5.0, 0.0, 0.38, -0.34, 0.02, "stone_rustic", bevel=0.02)
@@ -625,10 +733,10 @@ def casa_riferimento(name="CasaRiferimento", seed=17):
 		fbox(B, F, -0.04, F.length + 0.04, 0.0, 0.3, -0.04, 0.02, "stone_rustic", bevel=0.02)
 	Bc.box((0, 0, zt * 0.5), (w, d, zt), "stone")
 	top = eaves(B, Bc, facades, w, d, zt, lip_out, pitch, "gable", rng, chimneys=1, cornice=False)
-	# The gutter at the front's and back's eaves: a slim pipe under the lip (below the hands that hold the lip).
+	# The gutter at the front's and back's eaves: a half-round of weathered zinc hung just under the lip, open above.
 	for sy in (-1, 1):
-		y = sy * (d * 0.5 + lip_out + 0.04)
-		B.cylinder((-w * 0.5 - lip_out, y, zt - 0.05), (w * 0.5 + lip_out, y, zt - 0.05), 0.04, "iron", segments=10)
+		y = sy * (d * 0.5 + lip_out + 0.045)
+		B.half_tube((-w * 0.5 - lip_out, y, zt + 0.01), (w * 0.5 + lip_out, y, zt + 0.01), 0.05, "zinc", up=Vector((0, 0, -1)), segments=8)
 	obj = B.to_object(name)
 	col = Bc.to_object(name + "_col")
 	return obj, col, top
