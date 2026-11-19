@@ -589,6 +589,20 @@ func _build() -> void:
 			[1.6, {"intent": Vector3(0, 1, 0)}], [7.4, {"intent": Vector3()}]])
 	(lpa.traversal as FellowTraversal3D).hang_reach_up = 1.25
 	(lpa.traversal as FellowTraversal3D).hang_brace_height = 0.65
+	# Milestone 153 (decision 0290): hold_climb's wall and program with a leap's wind-up (hang_leap_windup 0.15), the
+	# body's sway (body_sway 1) and the feet braced lower (0.42 m): the same holds, the leap 0.15 s longer; the hips
+	# swinging.
+	_box(Vector3(196, -0.5, 10.0), Vector3(11.0, 1.0, 10.0), Color(0.36, 0.42, 0.34))
+	_box(Vector3(196, 3.7, 9.0), Vector3(3.0, 7.4, 2.0), Color(0.62, 0.55, 0.48))
+	for h in [2.6, 3.7, 4.8, 6.4]:
+		_box(Vector3(196, h - 0.075, 10.11), Vector3(0.8, 0.15, 0.22), Color(0.72, 0.7, 0.66))
+	var lw := _lane("leap_style", Vector3(196, 0, 12), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}],
+			[3.4, {"call": "hang_jump"}], [4.0, {"call": "hang_jump"}], [5.0, {"intent": Vector3()}]])
+	(lw.traversal as FellowTraversal3D).hang_reach_up = 1.25
+	(lw.traversal as FellowTraversal3D).hang_jump_height = 2.3
+	(lw.traversal as FellowTraversal3D).hang_brace_height = 0.42
+	(lw.traversal as FellowTraversal3D).hang_leap_windup = 0.15
+	(lw.pose as FellowTraversalPose3D).body_sway = 1.0
 	# None: free_climb off; the wall outside climb_mask; an overhang of 30 degrees.
 	_box(Vector3(40, 2.25, 9.0), Vector3(3.0, 4.5, 2.0), Color(0.6, 0.6, 0.66))
 	_lane("climb_off", Vector3(40, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [4.0, {"intent": Vector3()}]])
@@ -659,6 +673,8 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x - 0.3, 4.0, 14.0), Vector3(x - 0.3, 3.8, 10.0))
 			"parapet":
 				cam.look_at_from_position(Vector3(x + 3.5, 5.5, 14.0), Vector3(x, 3.4, 9.5))
+			"leap_style":
+				cam.look_at_from_position(Vector3(x + 4.0, 4.6, 13.0), Vector3(x, 4.4, 10.0))
 			_:
 				cam.look_at_from_position(Vector3(x + 2.5, 2.4, 3.2), Vector3(x - 0.4, 1.6, -1.8))
 		if grid:
@@ -692,6 +708,10 @@ func _on_skeleton_updated(lane: Dictionary) -> void:
 	var t: FellowTraversal3D = lane.traversal
 	var sk: Skeleton3D = lane.skeleton
 	var targets: Dictionary = t.get_pose_targets()
+	# Milestone 153: how far the body's sway took the hips (a lane with body_sway).
+	var pose: FellowTraversalPose3D = lane.pose
+	if pose.body_sway > 0.0:
+		lane["sway_max"] = maxf(lane.get("sway_max", 0.0), pose.get_sway().length())
 	if not targets.get("active", false) or not (t.is_hanging() or t.is_on_ladder() or t.is_climbing()):
 		return
 	var pairs := [["LeftHand", "hand_left", targets.hand_weights.x, "LeftUpperArm", "LeftLowerArm"],
@@ -931,6 +951,10 @@ func _finish() -> void:
 			"parapet":
 				# Milestone 152: up to the parapet's top, over it: standing on the terrace (3.2 m) behind it.
 				ok = ok and names.has("hang_started:3.0") and names.count("hang_transferred:reach") == 1 and names.has("mantle_finished:high") and absf(feet.y - 3.2) < 0.05 and feet.z < 9.6
+			"leap_style":
+				# Milestone 153: as hold_climb, the leap 0.15 s longer; the hips swung by the leap's catch.
+				e["sway_max_cm"] = snappedf(float(lane.get("sway_max", 0.0)) * 100.0, 0.1)
+				ok = ok and names.has("hang_started:3.7") and names.count("hang_transferred:reach") == 2 and names.count("hang_transferred:up") == 1 and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 7.4) < 0.05 and lane.get("sway_max", 0.0) > 0.01
 			"climb_off", "climb_masked", "climb_overhang":
 				# Not climbed: standing at the wall's foot.
 				ok = ok and not names.has("climb_started") and feet.y < 0.05

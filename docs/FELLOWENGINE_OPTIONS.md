@@ -882,8 +882,15 @@ top (to `max_ledge_slope`) is climbed onto in any mode. Holds beside and out (mi
 `hang_reach_up`, a hold up and 0.3-0.9 m to the side is reached across, an eave's lip 0.3 m or more out is reached up to,
 holds close over each other are found, and a hold needs 0.12 m free over its edge. Over a parapet (milestone 152,
 decision 0289): with `hang_reach_up`, from a hang over a top 0.6 m thick at most onto a floor 0.3-1.6 m lower behind it.
+The body's weight (milestone 153, decision 0290): on `FellowTraversal3D`, `hang_leap_windup` (0 s: a leap from a hold
+winds up this long — drawn in to the wall, the feet coiled — then springs from rest and is caught with its speed, the
+hands thrown to the ledge ahead of the body and held, the feet pushing off and braced again; the move longer by as much),
+`hang_clip` (the clip of a mantle from a hang, in place of the high or low one; the pose's hint `body_offset`); on
+`FellowTraversalPose3D`, `body_sway` (0: the hips on a damped spring behind the body, keeping this share of its speed when
+it changes, never lower than the arms reach), `sway_frequency` (1.6 Hz), `sway_damping` (0.35 of critical), `sway_max`
+(0.15 m), `limb_smoothing` (0 s: the hands' and feet's targets eased with this time constant); `get_sway()`.
 Bench `bench/climb_check.gd` (`hold_climb`, `side_reach`, `narrow_holds`, `eave_roof`, `eave_deep`, `beside_reach`,
-`stacked_holds`, `parapet`;
+`stacked_holds`, `parapet`, `leap_style`;
 `--only=<lanes> --times=<s,...>` for a picture strip of some lanes at given times).
 
 Faces (milestone 83, decision 0191): `FellowFaceAnimator` (a `Node`; nothing changes without it): `mesh_path` (the

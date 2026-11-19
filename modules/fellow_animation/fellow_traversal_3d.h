@@ -109,6 +109,7 @@ public:
 		float foot_follow[2] = { 1.0f, 1.0f }; // how far a foot's target moves with the hips' drop (on the wall: 1)
 		float lean = 0.0f; // radians, the torso tipped towards the wall
 		float hips_drop = 0.0f; // meters the hips may hang below the capsule's place for the hands to reach the edge
+		Vector3 body_offset; // milestone 153 (decision 0290), world: the body shown off the capsule's place (a leap's wind-up)
 		Ref<Animation> clip; // set for the kind: played at clip_time instead of the procedural pose
 		double clip_time = 0.0;
 		StringName clip_root_bone;
@@ -155,6 +156,8 @@ private:
 	float vault_duration = 0.6f;
 	float exit_speed = 1.5f;
 	Ref<Animation> clips[3]; // low, high, vault
+	Ref<Animation> hang_clip; // milestone 153 (decision 0290): a mantle from a hang (climbing up onto the ledge held)
+	bool mantle_from_hang = false; // the mantle under way started from a hang
 	StringName clip_root_bone;
 	bool debug_draw = false;
 	// Milestone 75: hanging and ladders.
@@ -172,6 +175,7 @@ private:
 	float hang_brace_height = 0.0f; // m: the feet braced on the wall found under the ledge, this high over the body's feet (0: off)
 	float hang_reach_side = 0.0f; // milestone 152 (decision 0285), m: a gap to a ledge to the side up to this wide is crossed hand over hand (0: jumped)
 	float hold_min_width = 0.0f; // milestone 152 (decision 0286), m: a hold narrower than both hands' 0.48 m, down to this wide, is held with the hands closer (0: off)
+	float hang_leap_windup = 0.0f; // milestone 153 (decision 0290), s: a leap from a hold winds up this long, springs, flies hands first and is caught with its speed (0: as before)
 	// Milestone 84 (decision 0192): walking over an edge, hanging from it.
 	bool drop_to_hang = false;
 	float drop_max_speed = 2.0f; // m/s: faster, the body goes over
@@ -236,6 +240,7 @@ private:
 		Vector3 from_hands[2];
 		Ledge to;
 		int lead = 0; // milestone 151: the hand that goes first (a reach up)
+		double windup = 0.0; // milestone 153: a leap's wind-up before it springs (s, within duration)
 	} transfer;
 	// After a corner the wish held as it was goes on along the new edge (the stick held left stays "left").
 	bool remap = false;
@@ -285,7 +290,8 @@ private:
 	bool _capsule_free(const Vector3 &p_feet, float p_radius, float p_height, const HashSet<RID> &p_exclude) const;
 	Ledge _check(const Vector3 &p_direction, bool p_in_air, float p_speed, float p_min_height = -1.0f);
 	Ledge _check_ledge(const Vector3 &p_direction, bool p_in_air, float p_speed, float p_min_height);
-	bool _start(const Ledge &p_ledge, float p_speed);
+	bool _start(const Ledge &p_ledge, float p_speed, bool p_from_hang = false);
+	const Ref<Animation> &_mantle_clip() const;
 	void _finish(bool p_cancelled);
 	void _step(double p_delta);
 	void _step_body(double p_delta);
@@ -415,6 +421,8 @@ public:
 	Ref<Animation> get_high_clip() const { return clips[1]; }
 	void set_vault_clip(const Ref<Animation> &p_clip) { clips[2] = p_clip; }
 	Ref<Animation> get_vault_clip() const { return clips[2]; }
+	void set_hang_clip(const Ref<Animation> &p_clip) { hang_clip = p_clip; }
+	Ref<Animation> get_hang_clip() const { return hang_clip; }
 	void set_clip_root_bone(const StringName &p_bone) { clip_root_bone = p_bone; }
 	StringName get_clip_root_bone() const { return clip_root_bone; }
 	void set_debug_draw(bool p_enabled);
@@ -443,6 +451,8 @@ public:
 	float get_hang_reach_side() const { return hang_reach_side; }
 	void set_hold_min_width(float p_width) { hold_min_width = CLAMP(p_width, 0.0f, 0.48f); }
 	float get_hold_min_width() const { return hold_min_width; }
+	void set_hang_leap_windup(float p_seconds) { hang_leap_windup = CLAMP(p_seconds, 0.0f, 0.4f); }
+	float get_hang_leap_windup() const { return hang_leap_windup; }
 	void set_drop_to_hang(bool p_enabled) { drop_to_hang = p_enabled; }
 	bool is_drop_to_hang() const { return drop_to_hang; }
 	void set_drop_max_speed(float p_speed) { drop_max_speed = MAX(0.0f, p_speed); }

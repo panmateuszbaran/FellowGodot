@@ -68,6 +68,14 @@ private:
 	bool foot_ik = true;
 	bool lean = true;
 	Dictionary bone_names; // role name -> bone name, over the names found by themselves
+	// Milestone 153 (decision 0290): the body's weight — the hips on a damped spring behind where the traversal puts
+	// them (they keep the body's speed when it is stopped or started, and swing back), the torso leaning against them;
+	// the hands' and feet's targets eased (no jump where the hints change).
+	float body_sway = 0.0f; // 0: off; 1: the hips keep all of the body's speed
+	float sway_frequency = 1.6f; // Hz
+	float sway_damping = 0.35f; // of critical
+	float sway_max = 0.15f; // m
+	float limb_smoothing = 0.0f; // s: the time constant of the limbs' targets (0: off)
 
 	// The skeleton's bones for each role (-1: not found).
 	int bones[ROLE_MAX];
@@ -80,6 +88,20 @@ private:
 	float hips_drop = 0.0f; // the last pose's, in meters
 	FellowTraversal3D::PoseHints last;
 	mutable ObjectID traversal_cache;
+
+	// The spring's state (world space): the hips' offset and its rate; the point they hang behind, its last place and
+	// speed.
+	Vector3 sway;
+	Vector3 sway_rate;
+	Vector3 track_last;
+	Vector3 track_speed;
+	int track_frames = 0; // frames tracked in a row (two before the speed, three before the acceleration)
+	// The limbs' eased targets (world) and weights: the left hand, the right, the left foot, the right.
+	Vector3 limb_at[4];
+	float limb_weight[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	bool limbs_valid = false;
+
+	void _sway_step(const Vector3 &p_point, double p_delta, bool p_on);
 
 	FellowTraversal3D *_get_traversal() const;
 	void _find_bones(Skeleton3D *p_skeleton);
@@ -115,6 +137,17 @@ public:
 	bool is_lean() const { return lean; }
 	void set_bone_names(const Dictionary &p_names);
 	Dictionary get_bone_names() const { return bone_names; }
+	void set_body_sway(float p_amount) { body_sway = CLAMP(p_amount, 0.0f, 1.0f); }
+	float get_body_sway() const { return body_sway; }
+	void set_sway_frequency(float p_hz) { sway_frequency = CLAMP(p_hz, 0.2f, 8.0f); }
+	float get_sway_frequency() const { return sway_frequency; }
+	void set_sway_damping(float p_ratio) { sway_damping = CLAMP(p_ratio, 0.0f, 2.0f); }
+	float get_sway_damping() const { return sway_damping; }
+	void set_sway_max(float p_meters) { sway_max = CLAMP(p_meters, 0.0f, 0.5f); }
+	float get_sway_max() const { return sway_max; }
+	void set_limb_smoothing(float p_seconds) { limb_smoothing = CLAMP(p_seconds, 0.0f, 0.5f); }
+	float get_limb_smoothing() const { return limb_smoothing; }
+	Vector3 get_sway() const { return sway; }
 
 	FellowTraversalPose3D();
 };

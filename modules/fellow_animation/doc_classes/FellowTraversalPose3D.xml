@@ -23,6 +23,12 @@
 				The skeleton's bone found for [param role], or -1.
 			</description>
 		</method>
+		<method name="get_sway" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				The [member body_sway] spring's offset of the hips in the last pose, in world space (metres).
+			</description>
+		</method>
 		<method name="get_weight" qualifiers="const">
 			<return type="float" />
 			<description>
@@ -33,6 +39,9 @@
 	<members>
 		<member name="blend_time" type="float" setter="set_blend_time" getter="get_blend_time" default="0.15">
 			The seconds the pose takes to blend in when a mantle starts and out when it ends (a clip's last pose is held while it fades).
+		</member>
+		<member name="body_sway" type="float" setter="set_body_sway" getter="get_body_sway" default="0.0">
+			The body's weight while the pose is procedural (hanging, moving from hold to hold, climbing): the hips hang on a damped spring behind where the traversal shows the body and keep this share of its speed when it changes — caught at the end of a leap they swing on and back, they lag a start — pulled back at [member sway_frequency], damped by [member sway_damping], never further than [member sway_max]; the torso leans back against the swing (with [member lean]), the hands and feet stay on their targets, and the hips go no lower than the arms reach. [code]0[/code]: off (milestone 153, decision 0290).
 		</member>
 		<member name="bone_names" type="Dictionary" setter="set_bone_names" getter="get_bone_names" default="{}">
 			Bones named for roles, over the names found by themselves: a role's name ([code]"hips"[/code], [code]"spine"[/code], [code]"chest"[/code], [code]"left_upper_arm"[/code], [code]"left_lower_arm"[/code], [code]"left_hand"[/code], [code]"right_upper_arm"[/code], …, [code]"left_upper_leg"[/code], [code]"left_lower_leg"[/code], [code]"left_foot"[/code], [code]"right_upper_leg"[/code], …) to the bone's name.
@@ -45,6 +54,18 @@
 		</member>
 		<member name="lean" type="bool" setter="set_lean" getter="is_lean" default="true">
 			The torso tipped towards the wall.
+		</member>
+		<member name="limb_smoothing" type="float" setter="set_limb_smoothing" getter="get_limb_smoothing" default="0.0">
+			The time constant, in seconds, with which the hands' and feet's targets and weights follow the traversal's (no jump where they change: a move's end, a hang's start). [code]0[/code]: off, the targets as given (milestone 153, decision 0290).
+		</member>
+		<member name="sway_damping" type="float" setter="set_sway_damping" getter="get_sway_damping" default="0.35">
+			The [member body_sway] spring's damping, a share of critical damping (1: no swing past the rest).
+		</member>
+		<member name="sway_frequency" type="float" setter="set_sway_frequency" getter="get_sway_frequency" default="1.6">
+			The [member body_sway] spring's frequency, in hertz.
+		</member>
+		<member name="sway_max" type="float" setter="set_sway_max" getter="get_sway_max" default="0.15">
+			The furthest the [member body_sway] spring takes the hips from where the traversal shows the body, in metres.
 		</member>
 		<member name="traversal_path" type="NodePath" setter="set_traversal_path" getter="get_traversal_path" default="NodePath(&quot;&quot;)">
 			The [FellowTraversal3D] followed; by default the first found among the children of the skeleton's ancestors.
