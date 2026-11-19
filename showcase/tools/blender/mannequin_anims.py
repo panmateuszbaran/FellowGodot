@@ -97,17 +97,17 @@ GAITS = {
 	# locked it straight: the ankle had been asked to go 1.0 m from the hip on a 0.86 m leg).
 	"walk": dict(v=1.6, T=0.95, duty=0.58, front=0.46, push=0.5, lift=0.1, hip=0.0, sway=0.025, yaw=6.0, roll=4.0, lean=4.0,
 			swing=24.0, elbow=(12.0, 32.0), lower=79.0, width=0.09, kick=0.0, strike=16.0, run=False,
-			knee=[(0.0, 4.0), (0.2, 15.0), (0.5, 6.0), (0.75, 16.0), (1.0, 42.0)]),
+			knee=[(0.0, 4.0), (0.2, 13.0), (0.5, 6.0), (0.75, 16.0), (1.0, 42.0)]),
 	# Milestone 155: a jog between the walk and the run, so that a blend of two gaits mixes strides of like stances (a
 	# walk's foot planted while a run's swings dragged the foot as the body sped up).
 	"jog": dict(v=3.0, T=0.8, duty=0.4, front=0.45, push=0.5, heel_max=65.0, retract=0.6, lift=0.2, hip=0.0, sway=0.018,
 			yaw=8.0, roll=4.5, lean=7.0, swing=36.0, elbow=(55.0, 85.0), lower=76.0, width=0.07, kick=0.1, strike=8.0, run=True,
 			knee=[(0.0, 18.0), (0.45, 38.0), (1.0, 20.0)]),
-	"run": dict(v=4.4, T=0.7, duty=0.32, front=0.45, push=0.5, heel_max=70.0, retract=0.45, lift=0.28, hip=0.0, sway=0.012, yaw=10.0, roll=5.0, lean=11.0,
+	"run": dict(v=4.4, T=0.7, duty=0.32, front=0.45, push=0.5, heel_max=70.0, retract=0.7, lift=0.28, hip=0.0, sway=0.012, yaw=10.0, roll=5.0, lean=11.0,
 			swing=48.0, elbow=(78.0, 105.0), lower=74.0, width=0.06, kick=0.2, strike=4.0, run=True,
 			knee=[(0.0, 22.0), (0.45, 47.0), (1.0, 22.0)]),
-	"sprint": dict(v=7.0, T=0.62, duty=0.22, front=0.45, push=0.5, heel_max=70.0, retract=0.45, lift=0.33, hip=0.0, sway=0.008, yaw=12.0, roll=5.0, lean=18.0,
-			swing=62.0, elbow=(72.0, 110.0), lower=74.0, width=0.05, kick=0.16, strike=0.0, run=True,
+	"sprint": dict(v=7.0, T=0.62, duty=0.22, front=0.45, push=0.5, heel_max=70.0, retract=0.7, lift=0.38, hip=0.0, sway=0.008, yaw=12.0, roll=5.0, lean=18.0,
+			swing=62.0, elbow=(72.0, 110.0), lower=74.0, width=0.05, kick=0.0, strike=0.0, run=True,
 			knee=[(0.0, 26.0), (0.45, 48.0), (1.0, 24.0)]),
 }
 
@@ -295,7 +295,7 @@ def gait_pose(name, t):
 			cy = h00 * a0[1] + h10 * m + h01 * a1[1] + h11 * m
 			# The heel kicked up behind (running), then the knee drives forward.
 			cy += G["kick"] * 0.35 * math.sin(math.pi * min(1.0, s_ * 1.6)) * (1.0 - s_)
-			lift = G["lift"] * math.sin(math.pi * s_) ** 0.8 + G["kick"] * math.sin(math.pi * min(1.0, s_ * 1.4)) * (1.0 - s_) ** 1.5
+			lift = G["lift"] * math.sin(math.pi * s_ ** G.get("lift_late", 1.0)) ** 0.8 + G["kick"] * math.sin(math.pi * min(1.0, s_ * 1.4)) * (1.0 - s_) ** 1.5
 			# The foot kept pointing down while it lifts (turned flat at once, the ball dragged forwards on the ground).
 			pitch = p0 * (1.0 - smooth((s_ - 0.12) / 0.4)) + _strike(G, 0.0) * smooth((s_ - 0.6) / 0.4)
 			ankle = (x, cy, a0[2] + (a1[2] - a0[2]) * e + lift)

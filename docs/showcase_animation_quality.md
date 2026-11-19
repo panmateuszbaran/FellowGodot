@@ -1,6 +1,6 @@
 # The showcase's animation: a quality loop
 
-Status: **IN USE** from milestone 155 (17 iterations so far: 25 of 32 gates pass, milestone 154's build 14 — see the
+Status: **IN USE** from milestone 155 (18 iterations so far: 29 of 32 gates pass, milestone 154's build 14 — see the
 log below). Owner: the showcase (`showcase/`); the engine's part is the climbing's pose
 (`FellowTraversalPose3D`). Every change to the mannequin's clips, its animation tree or its pose goes through this
 loop; nothing is shown to the owner until its gates pass.
@@ -106,9 +106,9 @@ Milestone 155 (decision 0295): the gaits rebuilt from the supporting leg, soft I
 | 10-12 | `FellowFootLock3D` (the ankle held, then the sole; grabbed within 1.2 cm) | 25 | the changes 2.2-2.4 cm; holding the ankle had bent the toe-off knee |
 | 13-16 | soft IK in the climbing's pose; the lock reaching what the clips reach; a reach margin in the push | 25 | the mantle's knees no longer straight |
 | 17 | the walk's stride as in iteration 12 | 25 | the walk's toe-off knee in its band |
+| 18 | running, the foot reaching the ground at 70 % of its speed (was 45 %); the sprint's swing without its heel kick | 29 | the running skate and knee, the sprint's skate and the changes' pops in their bands |
 
-Next: the walking knee and ankle after the strike, the running knee at the end of the push, the running foot's
-landing speed, the walk-to-run change's fastest joint; then the feet on slopes, starts and stops, landings — each with
+Next: the walking knee and ankle after the strike, the sprinting knee at the end of the push; then the feet on slopes, starts and stops, landings — each with
 its gates first.
 
 ## Reference

@@ -39,7 +39,8 @@ way, each measured before it was fixed:
   from walking and running data (walk 0.95 s, its stance 58 %, 44 % of it ahead of the hips); a swing that leaves and
   reaches the ground at the ground's speed (a Hermite curve; running, with part of it), the foot kept pointing down
   while it lifts; the pivots the turned foot's own, the ball's on the sole; a jog (3 m/s) between the walk and the run;
-  the clips at 60 Hz (made and imported).
+  the clips at 60 Hz (made and imported); running, the foot reaches the ground at 70 % of the ground's speed (the
+  rest: it lands moving forwards, 1.3-1.6 m/s running, 2.1-2.4 sprinting) and the sprint's swing drops lower before it.
 * **Soft IK**: in the generator, past 99 % of a limb's reach its target is eased towards 99.7 % of it (a knee never
   less than about 9° bent); in `FellowTraversalPose3D`, `soft_ik` (off; the showcase: 0.97).
 * **`FellowFootLock3D`** (engine, a new node): each foot held where its sole comes down (heel or ball, handed over
@@ -64,22 +65,19 @@ way, each measured before it was fixed:
   | walk: ankle after the strike | 10-25° | 21.5° | 8.9° |
   | walk: skate (cm a planted foot moves in a stance) | ≤ 2 | 2.26 | 0.006 |
   | walk: feet in the ground | ≥ -2 cm | -2.16 | -0.77 |
-  | run: knee's least flexion | ≥ 15° | 3.6° | 14.7° |
+  | run: knee's least flexion | ≥ 15° | 3.6° | 16.0° |
   | run: knee straight | 0 % | 31 % | 0 % |
-  | run: knee at contact / in stance / in the swing | 15-45 / 40-65 / 90-125° | 9.3 / 49.8 / 110 | 23.2 / 42.1 / 124 |
-  | run: skate | ≤ 2 cm | 2.55 | 2.33 |
-  | sprint: knee's least / straight / swing | ≥ 15° / 0 % / 110-130° | 3.6 / 35 % / 124 | 12.8 / 0 % / 129 |
-  | sprint: skate | ≤ 2 cm | 4.20 | 3.14 |
-  | walk to run / run to sprint / stop: worst stance's skate | ≤ 5 cm | 7.66 / 10.1 / 20.6 | 2.24 / 2.29 / 1.66 |
-  | changes of gait: the joints' fastest against the gaits' | ≤ 1.5 | 1.27 / 1.12 / 1.40 | 1.71 / 1.43 / 1.27 |
+  | run: knee at contact / in stance / in the swing | 15-45 / 40-65 / 90-125° | 9.3 / 49.8 / 110 | 22.3 / 42.2 / 124 |
+  | run: skate | ≤ 2 cm | 2.55 | 1.52 |
+  | sprint: knee's least / straight / swing | ≥ 15° / 0 % / 110-130° | 3.6 / 35 % / 124 | 12.7 / 0 % / 129 |
+  | sprint: skate | ≤ 2 cm | 4.20 | 1.93 |
+  | walk to run / run to sprint / stop: worst stance's skate | ≤ 5 cm | 7.66 / 10.1 / 20.6 | 1.97 / 2.11 / 1.66 |
+  | changes of gait: the joints' fastest against the gaits' | ≤ 1.5 | 1.27 / 1.12 / 1.40 | 1.32 / 1.04 / 1.14 |
   | hanging / hold to hold / mantle: knee straight | ≤ 1 % | 0 / 0 / 25 % | 0 / 0 / 0 % |
 
-  25 of the 32 gates pass (milestone 154: 14). Not yet: the walking knee after the strike (20.6°) and the ankle after it
-  (8.9°: it was 21.5° — further from its band), the running and sprinting knees' least flexion (14.7°, 12.8°, at the end
-  of the push), the running and sprinting skate (2.3, 3.1 cm: the foot comes down still moving forwards — a swing that
-  reached the ground at the ground's speed straightened the knee), the walk-to-run change's fastest joint (1.71 times
-  the gaits' fastest; 1.04-1.71 over the last iterations, as small changes move the moment the jog's and the run's
-  strides cross). The next iterations of the loop.
+  29 of the 32 gates pass (milestone 154: 14). Not yet: the walking knee after the strike (20.6°, its band 5-20°) and
+  the ankle after it (8.9°, 10-25°: it was 21.5° — further from its band), the sprinting knee's least flexion (12.7°, at
+  the end of the push). The next iterations of the loop.
 * **`climb_check.gd`**: the 37 lanes' events, places and times value for value on GodotPhysics3D and Jolt;
   `last_check` (the last ledge check's diagnosis) of two or three free-climb lanes swapped among them — with the new
   class registered and not with it unregistered (the same build otherwise): registering a class moves object ids, and

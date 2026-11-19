@@ -20,7 +20,7 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   frames, running 31 %, mantling 25 %) and their cause found (the stance ankle asked to go 1.0 m from the hip on a
   0.86 m leg); the gaits rebuilt from the supporting leg, soft IK, and `FellowFootLock3D` (a new node: each foot held
   where its sole comes down, only its slide taken out); `FellowTraversalPose3D.soft_ik` (off by default). Straight
-  knees 0 % in every gait and in the mantle; the feet dragged 2.2-2.3 cm through a change of gait (7.7-20.6). 25 of the
+  knees 0 % in every gait and in the mantle; the feet dragged 1.7-2.1 cm through a change of gait (7.7-20.6). 29 of the
   32 gates pass (14). `climb_check.gd`: events, places and times value for value on GodotPhysics3D and Jolt; the
   regression scenes exact.
 
