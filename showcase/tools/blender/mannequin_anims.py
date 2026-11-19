@@ -323,6 +323,38 @@ def clip_hang_reach(lead):
 	return 0.75, False, lambda t: keyed(keys, t)
 
 
+def clip_hang_reach_side(lead):
+	"""Across to a ledge to the side hand over hand (0.8 s, FellowTraversal3D's TRANSFER_REACH_SIDE, milestone 152; the
+	pose's IK puts the hands and feet on the stone): the leading hand reaching out to the side, the head and the torso
+	turning to it, the leading foot stepping out; the hips swinging across under the hands, the arms wide; the other hand
+	and foot following in. lead: "L" or "R" (the side the body goes)."""
+	s = 1.0 if lead == "L" else -1.0
+	W = 0.75  # how far across (the IK puts the hands where the holds really are)
+	base = hang_base()
+
+	def side(x_lead, x_other, z_lead=2.0, z_other=2.0):
+		# The hands' places, the leading one first (mirrored for the right).
+		return _hands(zl=z_lead, zr=z_other, xl=x_lead, xr=x_other) if s > 0 else _hands(zl=z_other, zr=z_lead, xl=-x_other, xr=-x_lead)
+
+	def feet(x_lead, x_other, z_lead=BRACE, z_other=BRACE):
+		return _feet(xl=x_lead, xr=x_other, zl=z_lead, zr=z_other) if s > 0 else _feet(xl=-x_other, xr=-x_lead, zl=z_other, zr=z_lead)
+
+	keys = [
+		(0.0, base),
+		(0.2, hang_base(hips=(-0.05 * s, 0.11, -0.08), hips_rot=(7.0, -4.0 * s, -6.0 * s), spine=(-12.0, 8.0 * s, 8.0 * s),
+				neck=(-8.0, 14.0 * s), head=(-14.0, 22.0 * s, 0), **side(0.23 + W * 0.7, -0.23, 2.06),
+				**feet(0.11 + W * 0.25, -0.11, BRACE + 0.12, BRACE))),
+		(0.42, hang_base(hips=(0.06 * s, 0.13, -0.12), hips_rot=(6.0, 2.0 * s, 4.0 * s), spine=(-10.0, 4.0 * s, -4.0 * s),
+				neck=(-8.0, 8.0 * s), head=(-14.0, 12.0 * s, 0), **side(0.23 + W * 0.55, -0.23 - W * 0.45),
+				**feet(0.11 + W * 0.35, -0.11 - W * 0.3, BRACE, BRACE - 0.08))),
+		(0.62, hang_base(hips=(0.03 * s, 0.11, -0.08), hips_rot=(7.0, 1.0 * s, 2.0 * s), spine=(-10.0, 2.0 * s, -2.0 * s),
+				neck=(-8.0, 4.0 * s), head=(-15.0, 6.0 * s, 0), **side(0.23 + W * 0.1, -0.23 - W * 0.2, 2.0, 2.06),
+				**feet(0.11 + W * 0.05, -0.11 - W * 0.1, BRACE, BRACE + 0.14))),
+		(0.8, base),
+	]
+	return 0.8, False, lambda t: keyed(keys, t)
+
+
 def clip_hang_leap_up():
 	"""The leap up to a ledge too far to reach (0.45 s, TRANSFER_JUMP_UP): crouched on the wall, the legs driving the
 	body up off it, the arms thrown up overhead and catching the edge, the legs swinging in under the body and braced
@@ -656,6 +688,8 @@ def clips():
 	out["hang_shimmy"] = clip_hang_shimmy()
 	out["hang_reach_l"] = clip_hang_reach("L")
 	out["hang_reach_r"] = clip_hang_reach("R")
+	out["hang_across_l"] = clip_hang_reach_side("L")
+	out["hang_across_r"] = clip_hang_reach_side("R")
 	out["hang_leap_up"] = clip_hang_leap_up()
 	out["hang_leap_l"] = clip_hang_leap_side("L")
 	out["hang_leap_r"] = clip_hang_leap_side("R")

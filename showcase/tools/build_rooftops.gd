@@ -1466,7 +1466,7 @@ func _anim_tree() -> AnimationNodeBlendTree:
 		climb.add_blend_point(a, pt[1], -1, pt[0])
 	bt.add_node(&"climb", climb, Vector2(0, 400))
 	var states := ["loco", "jump", "fall", "land", "roll", "hang", "climb", "climb_jump", "dive_start", "dive", "hay_exit", "perch",
-			"hang_reach_l", "hang_reach_r", "hang_leap_up", "hang_leap_l", "hang_leap_r"]
+			"hang_reach_l", "hang_reach_r", "hang_leap_up", "hang_leap_l", "hang_leap_r", "hang_across_l", "hang_across_r"]
 	var tr := AnimationNodeTransition.new()
 	tr.xfade_time = 0.2
 	for i in states.size():

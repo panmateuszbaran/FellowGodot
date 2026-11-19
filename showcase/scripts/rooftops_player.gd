@@ -14,7 +14,8 @@ extends CharacterBody3D
 enum Mode { GROUND, AIR, TRAVERSE, PERCH, DIVE, HAY, ROLL }
 
 const ONE_SHOTS := {"jump": 0.34, "land": 0.45, "roll": 0.8, "climb_jump": 0.5, "dive_start": 0.55, "hay_exit": 2.2,
-		"hang_reach_l": 0.75, "hang_reach_r": 0.75, "hang_leap_up": 0.45, "hang_leap_l": 0.5, "hang_leap_r": 0.5}
+		"hang_reach_l": 0.75, "hang_reach_r": 0.75, "hang_leap_up": 0.45, "hang_leap_l": 0.5, "hang_leap_r": 0.5,
+		"hang_across_l": 0.8, "hang_across_r": 0.8}
 # FellowTraversal3D's Transfer values.
 const TRANSFER_JUMP_ALONG := 2
 const TRANSFER_JUMP_UP := 3
@@ -77,8 +78,10 @@ func _ready() -> void:
 func _on_transfer(_ledge: Dictionary, how: int, _duration: float, lead: int) -> void:
 	var side := "l" if lead == 0 else "r"
 	match how:
-		TRANSFER_REACH_UP, TRANSFER_REACH_SIDE:
+		TRANSFER_REACH_UP:
 			_play("hang_reach_" + side)
+		TRANSFER_REACH_SIDE:
+			_play("hang_across_" + side)
 		TRANSFER_JUMP_UP:
 			_play("hang_leap_up")
 		TRANSFER_JUMP_ALONG, TRANSFER_JUMP_DIAGONAL, TRANSFER_JUMP_CORNER, TRANSFER_JUMP_BACK:
