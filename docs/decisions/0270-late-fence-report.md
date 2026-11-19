@@ -100,6 +100,14 @@ whether worker threads recorded it in secondary command buffers — now in its c
 with the checkpoints — the hang about one run in 20 by now (5 in 114 runs as is, without the pass timestamps, since
 milestone 146). Open; next on the GPU: `f510` (40 runs with the checkpoints, prepared in `.tools/wip`).
 
+`m147_f510` (milestone 151): 3 hangs in 40 runs (runs 7, 15 and 21), each inside command 69 of its frame, as
+milestone 147's catch — both of the main queue's checkpoints before it, every command before it done: a draw list at
+1920 × 1080, about 64 KB of commands, recorded on worker threads (`cpu/parallel_recording`). Forward+'s frame there:
+the opaque pass (command 65, 256 KB, recorded on worker threads), the sky (66), the screen and depth textures' copies
+(67, 68), then **the transparent pass** (69). Four catches, four times the transparent pass recorded in parallel, never
+the opaque pass recorded the same way. Next: `f512` (parallel recording off) and `f514` (the frame's parallel replay
+off), 40 runs each.
+
 ## Decision
 
 KEEP: the late fence report on by default (2 s; changes no frame), the record off by default (start-up), the fault
