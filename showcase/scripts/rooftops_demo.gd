@@ -22,6 +22,7 @@ var _mark := INF # when the shot's mantle began (its program's "m+" times)
 var _climb: Node3D # the foot of the climb up the bell tower (ClimbStart), facing the wall
 var _climbing := false # running to the climb's foot, then up the holds
 var _path: Array = [] # points walked to one after another
+var _house := [] # milestone 152: [the foot of a house's front, into it] while running at it and climbing it
 
 
 func _ready() -> void:
@@ -113,6 +114,27 @@ func _make_shots() -> void:
 				[0.0, Vector3(-2.5, 2.2, -3.0), Vector3(1.0, 1.5, -9.0), 55.0],
 				[6.5, Vector3(-9.0, 14.0, 10.0), Vector3(2.0, 11.0, -14.0), 60.0]]},
 			"prog": [[0.3, {"to": Vector3(4.0, 0.0, 1.0), "walk": true}]],
+		},
+		{
+			# Milestone 152: across to CasaCrema and up its front from the street to the roof, from hold to hold (impost band,
+			# rustication, sill, pediment, sill, hood), out to the eave's lip and over it.
+			"name": "house", "duration": 8.0, "until_y": 2.0,
+			"place": [Vector3(13.1, 0.0, -7.0), 0.0],
+			"cam": {"mode": "chase", "offset": Vector3(-2.8, 1.6, 5.2)},
+			"prog": [[0.5, {"house": [Vector3(13.1, 0.0, -12.9), Vector3(0.0, 0.0, -1.0)], "sprint": true}]],
+		},
+		{
+			"name": "house_climb", "duration": 14.0, "until_mantle": true,
+			"cam": {"mode": "chase", "offset": Vector3(-2.8, 1.6, 5.2)},
+			"prog": [],
+		},
+		{
+			# On the tiles; the camera rising over the roofs to the tower.
+			"name": "roof", "duration": 7.0, "mantle_at_start": true,
+			"cam": {"mode": "path_follow", "keys": [
+				[0.0, Vector3(10.0, 12.5, -7.0), Vector3(13.5, 12.0, -13.0), 55.0],
+				[7.0, Vector3(20.0, 19.0, 2.0), Vector3(8.0, 13.0, -16.0), 60.0]]},
+			"prog": [["m+1.4", {"house": [], "sprint": false, "wish": Vector3()}]],
 		},
 	]
 
@@ -211,6 +233,8 @@ func _physics_process(delta: float) -> void:
 			_player.want_perch = true
 		if c.has("climb"):
 			_climbing = c["climb"]
+		if c.has("house"):
+			_house = c["house"]
 		if c.has("belfry_path"):
 			_path = _belfry_path()
 		if c.has("aim"):
@@ -219,7 +243,19 @@ func _physics_process(delta: float) -> void:
 			s["cam"]["rate"] = c["aim"][2]
 			s["cam"]["aim_world"] = true
 		_next += 1
-	if _climbing and _climb:
+	if not _house.is_empty():
+		# Milestone 152: to the house's front and on into it; on the wall, straight at it (free-running up its holds).
+		var inward: Vector3 = _house[1]
+		var tr: Node = _player.get_node("Traversal")
+		if tr.is_hanging() or tr.is_transferring() or tr.is_active():
+			_player.wish = inward
+		elif _player.global_position.y > 3.0:
+			_player.wish = Vector3() # up there (on the roof): standing
+		else:
+			var d: Vector3 = (_house[0] as Vector3) - inward * 1.2 - _player.global_position
+			d.y = 0.0
+			_player.wish = d.normalized() if d.length() > 0.3 else inward
+	elif _climbing and _climb:
 		# To the climb's foot and on into the wall; on the wall, straight at it (up the holds, no shimmy).
 		var inward := -_climb.global_basis.z
 		var tr: Node = _player.get_node("Traversal")
@@ -277,6 +313,12 @@ func _process(delta: float) -> void:
 				look = look.lerp(chest, 0.35)
 			_cam.global_transform = Transform3D(Basis(), k[0]).looking_at(look)
 			_cam.fov = k[2]
+		"chase":
+			# Milestone 152: behind and beside the character by an offset, eased.
+			var want: Vector3 = chest + (c["offset"] as Vector3) - Vector3.UP * 1.2
+			_cam_pos = want if t < 0.05 else _cam_pos.lerp(want, 1.0 - exp(-2.5 * delta))
+			_cam.global_transform = Transform3D(Basis(), _cam_pos).looking_at(chest + Vector3.UP * 0.4)
+			_cam.fov = 55.0
 		"track":
 			var keys: Array = c["keys"]
 			var k := _sample([[keys[0][0], keys[0][1], Vector3(), keys[0][2]], [keys[1][0], keys[1][1], Vector3(), keys[1][2]]], t)
