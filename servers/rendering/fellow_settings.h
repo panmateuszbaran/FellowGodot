@@ -1166,6 +1166,12 @@ inline bool frame_replay_frame_plan() {
 inline int frame_replay_plan_min_draws() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/frame/replay_plan_min_draws");
 }
+// Milestone 151 (decision 0283): a list recorded in parallel (cpu/parallel_recording) replayed in the segments it was
+// recorded in, each trusted to set its own state (on), or split as any other list, each segment starting with the state
+// the instructions before it set (off: the RTX's rare hang, decision 0270, was always inside a list replayed so).
+inline bool frame_replay_recorded_segments() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/replay_recorded_segments");
+}
 
 inline bool frame_async_compute() {
 	return enabled() && GLOBAL_GET_CACHED(int, "rendering/fellow/frame/async_compute") != 0 && autotune_allows(TUNE_ASYNC_COMPUTE);

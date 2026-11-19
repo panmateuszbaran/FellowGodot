@@ -113,6 +113,11 @@ of the time). The frame 4.56 ms against 4.47 (the render thread records them alo
 7.1 against 6.3 ms. Next: `f514` (parallel recording on, the frame's parallel replay off: the recorded segments replayed
 into the main command buffer) — a hang there is the recorded commands', none the replay of recorded segments'.
 
+`m151_f514` — parallel recording on, the parallel replay off: **no hang in 40** (the frame 4.47 ms, the render thread
+1.43 ms against 1.47, p99 6.0 ms). Neither path alone hangs; both together, where a list recorded in segments is
+replayed in those segments, did (3 in 40). Decision 0283: such lists are now split for the replay as any other
+(`frame/replay_recorded_segments` off); `f515` runs Bistro so 60 times.
+
 ## Decision
 
 KEEP: the late fence report on by default (2 s; changes no frame), the record off by default (start-up), the fault

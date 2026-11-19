@@ -3223,7 +3223,7 @@ uint32_t RenderingDeviceGraph::_fellow_split_draw_list(const RecordedDrawListCom
 	// first to fellow_replay_state). Returns how many: 0 if the list is replayed inline.
 	const uint32_t segments_from = fellow_replay_segments.size();
 	const uint32_t state_from = fellow_replay_state.size();
-	if (p_command->fellow_starts_count > 0 && _fellow_replay_recorded_segments(p_command)) {
+	if (p_command->fellow_starts_count > 0 && Fellow::frame_replay_recorded_segments() && _fellow_replay_recorded_segments(p_command)) {
 		Fellow::stats().frame_replay_recorded_lists.increment();
 		return fellow_replay_segments.size() - segments_from;
 	}

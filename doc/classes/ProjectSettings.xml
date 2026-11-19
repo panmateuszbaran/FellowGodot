@@ -3325,6 +3325,9 @@
 		<member name="rendering/fellow/frame/replay_plan_min_draws" type="int" setter="" getter="" default="16">
 			With [member rendering/fellow/frame/replay_frame_plan]: lists with at least this many draws replayed as one segment.
 		</member>
+		<member name="rendering/fellow/frame/replay_recorded_segments" type="bool" setter="" getter="" default="false">
+			With [member rendering/fellow/frame/parallel_replay]: a draw list recorded in parallel ([member rendering/fellow/cpu/parallel_recording]) replayed in the segments it was recorded in, each trusted to set its own state (on), or split as any other list, each segment starting with the state set before it (off). Off since decision 0283: on the RTX, the rare GPU hang of decision 0270 was always inside a list replayed in its recorded segments.
+		</member>
 		<member name="rendering/fellow/frame/separate_present_queue" type="bool" setter="" getter="" default="false">
 			Measured and rejected: presentation from a second queue. Decision 0009.
 		</member>

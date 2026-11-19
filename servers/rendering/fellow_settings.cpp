@@ -401,6 +401,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/frame/lazy_shader_variants_fill", true); // decision 0176
 	GLOBAL_DEF("rendering/fellow/frame/submit_thread", true);
 	GLOBAL_DEF("rendering/fellow/frame/parallel_replay", true);
+	GLOBAL_DEF("rendering/fellow/frame/replay_recorded_segments", false); // decision 0283 (the hang of decision 0270)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/replay_max_segments", PROPERTY_HINT_RANGE, "2,64,1"), 12);
 	GLOBAL_DEF("rendering/fellow/autotune/enabled", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/autotune/block_frames", PROPERTY_HINT_RANGE, "8,120,1"), 16);
