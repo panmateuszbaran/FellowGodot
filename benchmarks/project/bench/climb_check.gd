@@ -535,6 +535,18 @@ func _build() -> void:
 	(ln.traversal as FellowTraversal3D).hang_reach_side = 0.8
 	(ln.traversal as FellowTraversal3D).hang_brace_height = 0.65
 	(ln.traversal as FellowTraversal3D).hold_min_width = 0.2
+	# Milestone 152 (decision 0287): onto a roof over its eave. A 4 m wall (its own ground) under a roof sloping 25 degrees,
+	# its eave 0.45 m out with its lip at 3.9 m, a corbel at 3.0 m: caught by the corbel (the eave over it: no room for the
+	# body, room for the hands), up to the eave's lip hand over hand (hanging out from the wall), over it onto the roof.
+	_box(Vector3(150, -0.5, 10.0), Vector3(11.0, 1.0, 10.0), Color(0.36, 0.42, 0.34))
+	_box(Vector3(150, 2.0, 9.0), Vector3(6.0, 4.0, 2.0), Color(0.62, 0.55, 0.48))
+	_box(Vector3(150, 3.0 - 0.075, 10.11), Vector3(0.8, 0.15, 0.22), Color(0.72, 0.7, 0.66))
+	var roof := _box(Vector3(150, 4.466, 9.059), Vector3(6.0, 0.15, 3.0), Color(0.6, 0.3, 0.25))
+	roof.rotation_degrees = Vector3(25, 0, 0)
+	var le := _lane("eave_roof", Vector3(150, 0, 12), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}],
+			[1.6, {"intent": Vector3(0, 1, 0)}], [7.4, {"intent": Vector3()}]])
+	(le.traversal as FellowTraversal3D).hang_reach_up = 1.25
+	(le.traversal as FellowTraversal3D).hang_brace_height = 0.65
 	# None: free_climb off; the wall outside climb_mask; an overhang of 30 degrees.
 	_box(Vector3(40, 2.25, 9.0), Vector3(3.0, 4.5, 2.0), Color(0.6, 0.6, 0.66))
 	_lane("climb_off", Vector3(40, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [4.0, {"intent": Vector3()}]])
@@ -599,6 +611,8 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x - 1.4, 4.2, 15.0), Vector3(x - 1.4, 3.6, 10.0))
 			"narrow_holds":
 				cam.look_at_from_position(Vector3(x - 0.5, 4.2, 14.0), Vector3(x - 0.5, 3.9, 10.0))
+			"eave_roof":
+				cam.look_at_from_position(Vector3(x + 3.5, 4.0, 14.5), Vector3(x, 3.4, 10.0))
 			_:
 				cam.look_at_from_position(Vector3(x + 2.5, 2.4, 3.2), Vector3(x - 0.4, 1.6, -1.8))
 		if grid:
@@ -741,7 +755,7 @@ func _finish() -> void:
 		e["sequence"] = names
 		if lane.has("penetration_first"):
 			e["penetration_first"] = lane.penetration_first
-		if String(lane.name).begins_with("climb"):
+		if String(lane.name).begins_with("climb") or lane.name == "eave_roof":
 			var lc: Dictionary = (lane.traversal as FellowTraversal3D).get_last_check()
 			e["last_check"] = {"kind": KIND_NAMES[int(lc.get("kind", 0))], "reason": lc.get("reason", ""), "height": snappedf(float(lc.get("height", 0.0)), 0.01)}
 		var ok: bool = lane.penetration_frames == 0
@@ -856,6 +870,9 @@ func _finish() -> void:
 				for k in mini(3, lane.spreads.size()):
 					narrow = narrow and lane.spreads[k] >= 0.06 and lane.spreads[k] <= 0.1
 				ok = ok and narrow and names.has("hang_started:3.4") and names.count("hang_transferred:reach") == 2 and names.count("hang_transferred:reach_side") == 1 and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 5.5) < 0.05
+			"eave_roof":
+				# Milestone 152: caught under the eave, up to its lip, over it: standing on the roof's slope above the wall.
+				ok = ok and names.has("hang_started:3.0") and names.count("hang_transferred:reach") == 1 and names.has("mantle_finished:high") and feet.y > 4.0 and feet.z < 10.2
 			"climb_off", "climb_masked", "climb_overhang":
 				# Not climbed: standing at the wall's foot.
 				ok = ok and not names.has("climb_started") and feet.y < 0.05

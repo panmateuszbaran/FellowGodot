@@ -425,13 +425,16 @@ FellowTraversal3D::Ledge FellowTraversal3D::_check_ledge(const Vector3 &p_direct
 		// The same top (not the ground beyond a thin wall, not a step on it).
 		if (space->intersect_ray(tq, tr) && tr.normal != Vector3() && tr.normal.y >= Math::cos(Math::deg_to_rad(max_ledge_slope)) && Math::abs(tr.position.y - top.y) < 0.25f) {
 			top_feet.y = tr.position.y;
-			room = _capsule_free(top_feet + UP * 0.03f, cr, ch, exclude);
+			// Milestone 152 (decision 0287): on a sloping top (a roof), the capsule's round end clear of the slope.
+			room = _capsule_free(top_feet + UP * (0.03f + cr * (1.0f / tr.normal.y - 1.0f)), cr, ch, exclude);
 		}
 	}
 	const Vector3 front = edge - inward * (radius + 0.03f);
 	const bool lift = _capsule_free(Vector3(front.x, top.y + 0.03f, front.z), cr, ch, exclude);
 	const Vector3 over = edge + inward * (radius * 0.5f);
-	const bool over_free = _capsule_free(Vector3(over.x, top.y + 0.03f, over.z), cr, ch, exclude);
+	// (Over the edge on a sloping top: as high as the top is there, the round end clear of the slope.)
+	const float over_y = top.y - (rr.normal.x * (over.x - top.x) + rr.normal.z * (over.z - top.z)) / rr.normal.y + cr * (1.0f / rr.normal.y - 1.0f);
+	const bool over_free = _capsule_free(Vector3(over.x, over_y + 0.03f, over.z), cr, ch, exclude);
 	bool vault_ok = false;
 	if (thin) {
 		const Vector3 middle = edge + inward * (l.depth * 0.5f);
@@ -948,6 +951,25 @@ bool FellowTraversal3D::_fit_hold(Ledge &r_ledge) const {
 	r_ledge.collider = middle.collider;
 	r_ledge.spread = CLAMP(width * 0.5f - 0.05f, 0.04f, 0.24f);
 	return true;
+}
+
+// Milestone 152 (decision 0287): climbing from hold to hold (hang_reach_up), a hold with no room for the body over it —
+// under an eave, a balcony — is still held where the hands have room on it (nothing 0.2 m over its edge).
+bool FellowTraversal3D::_hands_room(const Ledge &p_ledge) const {
+	CollisionObject3D *body = _get_body();
+	if (hang_reach_up <= 0.0f || !body || body->get_world_3d().is_null()) {
+		return false;
+	}
+	PhysicsDirectSpaceState3D *space = body->get_world_3d()->get_direct_space_state();
+	HashSet<RID> exclude;
+	exclude.insert(body->get_rid());
+	PhysicsDirectSpaceState3D::RayParameters q;
+	q.from = p_ledge.edge + p_ledge.inward * 0.06f + UP * 0.02f;
+	q.to = q.from + UP * 0.2f;
+	q.exclude = exclude;
+	q.collision_mask = collision_mask;
+	PhysicsDirectSpaceState3D::RayResult r;
+	return !space->intersect_ray(q, r);
 }
 
 // Milestone 152 (decision 0285): room for a reach to r_to from p_from_feet — for the body hanging from it (out from it
@@ -2628,7 +2650,7 @@ void FellowTraversal3D::_notification(int p_what) {
 							// hang_first, is hung from when its edge is about the hands' reach above the feet.
 							const float over = last_check.edge.y - _feet_of(body->get_global_transform()).y;
 							const bool climbable = last_check.kind == KIND_LOW || last_check.kind == KIND_HIGH;
-							const bool hangable = air && hang && last_check.inward != Vector3() && over > hang_reach - 0.8f && over < hang_reach + 0.4f && ((last_check.kind == KIND_BLOCKED && last_check.reason != "no room above") || (hang_first && climbable));
+							const bool hangable = air && hang && last_check.inward != Vector3() && over > hang_reach - 0.8f && over < hang_reach + 0.4f && ((last_check.kind == KIND_BLOCKED && (last_check.reason != "no room above" || _hands_room(last_check))) || (hang_first && climbable));
 							if (hangable && _start_hang(last_check)) {
 								// hanging
 							} else if (!(air && last_check.kind == KIND_VAULT) && !(last_check.open_below && !air)) {
