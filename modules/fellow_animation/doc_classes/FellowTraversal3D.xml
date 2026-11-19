@@ -100,7 +100,7 @@
 		<method name="get_pose_targets" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				What the body's pose follows this physics frame (global space), for a pose of one's own: [code]active[/code], [code]kind[/code], [code]progress[/code], [code]inward[/code], [code]hand_left[/code], [code]hand_right[/code], [code]hand_weights[/code] (a [Vector2]: left, right), [code]foot_left[/code], [code]foot_right[/code], [code]foot_weights[/code], [code]foot_follow[/code] (how far each foot's target moves down with the hips), [code]lean[/code] (radians, towards the wall), [code]hips_drop[/code] (meters the hips may hang below the capsule's place), [code]clip[/code] and [code]clip_time[/code].
+				What the body's pose follows this physics frame (global space), for a pose of one's own: [code]active[/code], [code]kind[/code], [code]progress[/code], [code]inward[/code], [code]hand_left[/code], [code]hand_right[/code], [code]hand_weights[/code] (a [Vector2]: left, right), [code]foot_left[/code], [code]foot_right[/code], [code]foot_weights[/code], [code]foot_follow[/code] (how far each foot's target moves down with the hips), [code]lean[/code] (radians, towards the wall), [code]hips_drop[/code] (meters the hips may hang below the capsule's place), [code]body_offset[/code] (the body shown off the capsule's place: a leap's wind-up, milestone 153), [code]hand_grips[/code] (a [Vector2]: 1 where a hand is on its hold, 0 where it moves to the next; milestone 153), [code]clip[/code] and [code]clip_time[/code].
 			</description>
 		</method>
 		<method name="get_progress" qualifiers="const">

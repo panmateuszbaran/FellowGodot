@@ -388,6 +388,7 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 	if (weight <= 0.0f) {
 		last.clip.unref();
 		limbs_valid = false;
+		fit = Vector3();
 		return;
 	}
 	_find_bones(skeleton);
@@ -395,6 +396,17 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 	if (h.clip.is_valid()) {
 		limbs_valid = false;
 		_apply_clip(skeleton, h, weight);
+		// Milestone 153: a clip from a hang (climbing up onto the ledge) starts where the fitted body was, the fit eased out.
+		if (fit != Vector3()) {
+			fit = fit.lerp(Vector3(), 1.0f - Math::exp(-float(p_delta) / 0.2f));
+			const int hips_bone = bones[ROLE_HIPS];
+			if (hips_bone >= 0) {
+				const Transform3D to_sk = skeleton->get_global_transform().affine_inverse();
+				const Vector3 moved = skeleton->get_bone_global_pose(hips_bone).origin + to_sk.basis.xform(fit) * weight;
+				const int parent = skeleton->get_bone_parent(hips_bone);
+				skeleton->set_bone_pose_position(hips_bone, parent >= 0 ? skeleton->get_bone_global_pose(parent).affine_inverse().xform(moved) : moved);
+			}
+		}
 		return;
 	}
 	const Transform3D to_skeleton = skeleton->get_global_transform().affine_inverse();
@@ -435,6 +447,48 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 			if (axis.length() > 1e-5f) {
 				_lean(skeleton, axis.normalized(), up.angle_to(tilted));
 			}
+		}
+	}
+	// Milestone 153 (decision 0291): hanging, the body moved (up to 0.75 m, eased over 0.1 s) until the shoulders are
+	// within the arms' reach of the holds the hands grip — a hand that takes a hold pulls the body up to it.
+	Vector3 fit_goal;
+	if (hang_fit && hand_ik && hips >= 0 && h.kind == FellowTraversal3D::KIND_HANG) {
+		Vector3 move;
+		for (int iter = 0; iter < 4; iter++) {
+			Vector3 need;
+			float count = 0.0f;
+			for (int s = 0; s < 2; s++) {
+				const int upper = bones[s == 0 ? ROLE_LEFT_UPPER_ARM : ROLE_RIGHT_UPPER_ARM];
+				const int lower = bones[s == 0 ? ROLE_LEFT_LOWER_ARM : ROLE_RIGHT_LOWER_ARM];
+				const int hand = bones[s == 0 ? ROLE_LEFT_HAND : ROLE_RIGHT_HAND];
+				const float grip = h.hand_grip[s] * MIN(1.0f, limb_w[s]);
+				if (upper < 0 || lower < 0 || hand < 0 || grip <= 0.01f) {
+					continue;
+				}
+				const Vector3 shoulder = skeleton->get_bone_global_pose(upper).origin + move;
+				const Vector3 elbow = skeleton->get_bone_global_pose(lower).origin;
+				const float reach = 0.97f * (skeleton->get_bone_global_pose(upper).origin.distance_to(elbow) + elbow.distance_to(skeleton->get_bone_global_pose(hand).origin));
+				const Vector3 d = to_skeleton.xform(limb_target[s]) - shoulder;
+				const float len = d.length();
+				if (len > reach) {
+					need += d / len * ((len - reach) * grip);
+				}
+				count += 1.0f;
+			}
+			if (need == Vector3()) {
+				break;
+			}
+			move += need / MAX(count, 1.0f);
+		}
+		move = move.limit_length(0.75f * meter);
+		fit_goal = skeleton->get_global_transform().basis.xform(move);
+	}
+	if (hang_fit) {
+		fit = fit.lerp(fit_goal, 1.0f - Math::exp(-float(p_delta) / 0.1f));
+		if (hips >= 0 && fit != Vector3()) {
+			const Vector3 moved = skeleton->get_bone_global_pose(hips).origin + to_skeleton.basis.xform(fit) * weight;
+			const int parent = skeleton->get_bone_parent(hips);
+			skeleton->set_bone_pose_position(hips, parent >= 0 ? skeleton->get_bone_global_pose(parent).affine_inverse().xform(moved) : moved);
 		}
 	}
 	// The hips lowered (as far as the traversal allows) until the shoulders are within the arms' reach of the hands'
@@ -570,6 +624,7 @@ void FellowTraversalPose3D::_notification(int p_what) {
 		sway_rate = Vector3();
 		track_frames = 0;
 		limbs_valid = false;
+		fit = Vector3();
 	}
 }
 
@@ -597,6 +652,9 @@ void FellowTraversalPose3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_limb_smoothing", "seconds"), &FellowTraversalPose3D::set_limb_smoothing);
 	ClassDB::bind_method(D_METHOD("get_limb_smoothing"), &FellowTraversalPose3D::get_limb_smoothing);
 	ClassDB::bind_method(D_METHOD("get_sway"), &FellowTraversalPose3D::get_sway);
+	ClassDB::bind_method(D_METHOD("set_hang_fit", "enabled"), &FellowTraversalPose3D::set_hang_fit);
+	ClassDB::bind_method(D_METHOD("is_hang_fit"), &FellowTraversalPose3D::is_hang_fit);
+	ClassDB::bind_method(D_METHOD("get_hang_fit_offset"), &FellowTraversalPose3D::get_hang_fit_offset);
 	ClassDB::bind_method(D_METHOD("get_role_bone", "role"), &FellowTraversalPose3D::get_role_bone);
 	ClassDB::bind_method(D_METHOD("get_hips_drop"), &FellowTraversalPose3D::get_hips_drop);
 	ClassDB::bind_method(D_METHOD("get_weight"), &FellowTraversalPose3D::get_weight);
@@ -613,6 +671,7 @@ void FellowTraversalPose3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sway_damping", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_sway_damping", "get_sway_damping");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sway_max", PROPERTY_HINT_RANGE, "0,0.5,0.01,suffix:m"), "set_sway_max", "get_sway_max");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "limb_smoothing", PROPERTY_HINT_RANGE, "0,0.5,0.005,suffix:s"), "set_limb_smoothing", "get_limb_smoothing");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "hang_fit"), "set_hang_fit", "is_hang_fit");
 
 	BIND_ENUM_CONSTANT(ROLE_HIPS);
 	BIND_ENUM_CONSTANT(ROLE_SPINE);

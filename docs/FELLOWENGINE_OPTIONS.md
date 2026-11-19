@@ -888,7 +888,9 @@ hands thrown to the ledge ahead of the body and held, the feet pushing off and b
 `hang_clip` (the clip of a mantle from a hang, in place of the high or low one; the pose's hint `body_offset`); on
 `FellowTraversalPose3D`, `body_sway` (0: the hips on a damped spring behind the body, keeping this share of its speed when
 it changes, never lower than the arms reach), `sway_frequency` (1.6 Hz), `sway_damping` (0.35 of critical), `sway_max`
-(0.15 m), `limb_smoothing` (0 s: the hands' and feet's targets eased with this time constant); `get_sway()`.
+(0.15 m), `limb_smoothing` (0 s: the hands' and feet's targets eased with this time constant); `get_sway()`. The hands
+on the stone (decision 0291): `hang_fit` (off: hanging, the body moved up to 0.75 m until the shoulders are within reach
+of the holds the hands grip — `hand_grips` in `get_pose_targets()`), `get_hang_fit_offset()`.
 Bench `bench/climb_check.gd` (`hold_climb`, `side_reach`, `narrow_holds`, `eave_roof`, `eave_deep`, `beside_reach`,
 `stacked_holds`, `parapet`, `leap_style`;
 `--only=<lanes> --times=<s,...>` for a picture strip of some lanes at given times).

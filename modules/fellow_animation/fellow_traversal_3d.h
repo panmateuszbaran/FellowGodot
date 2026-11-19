@@ -110,6 +110,7 @@ public:
 		float lean = 0.0f; // radians, the torso tipped towards the wall
 		float hips_drop = 0.0f; // meters the hips may hang below the capsule's place for the hands to reach the edge
 		Vector3 body_offset; // milestone 153 (decision 0290), world: the body shown off the capsule's place (a leap's wind-up)
+		float hand_grip[2] = { 0.0f, 0.0f }; // milestone 153 (decision 0291): a hand on its hold (1), or moving to the next (0)
 		Ref<Animation> clip; // set for the kind: played at clip_time instead of the procedural pose
 		double clip_time = 0.0;
 		StringName clip_root_bone;

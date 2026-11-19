@@ -76,6 +76,10 @@ private:
 	float sway_damping = 0.35f; // of critical
 	float sway_max = 0.15f; // m
 	float limb_smoothing = 0.0f; // s: the time constant of the limbs' targets (0: off)
+	// Milestone 153 (decision 0291): hanging, the body moved until the shoulders are within the arms' reach of the holds
+	// the hands grip (the hands on the stone whatever the clip's pose and the capsule's place).
+	bool hang_fit = false;
+	Vector3 fit; // world: the body's move, eased
 
 	// The skeleton's bones for each role (-1: not found).
 	int bones[ROLE_MAX];
@@ -145,6 +149,9 @@ public:
 	float get_sway_damping() const { return sway_damping; }
 	void set_sway_max(float p_meters) { sway_max = CLAMP(p_meters, 0.0f, 0.5f); }
 	float get_sway_max() const { return sway_max; }
+	void set_hang_fit(bool p_enabled) { hang_fit = p_enabled; }
+	bool is_hang_fit() const { return hang_fit; }
+	Vector3 get_hang_fit_offset() const { return fit; }
 	void set_limb_smoothing(float p_seconds) { limb_smoothing = CLAMP(p_seconds, 0.0f, 0.5f); }
 	float get_limb_smoothing() const { return limb_smoothing; }
 	Vector3 get_sway() const { return sway; }

@@ -10,6 +10,12 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="get_hang_fit_offset" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				How far [member hang_fit] moved the body in the last pose, in world space (metres).
+			</description>
+		</method>
 		<method name="get_hips_drop" qualifiers="const">
 			<return type="float" />
 			<description>
@@ -51,6 +57,9 @@
 		</member>
 		<member name="hand_ik" type="bool" setter="set_hand_ik" getter="is_hand_ik" default="true">
 			The hands placed on the edge (and the hips lowered for them to reach it).
+		</member>
+		<member name="hang_fit" type="bool" setter="set_hang_fit" getter="is_hang_fit" default="false">
+			Hanging or moving from hold to hold, the body moved — up to 0.75 m, eased over 0.1 s — until the shoulders are within the arms' reach of the holds the hands grip (the traversal's [code]hand_grips[/code]): the hands on the stone whatever the clip's pose and the capsule's place, and a hand that takes a hold pulls the body up to it. A hand moving to its next hold reaches for it as far as the arm goes. A clip played from a hang (a mantle) starts where the fitted body was, the move eased out. [code]false[/code]: the body where the clip and the capsule put it (milestone 153, decision 0291).
 		</member>
 		<member name="lean" type="bool" setter="set_lean" getter="is_lean" default="true">
 			The torso tipped towards the wall.
