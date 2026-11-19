@@ -282,22 +282,22 @@ nodes/jump_wall/node = SubResource("AnimationNodeAnimation_kutla")
 nodes/jump_wall/position = Vector2(0, 2500)
 node_connections = [&"output", 0, &"state", &"state", 0, &"loco", &"state", 1, &"jump", &"state", 2, &"fall", &"state", 3, &"land", &"state", 4, &"roll", &"state", 5, &"hang", &"state", 6, &"climb", &"state", 7, &"climb_jump", &"state", 8, &"dive_start", &"state", 9, &"dive", &"state", 10, &"hay_exit", &"state", 11, &"perch", &"state", 12, &"ts_hang_reach_l", &"state", 13, &"ts_hang_reach_r", &"state", 14, &"ts_hang_leap_up", &"state", 15, &"ts_hang_leap_l", &"state", 16, &"ts_hang_leap_r", &"state", 17, &"ts_hang_across_l", &"state", 18, &"ts_hang_across_r", &"state", 19, &"jump_wall", &"ts_hang_reach_l", 0, &"hang_reach_l", &"ts_hang_reach_r", 0, &"hang_reach_r", &"ts_hang_leap_up", 0, &"hang_leap_up", &"ts_hang_leap_l", 0, &"hang_leap_l", &"ts_hang_leap_r", 0, &"hang_leap_r", &"ts_hang_across_l", 0, &"hang_across_l", &"ts_hang_across_r", 0, &"hang_across_r"]
 
-[node name="Player" type="CharacterBody3D" unique_id=1436891706]
+[node name="Player" type="CharacterBody3D" unique_id=2000781305]
 collision_layer = 8
 floor_max_angle = 0.87266463
 floor_snap_length = 0.3
 script = ExtResource("1_gtwnn")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=455185861]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1667660592]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("CapsuleShape3D_nd4pj")
 
-[node name="Model" type="Node3D" parent="." unique_id=653749523]
+[node name="Model" type="Node3D" parent="." unique_id=1747319227]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Mannequin" type="Node3D" parent="Model" unique_id=244896158]
+[node name="Mannequin" type="Node3D" parent="Model" unique_id=520134065]
 
-[node name="Skeleton3D" type="Skeleton3D" parent="Model/Mannequin" unique_id=1138582859]
+[node name="Skeleton3D" type="Skeleton3D" parent="Model/Mannequin" unique_id=1821372124]
 bones/0/name = "Root"
 bones/0/parent = -1
 bones/0/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
@@ -600,23 +600,24 @@ bones/42/position = Vector3(6.016345e-10, 0.14004643, 2.7939677e-09)
 bones/42/rotation = Quaternion(-0.18803409, -0.19119103, 0.05059307, 0.9620445)
 bones/42/scale = Vector3(0.99999994, 0.9999999, 1)
 
-[node name="MannequinBody" type="MeshInstance3D" parent="Model/Mannequin/Skeleton3D" unique_id=33206590]
+[node name="MannequinBody" type="MeshInstance3D" parent="Model/Mannequin/Skeleton3D" unique_id=1020766909]
 mesh = ExtResource("2_1of6o")
 skin = ExtResource("3_s8fep")
 skeleton = NodePath("..")
 
-[node name="TraversalPose" type="FellowTraversalPose3D" parent="Model/Mannequin/Skeleton3D" unique_id=952750196]
+[node name="TraversalPose" type="FellowTraversalPose3D" parent="Model/Mannequin/Skeleton3D" unique_id=1167050896]
 body_sway = 1.0
 sway_frequency = 1.7
 sway_damping = 0.32
 sway_max = 0.16
 limb_smoothing = 0.05
+hang_fit = true
 
-[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=1805925316]
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=539864033]
 root_node = NodePath("../Model")
 libraries/ = ExtResource("4_x374l")
 
-[node name="AnimationTree" type="AnimationTree" parent="." unique_id=844656186]
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=1480550638]
 root_node = NodePath("../Model")
 root_motion_track = NodePath("Mannequin/Skeleton3D:Root")
 callback_mode_process = 0
@@ -636,7 +637,7 @@ parameters/ts_hang_leap_r/scale = 1.0
 parameters/ts_hang_across_l/scale = 1.0
 parameters/ts_hang_across_r/scale = 1.0
 
-[node name="Traversal" type="FellowTraversal3D" parent="." unique_id=1210813643]
+[node name="Traversal" type="FellowTraversal3D" parent="." unique_id=2040736332]
 low_clip = ExtResource("5_r17wi")
 high_clip = ExtResource("6_t2oxt")
 vault_clip = ExtResource("7_wxayk")

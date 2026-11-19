@@ -45,16 +45,35 @@ climbing animations are unrealistic, the transitions between them strange — it
     own; the near ones cast shadows;
   * the scene's fog: a light haze with the sky's colour (aerial perspective) — the city and the hills recede.
 
+### The owner's second look (decision 0291)
+
+On the first video: "why does the character jump with its back to the wall? why are its arms always stretched out,
+floating?" Both were so, read off the bones after the modifiers:
+
+* **Its back to the wall**: the demo steered the run at a point 1.2 m out from the front; the sprint carried the body
+  past it, the next wish pointed back, and the body turned 160° in the air — it was caught with its back to the wall
+  and turned round on the hold. The demo now steers straight at the wall once past the point.
+* **Floating hands**: hanging, every hand was 20-35 cm short of its hold (the torso leaned back from the wall, the
+  mannequin's arm 0.54 m, the capsule 2.05 m under the edge): the arms stood straight up, the hands in the air. Now the
+  traversal says which hand grips its hold (`hand_grips`), and `FellowTraversalPose3D.hang_fit` moves the body until
+  the shoulders are within reach of the gripped holds — a hand that takes a hold pulls the body up to it. The hanging
+  torso leans in to the wall; the leap's hands move with the body; the jump at a wall swings the arms up only as the
+  hold comes.
+
 ## 1. Checks (cloud)
 
-* **`climb_check.gd`**: a new lane `leap_style` (decision 0290): the leap caught 0.15 s later (its wind-up), the hips
-  swung 15 cm, never in the wall. The other 36 lanes: value for value on GodotPhysics3D and Jolt.
+* **`climb_check.gd`**: a new lane `leap_style` (decisions 0290 and 0291): the leap caught 0.15 s later (its wind-up),
+  the hips swung 15 cm, the gripping hands within 1.6 cm of their holds, never in the wall. The other 36 lanes: value
+  for value on GodotPhysics3D and Jolt.
+* **The demo probed** (the bones after the modifiers, every 0.1 s): the body's facing constant through the run, the jump
+  and the catch; the gripping hands on their holds.
 * **Regression suite**: `climb`, `ledge_corners`, `traversal` exact.
 * **The class reference**: the new members documented, in `--doctool`'s order; `xmllint` and `make_rst.py` clean.
 * **Pictures** (lavapipe): the climb up CasaCrema before and after, from behind and from beside; the city from the
   roofs, over the square and in a street, before and after the instances' colour was read as sRGB (it had come out
   white: a linear colour where the shader's tint is sRGB).
-* **Video**: the climb up CasaCrema from beside the climber and a flight over the city (Movie Maker, lavapipe).
+* **Video**: the climb up CasaCrema from beside the climber and a flight over the city (Movie Maker, lavapipe); made
+  again after decision 0291.
 
 ## 2. Next
 

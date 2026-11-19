@@ -1382,6 +1382,8 @@ func _build_player() -> PackedScene:
 	pose.set("sway_damping", 0.32)
 	pose.set("sway_max", 0.16)
 	pose.set("limb_smoothing", 0.05)
+	# The hands on the stone (decision 0291): hanging, the body moved until the shoulders are within reach of the holds.
+	pose.set("hang_fit", true)
 	_add(skel, pose, "TraversalPose")
 	var ap := AnimationPlayer.new()
 	ap.add_animation_library(&"", lib)

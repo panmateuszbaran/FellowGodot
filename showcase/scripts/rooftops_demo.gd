@@ -252,9 +252,12 @@ func _physics_process(delta: float) -> void:
 		elif _player.global_position.y > 3.0:
 			_player.wish = Vector3() # up there (on the roof): standing
 		else:
-			var d: Vector3 = (_house[0] as Vector3) - inward * 1.2 - _player.global_position
+			# To a point 1.2 m out from the front, then on into it (milestone 153: once past that point, straight at the
+			# wall — not back to the point, which turned the body round in the air, its back to the wall).
+			var aim: Vector3 = (_house[0] as Vector3) - inward * 1.2
+			var d: Vector3 = aim - _player.global_position
 			d.y = 0.0
-			_player.wish = d.normalized() if d.length() > 0.3 else inward
+			_player.wish = d.normalized() if d.length() > 0.3 and -d.dot(inward) < -0.3 else inward
 	elif _climbing and _climb:
 		# To the climb's foot and on into the wall; on the wall, straight at it (up the holds, no shimmy).
 		var inward := -_climb.global_basis.z

@@ -18,6 +18,10 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   (`FellowTraversalPose3D.body_sway`, `sway_frequency`, `sway_damping`, `sway_max`, `limb_smoothing`); a clip of its own
   for a mantle from a hang (`hang_clip`). `climb_check.gd`: a new lane `leap_style`; the other 36 value for value on
   GodotPhysics3D and Jolt; the regression scenes exact.
+- Decision 0291 (opt-in): the hands on the stone — the traversal's hints say which hand grips its hold (`hand_grips`);
+  `FellowTraversalPose3D.hang_fit` moves the hanging body until the shoulders are within reach of the gripped holds (the
+  showcase's hands had been 20-35 cm short, floating before the stone). The showcase's demo no longer turns the climber
+  round in the air, its back to the wall.
 - The rooftops showcase: the hang braced lower (the feet under the hips, not drawn up to the chest) and its clips remade;
   leaps that wind up, fly with the legs together and swing in to the wall when caught, scaled to each move's time; a
   climb up from a hang (pulled up, a knee onto the top, standing up); a jump at a wall with the arms reaching for the

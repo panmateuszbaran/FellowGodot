@@ -235,6 +235,8 @@ WALL = -0.33
 # of the feet on it (the ankle 0.12 m out), the knees bent towards it (milestone 153: 0.42, the feet under the hips,
 # not drawn up to the chest).
 BRACE = 0.42
+# Milestone 153: how far the hanging torso leans in to the wall (degrees) over every hanging clip's own lean.
+HANG_LEAN = 18.0
 BRACE_Y = WALL + 0.12
 
 
@@ -269,6 +271,14 @@ def hang_base(**kw):
 	p.update(_hands())
 	p.update(_feet())
 	p.update(kw)
+	# Milestone 153: the torso leaning in to the wall over the hips (the chest near the stone, the arms nearly straight up
+	# to the hold; it had leaned back, the shoulders out of the arms' reach), the head kept looking up at the hold.
+	sp = p["spine"]
+	p["spine"] = (sp[0] + HANG_LEAN, sp[1], sp[2])
+	hr = p["hips_rot"]
+	p["hips_rot"] = (hr[0] + HANG_LEAN * 0.4, hr[1], hr[2])
+	hd = p["head"]
+	p["head"] = (hd[0] - HANG_LEAN * 0.8, hd[1], hd[2])
 	return p
 
 
@@ -481,9 +491,9 @@ def clip_jump_wall():
 		(0.1, dict(run, hips=(0, -0.02, -0.12), hips_rot=(16.0, 0, 0), spine=(14.0, 0, 0), head=(-18.0, 0, 0),
 				leg_L={"ik": ((0.1, -0.26, 0.42), (0.15, -1, 0))}, leg_R={"ik": ((-0.1, 0.2, 0.05), (-0.15, -1, 0))},
 				foot_L=(10.0, 6.0, 0), foot_R=(-45.0, 6.0, 0), toes_R=25.0,
-				arm_L={"fk": (40.0, 70.0, 40.0, 6.0)}, arm_R={"fk": (40.0, 70.0, 40.0, 6.0)})),
-		(0.26, dict(stand(), hips=(0, 0.0, 0.04), hips_rot=(-2.0, 0, 0), spine=(-8.0, 0, 0), neck=(-8.0, 0), head=(-26.0, 0, 0),
-				shoulder_L=(20.0, 6.0), shoulder_R=(20.0, 6.0), **arms(1.95),
+				arm_L={"fk": (70.0, -25.0, 30.0, 6.0)}, arm_R={"fk": (70.0, -25.0, 30.0, 6.0)})),
+		(0.26, dict(stand(), hips=(0, 0.0, 0.04), hips_rot=(-2.0, 0, 0), spine=(-6.0, 0, 0), neck=(-6.0, 0), head=(-22.0, 0, 0),
+				shoulder_L=(10.0, 4.0), shoulder_R=(10.0, 4.0), **arms(1.45, y=-0.42),
 				leg_L={"ik": ((0.1, -0.24, 0.5), (0.15, -1, 0))}, leg_R={"ik": ((-0.1, 0.12, 0.2), (-0.15, -1, 0))},
 				foot_L=(0.0, 6.0, 0), foot_R=(-35.0, 6.0, 0))),
 		(0.46, dict(stand(), hips=(0, 0.02, 0.02), hips_rot=(4.0, 0, 0), spine=(-10.0, 0, 0), neck=(-8.0, 0), head=(-28.0, 0, 0),
