@@ -133,6 +133,13 @@ few places of the camera path. Left: the cold parallel recording at those places
 luck, 6 % at the rate), or something the frames with the gate open leave behind. Decision 0284 adds the gate's history
 to the report and `debug/gate_open_every` to force it; next, `f517`: the gate held closed against the gate as it is.
 
+`m152_f517` (milestone 152) — the gate held closed (`debug/gate_open_every` -1) against the gate as it is, interleaved,
+33 runs each (stopped there when the owner needed the laptop): **4 failures in 33 held closed** (three hangs as before,
+their reports `opened 0 times ... never open`; one exit at 70 s with 0x80000003 and no report), **none in 33 as it is**.
+The failure needs no frame with the gate open: it is the closed frame's own path — the lists recorded on cold workers,
+replayed whole into the primary command buffer, submitted by the render thread. Next, `f518`: the cold workers apart
+from the closed frame's replay and submission.
+
 ## Decision
 
 KEEP: the late fence report on by default (2 s; changes no frame), the record off by default (start-up), the fault

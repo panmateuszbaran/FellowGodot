@@ -14,7 +14,10 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - Decision 0284: the hot workers' gate forced (`debug/gate_open_every`: one frame in N, 1 always open, -1 always
   closed) and its last 64 frames in a late fence's report. The nine failures of decision 0270 read again: each failing
   frame had the gate closed — its transparent pass replayed whole into the primary command buffer, not into secondary
-  ones as decision 0283 had read it. `f516` (the gate held open): no failure in 30 runs.
+  ones as decision 0283 had read it. `f516` (the gate held open): no failure in 30 runs. `f517` (stopped after 33
+  runs each when the owner needed the laptop): held closed, 4 failures in 33, in runs where the gate never opened;
+  as it is, none in 33. The failure is the closed frame's own path (cold workers, the whole replay, the render
+  thread's submission); `f518` splits them when the GPU is free again.
 - Decisions 0285-0289, climbing from hold to hold (`FellowTraversal3D`, opt-in): across a gap to a ledge to the side, or
   up and to the side, hand over hand (`hang_reach_side`, `TRANSFER_REACH_SIDE`); narrow holds held with the hands
   together (`hold_min_width`, `spread`); a hold under an eave caught and the eave's lip reached, near or far out, and over

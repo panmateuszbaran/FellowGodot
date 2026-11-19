@@ -3,7 +3,8 @@
 Status: **KEEP** (diagnostics; `debug/gate_open_every` 0 by default changes nothing) · Branch `fellow/geometry` · Code:
 `servers/rendering/fellow_settings.{h,cpp}` (`frame_gpu_wait_report()`, `frame_gate_describe()`),
 `servers/rendering/rendering_device.cpp` (`_fellow_late_fence_report()`) · Checks: lavapipe (a scene of 1 200
-transparent meshes, its transparent pass recorded in parallel); the RTX's job `m151_f517` (pending).
+transparent meshes, its transparent pass recorded in parallel); the RTX's job `m152_f517` (33 runs each way; stopped
+there when the owner needed the laptop).
 
 ## Problem
 
@@ -55,12 +56,28 @@ that failed, and the gate cannot be held closed.
   `[ooooooooo]` for 0 on lavapipe (never waiting for its GPU).
 * The default (0) leaves the gate's decision as it was; the history is a few integer operations per frame.
 
+* **`m152_f517`, the RTX**: Bistro exterior streamed as `f510`, the gate held closed (-1) against the gate as it is,
+  interleaved (planned 45 each; stopped after 33 each when the owner needed the laptop):
+
+  | the gate | runs | failures |
+  |---|---:|---|
+  | held closed (`debug/gate_open_every` -1) | 33 | **4**: three hangs (runs 14, 22, 28), one exit at 70 s with 0x80000003 and no report (run 1) |
+  | as it is | 33 | 0 |
+
+  The three hangs' reports: `open in 0 of the last 64 frames [....]; opened 0 times in 5232 frames; never open` (5 110
+  and 17 461 frames in the others) — the gate never opened in those runs. The GPU stopped as in decision 0270, frame
+  slot's fence not signalled, every submission the render thread's. The frame and the GPU when it ran: 4.3-4.5 ms
+  against 4.4-4.5 ms as it is.
+
 ## Decision
 
-KEEP (diagnostics). Next (`m151_f517`, the RTX): Bistro exterior streamed as `f510`, the gate held closed (-1: the
-failing frames' conditions in every frame, no list ever replayed in secondary command buffers) against the gate as it
-is, 45 runs each, interleaved. Failures with it closed: the cold parallel recording; none there while the gate as it is
-fails: something the open frames leave behind.
+KEEP (diagnostics). `f517` answers the question it was made for: the failure needs no frame with the gate open — it
+comes in runs where the gate never opened, at 4 in 33 (12 %, against 7 in 100 with the gate as it is and 0 in 30 held
+open). What the open frames leave behind is ruled out; left is the frame with the gate closed itself: its lists recorded
+in parallel on cold workers (pool tasks), replayed whole into the primary command buffer, submitted by the render thread.
+Next (`f518`, held while the GPU is paused): those three split — the gate held open with `frame/parallel_replay` and
+`frame/submit_thread` off (the hot workers alone), against the gate held open with `cpu/hot_workers_usec` 0 (the cold
+workers with the open frame's replay and submission).
 
 ## Rejected / not done
 
