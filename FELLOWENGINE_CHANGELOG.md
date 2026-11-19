@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 159 — the reference's light (2026-11-20)
+
+- Decision 0300: the rooftops scene's light as the owner's reference video's — soft, warm, bright in the shade.
+  - Measured against the video's frames: our luminance's percentiles 0.37-0.76 of the video's → 0.91-1.05, the fine
+    detail's contrast 1.59 → 1.31 times, the saturation 1.27 → 0.97 times.
+  - The light: a soft sun (2.5° across), the sky's and bounce's light doubled, exposure 1.3, less SSAO, contrast and
+    saturation.
+  - The ashlar dressed and warm (only its joints sunk by the parallax). The coppi are tapered tiles with lips over
+    pan tiles, in smooth terracotta (`Builder.coppo`). The glass is dark (no direct specular, the sky's reflection
+    mostly hidden, no lamps by day).
+
 ## Milestone 158 — the reference's house finished as the video's; its pelvis (2026-11-20)
 
 - Decision 0298: the replica of the reference's house, and the square's houses, beside the video's frames.

@@ -4,11 +4,11 @@
 [ext_resource type="Skin" path="res://rooftops/character/mannequin_skin.res" id="2_cx1j0"]
 [ext_resource type="AnimationLibrary" path="res://rooftops/character/mannequin_clips.res" id="3_5ek2c"]
 
-[node name="NPC" type="Node3D" unique_id=1819043739]
+[node name="NPC" type="Node3D" unique_id=1576372770]
 
-[node name="Mannequin" type="Node3D" parent="." unique_id=1594112617]
+[node name="Mannequin" type="Node3D" parent="." unique_id=482224329]
 
-[node name="Skeleton3D" type="Skeleton3D" parent="Mannequin" unique_id=700467984]
+[node name="Skeleton3D" type="Skeleton3D" parent="Mannequin" unique_id=97158618]
 bones/0/name = "Root"
 bones/0/parent = -1
 bones/0/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
@@ -311,10 +311,10 @@ bones/42/position = Vector3(6.016345e-10, 0.14004643, 2.7939677e-09)
 bones/42/rotation = Quaternion(-0.18803409, -0.19119103, 0.05059307, 0.9620445)
 bones/42/scale = Vector3(0.99999994, 0.9999999, 1)
 
-[node name="MannequinBody" type="MeshInstance3D" parent="Mannequin/Skeleton3D" unique_id=609977099]
+[node name="MannequinBody" type="MeshInstance3D" parent="Mannequin/Skeleton3D" unique_id=2144841942]
 mesh = ExtResource("1_bob4v")
 skin = ExtResource("2_cx1j0")
 skeleton = NodePath("..")
 
-[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=551923314]
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=1205382466]
 libraries/ = ExtResource("3_5ek2c")

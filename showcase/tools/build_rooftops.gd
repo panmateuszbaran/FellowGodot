@@ -161,7 +161,8 @@ func _make_materials() -> void:
 	mats["shutter_brown"] = _shader_mat("wood", {"louvres": true, "paint": Color(0.4, 0.21, 0.12), "wear": 0.3, "seed": 5.0})
 	# Milestone 158: the windows' wooden casements give the panes; a lamp in fewer rooms, dimmer (one lit behind the
 	# climbed window had glowed white beside the reference's dark glass).
-	mats["glass"] = _shader_mat("window_glass", {"lead_width": 0.0, "lit_share": 0.04, "lamp_energy": 0.3})
+	# Milestone 159: no lamps lit in the golden hour's daylight (one had lit the climbed window white).
+	mats["glass"] = _shader_mat("window_glass", {"lead_width": 0.0, "lit_share": 0.0, "lamp_energy": 0.3})
 	mats["hay"] = _shader_mat("hay", {})
 	mats["cloth"] = _shader_mat("banner_cloth", {"pattern": 1})
 	var iron := StandardMaterial3D.new()
@@ -250,15 +251,20 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 		# strength it read as rubble). Each house its stone's shade (the plaster's colour, a sixth of it, over a pale
 		# beige).
 		for n in p_plaster:
-			var shade: Color = Color(0.93, 0.89, 0.81).lerp(p_plaster[n][0], 0.15)
+			# Milestone 159: warmer (beside the reference's honey-coloured sandstone ours had read as a white limestone).
+			var shade: Color = Color(0.9, 0.8, 0.66).lerp(p_plaster[n][0], 0.15)
 			# Milestone 158 (the reference beside the replica, frame for frame): the blocks at the photograph's own scale
 			# halved to the reference's courses (some 29 cm: the climber's shin spans one and a half; at 1.25 m they had
 			# been 15 cm, a wall of bricks), dressed — their faces flat (the photograph's rock-faced relief left to a
 			# weaker normal map), the joints sunk 2.5 cm by the parallax.
-			photo[n] = _photo("ashlar", {"tint": shade, "tint_strength": 0.3, "brightness": 1.25, "seed": p_plaster[n][2],
-					"tex_size": 2.5, "normal_strength": 0.18, "specular": 0.2, "roughness_bias": 0.05, "stains": 0.25,
-					"variation": 0.08, "anti_tile": false, "parallax_depth": 0.025, "height_lo": 0.44, "height_hi": 0.6,
-					"albedo_soften": 0.55})
+			# Milestone 159 (the owner: "why does our light look so nasty instead of soft and delicate?" — beside the
+			# reference our walls' fine detail was half as contrasty again): the faces smooth — only the joints and their
+			# arrises sunk (the height map's lowest 5 %: at 0.44-0.6 the rough faces had been sunk in bumps), the normal
+			# map weaker still, the photograph's own baked shading mostly blurred out.
+			photo[n] = _photo("ashlar", {"tint": shade, "tint_strength": 0.45, "brightness": 1.2, "seed": p_plaster[n][2],
+					"tex_size": 2.5, "normal_strength": 0.08, "specular": 0.2, "roughness_bias": 0.05, "stains": 0.25,
+					"variation": 0.08, "anti_tile": false, "parallax_depth": 0.02, "height_lo": 0.4, "height_hi": 0.52,
+					"albedo_soften": 0.85, "cavity": 0.3})
 		photo["far_plaster"] = _photo("ashlar", {"tint": Color(0.9, 0.84, 0.74), "tint_strength": 0.3, "brightness": 1.2,
 				"tex_size": 2.5, "normal_strength": 0.55, "specular": 0.2, "stains": 0.3, "variation": 0.1, "anti_tile": false,
 				"instance_tint": true, "parallax_depth": 0.0})
@@ -271,14 +277,16 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 				"fallen": 0.15, "patch_albedo": brick[0], "patch_normal": brick[1], "patch_size": brick[3], "specular": 0.22,
 				"roughness_bias": 0.08, "stains": 0.5, "variation": 0.14, "instance_tint": true})
 	# Laid textures (blocks, bricks, tiles, boards) are not turned for the anti-tiling: their courses must stay level.
-	photo["stone"] = _photo("stone", {"tint": Color(0.8, 0.76, 0.66), "tint_strength": 0.45, "specular": 0.25, "stains": 0.3,
-			"anti_tile": false, "seed": 1.0, "parallax_depth": 0.006})
+	# Milestone 159: dressed (the quoins, the frames, the balconette: smooth in the reference; at full strength the
+	# photograph's normals had made them rock-faced).
+	photo["stone"] = _photo("stone", {"tint": Color(0.84, 0.76, 0.64), "tint_strength": 0.45, "specular": 0.25, "stains": 0.3,
+			"anti_tile": false, "seed": 1.0, "parallax_depth": 0.006, "normal_strength": 0.35, "albedo_soften": 0.6})
 	photo["water_stone"] = _photo("stone", {"tint": Color(0.82, 0.8, 0.74), "tint_strength": 0.6, "specular": 0.25, "stains": 0.5,
 			"anti_tile": false, "seed": 2.0})
 	# The ground floors' rustication: the sandstone's blocks, larger and rougher, greyer than the dressings.
 	photo["stone_rustic"] = _photo("ashlar" if _tex.has("ashlar") else "stone", {"tint": Color(0.82, 0.76, 0.66), "tint_strength": 0.4, "specular": 0.22,
-			"stains": 0.4, "ground_dirt": 0.9, "normal_strength": 1.2, "tex_size": 3.4, "variation": 0.16, "anti_tile": false,
-			"seed": 3.0, "parallax_depth": 0.035, "height_lo": 0.44, "height_hi": 0.62})
+			"stains": 0.4, "ground_dirt": 0.9, "normal_strength": 0.5, "tex_size": 3.4, "variation": 0.16, "anti_tile": false,
+			"seed": 3.0, "parallax_depth": 0.025, "height_lo": 0.4, "height_hi": 0.55, "albedo_soften": 0.6, "cavity": 0.3})
 	photo["kerb"] = _photo("stone", {"tint": Color(0.62, 0.62, 0.6), "tint_strength": 0.7, "specular": 0.25, "anti_tile": false, "seed": 4.0})
 	photo["brick"] = _photo("brick", {"tint": Color(0.56, 0.38, 0.3), "tint_strength": 0.5, "normal_strength": 0.75, "specular": 0.2,
 			"stains": 0.3, "variation": 0.1, "anti_tile": false, "seed": 5.0})
@@ -288,9 +296,11 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 	# had been twice as colourful as the reference's roofs, and darker).
 	# Milestone 158: the coppi themselves geometry (ac_buildings.eaves): the photograph under them the troughs, darker;
 	# on the coppi its colour spread wide (a coppo's own weathering, no tiles drawn on it).
-	photo["coppo"] = _photo("roof", {"tint": Color(0.74, 0.47, 0.36), "tint_strength": 0.75, "brightness": 1.05,
-			"specular": 0.22, "roughness_bias": 0.08, "stains": 0.35, "variation": 0.3, "ground_dirt": 0.0, "anti_tile": false,
-			"seed": 12.0, "tex_size": 6.0, "normal_strength": 0.25})
+	# Milestone 159: the clay smooth (the photograph's tiles stretched along each coppo had read as bark): its colour
+	# only, blurred to its weathering's broad patches.
+	photo["coppo"] = _photo("roof", {"tint": Color(0.66, 0.36, 0.22), "tint_strength": 0.85, "brightness": 0.95,
+			"specular": 0.22, "roughness_bias": 0.08, "stains": 0.3, "variation": 0.25, "ground_dirt": 0.0, "anti_tile": false,
+			"seed": 12.0, "tex_size": 6.0, "normal_strength": 0.04, "albedo_soften": 1.0, "soften_lod": 6.0})
 	photo["roof"] = _photo("roof", {"tint": Color(0.8, 0.62, 0.52), "tint_strength": 0.55, "brightness": 0.8, "specular": 0.22,
 			"roughness_bias": 0.05, "stains": 0.25, "variation": 0.15, "ground_dirt": 0.0, "anti_tile": false, "seed": 6.0,
 			"tex_size": 4.2, "parallax_depth": 0.06, "height_lo": 0.2, "height_hi": 0.85, "cavity": 0.3})
@@ -578,13 +588,15 @@ func _environment(p_root: Node3D) -> void:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_sky_contribution = 1.0
 	# Milestone 156 (the owner's reference): the shade lighter — the warm stone's light bounced into it and the sky's.
-	env.ambient_light_energy = 1.55
+	# Milestone 159 (beside the reference: our shade 2-3 times darker than its warm, bounced shade): the sky's and the
+	# bounce's light doubled.
+	env.ambient_light_energy = 3.0
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_AGX
-	env.tonemap_exposure = 1.0
+	env.tonemap_exposure = 1.3
 	env.ssao_enabled = true
 	env.ssao_radius = 1.0
-	env.ssao_intensity = 1.3
+	env.ssao_intensity = 0.6
 	env.ssao_detail = 0.6
 	# No screen-space reflections: on rough stone and old glass they read as a sheen on everything; the puddles and
 	# windows reflect the sky's radiance.
@@ -598,7 +610,7 @@ func _environment(p_root: Node3D) -> void:
 	env.sdfgi_cascades = 4
 	env.sdfgi_min_cell_size = 0.25
 	env.sdfgi_bounce_feedback = 0.6
-	env.sdfgi_energy = 1.25
+	env.sdfgi_energy = 2.0
 	env.fog_enabled = true
 	# Milestone 153: the golden hour's haze — the city's far houses and the hills paler and bluer with distance (the
 	# sky's colour mixed in), as the eye reads depth.
@@ -613,20 +625,23 @@ func _environment(p_root: Node3D) -> void:
 	env.volumetric_fog_length = 64.0
 	env.volumetric_fog_sky_affect = 0.0
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 0.92
+	env.adjustment_saturation = 0.8
 	env.adjustment_contrast = 1.0
 	# Milestone 158 (the reference beside the scene): its softer light — AgX's contrast lower, the shade lighter, the
 	# colours a little less saturated.
-	env.tonemap_agx_contrast = 1.05
+	# Milestone 159: lower still, less saturated (ours 106-131 against the reference's 87-90).
+	env.tonemap_agx_contrast = 0.95
 	var we := WorldEnvironment.new()
 	we.environment = env
 	we.camera_attributes = CameraAttributesPractical.new()
 	_add(p_root, we, "WorldEnvironment")
 	# The sun low in the west-south-west: the golden hour, long shadows across the square.
 	var sun := DirectionalLight3D.new()
-	sun.light_energy = 2.8
+	sun.light_energy = 3.3
 	sun.light_color = Color(1.0, 0.9, 0.78) # the atmosphere colours it further (rendering/fellow/post/atmosphere/sun_transmittance)
-	sun.light_angular_distance = 0.6
+	# Milestone 159: the reference's soft shadows — a hazy sun, its penumbrae wide (at 0.6 degrees they had been knife
+	# edges).
+	sun.light_angular_distance = 2.5
 	sun.shadow_enabled = true
 	sun.shadow_blur = 1.2
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS

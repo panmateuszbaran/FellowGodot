@@ -181,6 +181,36 @@ class Builder:
 			faces.append(f)
 		return faces
 
+	def coppo(self, p0, p1, r0, r1, material, up=Vector((0, 0, 1)), segments=6, lip=0.014, concave=False):
+		"""A coppo (milestone 159, the owner's reference): half a tapered tube from p0 (radius r0) to p1 (r1), its lower
+		end thick (a lip of the clay's thickness and a little of its inside, so that the course's step reads); convex
+		(its open side facing -up: a cover tile) or concave (open side up: a pan tile in the channel between two)."""
+		p0 = Vector(p0)
+		p1 = Vector(p1)
+		axis = (p1 - p0).normalized()
+		side = axis.cross(up).normalized()
+		u = side.cross(axis).normalized()
+		if concave:
+			u = -u
+		def ring(c, r):
+			return [c + (side * math.cos(math.pi * i / segments) + u * math.sin(math.pi * i / segments)) * r
+					for i in range(segments + 1)]
+		o0, o1 = ring(p0, r0), ring(p1, r1)
+		i0 = ring(p0, r0 - lip)
+		i1 = ring(p0 + axis * 0.06, r0 - lip - (r0 - r1) * 0.06 / max(1e-6, (p1 - p0).length))
+		faces = []
+		def quad(a, b, c, d):
+			vs = [self.bm.verts.new(v) for v in (a, b, c, d)]
+			f = self.bm.faces.new(vs)
+			f.smooth = True
+			f.material_index = mat(material)
+			faces.append(f)
+		for i in range(segments):
+			quad(o0[i], o1[i], o1[i + 1], o0[i + 1])
+			quad(i0[i + 1], o0[i + 1], o0[i], i0[i])
+			quad(i1[i], i1[i + 1], i0[i + 1], i0[i])
+		return faces
+
 	def lathe(self, profile, center, material, segments=24, smooth=True):
 		"""A surface of revolution about the vertical through center: profile a list of (radius, z) from the bottom."""
 		c = Vector(center)

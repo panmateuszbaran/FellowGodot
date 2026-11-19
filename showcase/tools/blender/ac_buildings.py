@@ -439,12 +439,21 @@ def eaves(B, Bc, facades, w, d, zt, overhang, pitch_deg, kind, rng, chimneys=1, 
 			while y < max(ys):
 				y0, y1 = y, y + 0.45
 				if inside(x, y0 + 0.05) and inside(x, min(y1, max(ys) - 0.02) - 0.05) and inside(x - 0.08, y0 + 0.2) and inside(x + 0.08, y0 + 0.2):
+					# Milestone 159 (the reference's roof close up: each coppo's lower end a thick rounded step over
+					# the one below, the channels between the rows dark): tapered cover tiles, wide end down, lifted
+					# at their lower end over the course below; a pan tile in each channel, concave, under them.
 					jx = rng.uniform(-0.012, 0.012)
-					base = a + t * (x + jx) + slope * y0 + nrm * (0.035 + rng.uniform(-0.004, 0.006))
-					tip = base + slope * (min(y1, max(ys) - 0.02) - y0) + nrm * 0.012 + t * rng.uniform(-0.01, 0.01)
+					# the cover's edges down on the pans' rims; its wide lower end over the narrow head of the one below
+					base = a + t * (x + jx) + slope * y0 + nrm * (0.02 + rng.uniform(-0.004, 0.004))
+					tip = base + slope * (min(y1, max(ys) - 0.02) - y0) - nrm * 0.008 + t * rng.uniform(-0.01, 0.01)
 					if k == 0:
 						base = base - slope * 0.04
-					B.half_tube(base, tip, 0.082 + rng.uniform(-0.005, 0.004), "coppo", up=up, segments=5)
+					rr = rng.uniform(-0.005, 0.004)
+					B.coppo(base, tip, 0.09 + rr, 0.074 + rr, "coppo", up=up, segments=6)
+					if inside(x + col * 0.5, y0 + 0.2) and inside(x + col * 0.5 + 0.1, y0 + 0.2):
+						pb = a + t * (x + col * 0.5) + slope * y0 + nrm * 0.093
+						pt = pb + slope * (min(y1, max(ys) - 0.02) - y0)
+						B.coppo(pb, pt, 0.09, 0.078, "coppo", up=up, segments=5, lip=0.012, concave=True)
 				y += row
 				k += 1
 	for a, b in ridges:

@@ -1,7 +1,9 @@
 // FellowEngine showcase (rooftops): old window glass, the room behind it — dark, a curtain drawn in some, a lamp lit
 // in a few; the panes' leading, the sky's reflection with the panes each a little out of true.
 shader_type spatial;
-render_mode diffuse_burley, specular_schlick_ggx;
+// Milestone 159: no direct specular — the sun's disc mirrored in the panes had whitened whole windows the reference
+// shows dark (the sky's reflection stays, mostly hidden: AO).
+render_mode diffuse_burley, specular_disabled;
 
 #include "rooftops_common.gdshaderinc"
 
@@ -40,7 +42,11 @@ void fragment() {
 	NORMAL = normalize(NORMAL + (VIEW_MATRIX * vec4(wob.x, wob.y, 0.0, 0.0)).xyz);
 	ALBEDO = mix(col, vec3(0.04), lead);
 	EMISSION = vec3(1.0, 0.62, 0.3) * emit * (1.0 - lead) * (r < curtain_share ? 0.6 : 0.25);
-	ROUGHNESS = mix(0.04, 0.6, lead);
-	SPECULAR = mix(0.45, 0.2, lead);
+	// Milestone 159: old glass a little dull.
+	ROUGHNESS = mix(0.12, 0.6, lead);
+	SPECULAR = mix(0.25, 0.2, lead);
+	// The sky a window mirrors mostly hidden by the street's other houses (seen from below, at a grazing angle, the
+	// glass had mirrored the open sky: white).
+	AO = 0.3;
 	METALLIC = 0.0;
 }
