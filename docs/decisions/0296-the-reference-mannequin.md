@@ -54,7 +54,7 @@ Compared, frame by frame:
   conical neck; a dark socket for the arm's grey dome; dark balls at the elbows, wrists and ankles; the knee a grey
   ball with dark rings; the limbs heavier (the thigh 20 cm across at its top, the calf 12 cm deep); feet like shoes;
   the shell mid-grey (the scene's material 0.55 sRGB, roughness 0.5, a light clearcoat), the joints and the core near
-  black (0.07). 14166 vertices (7604): two materials as before. The faces' winding checked part by part (every
+  black (0.07). 15134 vertices (7604): two materials as before. The faces' winding checked part by part (every
   one of the 59 closes with a positive volume: the head and the rings had been inside out, drawn black in Godot).
 * **The run** (`gait_pose()`): the lean 18° jogging, 32° running, 36° sprinting (trunk 10.6°, 19.7°, 22.2°), the head
   held up by 30 % of it, not 40 %; running, the upper arm swings further back than forward (-9° offset, the swing
