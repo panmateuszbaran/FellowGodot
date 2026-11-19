@@ -95,20 +95,20 @@ GAITS = {
 	# Milestone 155 (docs/showcase_animation_quality.md): the hips as high as the supporting legs reach at their knee's
 	# flexion, the heel raised as far as the knee's flexion needs — the knee is never left to the IK's reach (which
 	# locked it straight: the ankle had been asked to go 1.0 m from the hip on a 0.86 m leg).
-	"walk": dict(v=1.6, T=0.95, duty=0.58, front=0.46, push=0.5, lift=0.1, hip=0.0, sway=0.025, yaw=6.0, roll=4.0, lean=4.0,
+	"walk": dict(v=1.6, T=0.95, duty=0.58, front=0.46, push=0.5, lift=0.1, hip=0.008, sway=0.025, yaw=6.0, roll=4.0, lean=4.0,
 			swing=24.0, elbow=(12.0, 32.0), lower=79.0, width=0.09, kick=0.0, strike=16.0, run=False,
-			knee=[(0.0, 4.0), (0.2, 13.0), (0.5, 6.0), (0.75, 16.0), (1.0, 42.0)]),
+			knee=[(0.0, 4.0), (0.2, 10.0), (0.5, 6.0), (0.75, 16.0), (1.0, 42.0)]),
 	# Milestone 155: a jog between the walk and the run, so that a blend of two gaits mixes strides of like stances (a
 	# walk's foot planted while a run's swings dragged the foot as the body sped up).
 	"jog": dict(v=3.0, T=0.8, duty=0.4, front=0.45, push=0.5, heel_max=65.0, retract=0.6, lift=0.2, hip=0.0, sway=0.018,
-			yaw=8.0, roll=4.5, lean=7.0, swing=36.0, elbow=(55.0, 85.0), lower=76.0, width=0.07, kick=0.1, strike=8.0, run=True,
+			yaw=8.0, roll=4.5, lean=18.0, swing=34.0, elbow=(62.0, 88.0), lower=76.0, width=0.07, kick=0.1, strike=8.0, run=True,
 			knee=[(0.0, 18.0), (0.45, 38.0), (1.0, 20.0)]),
-	"run": dict(v=4.4, T=0.7, duty=0.32, front=0.45, push=0.5, heel_max=70.0, retract=0.7, lift=0.28, hip=0.0, sway=0.012, yaw=10.0, roll=5.0, lean=11.0,
-			swing=48.0, elbow=(78.0, 105.0), lower=74.0, width=0.06, kick=0.2, strike=4.0, run=True,
+	"run": dict(v=4.4, T=0.7, duty=0.32, front=0.45, push=0.5, heel_max=70.0, retract=0.7, lift=0.28, hip=0.0, sway=0.012, yaw=10.0, roll=5.0, lean=32.0,
+			swing=39.0, elbow=(76.0, 96.0), lower=74.0, width=0.06, kick=0.2, strike=4.0, run=True,
 			knee=[(0.0, 22.0), (0.45, 47.0), (1.0, 22.0)]),
-	"sprint": dict(v=7.0, T=0.62, duty=0.22, front=0.45, push=0.5, heel_max=70.0, retract=0.7, lift=0.38, hip=0.0, sway=0.008, yaw=12.0, roll=5.0, lean=18.0,
-			swing=62.0, elbow=(72.0, 110.0), lower=74.0, width=0.05, kick=0.0, strike=0.0, run=True,
-			knee=[(0.0, 26.0), (0.45, 48.0), (1.0, 24.0)]),
+	"sprint": dict(v=7.0, T=0.62, duty=0.22, front=0.45, push=0.5, heel_max=70.0, retract=0.7, lift=0.38, hip=0.0, sway=0.008, yaw=12.0, roll=5.0, lean=36.0,
+			swing=46.0, elbow=(72.0, 100.0), lower=74.0, width=0.05, kick=0.0, strike=0.0, run=True,
+			knee=[(0.0, 26.0), (0.45, 48.0), (1.0, 34.0)]),
 }
 
 
@@ -150,7 +150,12 @@ def _height_for(x, ankle, k_deg, sway):
 
 
 def _strike(G, u):
-	return G["strike"] * (1.0 - smooth(u / 0.2)) if u < 0.2 else 0.0
+	"""The toes' pitch up after the heel's strike, the foot flat by STRIKE_FLAT of the stance (milestone 156: 0.2 — the foot
+	came flat when the shin had nearly come upright, the ankle plantarflexed 8.9 degrees in the loading, its band 10-25)."""
+	return G["strike"] * (1.0 - smooth(u / STRIKE_FLAT)) if u < STRIKE_FLAT else 0.0
+
+
+STRIKE_FLAT = 0.14
 
 
 def _sway(G, phase_l):
@@ -309,17 +314,26 @@ def gait_pose(name, t):
 	p["hips_rot"] = (G["lean"] * 0.35, yaw, roll)
 	twist = -yaw * 1.5
 	p["spine"] = (G["lean"] * 0.65 + (2.0 if G["run"] else 0.0) * math.cos(2.0 * w), twist, -roll * 0.6)
-	p["neck"] = (-G["lean"] * 0.4, -(yaw + twist) * 0.6)
-	p["head"] = (-G["lean"] * 0.4, -(yaw + twist) * 0.4, -roll * 0.3)
+	# The head held up against the lean, not all of it: running, it leads, the eyes ahead (milestone 156).
+	up_k = 0.3 if G["run"] else 0.4
+	p["neck"] = (-G["lean"] * up_k, -(yaw + twist) * 0.6)
+	p["head"] = (-G["lean"] * up_k, -(yaw + twist) * 0.4, -roll * 0.3)
 	for side, sx, ph in (("L", 1.0, 0.0), ("R", -1.0, math.pi)):
 		c = math.cos(w + ph)
-		fwd = -G["swing"] * c + (8.0 if G["run"] else 2.0)
+		# Running, the upper arm swings further back than forward (milestone 156: it had reached 62 degrees forward, the
+		# hand up by the face).
+		fwd = -G["swing"] * c + (G.get("arm_off", -9.0) if G["run"] else 2.0)
 		fwdness = (1.0 - c) * 0.5
 		elbow = G["elbow"][0] + (G["elbow"][1] - G["elbow"][0]) * fwdness
-		p["arm_" + side] = {"fk": (G["lower"] - (6.0 * fwdness if G["run"] else 0.0), fwd, elbow, 10.0 + (20.0 * fwdness if G["run"] else 0.0))}
-		p["hand_" + side] = (10.0, 0.0, 0.0)
-		p["grip_" + side] = 0.55 if G["run"] else 0.3
-		p["shoulder_" + side] = (0.0, (4.0 if G["run"] else 1.5) * -c)
+		# Milestone 156 (the owner's reference video): running, the forearms swing in front of their own shoulders, not
+		# across the chest (the upper arm's twist turned the elbow's plane inwards by up to 30 degrees); the hands loose,
+		# the thumb along the fingers.
+		twist = (4.0 + 5.0 * fwdness) if G["run"] else 10.0
+		p["arm_" + side] = {"fk": (G["lower"] - (4.0 * fwdness if G["run"] else 0.0), fwd, elbow, twist)}
+		p["hand_" + side] = (14.0, 0.0, 0.0) if G["run"] else (10.0, 0.0, 0.0)
+		p["grip_" + side] = 0.5 if G["run"] else 0.3
+		p["thumb_" + side] = 1.0 if G["run"] else 0.3
+		p["shoulder_" + side] = (0.0, (6.0 if G["run"] else 1.5) * -c)
 	return p
 
 
@@ -915,6 +929,69 @@ def clip_hay_exit():
 	return 2.2, False, lambda t: keyed(keys, t)
 
 
+# Milestone 156 (the owner's reference video: over the gutter and up the tiles on hands and feet): the scramble up a
+# roof. The roof rises ahead at CRAWL_SLOPE degrees (the root on the tiles under the hips); the body low, the trunk
+# nearly along the slope, the head up; hands and feet in a lateral sequence (left hand, right foot, right hand, left
+# foot), each planted on the tiles while the body passes over it at CRAWL_V and swung forward over them.
+CRAWL_SLOPE = 21.0
+CRAWL_V = 0.55  # m/s along the ground (the controller plays the clip at the rate of its speed)
+CRAWL_T = 1.1
+
+
+def crawl_pose(t):
+	T = CRAWL_T
+	tan_s = math.tan(math.radians(CRAWL_SLOPE))
+
+	def zg(y):
+		return -y * tan_s
+
+	phase = (t / T) % 1.0
+	duty = 0.72
+	travel = CRAWL_V * T * duty
+	p = stand()
+	w = 2.0 * math.pi * phase
+	sway = 0.03 * math.sin(w)
+	p["hips"] = (sway, 0.02, -0.42 + 0.012 * math.cos(2.0 * w))
+	p["hips_rot"] = (50.0, 5.0 * math.sin(w), -4.0 * math.sin(w))
+	p["spine"] = (34.0 - 2.0 * math.cos(2.0 * w), -8.0 * math.sin(w), 3.0 * math.sin(w))
+	p["neck"] = (-32.0, 4.0 * math.sin(w))
+	p["head"] = (-30.0, 3.0 * math.sin(w), 0.0)
+	limbs = (("hand", "L", 1.0, 0.0), ("foot", "R", -1.0, 0.15), ("hand", "R", -1.0, 0.5), ("foot", "L", 1.0, 0.65))
+	for kind, side, sx, off in limbs:
+		ph = (phase - off) % 1.0
+		front, lift = (-0.76, 0.1) if kind == "hand" else (-0.04, 0.13)
+		back = front + travel
+		if ph < duty:
+			u = ph / duty
+			y = front + travel * u
+			h = 0.0
+		else:
+			u = (ph - duty) / (1.0 - duty)
+			y = back - travel * smoother(u)
+			h = lift * math.sin(math.pi * u) ** 0.8
+		if kind == "hand":
+			x = sx * 0.21
+			p["arm_" + side] = {"ik": ((x, y, zg(y) + 0.05 + h), (sx * 1.0, 0.45, 0.0))}
+			# The palm flat on the tiles (the wrist bent back), the fingers a little curled; flatter while it bears.
+			p["hand_" + side] = (-55.0 + 25.0 * (h / lift), 0.0, sx * 10.0)
+			p["grip_" + side] = 0.25 + 0.25 * (h / lift)
+			p["thumb_" + side] = 0.2
+		else:
+			x = sx * 0.13
+			# On the balls of the feet, the heels up off the tiles; the toes bent up under it.
+			pitch = CRAWL_SLOPE - 45.0 - 25.0 * (h / lift)
+			ankle = foot_on_ground((y, x), pitch, sx * 6.0)
+			ball_y = y - 0.126
+			p["leg_" + side] = {"ik": ((ankle[0], ankle[1], ankle[2] + zg(ball_y) + h), (sx * 0.35, -1.0, 0.25))}
+			p["foot_" + side] = (pitch, 6.0, 0.0)
+			p["toes_" + side] = 45.0 if h < 0.02 else 20.0
+	return p
+
+
+def clip_crawl():
+	return CRAWL_T, True, crawl_pose
+
+
 def clip_perch():
 	base = stand(
 		hips=(0, 0.06, -0.47), hips_rot=(28.0, 0, 0), spine=(18.0, 0, 0), neck=(-10.0, 0), head=(-14.0, 0, 0),
@@ -1000,6 +1077,7 @@ def clips():
 	out["dive"] = clip_dive()
 	out["dive_start"] = clip_dive_start()
 	out["hay_exit"] = clip_hay_exit()
+	out["crawl"] = clip_crawl()
 	out["perch"] = clip_perch()
 	out["sit"] = clip_sit()
 	out["talk"] = clip_talk()

@@ -9,6 +9,27 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 156 — the owner's reference video: the mannequin, its run, its scramble up the tiles; no pops (2026-11-19)
+
+- Decision 0296: the rooftops showcase after a 4-second video the owner chose (a grey articulated mannequin running
+  across a stone square, up a house's front, over the eave and up the tiles on hands and feet), compared frame by
+  frame. The mannequin rebuilt on the same skeleton (`tools/blender/mannequin.py`): a breastplate, the abdomen and a
+  pelvis cut like briefs with thin dark seams over a dark core, a large egg of a head with a face's plane, a dark neck
+  and shoulder sockets, a grey ball for the knee between dark rings, heavier limbs, shoes, mid-grey. The run leaning
+  as the reference's (the trunk 19.7° running, 5.8° before), the forearms in front of their own shoulders (the forward
+  hand had been up by the face, across the chest); a new clip and controller state: up a roof on hands and feet. The
+  houses of sandstone ashlar, the shade lighter. The demo's house filmed as the reference is (`orbit`: beside the
+  runner, below the climber, beside the body on the tiles).
+- No pops, measured: the quality loop reads the fastest joint each frame and the hips' acceleration; six new gates
+  (the climbing's segments ≤ 2200°/s; the mantle's body ≤ 400 m/s²). The pops found and their causes fixed: the clips'
+  rig blends a limb from FK to IK (it swapped halfway); `FellowTraversalPose3D.clip_blend` (a mantle fades in from the
+  braced pose), `pole_follow` (the bend follows the clip's where the pole's turns over), `max_joint_speed` (no bone
+  turned faster than this while the traversal poses the body) — all off by default; `FellowTraversal3D` lets a mantle's
+  body go from the wall over 18 % of it (it had jumped 0.65 m in two frames over an eave); `FellowFootLock3D` never
+  eases a foot back from beyond the leg's reach. The mantle's fastest joint 8863 → 2000°/s, hold to hold 4428 → 2087;
+  38 of 38 gates pass (milestone 155: 29 of 32). `climb_check.gd` and `traversal_check.gd` value for value; the
+  regression scenes exact.
+
 ## Milestone 155 — legs that bear weight; the showcase's animation measured in a loop (2026-11-19)
 
 - A quality loop for the showcase's animation (`docs/showcase_animation_quality.md`): `showcase/tools/anim_quality.gd`

@@ -1,33 +1,29 @@
 [gd_resource type="ShaderMaterial" format=3]
 
-[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_1u8c1"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/plastered_wall_diff_2k.jpg" id="2_4c7yq"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/plastered_wall_arm_2k.jpg" id="3_1i55g"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/plastered_wall_nor_gl_2k.jpg" id="4_4sxgt"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/brick_wall_006_diff_2k.jpg" id="5_iaqyv"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/brick_wall_006_nor_gl_2k.jpg" id="6_qbky8"]
+[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_2vkhs"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_diff_2k.jpg" id="2_lyrnt"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_arm_2k.jpg" id="3_1u8c1"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_nor_gl_2k.jpg" id="4_4c7yq"]
 
 [resource]
 render_priority = 0
-shader = ExtResource("1_1u8c1")
-shader_parameter/albedo_tex = ExtResource("2_4c7yq")
-shader_parameter/normal_tex = ExtResource("4_4sxgt")
-shader_parameter/arm_tex = ExtResource("3_1i55g")
-shader_parameter/tex_size = 1.9999996423721311
-shader_parameter/tint = Color(0.86, 0.85, 0.8, 1)
-shader_parameter/tint_strength = 0.9
-shader_parameter/tex_lum = 0.3936579393513965
-shader_parameter/brightness = 1.0
-shader_parameter/normal_strength = null
-shader_parameter/roughness_bias = 0.08
-shader_parameter/specular = 0.22
-shader_parameter/anti_tile = null
-shader_parameter/variation = 0.12
-shader_parameter/stains = 0.45
+shader = ExtResource("1_2vkhs")
+shader_parameter/albedo_tex = ExtResource("2_lyrnt")
+shader_parameter/normal_tex = ExtResource("4_4c7yq")
+shader_parameter/arm_tex = ExtResource("3_1u8c1")
+shader_parameter/tex_size = 1.25
+shader_parameter/tint = Color(0.9195, 0.884, 0.8085, 1)
+shader_parameter/tint_strength = 0.3
+shader_parameter/tex_lum = 0.35650870436825244
+shader_parameter/brightness = 1.25
+shader_parameter/normal_strength = 0.55
+shader_parameter/roughness_bias = 0.05
+shader_parameter/specular = 0.2
+shader_parameter/anti_tile = false
+shader_parameter/variation = 0.08
+shader_parameter/stains = 0.25
 shader_parameter/ground_dirt = null
 shader_parameter/seed = 5.0
 shader_parameter/instance_tint = null
-shader_parameter/fallen = 0.2
-shader_parameter/patch_albedo = ExtResource("5_iaqyv")
-shader_parameter/patch_normal = ExtResource("6_qbky8")
-shader_parameter/patch_size = 3.0
+shader_parameter/fallen = null
+shader_parameter/patch_size = null

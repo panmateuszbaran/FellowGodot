@@ -35,6 +35,7 @@ const TRANSFER_REACH_SIDE := 10
 @export var deceleration := 22.0
 @export var air_control := 2.5
 @export var roll_height := 3.5 ## a fall from higher than this, moving, ends in a roll
+@export var crawl_speed := 0.65 ## up a roof steeper than CRAWL_SLOPE, slowly (walking, or `want_crawl`): on hands and feet
 @export var camera_path := NodePath("../CameraRig")
 @export var viewpoint_path := NodePath("") ## a Node3D at the beam's end: perching there, the leap of faith
 @export var autopilot := false
@@ -51,6 +52,7 @@ var want_walk := false
 var want_jump := false
 var want_drop := false
 var want_perch := false
+var want_crawl := false ## the demo: up a roof on hands and feet whatever the speed asked
 var state := ""
 var _one_shot := 0.0
 var _air_top := 0.0
@@ -60,6 +62,7 @@ var _last_pos := Vector3()
 var _climb_speed := 0.0
 var _dive_time := 0.0
 var _land_kind := ""
+var _crawling := false
 
 
 func _ready() -> void:
@@ -145,6 +148,9 @@ func _physics_process(delta: float) -> void:
 		speed_goal = sprint_speed
 	elif want_walk:
 		speed_goal = walk_speed
+	_crawling = mode == Mode.GROUND and _crawl_wanted()
+	if _crawling:
+		speed_goal = crawl_speed
 	# Climbing is from hold to hold (no free climbing of bare walls).
 	traversal.set("free_climb", false)
 	traversal.set_intent(wish * speed_goal)
@@ -222,7 +228,7 @@ func _move(delta: float, speed_goal: float) -> void:
 				mode = Mode.AIR
 				_air_top = global_position.y
 			elif _one_shot <= 0.0:
-				_set_state("loco")
+				_set_state("crawl" if _crawling else "loco")
 		Mode.AIR:
 			_air_top = maxf(_air_top, global_position.y)
 			if on_floor:
@@ -243,6 +249,23 @@ func _move(delta: float, speed_goal: float) -> void:
 				_set_state("loco")
 	var hs := Vector2(velocity.x, velocity.z).length() if on_floor else 0.0
 	_loco(hs, delta)
+	tree.set("parameters/ts_crawl/scale", clampf(hs / CRAWL_CLIP_SPEED, 0.0, 2.0))
+
+
+## Milestone 156 (the owner's reference video: over the gutter and up the tiles on hands and feet): on a roof steeper
+## than CRAWL_SLOPE, going up it (within 40 degrees of straight up) slowly — walking, or the demo's `want_crawl` — the
+## body scrambles on hands and feet (the clip "crawl", made for a roof of 21 degrees, played at the rate of the speed).
+const CRAWL_SLOPE := 15.0
+const CRAWL_CLIP_SPEED := 0.55 # m/s, mannequin_anims.py's CRAWL_V
+
+func _crawl_wanted() -> bool:
+	if not is_on_floor() or not (want_crawl or want_walk) or wish.length() < 0.3:
+		return false
+	var n := get_floor_normal()
+	if n.angle_to(Vector3.UP) < deg_to_rad(CRAWL_SLOPE):
+		return false
+	var uphill := Vector3(-n.x, 0.0, -n.z).normalized()
+	return wish.normalized().dot(uphill) > cos(deg_to_rad(40.0))
 
 
 func _traverse(_delta: float) -> void:
@@ -510,7 +533,7 @@ var _look_weight := 0.0
 
 func _process(delta: float) -> void:
 	if _foot_lock:
-		var down: bool = mode == Mode.GROUND and is_on_floor() and not traversal.is_active() and not traversal.is_hanging()
+		var down: bool = mode == Mode.GROUND and is_on_floor() and not traversal.is_active() and not traversal.is_hanging() and not _crawling
 		_foot_lock.influence = move_toward(_foot_lock.influence, 1.0 if down else 0.0, delta / 0.1)
 	if _look_target == null or _head_look == null:
 		return

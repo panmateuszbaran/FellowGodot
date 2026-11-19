@@ -31,6 +31,8 @@ SETS = {
     "wood_dark": "old_planks_02",
     "shutter_green": "green_rough_planks",
     "shutter_painted": "distressed_painted_planks",
+    # Milestone 156: the owner's reference — a city of warm, rough-faced sandstone ashlar.
+    "ashlar": "sandstone_blocks_05",
 }
 MAPS = {"Diffuse": "diff", "nor_gl": "nor_gl", "arm": "arm"}
 HEADERS = {"User-Agent": "FellowEngine-showcase/1.0 (fetch_textures.py)"}

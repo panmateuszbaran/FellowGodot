@@ -12,6 +12,9 @@ const ON_GROUND := 0.025 # a foot's lowest point this close to the ground: plant
 const BEARING := 0.01 # a heel or a ball this close to the ground bears weight (its slide is the foot's skate)
 const LIFTED := 0.06 # and this far above it since: a new step
 const BINS := 50
+## Milestone 156: the whole body's smoothness — each joint's turn against its parent (deg/s) and the hips' acceleration.
+const SMOOTH_BONES := ["Spine", "Chest", "Neck", "Head", "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm",
+		"RightLowerArm", "RightHand", "LeftUpperLeg", "LeftLowerLeg", "RightUpperLeg", "RightLowerLeg"]
 
 var program := "gaits"
 var out_dir := "user://anim_quality"
@@ -28,6 +31,7 @@ var ball_local: Array[Vector3] = [Vector3(), Vector3()] # the sole under the bal
 var segs := {}
 var last := {}
 var foot_state := [{}, {}]
+var last_rot := {}
 
 # [from s, segment, wish (yaw degrees, -90 = +x), walk, sprint]; a null yaw stands.
 var gaits := [[0.0, "idle", null, false, false], [0.7, "walk_in", -90.0, true, false], [1.7, "walk", -90.0, true, false],
@@ -49,7 +53,7 @@ func _initialize() -> void:
 	traversal = player.get_node("Traversal")
 	sk = player.get_node("Model/Mannequin/Skeleton3D")
 	for n in ["Hips", "Spine", "Chest", "LeftUpperLeg", "LeftLowerLeg", "LeftFoot", "LeftToes", "RightUpperLeg", "RightLowerLeg",
-			"RightFoot", "RightToes"]:
+			"RightFoot", "RightToes"] + SMOOTH_BONES:
 		b[n] = sk.find_bone(n)
 	# The ankle's angle standing (between the shin and the foot) is its zero.
 	for f in 2:
@@ -117,9 +121,31 @@ func _upd() -> void:
 	var legs := [_leg(0, fwd, right, trunk_up), _leg(1, fwd, right, trunk_up)]
 	var d: Dictionary = segs.get_or_add(s, {"frames": 0, "knee": [], "hip": [], "ankle": [], "g_min": INF, "skates": [],
 			"speed": {"knee": 0.0, "hip": 0.0, "ankle": 0.0}, "contacts": [[], []], "toe_offs": [[], []], "curves": [[], []],
-			"hips_y": [], "body_v": []})
+			"hips_y": [], "body_v": [], "ang": [], "hips_p": []})
 	d.frames += 1
 	var dt := 1.0 / 120.0
+	# The fastest joint this frame (its turn against its parent's), and where the hips are drawn.
+	var ang := 0.0
+	var ang_bone := ""
+	for n in SMOOTH_BONES:
+		var bi: int = b[n]
+		var parent := sk.get_bone_parent(bi)
+		var q := (sk.get_bone_global_pose(parent).basis.inverse() * sk.get_bone_global_pose(bi).basis).get_rotation_quaternion()
+		if last_rot.has(n) and frame > 4: # (the first frames: from the rest pose to the first animated one)
+			var dq: Quaternion = (last_rot[n] as Quaternion).inverse() * q
+			var w := rad_to_deg(2.0 * acos(clampf(absf(dq.w), 0.0, 1.0))) / dt
+			if w > ang:
+				ang = w
+				ang_bone = n
+		last_rot[n] = q
+	d.ang.append(ang)
+	# The worst moments (the fastest joints, a frame each), to find what pops.
+	var worst: Array = d.get_or_add("worst", [])
+	worst.append([ang, ang_bone, frame, player.get("state"), String(player.get("state"))])
+	worst.sort_custom(func(x, y): return x[0] > y[0])
+	if worst.size() > 6:
+		worst.resize(6)
+	d.hips_p.append([frame, _p("Hips")])
 	d.hips_y.append(_p("Hips").y - player.global_position.y)
 	d.body_v.append(Vector2(player.velocity.x, player.velocity.z).length())
 	for f in 2:
@@ -273,6 +299,25 @@ func _write() -> void:
 				if x > cl[i] and x <= cl[i + 1]:
 					lr.append(float(x - cl[i]) / (cl[i + 1] - cl[i]))
 		r["right_phase"] = lr
+		# Smoothness: the fastest joint per frame and the hips' acceleration (second differences, m/s²).
+		r["worst"] = d.get("worst", [])
+		var an: Array = d.ang.duplicate()
+		an.sort()
+		if an.size() > 0:
+			r["joint_deg_s"] = {"p50": an[an.size() / 2], "p95": an[int(an.size() * 0.95)], "p99": an[int(an.size() * 0.99)], "max": an[-1]}
+		var acc := []
+		var hp: Array = d.hips_p
+		for i in range(1, hp.size() - 1):
+			# Only over three frames in a row (a segment comes back after others: its samples are not continuous).
+			if int(hp[i + 1][0]) - int(hp[i - 1][0]) != 2:
+				continue
+			var p0: Vector3 = hp[i - 1][1]
+			var p1: Vector3 = hp[i][1]
+			var p2: Vector3 = hp[i + 1][1]
+			acc.append((p2 - 2.0 * p1 + p0).length() * 120.0 * 120.0)
+		acc.sort()
+		if acc.size() > 0:
+			r["hips_acc"] = {"p50": acc[acc.size() / 2], "p95": acc[int(acc.size() * 0.95)], "p99": acc[int(acc.size() * 0.99)], "max": acc[-1]}
 		outd.segments[k] = r
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	var fa := FileAccess.open(out_dir.path_join(program + ".json"), FileAccess.WRITE)

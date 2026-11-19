@@ -901,7 +901,13 @@ where its sole comes down (under the heel or the ball, within `contact_height`, 
 height), only its slide taken out, by two-bone IK; let go when lifted or pulled `unlock_radius` (0.3 m) away, back to the
 animation over `blend_halflife` (0.06 s); `heel_offset` (0.05 m), `left_foot_bone`, `right_foot_bone` (`LeftFoot`,
 `RightFoot`; their parents are the legs), `left_toe_bone`, `right_toe_bone` (`LeftToes`, `RightToes`); `is_locked()`,
-`get_slide()`, `reset()`.
+`get_slide()`, `reset()`. No pops (milestone 156, decision 0296): on `FellowTraversalPose3D`, `clip_blend` (0 s: a clip
+the traversal plays — a mantle from a hang — fades in from the pose the limbs' IK gave the frame before over this
+time), `pole_follow` (0: a limb's bend follows the clip's own by this weight against the pole's, which turns over where
+a target passes its line), `max_joint_speed` (0 °/s: off; while the node poses the body, no bone turns faster than this
+from its last pose); `FellowTraversal3D`, a mantle with a clip's root motion: held at the wall until the clip's root is
+over the top, then let go over 18 % of the mantle; `FellowFootLock3D`: a foot let go is never eased back from further
+from the hip than the leg reaches.
 Bench `bench/climb_check.gd` (`hold_climb`, `side_reach`, `narrow_holds`, `eave_roof`, `eave_deep`, `beside_reach`,
 `stacked_holds`, `parapet`, `leap_style`;
 `--only=<lanes> --times=<s,...>` for a picture strip of some lanes at given times).

@@ -225,27 +225,46 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 		return
 	_tex = JSON.parse_string(f.get_as_text())
 	var brick := _texset("brick")
-	for n in p_plaster:
-		photo[n] = _photo("plaster_smooth", {"tint": p_plaster[n][0], "tint_strength": 0.9, "brightness": 1.0, "seed": p_plaster[n][2],
-				"fallen": p_plaster[n][1], "patch_albedo": brick[0], "patch_normal": brick[1], "patch_size": brick[3],
-				"specular": 0.22, "roughness_bias": 0.08, "stains": 0.45, "variation": 0.12})
-	photo["far_plaster"] = _photo("plaster_smooth", {"tint": Color(0.82, 0.7, 0.55), "tint_strength": 0.9, "brightness": 1.0,
-			"fallen": 0.15, "patch_albedo": brick[0], "patch_normal": brick[1], "patch_size": brick[3], "specular": 0.22,
-			"roughness_bias": 0.08, "stains": 0.5, "variation": 0.14, "instance_tint": true})
+	if _tex.has("ashlar"):
+		# Milestone 156: the owner's reference — a city of warm, rough-faced sandstone ashlar, not of coloured plaster:
+		# blocks some 45 by 25 cm (a texture 1.25 m across), pale and dressed (the photograph's relief halved: at full
+		# strength it read as rubble). Each house its stone's shade (the plaster's colour, a sixth of it, over a pale
+		# beige).
+		for n in p_plaster:
+			var shade: Color = Color(0.93, 0.89, 0.81).lerp(p_plaster[n][0], 0.15)
+			photo[n] = _photo("ashlar", {"tint": shade, "tint_strength": 0.3, "brightness": 1.25, "seed": p_plaster[n][2],
+					"tex_size": 1.25, "normal_strength": 0.55, "specular": 0.2, "roughness_bias": 0.05, "stains": 0.25,
+					"variation": 0.08, "anti_tile": false})
+		photo["far_plaster"] = _photo("ashlar", {"tint": Color(0.9, 0.84, 0.74), "tint_strength": 0.3, "brightness": 1.2,
+				"tex_size": 1.25, "normal_strength": 0.55, "specular": 0.2, "stains": 0.3, "variation": 0.1, "anti_tile": false,
+				"instance_tint": true})
+	else:
+		for n in p_plaster:
+			photo[n] = _photo("plaster_smooth", {"tint": p_plaster[n][0], "tint_strength": 0.9, "brightness": 1.0, "seed": p_plaster[n][2],
+					"fallen": p_plaster[n][1], "patch_albedo": brick[0], "patch_normal": brick[1], "patch_size": brick[3],
+					"specular": 0.22, "roughness_bias": 0.08, "stains": 0.45, "variation": 0.12})
+		photo["far_plaster"] = _photo("plaster_smooth", {"tint": Color(0.82, 0.7, 0.55), "tint_strength": 0.9, "brightness": 1.0,
+				"fallen": 0.15, "patch_albedo": brick[0], "patch_normal": brick[1], "patch_size": brick[3], "specular": 0.22,
+				"roughness_bias": 0.08, "stains": 0.5, "variation": 0.14, "instance_tint": true})
 	# Laid textures (blocks, bricks, tiles, boards) are not turned for the anti-tiling: their courses must stay level.
 	photo["stone"] = _photo("stone", {"tint": Color(0.8, 0.76, 0.66), "tint_strength": 0.45, "specular": 0.25, "stains": 0.3,
 			"anti_tile": false, "seed": 1.0})
 	photo["water_stone"] = _photo("stone", {"tint": Color(0.82, 0.8, 0.74), "tint_strength": 0.6, "specular": 0.25, "stains": 0.5,
 			"anti_tile": false, "seed": 2.0})
 	# The ground floors' rustication: the sandstone's blocks, larger and rougher, greyer than the dressings.
-	photo["stone_rustic"] = _photo("stone", {"tint": Color(0.76, 0.71, 0.62), "tint_strength": 0.5, "specular": 0.22,
-			"stains": 0.4, "ground_dirt": 0.9, "normal_strength": 2.2, "tex_size": 4.2, "variation": 0.16, "anti_tile": false,
+	photo["stone_rustic"] = _photo("ashlar" if _tex.has("ashlar") else "stone", {"tint": Color(0.82, 0.76, 0.66), "tint_strength": 0.4, "specular": 0.22,
+			"stains": 0.4, "ground_dirt": 0.9, "normal_strength": 1.6, "tex_size": 2.2, "variation": 0.16, "anti_tile": false,
 			"seed": 3.0})
 	photo["kerb"] = _photo("stone", {"tint": Color(0.62, 0.62, 0.6), "tint_strength": 0.7, "specular": 0.25, "anti_tile": false, "seed": 4.0})
 	photo["brick"] = _photo("brick", {"tint": Color(0.56, 0.38, 0.3), "tint_strength": 0.5, "normal_strength": 0.75, "specular": 0.2,
 			"stains": 0.3, "variation": 0.1, "anti_tile": false, "seed": 5.0})
-	photo["roof"] = _photo("roof", {"specular": 0.22, "roughness_bias": 0.05, "stains": 0.25, "variation": 0.15, "ground_dirt": 0.0,
-			"anti_tile": false, "seed": 6.0})
+	# Milestone 156: the tiles the reference's size (coppi some 45 cm long; the photograph's at its own size had read as
+	# a fine shingle).
+	# And weathered as its tiles are: the photograph's orange pulled a third of the way to a dusty terracotta, lighter (it
+	# had been twice as colourful as the reference's roofs, and darker).
+	photo["roof"] = _photo("roof", {"tint": Color(0.8, 0.62, 0.52), "tint_strength": 0.35, "brightness": 1.15, "specular": 0.22,
+			"roughness_bias": 0.05, "stains": 0.25, "variation": 0.15, "ground_dirt": 0.0, "anti_tile": false, "seed": 6.0,
+			"tex_size": 4.2})
 	photo["wood"] = _photo("wood", {"specular": 0.2, "stains": 0.0, "ground_dirt": 0.3, "anti_tile": false, "seed": 7.0})
 	photo["wood_dark"] = _photo("wood_dark", {"specular": 0.2, "brightness": 0.6, "stains": 0.0, "ground_dirt": 0.3, "anti_tile": false,
 			"seed": 8.0})
@@ -256,13 +275,14 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 	var walls := PackedVector4Array()
 	for n in FOOTPRINTS:
 		walls.append(_footprint(n))
-	var sl := _texset("square_slabs")
+	# Milestone 156: the square laid with large slabs (the smooth sandstone's blocks, greyed), as in the reference.
+	var sl := _texset("stone") if _tex.has("ashlar") else _texset("square_slabs")
 	var fan := _texset("street_fan")
 	var cob := _texset("cobbles")
 	var pav := _texset("pavement")
 	photo["paving"] = _shader_mat("paving_pbr", {"walls": walls, "wall_count": walls.size(), "pavement_width": PAVEMENT,
-			"fountain": PLACES["Fountain"][0], "slabs_albedo": sl[0], "slabs_normal": sl[1], "slabs_arm": sl[2], "slabs_size": sl[3] * 2.2,
-			"slabs_lum": sl[4], "slabs_tint": Color(0.62, 0.59, 0.54), "slabs_tint_strength": 0.8,
+			"fountain": PLACES["Fountain"][0], "slabs_albedo": sl[0], "slabs_normal": sl[1], "slabs_arm": sl[2], "slabs_size": sl[3] * (0.75 if _tex.has("ashlar") else 2.2),
+			"slabs_lum": sl[4], "slabs_tint": Color(0.74, 0.7, 0.64) if _tex.has("ashlar") else Color(0.62, 0.59, 0.54), "slabs_tint_strength": 0.8,
 			"fan_albedo": fan[0], "fan_normal": fan[1], "fan_arm": fan[2], "fan_size": fan[3],
 			"cob_albedo": cob[0], "cob_normal": cob[1], "cob_arm": cob[2], "cob_size": cob[3],
 			"pave_albedo": pav[0], "pave_normal": pav[1], "pave_arm": pav[2], "pave_size": pav[3]})
@@ -526,6 +546,8 @@ func _environment(p_root: Node3D) -> void:
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_sky_contribution = 1.0
+	# Milestone 156 (the owner's reference): the shade lighter — the warm stone's light bounced into it and the sky's.
+	env.ambient_light_energy = 1.35
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_AGX
 	env.tonemap_exposure = 1.0
@@ -545,7 +567,7 @@ func _environment(p_root: Node3D) -> void:
 	env.sdfgi_cascades = 4
 	env.sdfgi_min_cell_size = 0.25
 	env.sdfgi_bounce_feedback = 0.6
-	env.sdfgi_energy = 1.0
+	env.sdfgi_energy = 1.25
 	env.fog_enabled = true
 	# Milestone 153: the golden hour's haze — the city's far houses and the hills paler and bluer with distance (the
 	# sky's colour mixed in), as the eye reads depth.
@@ -560,7 +582,7 @@ func _environment(p_root: Node3D) -> void:
 	env.volumetric_fog_length = 64.0
 	env.volumetric_fog_sky_affect = 0.0
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.1
+	env.adjustment_saturation = 1.0
 	env.adjustment_contrast = 1.05
 	var we := WorldEnvironment.new()
 	we.environment = env
@@ -1305,7 +1327,7 @@ func _lamps(p_parent: Node3D) -> void:
 
 ## Clips that loop (glTF says nothing of it).
 const LOOPS := ["idle", "walk", "jog", "run", "sprint", "gait_walk", "gait_jog", "gait_run", "gait_sprint", "fall", "hang_idle",
-		"hang_shimmy", "climb_idle", "climb_move", "dive", "perch", "sit", "talk"]
+		"hang_shimmy", "climb_idle", "climb_move", "dive", "perch", "sit", "talk", "crawl"]
 
 
 func _build_player() -> PackedScene:
@@ -1319,20 +1341,18 @@ func _build_player() -> PackedScene:
 	var skel: Skeleton3D = src.find_child("Skeleton3D", true, false)
 	var body_mi: MeshInstance3D = src.find_child("MannequinBody", true, false)
 	var ap_src: AnimationPlayer = src.find_child("AnimationPlayer", true, false)
-	# The mannequin's materials: a satin shell, graphite joints.
+	# The mannequin's materials (milestone 156, decision 0296, the owner's reference): a mid-grey shell, satin; the joints
+	# and the seams' core near black, a little glossy.
 	var shell := StandardMaterial3D.new()
-	shell.albedo_color = Color(0.86, 0.84, 0.8)
-	shell.roughness = 0.38
+	shell.albedo_color = Color(0.55, 0.55, 0.56)
+	shell.roughness = 0.5
 	shell.clearcoat_enabled = true
-	shell.clearcoat = 0.35
-	shell.clearcoat_roughness = 0.3
-	shell.rim_enabled = true
-	shell.rim = 0.25
-	shell.rim_tint = 0.4
+	shell.clearcoat = 0.1
+	shell.clearcoat_roughness = 0.4
 	var joint := StandardMaterial3D.new()
-	joint.albedo_color = Color(0.09, 0.09, 0.1)
-	joint.metallic = 0.65
-	joint.roughness = 0.32
+	joint.albedo_color = Color(0.07, 0.07, 0.08)
+	joint.metallic = 0.2
+	joint.roughness = 0.35
 	joint.resource_name = "mannequin_joint" # (the crowd dresses the other surfaces)
 	_save(shell, OUT + "/character/mannequin_shell.tres")
 	_save(joint, OUT + "/character/mannequin_joint.tres")
@@ -1393,6 +1413,13 @@ func _build_player() -> PackedScene:
 	pose.set("hang_fit", true)
 	# Milestone 155 (decision 0295): no limb of the climbing's pose snaps straight.
 	pose.set("soft_ik", 0.97)
+	# Milestone 156 (decision 0296): a mantle from a hang fades in from the braced pose over 0.25 s (it had snapped).
+	pose.set("clip_blend", 0.25)
+	# And the elbows and knees bent the clip's way as much as the pole's (an elbow had turned over, hanging).
+	pose.set("pole_follow", 1.0)
+	# And no joint turned over in a frame: at most 2000 degrees a second (a sprinting knee's fastest is some 1100; the pops
+	# had been 3000-9000).
+	pose.set("max_joint_speed", 2000.0)
 	_add(skel, pose, "TraversalPose")
 	# Milestone 155 (decision 0295): the feet held where they come down while the gaits' blend, a turn, a start or a stop
 	# would slide them (the player script gives it its weight: on the ground).
@@ -1590,7 +1617,8 @@ func _anim_tree() -> AnimationNodeBlendTree:
 		climb.add_blend_point(a, pt[1], -1, pt[0])
 	bt.add_node(&"climb", climb, Vector2(0, 400))
 	var states := ["loco", "jump", "fall", "land", "roll", "hang", "climb", "climb_jump", "dive_start", "dive", "hay_exit", "perch",
-			"hang_reach_l", "hang_reach_r", "hang_leap_up", "hang_leap_l", "hang_leap_r", "hang_across_l", "hang_across_r", "jump_wall"]
+			"hang_reach_l", "hang_reach_r", "hang_leap_up", "hang_leap_l", "hang_leap_r", "hang_across_l", "hang_across_r", "jump_wall",
+			"crawl"]
 	var tr := AnimationNodeTransition.new()
 	tr.xfade_time = 0.2
 	# Milestone 153: the cross-fades eased in and out (no linear swap of one pose for the next).
@@ -1608,7 +1636,8 @@ func _anim_tree() -> AnimationNodeBlendTree:
 			var a := AnimationNodeAnimation.new()
 			a.animation = n
 			bt.add_node(n, a, Vector2(0, 600 + 100 * i))
-		if n.begins_with("hang_leap_") or n.begins_with("hang_reach_") or n.begins_with("hang_across_"):
+		# Milestone 156: the scramble up a roof at the rate of the body's speed (ts_crawl, set by the controller).
+		if n.begins_with("hang_leap_") or n.begins_with("hang_reach_") or n.begins_with("hang_across_") or n == "crawl":
 			# Milestone 153: a move's clip played over the move's time (a leap's depends on its kind and its wind-up).
 			var ts := AnimationNodeTimeScale.new()
 			bt.add_node(&"ts_" + n, ts, Vector2(200, 600 + 100 * i))

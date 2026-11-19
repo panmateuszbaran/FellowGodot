@@ -189,36 +189,12 @@ class Rig:
 			pre = "Left" if s == "L" else "Right"
 			leg = g("leg_" + s, {"fk": (0, 0, 0, 0)})
 			fp, fo, fr = g("foot_" + s, (0, 0, 0))
-			if "fk" in leg:
-				flex, abd, knee, tw = leg["fk"]
-				self.set_arm_rot(pre + "UpperLeg", Rz(sx * tw) @ Ry(-sx * abd) @ Rx(-flex))
-				self.set_arm_rot(pre + "LowerLeg", Rx(knee))
-				self.set_arm_rot(pre + "Foot", Rz(sx * fo) @ Ry(sx * fr) @ Rx(-fp))
-			else:
-				target, pole = leg["ik"]
-				cache = self.fk()
-				rm = cache["Root"] @ self.rest["Root"].inverted()
-				t_arm = rm @ Vector(target)
-				p_arm = rm.to_3x3() @ Vector(pole)
-				self.ik(pre + "UpperLeg", pre + "LowerLeg", pre + "Foot", t_arm, p_arm, (0, -1, 0))
-				cache = self.fk()
-				q = rm.to_quaternion() @ Rz(sx * fo) @ Ry(sx * fr) @ Rx(-fp)
-				self.set_global_rot(pre + "Foot", q @ self.rest_q[pre + "Foot"], cache)
+			self._mixed(leg, lambda one: self._leg(pre, sx, one, fp, fo, fr), (pre + "UpperLeg", pre + "LowerLeg", pre + "Foot"))
 			self.set_arm_rot(pre + "Toes", Rx(-g("toes_" + s, 0.0)))
 		for s, sx in (("L", 1.0), ("R", -1.0)):
 			pre = "Left" if s == "L" else "Right"
 			arm = g("arm_" + s, {"fk": (75, 0, 12, 0)})
-			if "fk" in arm:
-				lower, fwd, elbow, tw = arm["fk"]
-				self.set_arm_rot(pre + "UpperArm", Rx(-fwd) @ Ry(sx * lower) @ Rx(sx * tw))
-				self.set_arm_rot(pre + "LowerArm", Rz(-sx * elbow))
-			else:
-				target, pole = arm["ik"]
-				cache = self.fk()
-				rm = cache["Root"] @ self.rest["Root"].inverted()
-				t_arm = rm @ Vector(target)
-				p_arm = rm.to_3x3() @ Vector(pole)
-				self.ik(pre + "UpperArm", pre + "LowerArm", pre + "Hand", t_arm, p_arm, (0, 1, 0))
+			self._mixed(arm, lambda one: self._arm(pre, sx, one), (pre + "UpperArm", pre + "LowerArm"))
 			hf, hd, ht = g("hand_" + s, (0, 0, 0))
 			self.set_arm_rot(pre + "Hand", Rx(sx * ht) @ Rz(sx * hd) @ Ry(sx * hf))
 			grip = g("grip_" + s, 0.25)
@@ -228,6 +204,48 @@ class Rig:
 			th = g("thumb_" + s, grip)
 			self.set_arm_rot(pre + "ThumbMetacarpal", Rz(-sx * 20.0 * th) @ Ry(sx * 25.0 * th))
 			self.set_arm_rot(pre + "ThumbProximal", Ry(sx * 40.0 * th))
+
+	def _leg(self, pre, sx, leg, fp, fo, fr):
+		if "fk" in leg:
+			flex, abd, knee, tw = leg["fk"]
+			self.set_arm_rot(pre + "UpperLeg", Rz(sx * tw) @ Ry(-sx * abd) @ Rx(-flex))
+			self.set_arm_rot(pre + "LowerLeg", Rx(knee))
+			self.set_arm_rot(pre + "Foot", Rz(sx * fo) @ Ry(sx * fr) @ Rx(-fp))
+		else:
+			target, pole = leg["ik"]
+			cache = self.fk()
+			rm = cache["Root"] @ self.rest["Root"].inverted()
+			t_arm = rm @ Vector(target)
+			p_arm = rm.to_3x3() @ Vector(pole)
+			self.ik(pre + "UpperLeg", pre + "LowerLeg", pre + "Foot", t_arm, p_arm, (0, -1, 0))
+			cache = self.fk()
+			q = rm.to_quaternion() @ Rz(sx * fo) @ Ry(sx * fr) @ Rx(-fp)
+			self.set_global_rot(pre + "Foot", q @ self.rest_q[pre + "Foot"], cache)
+
+	def _arm(self, pre, sx, arm):
+		if "fk" in arm:
+			lower, fwd, elbow, tw = arm["fk"]
+			self.set_arm_rot(pre + "UpperArm", Rx(-fwd) @ Ry(sx * lower) @ Rx(sx * tw))
+			self.set_arm_rot(pre + "LowerArm", Rz(-sx * elbow))
+		else:
+			target, pole = arm["ik"]
+			cache = self.fk()
+			rm = cache["Root"] @ self.rest["Root"].inverted()
+			t_arm = rm @ Vector(target)
+			p_arm = rm.to_3x3() @ Vector(pole)
+			self.ik(pre + "UpperArm", pre + "LowerArm", pre + "Hand", t_arm, p_arm, (0, 1, 0))
+
+	def _mixed(self, limb, pose_fn, bones):
+		"""A limb posed by pose_fn, or, for {"mix": (a, b, t)}, posed both ways and its bones' turns blended."""
+		if "mix" not in limb:
+			pose_fn(limb)
+			return
+		a, b, t = limb["mix"]
+		pose_fn(a)
+		qa = [self.rot[n].copy() for n in bones]
+		pose_fn(b)
+		for n, q in zip(bones, qa):
+			self.rot[n] = q.slerp(self.rot[n], t)
 
 	def snapshot(self):
 		return {n: (self.loc[n].copy(), self.rot[n].copy()) for n in self.names}
@@ -242,7 +260,9 @@ def _lerp(a, b, t):
 			return {"fk": tuple(_lerp(x, y, t) for x, y in zip(a["fk"], b["fk"]))}
 		if "ik" in a and "ik" in b:
 			return {"ik": tuple(_lerp(x, y, t) for x, y in zip(a["ik"], b["ik"]))}
-		return a if t < 0.5 else b
+		# Milestone 156: a limb going from FK to IK (or back) — both poses made and their bones' turns blended (it had
+		# swapped from one to the other halfway: the arm 42 degrees in a frame as the run's jump at a wall reached up).
+		return {"mix": (a, b, t)}
 	if isinstance(a, (tuple, list)):
 		return tuple(_lerp(x, y, t) for x, y in zip(a, b))
 	if isinstance(a, Vector):

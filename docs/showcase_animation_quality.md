@@ -1,7 +1,7 @@
 # The showcase's animation: a quality loop
 
-Status: **IN USE** from milestone 155 (18 iterations so far: 29 of 32 gates pass, milestone 154's build 14 — see the
-log below). Owner: the showcase (`showcase/`); the engine's part is the climbing's pose
+Status: **IN USE** from milestone 155 (milestone 156: 38 of 38 gates pass; milestone 155 ended at 29 of 32, milestone
+154's build at 14 — see the log below). Owner: the showcase (`showcase/`); the engine's part is the climbing's pose
 (`FellowTraversalPose3D`). Every change to the mannequin's clips, its animation tree or its pose goes through this
 loop; nothing is shown to the owner until its gates pass.
 
@@ -51,7 +51,9 @@ locks the knee straight and leaves the foot short of where it should be (which i
    * the knee within 5° of straight (share of frames) and any hyperextension;
    * the skate: how far a planted foot's contact (the sole under the heel or the ball, whichever bears) moves in a
      stance; the feet through the ground;
-   * the joints' angular speed through each change of gait or state (a spike is a pop);
+   * the joints' angular speed through each change of gait or state (a spike is a pop); milestone 156: every frame, the
+     fastest joint of the body (each bone's turn against its parent: the spine, neck, head, arms, hands, legs) and the
+     hips' acceleration, per segment (p95, p99, the most), with the worst moments' bone, frame and state;
    * the left and right strides half a cycle apart (± 3 %);
    * climbing: the gripping hands to their holds, the braced feet to the wall, the knees braced, the body's distance
      from the wall, the look (decision 0293);
@@ -68,6 +70,7 @@ locks the knee straight and leaves the foot short of where it should be (which i
    | feet | skate ≤ 2 cm a stance in a steady gait (median), ≤ 5 cm through a change (the worst stance); never > 2 cm into the ground | 1.7-4.2 cm; 7.7-20.6 cm; -2.2 cm |
    | climbing | no knee within 5° of straight while braced or mantling; gripping hands ≤ 2 cm (decision 0291) | mantle 23 % |
    | transitions | no joint faster than 1.5× its fastest in either gait during a blend | to measure |
+   | pops (milestone 156) | climbing (the run and jump at the wall, hanging, hold to hold, the mantle, the roof): no joint faster than 2200°/s against its parent; the mantle's hips' acceleration ≤ 400 m/s² | 3000-8900°/s; 4650 m/s² |
    | no regression | every other metric no worse than the last accepted build; `climb_check.gd` value for value | — |
 
 4. **Change** — one cause at a time, the worst failing gate first; each change rebuilt and measured before the next.
@@ -108,8 +111,20 @@ Milestone 155 (decision 0295): the gaits rebuilt from the supporting leg, soft I
 | 17 | the walk's stride as in iteration 12 | 25 | the walk's toe-off knee in its band |
 | 18 | running, the foot reaching the ground at 70 % of its speed (was 45 %); the sprint's swing without its heel kick | 29 | the running skate and knee, the sprint's skate and the changes' pops in their bands |
 
-Next: the walking knee and ankle after the strike, the sprinting knee at the end of the push; then the feet on slopes, starts and stops, landings — each with
-its gates first.
+Milestone 156 (decision 0296): the owner's reference video; the whole body's smoothness measured.
+
+| iteration | change | gates | what it showed |
+|---|---|---|---|
+| 1 | the new mannequin; the run's lean and arms; the crawl; the foot flat earlier after the strike | 30/32 | the smoothness read at last: pops of 3000-9400°/s (the jump at the wall, the mantle's start and end, a leap's forearm), the mantle's body 0.65 m in two frames |
+| 2 | the clips' rig blending FK to IK; `clip_blend`; the mantle let go from the wall over 18 % of it | 30/32 | the jump at the wall 5001 → 1854°/s, the mantle's knee 8863 → 3534, its body 4653 → 197 m/s² |
+| 3 | `pole_follow`; the crawl's arms within reach | 30/32 | the crawl 2098 → 1366; a leap's forearm turned about its own axis (6405) |
+| 4-5 | `max_joint_speed` (1500, then 2000: 5 % of the climbing's frames had reached 1500) | 30/32 + 6 new | every climbing segment ≤ 2087°/s |
+| 6-8 | the foot lock's way back within the leg's reach (not the hold: the walk's planted foot let go) | 36/38 | the run from standing 2804 → 1343°/s; the sprint's knee at the toe-off 12.7 → 14.9° |
+| 9 | the walk's hips 8 mm higher; the sprint's knee 34° at the toe-off | 38/38 | the walk's knee at the strike 20 → 15° |
+
+Next: the feet on slopes (the roofs' tiles walked, not only crawled), starts and stops, landings — each with its gates
+first; the run's lean and arm swing against the reference's frames as gates (read off a pose estimate, if the owner
+allows one).
 
 ## Reference
 

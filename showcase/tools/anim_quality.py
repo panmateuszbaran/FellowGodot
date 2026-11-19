@@ -52,6 +52,15 @@ GATES = [
 	("hanging knee straight", "hanging", "knee_straight_share", None, 0.01, 0.01, "share of frames"),
 	("hold to hold knee straight", "hold_to_hold", "knee_straight_share", None, 0.01, 0.01, "share of frames"),
 	("mantle knee straight", "mantle", "knee_straight_share", None, 0.01, 0.01, "share of frames"),
+	# Milestone 156 (decision 0296): no pops — the fastest joint (its turn against its parent) in each climbing segment
+	# (a sprinting knee's fastest is some 1100°/s; the pops measured 3000-9000: a joint turned over in a frame), and the
+	# body's jumps (the hips' acceleration: the mantle's had moved them 0.65 m in two frames).
+	("approach pop", "approach", "joint_max", None, 2200.0, 100.0, "°/s, the fastest joint (the run, the jump at the wall)"),
+	("hanging pop", "hanging", "joint_max", None, 2200.0, 100.0, "°/s"),
+	("hold to hold pop", "hold_to_hold", "joint_max", None, 2200.0, 100.0, "°/s"),
+	("mantle pop", "mantle", "joint_max", None, 2200.0, 100.0, "°/s"),
+	("roof pop", "roof", "joint_max", None, 2200.0, 100.0, "°/s (the scramble up the tiles)"),
+	("mantle body jump", "mantle", "hips_acc_max", None, 400.0, 50.0, "m/s², the hips' fastest change of speed"),
 ]
 
 
@@ -99,6 +108,11 @@ def load(d):
 		if os.path.exists(p):
 			for k, v in json.load(open(p))["segments"].items():
 				segs[k] = derive(v)
+	for v in segs.values():
+		if v.get("joint_deg_s"):
+			v["joint_max"] = v["joint_deg_s"]["max"]
+		if v.get("hips_acc"):
+			v["hips_acc_max"] = v["hips_acc"]["max"]
 	# The pops: each change's fastest joint against the steady gaits' fastest.
 	steady = [segs[s]["speed_deg_s"] for s in ("walk", "run", "sprint") if s in segs]
 	for s in ("run_in", "sprint_in", "stop", "turn"):
@@ -175,6 +189,19 @@ def report(out, baseline):
 		lines.append(f"{r[0]:<{w}}  {r[1]:>8}  {r[2]:>8}  {r[3]:<9}  {r[4]}")
 	passed = sum(1 for r in rows if r[3] == "PASS")
 	lines.append(f"{passed}/{len(rows)} gates pass" + ("" if ok else "; " + ", ".join(r[0] for r in rows if r[3] == "REGRESSED") + (" regressed" if any(r[3] == "REGRESSED" for r in rows) else "")))
+	# Milestone 156: the whole body's smoothness per segment (not gated yet): the fastest joint per frame (its turn against
+	# its parent, deg/s) and the hips' acceleration (m/s²), against the baseline's.
+	lines.append("")
+	lines.append(f"{'smoothness':<14} {'joint p95':>9} {'p99':>6} {'max':>6}   {'hips acc p95':>12} {'p99':>6} {'max':>6}   (baseline max: joint, hips)")
+	for k in sorted(segs):
+		j = segs[k].get("joint_deg_s")
+		h = segs[k].get("hips_acc")
+		if not j or not h:
+			continue
+		bj = (base or {}).get(k, {}).get("joint_deg_s")
+		bh = (base or {}).get(k, {}).get("hips_acc")
+		was = f"   ({bj['max']:.0f}, {bh['max']:.1f})" if bj and bh else ""
+		lines.append(f"{k:<14} {j['p95']:>9.0f} {j['p99']:>6.0f} {j['max']:>6.0f}   {h['p95']:>12.1f} {h['p99']:>6.1f} {h['max']:>6.1f}{was}")
 	text = "\n".join(lines)
 	open(os.path.join(out, "report.txt"), "w").write(text + "\n")
 	print(text)

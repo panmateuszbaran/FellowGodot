@@ -117,24 +117,28 @@ func _make_shots() -> void:
 		},
 		{
 			# Milestone 152: across to CasaCrema and up its front from the street to the roof, from hold to hold (impost band,
-			# rustication, sill, pediment, sill, hood), out to the eave's lip and over it.
+			# rustication, sill, pediment, sill, hood), out to the eave's lip and over it. Milestone 156 (the owner's
+			# reference video): filmed as it is — beside the runner, a little ahead, at the height of the chest; close
+			# behind and below the climber, looking up the wall; beside the body on the tiles at the roof's height.
 			"name": "house", "duration": 8.0, "until_y": 2.0,
 			"place": [Vector3(13.1, 0.0, -7.0), 0.0],
-			"cam": {"mode": "chase", "offset": Vector3(-2.8, 1.6, 5.2)},
+			"cam": {"mode": "orbit", "offset": Vector3(-2.7, -0.15, -1.5), "rate": 4.0, "fov": 50.0},
 			"prog": [[0.5, {"house": [Vector3(13.1, 0.0, -12.9), Vector3(0.0, 0.0, -1.0)], "sprint": true}]],
 		},
 		{
 			"name": "house_climb", "duration": 14.0, "until_mantle": true,
-			"cam": {"mode": "chase", "offset": Vector3(-2.8, 1.6, 5.2)},
+			"cam": {"mode": "orbit", "offset": Vector3(1.5, -0.7, 2.5), "look_up": 0.5, "rate": 2.5, "fov": 55.0},
 			"prog": [],
 		},
 		{
-			# On the tiles; the camera rising over the roofs to the tower.
-			"name": "roof", "duration": 7.0, "mantle_at_start": true,
-			"cam": {"mode": "path_follow", "keys": [
-				[0.0, Vector3(10.0, 12.5, -7.0), Vector3(13.5, 12.0, -13.0), 55.0],
-				[7.0, Vector3(20.0, 19.0, 2.0), Vector3(8.0, 13.0, -16.0), 60.0]]},
-			"prog": [["m+1.4", {"house": [], "sprint": false, "wish": Vector3()}]],
+			# Over the gutter and up the tiles on hands and feet (milestone 156), then the camera rising over the roofs to
+			# the tower.
+			"name": "roof", "duration": 9.5, "mantle_at_start": true,
+			"cam": {"mode": "orbit", "offset": Vector3(2.3, 0.15, 0.9), "look_up": -0.3, "rate": 2.0, "fov": 52.0},
+			"prog": [["m+1.25", {"house": [], "sprint": false, "crawl": true, "wish": Vector3(0.0, 0.0, -1.0)}],
+					["m+4.2", {"crawl": false, "wish": Vector3(), "cam": {"mode": "path_follow", "keys": [
+						[4.2, Vector3(10.0, 12.5, -7.0), Vector3(13.5, 12.0, -13.0), 55.0],
+						[9.5, Vector3(20.0, 19.0, 2.0), Vector3(8.0, 13.0, -16.0), 60.0]]}}]],
 		},
 	]
 
@@ -239,6 +243,10 @@ func _physics_process(delta: float) -> void:
 			_climbing = c["climb"]
 		if c.has("house"):
 			_house = c["house"]
+		if c.has("crawl"):
+			_player.want_crawl = c["crawl"]
+		if c.has("cam"):
+			s["cam"] = c["cam"]
 		if c.has("belfry_path"):
 			_path = _belfry_path()
 		if c.has("aim"):
@@ -322,6 +330,15 @@ func _process(delta: float) -> void:
 				look = look.lerp(chest, 0.35)
 			_cam.global_transform = Transform3D(Basis(), k[0]).looking_at(look)
 			_cam.fov = k[2]
+		"orbit":
+			# Milestone 156: by an offset in the character's frame (x its right, y up, z behind it) from its chest, eased.
+			var want: Vector3 = chest + Basis(Vector3.UP, _player.facing) * (c["offset"] as Vector3)
+			var look: Vector3 = chest + Vector3.UP * float(c.get("look_up", 0.0))
+			var snap := t < 0.05
+			_cam_pos = want if snap else _cam_pos.lerp(want, 1.0 - exp(-float(c.get("rate", 3.0)) * delta))
+			_cam_look = look if snap else _cam_look.lerp(look, 1.0 - exp(-6.0 * delta))
+			_cam.global_transform = Transform3D(Basis(), _cam_pos).looking_at(_cam_look)
+			_cam.fov = float(c.get("fov", 50.0))
 		"chase":
 			# Milestone 152: behind and beside the character by an offset, eased.
 			var want: Vector3 = chest + (c["offset"] as Vector3) - Vector3.UP * 1.2

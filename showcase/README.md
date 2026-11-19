@@ -91,7 +91,7 @@ courses, the bell tower's corbels and beams. Play it with `godot --path showcase
 | WASD or the left stick, the mouse or the right stick | run (camera-relative), look |
 | Shift (right shoulder) held | free-run: sprint; at a wall, a jump for its first hold; hanging, push on to climb (hand over hand to a hold within reach, a leap to one further up) |
 | W hanging (towards the wall) | climb to the hold above, hand over hand; at the top, over it |
-| Ctrl | walk |
+| Ctrl | walk; up a steep roof, on hands and feet (milestone 156) |
 | Space (A) | jump; hanging, a leap along, up, down or round a corner to another hold (`hang_jump()`) |
 | C (B) | let go of a wall or a ledge; running, a roll |
 | E (Y) | at the bell tower's beam's end: perch (the camera swirls round, "synchronizing"); then Space: the leap of faith into the hay |
@@ -107,7 +107,7 @@ Everything in it is made by code, in two steps:
 
 ```
 python tools/blender/build_rooftops_models.py <dir>     # Blender's Python (or the bpy module): the buildings, the props
-python tools/blender/build_mannequin.py <dir>           # the mannequin, its skeleton and its 20 clips
+python tools/blender/build_mannequin.py <dir>           # the mannequin, its skeleton and its clips (37)
 godot --headless --path showcase -s res://tools/build_rooftops.gd -- <dir>
 ```
 
@@ -117,9 +117,11 @@ godot --headless --path showcase -s res://tools/build_rooftops.gd -- <dir>
   altana; the bell tower (its plinth, courses, clock, open belfry, bell, beam, pyramid roof), the hay cart, the
   fountain, the stalls, the props, the city round the square and its walls. Each model's collision is convex pieces
   (`ac_common.Collider`). UVs in metres.
-* `tools/blender/mannequin.py`, `mannequin_rig.py`, `mannequin_anims.py`: the mannequin (lofted shells, ball joints,
-  hands with fingers) on a skeleton named as Godot's humanoid profile; its clips posed by forward kinematics and
-  two-bone IK — locomotion cycles from a gait (the feet planted, the heels and toes rolling), the rest keyed.
+* `tools/blender/mannequin.py`, `mannequin_rig.py`, `mannequin_anims.py`: the mannequin (milestone 156, after the
+  owner's reference video: an artist's mannequin — plates with dark seams over a dark core, an egg of a head, a dark
+  neck and shoulder sockets, ball knees, hands with fingers, shoes) on a skeleton named as Godot's humanoid profile;
+  its clips posed by forward kinematics and two-bone IK (a limb blended from one to the other) — locomotion cycles
+  from a gait (the feet planted, the heels and toes rolling), the scramble up a roof, the rest keyed.
 * `tools/build_rooftops.gd`: the Godot side — the models' meshes with the scene's materials, the ground, pavements and
   kerbs, the ring of houses round the square (copies of its houses), the landscape, its trees (instances made at the
   start: `scripts/rooftops_multimesh.gd`), the farms, the cloth, the lamps, the people (`rooftops/npc.tscn`,
@@ -127,7 +129,8 @@ godot --headless --path showcase -s res://tools/build_rooftops.gd -- <dir>
   mannequin, an `AnimationTree`, `FellowTraversal3D` with the clips: climbing from hold to hold — decision 0282) and
   the camera.
 * The materials: photographs from [Poly Haven](https://polyhaven.com) (CC0) where they have been fetched —
-  `python tools/fetch_textures.py` downloads them (about 95 MB, 2k) into `rooftops/textures/` (not in git), the
+  `python tools/fetch_textures.py` downloads them (about 105 MB, 2k; milestone 156: the houses' sandstone ashlar) into
+  `rooftops/textures/` (not in git), the
   editor imports them, then the builder uses them (`rooftops/shaders/facade_pbr.gdshader`: tinted plaster with its
   weathering, stone, rustication, brick, roof tiles, wood, shutters, sampled twice against tiling;
   `paving_pbr.gdshader`: the ground by zone); without them the procedural shaders (`plaster`, `masonry`, `paving`, …).
