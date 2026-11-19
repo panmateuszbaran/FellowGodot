@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 157 — the owner's reference performed 1:1 (2026-11-19)
+
+- Decision 0297: the reference video's motion measured, not drawn by eye. In the cloud (MediaPipe Pose, OpenCV, SciPy;
+  nothing of them in the repository): 33 landmarks a frame on its 96 frames; the camera's turn and focal length from
+  the city's lines (1300 px, 52.4° across); the mannequin's own skeleton fitted to every frame at once through that
+  camera (40 parameters a frame, the joints 7.2 px off on average); which hand or foot holds still from the optical flow
+  around it; the hips' path from the holds (the run 3.4-3.6 m/s, the balconette 1.70 m up, the eave's lip 3.25 m).
+- In the repository: `showcase/tools/blender/reference_performance.json` (the measured performance: every segment's
+  rotation and the hips' place per frame, the camera, the holds) and `mannequin_reference.py` (the clip `reference` at
+  60 Hz and the camera's path, `ReferenceShot.glb`: the holds kept still by IK smoothed over a twentieth of a second,
+  the fastest joint 1517°/s); `ac_buildings.casa_riferimento()`, the video's house to its measures, closing the
+  square's west street; the demo's `reference` shot plays it through its camera (`--demo_only=<shot>` plays one shot).
+  The shot rendered by FellowEngine beside the video, frame for frame.
+
 ## Milestone 156 — the owner's reference video: the mannequin, its run, its scramble up the tiles; no pops (2026-11-19)
 
 - Decision 0296: the rooftops showcase after a 4-second video the owner chose (a grey articulated mannequin running

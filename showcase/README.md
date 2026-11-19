@@ -83,8 +83,11 @@ swifts over the roofs; the city beyond (its blocks, a cathedral's dome, towers, 
 hills round it (fields, vineyards, olive groves, cypress avenues, stone pines, farms). The buildings are climbed as in
 the game, from hold to hold: window sills and hoods, the ground floors' impost bands and the rustication's top, string
 courses, the bell tower's corbels and beams. Play it with `godot --path showcase res://rooftops/rooftops.tscn`; watch its demo with
-`godot --path showcase res://rooftops/rooftops.tscn -- --demo` (`--demo_from=<shot>`, `--demo_quit`; with
-`--write-movie <file> --fixed-fps 30` it is the showcase's video).
+`godot --path showcase res://rooftops/rooftops.tscn -- --demo` (`--demo_from=<shot>`, `--demo_only=<name>`,
+`--demo_quit`; with `--write-movie <file> --fixed-fps 30` it is the showcase's video). Its second shot, `reference`
+(milestone 157), is the owner's reference video performed 1:1 — its motion measured from the video
+(`tools/blender/reference_performance.json`), at a replica of its house (`CasaRiferimento`, the square's west side),
+through its camera: `-- --demo --demo_only=reference --demo_quit` with `--fixed-fps 24` frame for frame with it.
 
 | keys | |
 |---|---|

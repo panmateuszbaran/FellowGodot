@@ -234,12 +234,13 @@ def quoins(B, facades, z0, z1, a=0.62, b=0.32, h=0.34, out=0.035):
 			k += 1
 
 
-def eaves(B, Bc, facades, w, d, zt, overhang, pitch_deg, kind, rng, chimneys=1):
-	"""The roof: a stone cornice at the wall's top, the eave on wooden rafters (a hip or a gable roof), the coppi along
-	the eaves and the ridges; returns the ridge's height."""
+def eaves(B, Bc, facades, w, d, zt, overhang, pitch_deg, kind, rng, chimneys=1, cornice=True):
+	"""The roof: a stone cornice at the wall's top (unless cornice is False: the rafters straight out of the wall), the
+	eave on wooden rafters (a hip or a gable roof), the coppi along the eaves and the ridges; returns the ridge's
+	height."""
 	tanp = math.tan(math.radians(pitch_deg))
 	# The cornice: a moulded band, then the soffit's planks on rafters.
-	for i, F in enumerate(facades):
+	for i, F in enumerate(facades if cornice else []):
 		ext = 0.26 if i % 2 == 0 else -0.001
 		fbox(B, F, -ext, F.length + ext, zt - 0.36, zt - 0.2, -0.12, 0.02, "stone", bevel=0.02)
 		fbox(B, F, -ext, F.length + ext, zt - 0.2, zt - 0.06, -0.24, 0.02, "stone", bevel=0.02)
@@ -557,6 +558,77 @@ def house(name, w, d, floors, plaster, roof="hip", seed=1, shutters="shutter_gre
 	else:
 		top = eaves(B, Bc, facades, w, d, zt, overhang, pitch, roof, rng, chimneys=rng.choice([1, 2]))
 		Bc.box((0, 0, zt - 0.2), (w + 0.48, d + 0.48, 0.32), "stone")
+	obj = B.to_object(name)
+	col = Bc.to_object(name + "_col")
+	return obj, col, top
+
+
+def casa_riferimento(name="CasaRiferimento", seed=17):
+	"""Milestone 157: the house of the owner's reference video, built to its measures (reference_performance.json's
+	"house": the climbed window's balconette 1.70 m up and 0.40 m out, the eave's lip 3.25 m up and 0.47 m out, the
+	roof at 22 degrees) — a low house of rough sandstone ashlar: on its front a door, a window with a plain sill and,
+	near the right corner, the climbed window over a balconette on carved corbels; a stone bench along the front; no
+	cornice, the eave's rafters straight out of the wall, a gutter at its lip; a gable roof of coppi. The front faces
+	-Y; the replica's frame in reference_performance.json is this model's."""
+	import random
+
+	rng = random.Random(seed)
+	B = Builder(seed)
+	Bc = Collider(seed)
+	w, d = 8.0, 6.5
+	sill, lip, lip_out, pitch = 1.70, 3.25, 0.25, 22.0
+	zt = lip - 0.08
+	win_top = 2.87
+	facades = rect_facades(w, d)
+	for F in facades:
+		F.plaster = "plaster_cream"
+	front = facades[0]
+	u1 = w * 0.5 + 2.3  # the climbed window's centre along the front
+	ww = 1.1
+	opens = []
+	# The door, arched, oak.
+	opens.append(opening(0.75, 1.95, 0.0, 2.55, arch=True, back="wood_dark", depth=0.3))
+	fbox(B, front, 0.75 - 0.14, 0.75, 0.0, 2.0, -0.05, 0.02, "stone")
+	fbox(B, front, 1.95, 1.95 + 0.14, 0.0, 2.0, -0.05, 0.02, "stone")
+	fbox(B, front, 0.6, 2.1, 0.0, 0.14, -0.3, 0.02, "stone", bevel=0.015)
+	# The plain window.
+	opens.append(window(B, front, 3.6, sill, 1.0, win_top - sill, "plain", "shutter_brown", False, rng, Bc=Bc))
+	# The climbed window: its opening, its stone frame, its shutters open, a hood; the balconette under it.
+	x0, x1 = u1 - ww * 0.5, u1 + ww * 0.5
+	opens.append(opening(x0, x1, sill, win_top, arch=False, back="glass", depth=0.22))
+	f = 0.12
+	fbox(B, front, x0 - f, x0, sill, win_top + f, -0.05, 0.02, "stone")
+	fbox(B, front, x1, x1 + f, sill, win_top + f, -0.05, 0.02, "stone")
+	fbox(B, front, x0, x1, win_top, win_top + f, -0.05, 0.02, "stone")
+	sw = ww * 0.5
+	for a, b in ((x0 - f - sw - 0.02, x0 - f - 0.02), (x1 + f + 0.02, x1 + f + sw + 0.02)):
+		fbox(B, front, a, b, sill + 0.03, win_top, -0.09, -0.055, "shutter_brown", bevel=0.006)
+	# The balconette: a slab on a carved frieze and three corbels (scrolls: two blocks each, the lower one shorter).
+	fbox(B, front, x0 - 0.3, x1 + 0.3, sill - 0.12, sill, -0.40, 0.02, "stone", bevel=0.025)
+	fbox(B, front, x0 - 0.22, x1 + 0.22, sill - 0.24, sill - 0.12, -0.30, 0.02, "stone", bevel=0.02)
+	for bu in (x0 - 0.12, u1, x1 + 0.12):
+		fbox(B, front, bu - 0.08, bu + 0.08, sill - 0.46, sill - 0.24, -0.26, 0.02, "stone", bevel=0.03)
+		fbox(B, front, bu - 0.07, bu + 0.07, sill - 0.62, sill - 0.46, -0.14, 0.02, "stone", bevel=0.03)
+	fbox(Bc, front, x0 - 0.3, x1 + 0.3, sill - 0.24, sill, -0.40, 0.0, "stone", bevel=0.0)
+	# The bench along the front between the door and the climbed window (Florence's panche di via).
+	fbox(B, front, 2.4, 5.0, 0.0, 0.38, -0.34, 0.02, "stone_rustic", bevel=0.02)
+	fbox(B, front, 2.37, 5.03, 0.38, 0.46, -0.42, 0.02, "stone", bevel=0.02)
+	fbox(Bc, front, 2.37, 5.03, 0.0, 0.46, -0.42, 0.0, "stone", bevel=0.0)
+	wall(B, front, 0.0, zt, opens, "plaster_cream")
+	# The other walls: a window each.
+	for F in facades[1:]:
+		o = [window(B, F, F.length * 0.5, sill, 1.0, win_top - sill, "plain", "shutter_brown", rng.random() < 0.5, rng, Bc=Bc)]
+		wall(B, F, 0.0, zt, o, "plaster_cream")
+	quoins(B, facades, 0.1, zt - 0.1)
+	# A plinth along the walls' foot.
+	for F in facades:
+		fbox(B, F, -0.04, F.length + 0.04, 0.0, 0.3, -0.04, 0.02, "stone_rustic", bevel=0.02)
+	Bc.box((0, 0, zt * 0.5), (w, d, zt), "stone")
+	top = eaves(B, Bc, facades, w, d, zt, lip_out, pitch, "gable", rng, chimneys=1, cornice=False)
+	# The gutter at the front's and back's eaves: a slim pipe under the lip (below the hands that hold the lip).
+	for sy in (-1, 1):
+		y = sy * (d * 0.5 + lip_out + 0.04)
+		B.cylinder((-w * 0.5 - lip_out, y, zt - 0.05), (w * 0.5 + lip_out, y, zt - 0.05), 0.04, "iron", segments=10)
 	obj = B.to_object(name)
 	col = Bc.to_object(name + "_col")
 	return obj, col, top

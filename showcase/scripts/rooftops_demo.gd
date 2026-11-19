@@ -1,8 +1,9 @@
 extends Node
 ## The rooftops' demo: shots one after another, each putting the character somewhere (or going on from where the last
 ## left it) with a program of wishes, the camera following it (aimed), tracking it from a place, or on a path of its
-## own. Started by `-- --demo` (`--demo_from=<shot>` to start later), or by `autostart`; with Movie Maker
-## (`--write-movie`) it is the showcase's video. When the last shot ends the scene goes on as a game.
+## own. Started by `-- --demo` (`--demo_from=<shot>`, its index or name, to start later; `--demo_only=<name>` for one
+## shot), or by `autostart`; with Movie Maker (`--write-movie`) it is the showcase's video. When the last shot ends the
+## scene goes on as a game.
 
 @export var autostart := false
 
@@ -24,6 +25,10 @@ var _climb: Node3D # the foot of the climb up the bell tower (ClimbStart), facin
 var _climbing := false # running to the climb's foot, then up the holds
 var _path: Array = [] # points walked to one after another
 var _house := [] # milestone 152: [the foot of a house's front, into it] while running at it and climbing it
+var _only := "" # milestone 157: the one shot to play (--demo_only=<name>)
+var _reference: Node3D # milestone 157: the owner's reference video performed (ReferenceShot), shown in its shot
+var _sun_rotation := Vector3()
+var _sky_mode := Sky.PROCESS_MODE_INCREMENTAL
 
 
 func _ready() -> void:
@@ -33,18 +38,33 @@ func _ready() -> void:
 		set_process(false)
 		return
 	var from := 0
+	var from_name := ""
 	for a in args:
 		if a.begins_with("--demo_from="):
-			from = int(a.get_slice("=", 1))
+			# A shot's index or (milestone 157: the shots' indices moved) its name.
+			var v := a.get_slice("=", 1)
+			if v.is_valid_int():
+				from = int(v)
+			else:
+				from_name = v
 		if a == "--demo_quit":
 			_quit_at_end = true
+		if a.begins_with("--demo_only="):
+			_only = a.get_slice("=", 1)
 	_player = get_node("../Player")
 	_rig = get_node("../CameraRig")
 	_cam = _rig.get_node("Camera3D")
 	_player.autopilot = true
 	_player.get_node("Traversal").connect("mantle_started", func(_k, _l): _mark = minf(_mark, t))
 	_climb = get_node_or_null("../ClimbStart") as Node3D
+	_reference = get_node_or_null("../ReferenceShot") as Node3D
 	_make_shots()
+	if _only != "":
+		from_name = _only
+	if from_name != "":
+		for i in shots.size():
+			if shots[i]["name"] == from_name:
+				from = i
 	_start(from)
 
 
@@ -63,6 +83,13 @@ func _make_shots() -> void:
 			"cam": {"mode": "path", "keys": [
 				[0.0, Vector3(16.0, 24.0, 30.0), Vector3(-2.0, 10.0, -12.0), 55.0],
 				[7.0, Vector3(3.0, 6.0, 11.0), Vector3(0.5, 8.0, -12.0), 60.0]]},
+			"prog": [],
+		},
+		{
+			# Milestone 157: the owner's reference video performed 1:1 — the mannequin's every pose and its path measured
+			# from it, at the replica of its house, filmed by its camera (ReferenceShot: the clip moves both).
+			"name": "reference", "duration": 4.4, "reference": true,
+			"cam": {"mode": "reference"},
 			"prog": [],
 		},
 		{
@@ -162,7 +189,9 @@ func _belfry_path() -> Array:
 
 
 func _start(i: int) -> void:
-	if i >= shots.size():
+	if shot >= 0 and shots[shot].get("reference", false):
+		_show_reference(false)
+	if i >= shots.size() or (_only != "" and shot >= 0):
 		_finish()
 		return
 	shot = i
@@ -199,7 +228,50 @@ func _start(i: int) -> void:
 				_rig.pitch = deg_to_rad(c["pitch"])
 		_:
 			_rig.set_process(false)
+	if s.get("reference", false):
+		_show_reference(true)
 	print("demo: shot %d %s" % [i, s["name"]])
+
+
+## Milestone 157: the reference's performance shown (its mannequin, its camera current, its clip from the start; the
+## player and the square's people hidden: the video has no one else; the sun turned to light the house's front from
+## its left, low, as the video's does — the square's golden hour leaves the west side's fronts in shade) or hidden
+## again.
+func _show_reference(p_on: bool) -> void:
+	if _reference == null:
+		return
+	_reference.visible = p_on
+	_player.visible = not p_on
+	var crowd := get_node_or_null("../Crowd") as Node3D
+	if crowd:
+		crowd.visible = not p_on
+	var sun := get_node_or_null("../Sun") as DirectionalLight3D
+	var we := get_node_or_null("../WorldEnvironment") as WorldEnvironment
+	if we and we.environment and we.environment.sky:
+		# The sky's light redrawn at once for the turned sun (incrementally, the shot's first 7 frames had the old
+		# sky's ambient light and fog: hazy).
+		if p_on:
+			_sky_mode = we.environment.sky.process_mode
+			we.environment.sky.process_mode = Sky.PROCESS_MODE_REALTIME
+		else:
+			we.environment.sky.process_mode = _sky_mode
+	if sun:
+		if p_on:
+			_sun_rotation = sun.rotation
+			# The house's front lit from its left (seen from the square) at 45 degrees to it, 27 degrees up (the shot's frame:
+			# the house model's, its front facing +Z; at 63 degrees, along the front, the neighbours' fronts shaded it).
+			sun.global_basis = Basis.looking_at(_reference.global_basis * Vector3(0.55, -0.45, -0.7).normalized(), Vector3.UP)
+		else:
+			sun.rotation = _sun_rotation
+	var cam := _reference.get_node("ReferenceCamera") as Camera3D
+	var ap := _reference.get_node("AnimationPlayer") as AnimationPlayer
+	if p_on:
+		ap.play(&"reference")
+		ap.seek(0.0, true)
+		cam.make_current()
+	else:
+		ap.stop()
+		_cam.make_current()
 
 
 func _finish() -> void:

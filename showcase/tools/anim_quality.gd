@@ -4,7 +4,7 @@ extends SceneTree
 ## the gates. Headless and deterministic:
 ##   godot --headless --path showcase --fixed-fps 120 -s res://tools/anim_quality.gd -- --program=gaits --out=<dir>
 ## Programs: gaits (walk, run, sprint, the changes between them, a stop, a turn at a run), climb (the demo's run at
-## CasaCrema, the climb up its front and over its eave: add -- --demo --demo_from=9).
+## CasaCrema, the climb up its front and over its eave: add -- --demo --demo_from=house).
 
 const ANKLE_REST := 0.08 # the ankle's height standing (m)
 const TOE_REST := 0.02

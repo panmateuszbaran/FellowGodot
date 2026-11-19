@@ -220,7 +220,7 @@ def main():
 	project = os.path.dirname(here)
 	if a.cmd == "run":
 		os.makedirs(a.out, exist_ok=True)
-		for prog, extra in (("gaits", []), ("climb", ["--demo", "--demo_from=9"])):
+		for prog, extra in (("gaits", []), ("climb", ["--demo", "--demo_from=house"])):
 			cmd = [a.godot, "--headless", "--path", project, "--fixed-fps", "120", "-s", "res://tools/anim_quality.gd", "--",
 					f"--program={prog}", f"--out={os.path.abspath(a.out)}"] + extra
 			r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)

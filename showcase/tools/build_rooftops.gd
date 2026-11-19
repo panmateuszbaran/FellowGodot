@@ -21,13 +21,16 @@ const PLACES := {
 	"CasaBianca": [Vector2(21.5, 8.0), -90.0],
 	"CasaOcraBassa": [Vector2(6.0, 18.0), 180.0],
 	"CasaRosa": [Vector2(-9.0, 18.5), 180.0],
+	# Milestone 157: the house of the owner's reference video (its measures), closing the square's west street.
+	"CasaRiferimento": [Vector2(-22.25, 0.0), 90.0],
 	"Fountain": [Vector2(-3.5, 1.0), 22.5],
 	"StallA": [Vector2(-12.5, 4.0), 80.0],
 	"StallB": [Vector2(11.0, 7.5), -105.0],
 	"Skyline": [Vector2(0.0, 0.0), 0.0],
 }
 
-const BUILDINGS := ["PalazzoOcra", "Campanile", "CasaCrema", "PalazzoSiena", "CasaBianca", "CasaOcraBassa", "CasaRosa"]
+const BUILDINGS := ["PalazzoOcra", "Campanile", "CasaCrema", "PalazzoSiena", "CasaBianca", "CasaOcraBassa", "CasaRosa",
+		"CasaRiferimento"]
 
 ## The ring of houses round the square (copies of its houses, their meshes shared): closing its west side, lining the
 ## streets out of it before the city's blocks (the Skyline model leaves this ring empty). [model, position, degrees]
@@ -44,7 +47,7 @@ const NEAR := [
 const FOOTPRINTS := {
 	"PalazzoOcra": Vector2(14.2, 10.2), "Campanile": Vector2(6.44, 6.44), "CasaCrema": Vector2(8.6, 8.2),
 	"PalazzoSiena": Vector2(9.8, 11.2), "CasaBianca": Vector2(7.6, 9.2), "CasaOcraBassa": Vector2(11.2, 8.2),
-	"CasaRosa": Vector2(10.2, 9.2),
+	"CasaRosa": Vector2(10.2, 9.2), "CasaRiferimento": Vector2(8.0, 6.5),
 }
 const PAVEMENT := 1.2 ## the raised pavements' width along the fronts (m)
 const KERB := 0.08 ## and their height
@@ -69,7 +72,7 @@ func _init() -> void:
 	seed(1234)
 	_make_materials()
 	for f in DirAccess.get_files_at(models_dir):
-		if f.ends_with(".glb") and f != "Mannequin.glb":
+		if f.ends_with(".glb") and f != "Mannequin.glb" and f != "ReferenceShot.glb":
 			_load_model(models_dir.path_join(f))
 	if FileAccess.file_exists(models_dir.path_join("Mannequin.glb")):
 		models["Mannequin"] = {}
@@ -521,6 +524,7 @@ func _build_scene() -> void:
 		pc.far = 1500.0
 		pc.current = true
 		_add(rig, pc, "Camera3D")
+		_reference_shot(root)
 		var demo := Node.new()
 		demo.set_script(load("res://scripts/rooftops_demo.gd"))
 		_add(root, demo, "Demo")
@@ -1500,6 +1504,59 @@ func _build_player() -> PackedScene:
 var _mann := [] # the mannequin's mesh (its materials set) and clips, from _build_player()
 
 
+## Milestone 157: the owner's reference video performed 1:1 (tools/blender/mannequin_reference.py: the mannequin's
+## pose fitted to every frame of it, its path from its holds) — the mannequin and the camera that filmed it, their one
+## clip, placed with the replica of the video's house (its frame is the house model's). Hidden; rooftops_demo.gd's
+## "reference" shot shows it and plays it.
+func _reference_shot(p_root: Node3D) -> void:
+	var path := models_dir.path_join("ReferenceShot.glb")
+	if not FileAccess.file_exists(path) or _mann.is_empty() or not models.has("CasaRiferimento"):
+		return
+	var doc := GLTFDocument.new()
+	var st := GLTFState.new()
+	doc.append_from_file(path, st)
+	var src: Node = doc.generate_scene(st, 60.0)
+	var skel_src: Skeleton3D = src.find_child("Skeleton3D", true, false)
+	var cam_src: Camera3D = src.find_child("ReferenceCamera", true, false)
+	var ap_src: AnimationPlayer = src.find_child("AnimationPlayer", true, false)
+	var anim: Animation = ap_src.get_animation(&"reference")
+	anim.loop_mode = Animation.LOOP_NONE
+	var lib := AnimationLibrary.new()
+	lib.add_animation(&"reference", anim)
+	_save(lib, OUT + "/character/reference_shot_clip.res")
+	var shot := Node3D.new()
+	shot.transform = _place("CasaRiferimento")
+	shot.visible = false
+	_add(p_root, shot, "ReferenceShot")
+	var mann := Node3D.new()
+	_add(shot, mann, "Mannequin")
+	var skel := skel_src
+	for c in skel.get_children():
+		skel.remove_child(c)
+		c.free()
+	skel.owner = null
+	skel.get_parent().remove_child(skel)
+	_add(mann, skel, "Skeleton3D")
+	var body := MeshInstance3D.new()
+	body.mesh = _mann[0]
+	body.skin = load(OUT + "/character/mannequin_skin.res")
+	_add(skel, body, "MannequinBody")
+	body.skeleton = NodePath("..")
+	var cam := Camera3D.new()
+	cam.fov = cam_src.fov
+	cam.keep_aspect = cam_src.keep_aspect
+	cam.near = cam_src.near
+	cam.far = 1500.0
+	cam.current = false
+	cam.transform = cam_src.transform
+	_add(shot, cam, "ReferenceCamera")
+	var ap := AnimationPlayer.new()
+	ap.add_animation_library(&"", lib)
+	_add(shot, ap, "AnimationPlayer")
+	ap.root_node = NodePath("..")
+	src.free()
+
+
 ## The square's people's figure (rooftops_crowd.gd dresses each one): the mannequin, its front +Z, its clips played by
 ## its own AnimationPlayer.
 func _build_npc() -> PackedScene:
@@ -1556,7 +1613,8 @@ func _crowd(p_root: Node3D) -> void:
 		[P.call([Vector2(-1.8, 34.0), Vector2(-1.8, 12.5), Vector2(-7.5, 9.5)]), false, 3],
 		[P.call([Vector2(32.0, 3.0), Vector2(16.0, 3.0), Vector2(10.0, -1.0)]), false, 2],
 		[P.call([Vector2(6.8, -26.0), Vector2(6.8, -12.0), Vector2(9.0, -6.0)]), false, 2],
-		[P.call([Vector2(-32.0, 2.0), Vector2(-16.5, 2.0), Vector2(-10.0, -2.5)]), false, 2],
+		# (Milestone 157: by the alley north of CasaRiferimento, which closes the street.)
+		[P.call([Vector2(-32.0, 5.0), Vector2(-16.5, 5.0), Vector2(-10.0, -2.5)]), false, 2],
 	])
 	crowd.set("groups", [[Vector3(1.0, 0.0, 5.5), 3], [Vector3(-9.6, 0.0, 7.0), 2], [Vector3(12.6, 0.0, -9.6), 2],
 			[Vector3(14.0, 0.0, -4.0), 2], [Vector3(-7.0, 0.0, -9.2), 3]])
