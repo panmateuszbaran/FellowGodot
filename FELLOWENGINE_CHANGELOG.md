@@ -18,8 +18,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   and shoulder sockets, a grey ball for the knee between dark rings, heavier limbs, shoes, mid-grey. The run leaning
   as the reference's (the trunk 19.7° running, 5.8° before), the forearms in front of their own shoulders (the forward
   hand had been up by the face, across the chest); a new clip and controller state: up a roof on hands and feet. The
-  houses of sandstone ashlar, the shade lighter. The demo's house filmed as the reference is (`orbit`: beside the
-  runner, below the climber, beside the body on the tiles).
+  houses of sandstone ashlar, the shade lighter. The demo's house filmed as the reference is (`orbit`: behind the
+  runner as it comes at the wall, below the climber, beside the body on the tiles).
 - No pops, measured: the quality loop reads the fastest joint each frame and the hips' acceleration; six new gates
   (the climbing's segments ≤ 2200°/s; the mantle's body ≤ 400 m/s²). The pops found and their causes fixed: the clips'
   rig blends a limb from FK to IK (it swapped halfway); `FellowTraversalPose3D.clip_blend` (a mantle fades in from the

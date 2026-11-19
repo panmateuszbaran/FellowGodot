@@ -88,10 +88,11 @@ Compared, frame by frame:
   rustication of the same stone, the square's large slabs; the shade lighter (the ambient light 1.35, SDFGI 1.25), the
   colours not boosted (saturation 1.0).
 * **The demo** (`rooftops_demo.gd`): the house's shots filmed as the reference is — a camera in the character's frame
-  (`orbit`): beside the runner, a little ahead, at the chest's height; close behind and below the climber, looking up
-  the wall; beside the body on the tiles at the roof's height; then the camera rising over the roofs (drawn in along
-  the line from the chest where a wall crosses it, at once, and back out eased: running beside the house's front it had
-  passed behind a pilaster). After the mantle, up the tiles on hands and feet for 3 s.
+  (`orbit`): behind the runner and to its side as it comes at the wall (beside it and ahead, the house's front came
+  between: the camera passed behind a pilaster, then, drawn in, filled the frame with the body); close behind and below
+  the climber, looking up the wall; beside the body on the tiles at the roof's height; then the camera rising over the
+  roofs. An orbit is drawn in along the line from the chest where a wall crosses it (at once; back out eased). After
+  the mantle, up the tiles on hands and feet for 3 s.
 
 ## Checks
 

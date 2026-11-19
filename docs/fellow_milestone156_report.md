@@ -28,8 +28,8 @@ animations are as smooth and realistic as in it".
   foot lock easing a foot back from beyond the leg's reach (a knee bent 23° in a frame). The climbing's fastest joints
   now 1371-2087°/s; 38 of 38 gates pass (milestone 155: 29 of 32).
 * **The city**: the houses of sandstone ashlar (Poly Haven's `sandstone_blocks_05`, CC0) where they had been plastered
-  in colours, the shade lighter; the demo's house filmed as the reference is (beside the runner, below the climber,
-  beside the body on the tiles).
+  in colours, the shade lighter; the demo's house filmed as the reference is (behind the runner as it comes at the
+  wall, below the climber, beside the body on the tiles).
 * **Decision 0296**; the engine's part: `FellowTraversalPose3D.clip_blend`, `pole_follow`, `max_joint_speed` (off by
   default), a fix in `FellowTraversal3D`'s mantle with a clip's root motion and one in `FellowFootLock3D`.
 
