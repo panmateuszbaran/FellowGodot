@@ -70,6 +70,14 @@ the arms reaching up for the hold; the tree's cross-fades eased in and out; `bod
 152 against decisions 0285-0289's); on Jolt too. The regression scenes `climb`, `ledge_corners` and `traversal`:
 exact (the new settings off).
 
+The showcase (lavapipe), the demo's climb up CasaCrema filmed from behind and from beside the climber, before and
+after: hanging braced, the feet under the hips against the wall (before: the knees at the chest); a leap — coiled
+against the wall, both arms thrown up to the ledge, the legs together in the air, caught, the body swinging on and
+back (before: the arms dropped to the sides mid-leap, the legs splayed); the reaches as before; over the eave — pulled
+up, the chest over the edge, the hands pressing down, leaning out over the tiles with a knee up, standing up (before:
+the body stood straight up beside the wall and floated up it, the arms out). The jump at the wall from the street: the
+arms reaching up for the impost band (before: flung out to the sides). The demo runs through on the same path.
+
 ## Decision
 
 KEEP (opt-in).
