@@ -24,5 +24,6 @@ shader_parameter/variation = 0.15
 shader_parameter/stains = 0.25
 shader_parameter/ground_dirt = 0.0
 shader_parameter/seed = 6.0
+shader_parameter/instance_tint = null
 shader_parameter/fallen = null
 shader_parameter/patch_size = null

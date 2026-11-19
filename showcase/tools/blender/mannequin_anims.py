@@ -232,8 +232,9 @@ def clip_roll():
 # Hanging and climbing: the wall's face 0.33 m in front of the root (the capsule off it), the hands on its edge.
 WALL = -0.33
 # Hanging braced (FellowTraversal3D's hang_brace_height): the feet against the wall this high over the root, the balls
-# of the feet on it (the ankle 0.12 m out), the knees bent towards it.
-BRACE = 0.65
+# of the feet on it (the ankle 0.12 m out), the knees bent towards it (milestone 153: 0.42, the feet under the hips,
+# not drawn up to the chest).
+BRACE = 0.42
 BRACE_Y = WALL + 0.12
 
 
@@ -249,9 +250,9 @@ def hang_base(**kw):
 	"""Hanging braced: the arms up to the edge, the hips back off the wall, the knees bent and the feet on the wall."""
 	p = stand()
 	p.update({
-		"hips": (0, 0.1, -0.05),
-		"hips_rot": (8.0, 0, 0),
-		"spine": (-10.0, 0, 0),
+		"hips": (0, 0.13, -0.05),
+		"hips_rot": (10.0, 0, 0),
+		"spine": (-12.0, 0, 0),
 		"neck": (-8.0, 0),
 		"head": (-16.0, 0, 0),
 		"shoulder_L": (18.0, 4.0),
@@ -356,29 +357,38 @@ def clip_hang_reach_side(lead):
 
 
 def clip_hang_leap_up():
-	"""The leap up to a ledge too far to reach (0.45 s, TRANSFER_JUMP_UP): crouched on the wall, the legs driving the
-	body up off it, the arms thrown up overhead and catching the edge, the legs swinging in under the body and braced
-	again."""
+	"""The leap up to a ledge too far to reach (0.6 s: FellowTraversal3D's TRANSFER_JUMP_UP with hang_leap_windup 0.15;
+	the controller scales it to the move): coiled against the wall, the head up at the ledge; the legs driving the body
+	up off it, straightening, the arms thrown up overhead (the pose's IK takes the hands to the ledge); in the air the
+	legs together, a little bent, the toes pointed; caught, the knees swinging up to the wall to brace again."""
 	base = hang_base()
 	keys = [
 		(0.0, base),
-		(0.08, hang_base(hips=(0, 0.04, -0.2), hips_rot=(14.0, 0, 0), spine=(-4.0, 0, 0), head=(-24.0, 0, 0),
-				**_hands(zl=1.92, zr=1.92), **_feet(zl=BRACE + 0.12, zr=BRACE + 0.12, yl=BRACE_Y + 0.02, yr=BRACE_Y + 0.02))),
-		(0.2, hang_base(hips=(0, 0.06, 0.04), hips_rot=(-6.0, 0, 0), spine=(-14.0, 0, 0), neck=(-12.0, 0), head=(-30.0, 0, 0),
-				**_hands(zl=2.32, zr=2.32, xl=0.2, xr=-0.2, yl=WALL + 0.08, yr=WALL + 0.08),
-				**_feet(zl=0.12, zr=0.22, xl=0.09, xr=-0.1, yl=0.06, yr=0.12),
-				foot_L=(-40.0, 6.0, 0), foot_R=(-35.0, 6.0, 0), toes_L=10.0, toes_R=10.0)),
-		(0.32, hang_base(hips=(0, 0.16, -0.06), hips_rot=(4.0, 0, 0), spine=(-8.0, 0, 0), head=(-18.0, 0, 0),
-				**_feet(zl=0.42, zr=0.36, yl=WALL + 0.2, yr=WALL + 0.24))),
-		(0.45, base),
+		(0.13, hang_base(hips=(0, 0.04, 0.02), hips_rot=(18.0, 0, 0), spine=(-4.0, 0, 0), neck=(-12.0, 0), head=(-34.0, 0, 0),
+				shoulder_L=(24.0, 6.0), shoulder_R=(24.0, 6.0),
+				**_hands(zl=1.94, zr=1.94), **_feet(zl=BRACE + 0.06, zr=BRACE + 0.06))),
+		(0.24, hang_base(hips=(0, 0.08, 0.04), hips_rot=(-4.0, 0, 0), spine=(-16.0, 0, 0), neck=(-14.0, 0), head=(-32.0, 0, 0),
+				shoulder_L=(30.0, 8.0), shoulder_R=(30.0, 8.0),
+				**_hands(zl=2.5, zr=2.5, xl=0.2, xr=-0.2, yl=WALL + 0.06, yr=WALL + 0.06),
+				**_feet(zl=BRACE - 0.25, zr=BRACE - 0.22, yl=BRACE_Y + 0.05, yr=BRACE_Y + 0.05),
+				foot_L=(-30.0, 6.0, 0), foot_R=(-30.0, 6.0, 0), toes_L=15.0, toes_R=15.0)),
+		(0.38, hang_base(hips=(0, 0.1, 0.02), hips_rot=(2.0, 0, 0), spine=(-12.0, 0, 0), neck=(-10.0, 0), head=(-24.0, 0, 0),
+				shoulder_L=(26.0, 6.0), shoulder_R=(26.0, 6.0),
+				**_hands(zl=2.4, zr=2.4, xl=0.21, xr=-0.21, yl=WALL + 0.04, yr=WALL + 0.04),
+				**_feet(zl=0.3, zr=0.34, xl=0.07, xr=-0.07, yl=0.16, yr=0.2),
+				foot_L=(-38.0, 6.0, 0), foot_R=(-34.0, 6.0, 0), toes_L=10.0, toes_R=10.0)),
+		(0.5, hang_base(hips=(0, 0.14, -0.06), hips_rot=(12.0, 0, 0), spine=(-12.0, 0, 0), head=(-18.0, 0, 0),
+				**_feet(zl=BRACE - 0.06, zr=BRACE - 0.1, yl=BRACE_Y + 0.1, yr=BRACE_Y + 0.12))),
+		(0.6, base),
 	]
-	return 0.45, False, lambda t: keyed(keys, t)
+	return 0.6, False, lambda t: keyed(keys, t)
 
 
 def clip_hang_leap_side(lead):
-	"""A leap along the wall to the next ledge (0.5 s, TRANSFER_JUMP_ALONG, DIAGONAL, CORNER): the body swung away from
-	the side it goes to, then flung across, the leading arm reaching out for the ledge, the legs trailing, caught and
-	braced again. lead: "L" (to the body's left) or "R"."""
+	"""A leap along the wall to the next ledge (0.65 s: TRANSFER_JUMP_ALONG with hang_leap_windup 0.15; DIAGONAL, BACK
+	and CORNER scaled to theirs): coiled, the body drawn away from the side it goes to, the head turned to the ledge;
+	flung across, the leading arm reaching out for it, the body stretched, the legs together trailing; caught, the
+	legs swinging on past under the hands and braced again. lead: "L" (to the body's left) or "R"."""
 	s = 1.0 if lead == "L" else -1.0
 	base = hang_base()
 
@@ -390,16 +400,102 @@ def clip_hang_leap_side(lead):
 
 	keys = [
 		(0.0, base),
-		(0.1, hang_base(hips=(-0.1 * s, 0.08, -0.12), hips_rot=(10.0, -6.0 * s, -10.0 * s), spine=(-8.0, -8.0 * s, 6.0 * s),
-				head=(-14.0, 18.0 * s, 0), **hands(0.2, -0.26, 1.96, 1.98), **feet(0.02, -0.24, BRACE + 0.08, BRACE))),
-		(0.25, hang_base(hips=(0.08 * s, 0.1, 0.02), hips_rot=(0.0, 8.0 * s, 12.0 * s), spine=(-12.0, 10.0 * s, -10.0 * s),
-				neck=(-8.0, 10.0 * s), head=(-16.0, 20.0 * s, 0), **hands(0.62, 0.0, 2.08, 1.9),
-				**feet(0.0, -0.3, 0.3, 0.12, yl=0.0, yr=0.08), foot_L=(-30.0, 6.0, 0), foot_R=(-30.0, 6.0, 0))),
-		(0.4, hang_base(hips=(0.06 * s, 0.14, -0.06), hips_rot=(6.0, 4.0 * s, 6.0 * s), spine=(-10.0, 4.0 * s, -4.0 * s),
-				head=(-16.0, 8.0 * s, 0), **feet(0.2, -0.04, 0.4, 0.34, yl=WALL + 0.2, yr=WALL + 0.24))),
-		(0.5, base),
+		(0.13, hang_base(hips=(-0.08 * s, 0.05, 0.0), hips_rot=(14.0, -5.0 * s, -10.0 * s), spine=(-6.0, -8.0 * s, 6.0 * s),
+				neck=(-6.0, 10.0 * s), head=(-14.0, 24.0 * s, 0), **hands(0.21, -0.26, 1.95, 1.97),
+				**feet(0.0, -0.24, BRACE + 0.08, BRACE + 0.02))),
+		(0.27, hang_base(hips=(0.06 * s, 0.09, 0.03), hips_rot=(2.0, 8.0 * s, 14.0 * s), spine=(-12.0, 10.0 * s, -10.0 * s),
+				neck=(-8.0, 12.0 * s), head=(-16.0, 22.0 * s, 0), **hands(0.7, 0.05, 2.1, 1.92),
+				**feet(-0.06, -0.24, BRACE - 0.18, BRACE - 0.26, yl=BRACE_Y + 0.05, yr=BRACE_Y + 0.08),
+				foot_L=(-32.0, 6.0, 0), foot_R=(-32.0, 6.0, 0))),
+		(0.42, hang_base(hips=(0.02 * s, 0.11, 0.0), hips_rot=(6.0, 4.0 * s, 8.0 * s), spine=(-12.0, 6.0 * s, -6.0 * s),
+				head=(-16.0, 12.0 * s, 0), **feet(-0.12, -0.26, 0.3, 0.26, yl=0.16, yr=0.2),
+				foot_L=(-36.0, 6.0, 0), foot_R=(-36.0, 6.0, 0))),
+		(0.55, hang_base(hips=(0.06 * s, 0.13, -0.05), hips_rot=(10.0, -2.0 * s, -6.0 * s), spine=(-12.0, -2.0 * s, 4.0 * s),
+				head=(-16.0, 4.0 * s, 0), **feet(0.24, 0.02, BRACE - 0.04, BRACE - 0.1, yl=BRACE_Y + 0.08, yr=BRACE_Y + 0.12))),
+		(0.65, base),
 	]
-	return 0.5, False, lambda t: keyed(keys, t)
+	return 0.65, False, lambda t: keyed(keys, t)
+
+
+def clip_hang_climb():
+	"""Up from a hang onto the ledge held (1.25 s, FellowTraversal3D's hang_clip: its root's motion scaled onto the
+	ledge): from the hanging pose, the body pulled up, the feet walking up the wall, the head up; the chest over the edge,
+	the hands turning to press down on the top; pushed up over them, the left knee onto the top, the right foot still on
+	the wall; standing up onto it, the right foot stepping through. The edge 2 m over the root at the start (the hands'
+	place), 0.33 m in front of it."""
+	E = 2.0
+	base = hang_base()
+
+	def hands(root, z_rel, y=WALL + 0.02, x=0.23, wrist=30.0, pole=(1.0, 0.4, -0.6)):
+		ry, rz = root[1], root[2]
+		return {"arm_L": {"ik": ((x, y - ry, z_rel), pole)}, "arm_R": {"ik": ((-x, y - ry, z_rel), (-pole[0], pole[1], pole[2]))},
+				"hand_L": (wrist, 0, 0), "hand_R": (wrist, 0, 0)}
+
+	def legs(root, l, r, pole_l=(0.35, -1.0, 0.35), pole_r=(-0.35, -1.0, 0.35)):
+		ry, rz = root[1], root[2]
+		return {"leg_L": {"ik": ((l[0], l[1] - ry, l[2] - rz), pole_l)}, "leg_R": {"ik": ((r[0], r[1] - ry, r[2] - rz), pole_r)}}
+
+	r1 = (0, 0.02, 0.4)
+	r2 = (0, -0.04, 0.98)
+	r3 = (0, -0.22, 1.42)
+	r4 = (0, -0.42, 1.76)
+	r5 = (0, -0.56, 1.96)
+	r6 = (0, -0.62, E)
+	keys = [
+		(0.0, base),
+		(0.24, hang_base(root=r1, hips=(0, 0.1, -0.02), hips_rot=(6.0, 0, 0), spine=(-6.0, 0, 0), neck=(-8.0, 0), head=(-26.0, 0, 0),
+				shoulder_L=(10.0, 2.0), shoulder_R=(10.0, 2.0), **hands(r1, E - r1[2]),
+				**legs(r1, (0.11, BRACE_Y, BRACE + 0.12), (-0.11, BRACE_Y, BRACE + 0.3)))),
+		(0.46, hang_base(root=r2, hips=(0, 0.06, 0.0), hips_rot=(4.0, 0, 0), spine=(6.0, 0, 0), neck=(-4.0, 0), head=(-20.0, 0, 0),
+				shoulder_L=(0.0, 0.0), shoulder_R=(0.0, 0.0), **hands(r2, E - r2[2], pole=(1.0, 0.2, -1.0)),
+				**legs(r2, (0.11, BRACE_Y, 1.05), (-0.11, BRACE_Y + 0.12, 0.62)), foot_L=(10.0, 6.0, 0), foot_R=(-20.0, 6.0, 0))),
+		(0.66, hang_base(root=r3, hips=(0, 0.0, -0.06), hips_rot=(26.0, 0, 0), spine=(24.0, 0, 0), neck=(4.0, 0), head=(-10.0, 0, 0),
+				shoulder_L=(-6.0, 0.0), shoulder_R=(-6.0, 0.0), **hands(r3, E - r3[2] + 0.02, y=WALL - 0.06, x=0.26, wrist=70.0, pole=(1.0, 1.0, 0.2)),
+				**legs(r3, (0.12, WALL - 0.02, E + 0.12), (-0.11, BRACE_Y + 0.02, 1.25), pole_l=(0.3, -1.0, 0.0)),
+				foot_L=(30.0, 6.0, 0), foot_R=(-10.0, 6.0, 0))),
+		(0.86, stand(root=r4, hips=(0, 0.02, -0.16), hips_rot=(28.0, 0, 0), spine=(22.0, 0, 0), neck=(4.0, 0), head=(-12.0, 0, 0),
+				grip_L=0.6, grip_R=0.6, **hands(r4, E - r4[2] + 0.02, y=WALL - 0.12, x=0.27, wrist=70.0, pole=(1.0, 1.0, 0.3)),
+				**legs(r4, (0.12, WALL - 0.22, E + ANKLE), (-0.11, WALL + 0.06, E - 0.12), pole_l=(0.2, -1.0, 0.0), pole_r=(-0.2, -1.0, 0.0)),
+				foot_L=(0.0, 7.0, 0), foot_R=(-30.0, 6.0, 0), toes_R=20.0)),
+		(1.06, stand(root=r5, hips=(0, 0.02, -0.08), hips_rot=(14.0, 0, 0), spine=(10.0, 0, 0), head=(-6.0, 0, 0),
+				arm_L={"fk": (70.0, 20.0, 30.0, 6.0)}, arm_R={"fk": (72.0, 12.0, 26.0, 6.0)}, grip_L=0.4, grip_R=0.4,
+				**legs(r5, (0.11, WALL - 0.24, E + ANKLE), (-0.11, WALL - 0.42, E + ANKLE + 0.12), pole_l=(0.15, -1.0, 0.0), pole_r=(-0.15, -1.0, 0.0)),
+				foot_L=(0.0, 7.0, 0), foot_R=(-15.0, 7.0, 0))),
+		(1.25, stand(root=r6)),
+	]
+	return 1.25, False, lambda t: keyed(keys, t)
+
+
+def clip_jump_wall():
+	"""The run's jump at a wall for its first hold (0.7 s, its last pose held until the hold is caught): the take-off
+	from the sprint, the arms swinging up; the knees drawn up, the arms reaching up and forward for the hold; the feet
+	reaching for the wall."""
+	run = gait_pose("sprint", 0.05)
+
+	def arms(z, y=-0.38, x=0.24):
+		return {"arm_L": {"ik": ((x, y, z), (1.0, 0.3, -0.6))}, "arm_R": {"ik": ((-x, y, z), (-1.0, 0.3, -0.6))},
+				"hand_L": (20.0, 0, 0), "hand_R": (20.0, 0, 0), "grip_L": 0.5, "grip_R": 0.5}
+
+	keys = [
+		(0.0, dict(run)),
+		(0.1, dict(run, hips=(0, -0.02, -0.12), hips_rot=(16.0, 0, 0), spine=(14.0, 0, 0), head=(-18.0, 0, 0),
+				leg_L={"ik": ((0.1, -0.26, 0.42), (0.15, -1, 0))}, leg_R={"ik": ((-0.1, 0.2, 0.05), (-0.15, -1, 0))},
+				foot_L=(10.0, 6.0, 0), foot_R=(-45.0, 6.0, 0), toes_R=25.0,
+				arm_L={"fk": (40.0, 70.0, 40.0, 6.0)}, arm_R={"fk": (40.0, 70.0, 40.0, 6.0)})),
+		(0.26, dict(stand(), hips=(0, 0.0, 0.04), hips_rot=(-2.0, 0, 0), spine=(-8.0, 0, 0), neck=(-8.0, 0), head=(-26.0, 0, 0),
+				shoulder_L=(20.0, 6.0), shoulder_R=(20.0, 6.0), **arms(1.95),
+				leg_L={"ik": ((0.1, -0.24, 0.5), (0.15, -1, 0))}, leg_R={"ik": ((-0.1, 0.12, 0.2), (-0.15, -1, 0))},
+				foot_L=(0.0, 6.0, 0), foot_R=(-35.0, 6.0, 0))),
+		(0.46, dict(stand(), hips=(0, 0.02, 0.02), hips_rot=(4.0, 0, 0), spine=(-10.0, 0, 0), neck=(-8.0, 0), head=(-28.0, 0, 0),
+				shoulder_L=(22.0, 6.0), shoulder_R=(22.0, 6.0), **arms(2.05, y=-0.42),
+				leg_L={"ik": ((0.1, -0.3, 0.45), (0.2, -1, 0))}, leg_R={"ik": ((-0.1, -0.2, 0.36), (-0.2, -1, 0))},
+				foot_L=(10.0, 6.0, 0), foot_R=(5.0, 6.0, 0))),
+		(0.7, dict(stand(), hips=(0, 0.04, 0.0), hips_rot=(6.0, 0, 0), spine=(-10.0, 0, 0), neck=(-8.0, 0), head=(-26.0, 0, 0),
+				shoulder_L=(22.0, 6.0), shoulder_R=(22.0, 6.0), **arms(2.05, y=-0.4),
+				leg_L={"ik": ((0.11, -0.3, 0.42), (0.3, -1, 0.3))}, leg_R={"ik": ((-0.11, -0.28, 0.4), (-0.3, -1, 0.3))},
+				foot_L=(15.0, 6.0, 0), foot_R=(15.0, 6.0, 0))),
+	]
+	return 0.7, False, lambda t: keyed(keys, t)
 
 
 def climb_base(**kw):
@@ -693,6 +789,8 @@ def clips():
 	out["hang_leap_up"] = clip_hang_leap_up()
 	out["hang_leap_l"] = clip_hang_leap_side("L")
 	out["hang_leap_r"] = clip_hang_leap_side("R")
+	out["hang_climb"] = clip_hang_climb()
+	out["jump_wall"] = clip_jump_wall()
 	out["climb_idle"] = clip_climb_idle()
 	out["climb_move"] = clip_climb_move()
 	out["climb_jump"] = clip_climb_jump()

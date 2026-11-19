@@ -13,19 +13,26 @@ uniform vec3 brick_color : source_color = vec3(0.56, 0.30, 0.20);
 uniform float ground_dirt = 1.4; // how high the street's dirt reaches (m)
 uniform float seed = 0.0;
 uniform bool far_windows = false; // windows, shutters and string courses drawn on the wall (the distant city)
+// Milestone 153: the city's houses (a MultiMesh's instances): each instance's colour the plaster's, its alpha the seed's.
+uniform bool instance_tint = false;
 
 varying vec3 world_pos;
+varying vec4 inst;
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	// The instance's colour given as sRGB (as a source_color uniform is): to linear.
+	inst = vec4(mix(COLOR.rgb / 12.92, pow((COLOR.rgb + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), COLOR.rgb)), COLOR.a);
 }
 
 void fragment() {
-	vec2 uv = UV + vec2(seed * 17.31, seed * 5.13);
+	float sd = instance_tint ? seed + inst.a * 13.0 : seed;
+	vec3 color_ = instance_tint ? inst.rgb : color;
+	vec2 uv = UV + vec2(sd * 17.31, sd * 5.13);
 	float fade = rt_detail_fade(uv, 0.03);
 	float big = rt_fbm(uv * 0.17, 3);
 	float mid = rt_fbm(uv * 0.85 + 4.0, 4);
-	vec3 col = color * (1.0 + variation * (big - 0.5) * 2.4);
+	vec3 col = color_ * (1.0 + variation * (big - 0.5) * 2.4);
 	col = mix(col, col * vec3(1.06, 0.96, 0.86), smoothstep(0.45, 0.75, mid) * 0.8);
 	// Rain's streaks: long and vertical.
 	float streak = rt_fbm(vec2(uv.x * 2.4, world_pos.y * 0.09 + uv.x * 0.13), 3);

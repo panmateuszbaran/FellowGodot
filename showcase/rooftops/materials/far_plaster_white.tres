@@ -13,3 +13,4 @@ shader_parameter/brick_color = null
 shader_parameter/ground_dirt = null
 shader_parameter/seed = 5.0
 shader_parameter/far_windows = true
+shader_parameter/instance_tint = null

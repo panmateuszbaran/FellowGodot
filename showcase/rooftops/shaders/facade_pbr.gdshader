@@ -24,6 +24,8 @@ uniform float variation = 0.12;
 uniform float stains = 0.4;
 uniform float ground_dirt = 1.2;
 uniform float seed = 0.0;
+// Milestone 153: the city's houses (a MultiMesh's instances): each instance's colour the tint, its alpha the seed's.
+uniform bool instance_tint = false;
 // Plaster fallen off: the bricks under it.
 uniform float fallen = 0.0;
 uniform sampler2D patch_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -31,21 +33,26 @@ uniform sampler2D patch_normal : hint_normal, filter_linear_mipmap_anisotropic, 
 uniform float patch_size = 3.0;
 
 varying vec3 world_pos;
+varying vec4 inst;
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	// The instance's colour given as sRGB (as a source_color uniform is): to linear.
+	inst = vec4(mix(COLOR.rgb / 12.92, pow((COLOR.rgb + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), COLOR.rgb)), COLOR.a);
 }
 
 void fragment() {
-	vec2 uv_m = UV + vec2(seed * 7.31, seed * 3.17);
+	float sd = instance_tint ? seed + inst.a * 13.0 : seed;
+	vec3 tn = instance_tint ? inst.rgb : tint;
+	vec2 uv_m = UV + vec2(sd * 7.31, sd * 3.17);
 	vec2 uv_a = uv_m / tex_size;
 	vec3 col = texture(albedo_tex, uv_a).rgb;
 	vec3 nrm = texture(normal_tex, uv_a).rgb;
 	vec3 arm = texture(arm_tex, uv_a).rgb;
 	if (anti_tile) {
-		float ang = 1.1 + seed;
+		float ang = 1.1 + sd;
 		vec2 uv_b = rt_rotate(uv_m / (tex_size * 1.37), ang) + vec2(0.37, 0.61);
-		float m = smoothstep(0.42, 0.58, rt_fbm(uv_m * 0.11 + seed, 3));
+		float m = smoothstep(0.42, 0.58, rt_fbm(uv_m * 0.11 + sd, 3));
 		vec3 col_b = texture(albedo_tex, uv_b).rgb;
 		vec3 nrm_b = texture(normal_tex, uv_b).rgb;
 		// The second sample's normal turned back into the first's frame.
@@ -56,7 +63,7 @@ void fragment() {
 		arm = mix(arm, texture(arm_tex, uv_b).rgb, m);
 	}
 	float lum = dot(col, vec3(0.3, 0.55, 0.15));
-	col = mix(col, tint * lum / tex_lum, tint_strength) * brightness;
+	col = mix(col, tn * lum / tex_lum, tint_strength) * brightness;
 	// The tone drifting over the wall, warm blotches.
 	float big = rt_fbm(uv_m * 0.17, 3);
 	col *= 1.0 + variation * (big - 0.5) * 2.0;

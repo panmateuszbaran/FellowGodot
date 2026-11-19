@@ -805,62 +805,10 @@ def stall(name, seed=5):
 
 
 def skyline(name="Skyline", seed=21):
-	"""The city beyond the square: blocks of houses between streets (each house a box and a hip roof, its windows
-	drawn by the far plaster's shader), towers here and there, a dome on its drum with its lantern, a palace's tower."""
-	import random
-
-	import mathutils
-
-	rng = random.Random(seed)
+	"""The city beyond the square: towers here and there, a dome on its drum with its lantern, the city's walls, a
+	palace's tower (milestone 153: its houses are instances of skyline_houses()'s, no longer boxes here)."""
 	B = Builder(seed)
-	plasters = ["plaster_ochre", "plaster_rose", "plaster_cream", "plaster_sienna", "plaster_white"]
 
-	def house(x, y, w, d, h, rz):
-		B.box((x, y, h * 0.5 - 1.0), (w, d, h + 2.0), rng.choice(plasters), rot_z=rz)
-		m = mathutils.Matrix.Translation((x, y, h)) @ mathutils.Matrix.Rotation(rz, 4, "Z")
-		ex, ey = w * 0.5 + 0.5, d * 0.5 + 0.5
-		zr = min(ex, ey) * 0.4
-		if ex >= ey:
-			r0, r1 = (-(ex - ey), 0, zr), (ex - ey, 0, zr)
-			faces = [[(-ex, -ey, 0), (ex, -ey, 0), r1, r0], [(ex, -ey, 0), (ex, ey, 0), r1], [(ex, ey, 0), (-ex, ey, 0), r0, r1], [(-ex, ey, 0), (-ex, -ey, 0), r0]]
-		else:
-			r0, r1 = (0, -(ey - ex), zr), (0, ey - ex, zr)
-			faces = [[(-ex, -ey, 0), (ex, -ey, 0), r0], [(ex, -ey, 0), (ex, ey, 0), r1, r0], [(ex, ey, 0), (-ex, ey, 0), r1], [(-ex, ey, 0), (-ex, -ey, 0), r0, r1]]
-		for f in faces:
-			B.poly([m @ Vector(p) for p in f], "roof", uv_slope=True)
-
-	def clear(x, y, margin):
-		# The square and the ring of houses round it (the scene's NEAR: copies of the square's houses along its streets).
-		if -42.0 - margin < x < 40.0 + margin and abs(y) < 34.0 + margin:
-			return False  # the square and its houses (open to the west)
-		if math.hypot(x + 70.0, y - 95.0) < 34.0 + margin:
-			return False  # the cathedral
-		if math.hypot(x - 110.0, y - 60.0) < 10.0 + margin:
-			return False
-		return math.hypot(x, y) < 200.0
-
-	# Blocks on a grid of streets, the grid turned a little; two rows of houses back to back along each block.
-	turn = 0.06
-	cs, sn = math.cos(turn), math.sin(turn)
-	bw, bd, street = 26.0, 22.0, 6.0
-	for gi in range(-8, 9):
-		for gj in range(-9, 10):
-			cx0 = gi * (bw + street) + rng.uniform(-1.5, 1.5)
-			cy0 = gj * (bd + street) + rng.uniform(-1.5, 1.5)
-			bx, by = cx0 * cs - cy0 * sn, cx0 * sn + cy0 * cs
-			if not clear(bx, by, 0.0):
-				continue
-			for row in (-1, 1):
-				u = -bw * 0.5
-				while u < bw * 0.5 - 4.0:
-					w = min(rng.uniform(6.0, 11.0), bw * 0.5 - u)
-					d = bd * 0.5 - rng.uniform(0.0, 1.5)
-					h = rng.uniform(9.0, 19.0)
-					lx, ly = u + w * 0.5, row * d * 0.5
-					x, y = bx + lx * cs - ly * sn, by + lx * sn + ly * cs
-					if clear(x, y, 4.0):
-						house(x, y, w - 0.05, d, h, turn)
-					u += w
 	# Bell towers of other churches.
 	for tx, ty, th in ((-120.0, -40.0, 34.0), (60.0, 140.0, 30.0), (150.0, -70.0, 28.0)):
 		B.box((tx, ty, th * 0.5 - 1.0), (5.0, 5.0, th + 2.0), "brick")
@@ -940,6 +888,348 @@ def skyline(name="Skyline", seed=21):
 	B.prism([(tx - 2.2, ty - 2.2), (tx + 2.2, ty - 2.2), (tx + 2.2, ty + 2.2), (tx - 2.2, ty + 2.2)], 0.3, "stone", z0=59.5)
 	B.lathe([(2.0, 59.8), (0.0, 64.5)], (tx, ty, 0), "roof", segments=4, smooth=False)
 	return B.to_object(name)
+
+
+
+# ------------------------------------------------------------------ the city's houses (milestone 153)
+
+FAR_WIDTHS = (6.0, 7.2, 8.4, 9.6, 10.8)
+FAR_FLOORS = (3, 4, 5)
+FAR_DEPTH = 10.0
+
+
+def far_house(name, w, floors, seed, roof="hip", detail=True, d=FAR_DEPTH):
+	"""A house of the city beyond the square, made once and placed many times (instances, each with its plaster's
+	colour): its front (-Y) and back with windows in openings (reveals, glass, sills; shutters open or closed; nearer
+	ones with stone frames and hoods), string courses, a rusticated or plastered ground floor with its doors and shop
+	arches, a top floor's loggia on some; the side walls with fewer windows; a moulded cornice, deep eaves on rafters,
+	a hip or gable roof with its ridges' tiles and a roll of tiles along the eaves, or a terrace behind a parapet;
+	chimneys. Centred on the origin. detail False: the far ones (shutters drawn flat, no frames, rafters or railings)."""
+	import random
+
+	rng = random.Random(seed)
+	B = Builder(seed)
+	gh = rng.choice([3.9, 4.2, 4.5])
+	fh = rng.choice([3.1, 3.3, 3.5])
+	zt = gh + fh * (floors - 1)
+	hw, hd = w * 0.5, d * 0.5
+	facades = rect_facades(w, d)
+	front, right, back, left = facades
+	rustic = rng.random() < 0.4
+	shut = rng.choice(["shutter_green", "shutter_green", "shutter_brown", "shutter_brown", None])
+	frames = detail and rng.random() < 0.6
+	hoods = frames and rng.random() < 0.5
+	courses = rng.random() < 0.75
+	loggia = roof != "terrace" and floors >= 4 and rng.random() < 0.3
+	balcony = detail and rng.random() < 0.35
+	n = max(2, int(round(w / rng.uniform(2.3, 2.9))))
+	ww = rng.uniform(0.9, 1.1)
+	wh = rng.uniform(1.6, 1.85)
+	reveal = "stone" if frames else "far_plaster"
+	ground_wall = "stone_rustic" if rustic else "far_plaster"
+
+	def shutters(F, x0, x1, z, h, state):
+		if not shut or state == "none":
+			return
+		t = 0.035
+		sw = (x1 - x0) * 0.5
+		if not detail:
+			# Drawn flat on the wall (a quad each, 1 cm out) or in the opening.
+			if state == "open":
+				for a, b in ((x0 - sw - 0.04, x0 - 0.04), (x1 + 0.04, x1 + sw + 0.04)):
+					B.poly([F.p(a, z, -0.012), F.p(b, z, -0.012), F.p(b, z + h, -0.012), F.p(a, z + h, -0.012)], shut)
+			else:
+				B.poly([F.p(x0, z, 0.06), F.p(x1, z, 0.06), F.p(x1, z + h, 0.06), F.p(x0, z + h, 0.06)], shut)
+			return
+		if state == "open":
+			fbox(B, F, x0 - sw - 0.05, x0 - 0.05, z + 0.02, z + h, -0.06 - t, -0.06, shut, bevel=0.0)
+			fbox(B, F, x1 + 0.05, x1 + sw + 0.05, z + 0.02, z + h, -0.06 - t, -0.06, shut, bevel=0.0)
+		elif state == "half":
+			fbox(B, F, x0 - sw - 0.05, x0 - 0.05, z + 0.02, z + h, -0.06 - t, -0.06, shut, bevel=0.0)
+			fbox(B, F, (x0 + x1) * 0.5, x1 - 0.01, z + 0.02, z + h - 0.02, 0.05, 0.05 + t, shut, bevel=0.0)
+		else:
+			fbox(B, F, x0 + 0.01, x1 - 0.01, z + 0.02, z + h - 0.02, 0.05, 0.05 + t, shut, bevel=0.0)
+
+	def windows(F, count, floors_from, with_shutters=True, side=False):
+		"""The openings of the upper floors on F (count a floor), their sills, frames, hoods and shutters."""
+		ops = []
+		for f in range(floors_from, floors):
+			z = gh + (f - 1) * fh + (0.85 if f > 1 else 0.75)
+			h = wh + (0.3 if f == 1 and not side else 0.0)
+			top_loggia = loggia and f == floors - 1 and not side and F is front
+			if top_loggia:
+				# The top floor's loggia: an arcade of wide openings on piers, dark within.
+				k = count + 1
+				pier = 0.42
+				span = (F.length - pier * (k + 1)) / k
+				for i in range(k):
+					x0 = pier + i * (span + pier)
+					o = opening(x0, x0 + span, gh + (f - 1) * fh + 0.35, gh + f * fh - 0.45, arch=True, back="wood_dark", depth=1.4)
+					ops.append(o)
+					if detail:
+						fbox(B, F, x0 - 0.04, x0 + span + 0.04, o["z0"] - 0.05, o["z0"] + 0.9, 0.0, 0.08, "stone", bevel=0.0)
+				continue
+			for i in range(count):
+				u = F.length * (i + 0.5) / count
+				x0, x1 = u - ww * 0.5, u + ww * 0.5
+				ops.append(opening(x0, x1, z, z + h, back="glass", depth=0.2))
+				fbox(B, F, x0 - 0.1, x1 + 0.1, z - 0.09, z, -0.11, 0.02, "stone", bevel=0.0)
+				if frames:
+					fbox(B, F, x0 - 0.1, x0, z, z + h + 0.1, -0.03, 0.02, "stone", bevel=0.0)
+					fbox(B, F, x1, x1 + 0.1, z, z + h + 0.1, -0.03, 0.02, "stone", bevel=0.0)
+					fbox(B, F, x0, x1, z + h, z + h + 0.1, -0.03, 0.02, "stone", bevel=0.0)
+					if hoods:
+						fbox(B, F, x0 - 0.16, x1 + 0.16, z + h + 0.1, z + h + 0.22, -0.13, 0.02, "stone", bevel=0.0)
+				if with_shutters:
+					r = rng.random()
+					shutters(F, x0, x1, z, h, "open" if r < 0.55 else ("closed" if r < 0.8 else ("half" if r < 0.9 else "none")))
+				if balcony and f == 1 and i == count // 2 and F is front:
+					# A balcony on brackets, its iron railing.
+					fbox(B, F, x0 - 0.35, x1 + 0.35, z - 0.14, z, -0.75, 0.02, "stone", bevel=0.0)
+					for bu in (x0 - 0.2, x1 + 0.2):
+						fbox(B, F, bu - 0.06, bu + 0.06, z - 0.45, z - 0.14, -0.6, 0.02, "stone", bevel=0.0)
+					fbox(B, F, x0 - 0.33, x1 + 0.33, z + 0.9, z + 0.94, -0.74, -0.7, "iron", bevel=0.0)
+					for k2 in range(int((x1 - x0 + 0.66) / 0.14) + 1):
+						bu = x0 - 0.33 + k2 * 0.14
+						fbox(B, F, bu - 0.012, bu + 0.012, z, z + 0.9, -0.73, -0.71, "iron", bevel=0.0)
+					for sx in (x0 - 0.33, x1 + 0.31):
+						fbox(B, F, sx, sx + 0.02, z + 0.9, z + 0.94, -0.72, 0.0, "iron", bevel=0.0)
+		return ops
+
+	# Its footing, under the street (the ground is not level everywhere).
+	B.box((0.0, 0.0, -0.8), (w, d, 1.6), ground_wall)
+	# The front: the ground floor's doors and shops, the floors' windows.
+	g = []
+	kind = rng.choice(["shops", "shops", "doors", "door"])
+	if kind == "shops":
+		k = max(1, int(w / 3.2))
+		for i in range(k):
+			u = w * (i + 0.5) / k
+			sw = min(2.3, w / k - 0.9)
+			g.append(opening(u - sw * 0.5, u + sw * 0.5, 0.0, gh - 0.75, arch=rng.random() < 0.7, back="wood_dark", depth=0.35))
+	elif kind == "doors":
+		k = max(2, int(w / 2.6))
+		for i in range(k):
+			u = w * (i + 0.5) / k
+			arch = i == k // 2
+			g.append(opening(u - 0.65, u + 0.65, 0.0, 2.7 if not arch else 3.1, arch=arch, back="wood_dark" if arch else "glass", depth=0.3))
+	else:
+		g.append(opening(w * 0.5 - 0.8, w * 0.5 + 0.8, 0.0, 3.2, arch=True, back="wood_dark", depth=0.35))
+		for u in (w * 0.18, w * 0.82):
+			g.append(opening(u - 0.45, u + 0.45, 1.6, 2.9, back="glass", depth=0.2))
+	wall(B, front, 0.0, gh, g, ground_wall, reveal="stone")
+	if detail:
+		for o in g:
+			if o["z0"] > 0.5:
+				fbox(B, front, o["x0"] - 0.08, o["x1"] + 0.08, o["z0"] - 0.08, o["z0"], -0.09, 0.02, "stone", bevel=0.0)
+				# Iron bars on the ground floor's windows.
+				for b in range(4):
+					bu = o["x0"] + (o["x1"] - o["x0"]) * (b + 0.5) / 4
+					fbox(B, front, bu - 0.012, bu + 0.012, o["z0"], o["z1"], -0.02, 0.0, "iron", bevel=0.0)
+	if not rustic:
+		fbox(B, front, -0.02, w + 0.02, 0.0, 0.55, -0.05, 0.02, "stone", bevel=0.0)
+	wall(B, front, gh, zt, windows(front, n, 1), "far_plaster", reveal=reveal)
+	# The back: fewer windows, no shutters on the far ones.
+	bg = [opening(w * 0.5 - 0.6, w * 0.5 + 0.6, 0.0, 2.5, back="wood_dark", depth=0.25)]
+	wall(B, back, 0.0, gh, bg, ground_wall, reveal="stone")
+	wall(B, back, gh, zt, windows(back, max(2, n - 1), 1, with_shutters=detail), "far_plaster", reveal=reveal)
+	# The sides: a column of windows (seen above a lower neighbour, or at a block's end).
+	for F in (right, left):
+		ns = 2 if detail else 1
+		wall(B, F, 0.0, gh, [], ground_wall)
+		wall(B, F, gh, zt, windows(F, ns, 1, with_shutters=detail, side=True), "far_plaster", reveal=reveal)
+	if courses:
+		for f in range(1, floors):
+			z = gh + (f - 1) * fh
+			for F in (front, back):
+				fbox(B, F, -0.02, F.length + 0.02, z - 0.12, z + 0.04, -0.1, 0.02, "stone", bevel=0.0)
+			if detail:
+				for F in (right, left):
+					fbox(B, F, 0.0, F.length, z - 0.12, z + 0.04, -0.1, 0.02, "stone", bevel=0.0)
+	if rustic:
+		for F in (front, back):
+			fbox(B, F, -0.02, F.length + 0.02, gh - 0.16, gh, -0.12, 0.02, "stone", bevel=0.0)
+
+	# The top: the cornice, the eaves and the roof, or a terrace.
+	if roof == "terrace":
+		ph = 0.95
+		for F in facades:
+			fbox(B, F, -0.02, F.length + 0.02, zt - 0.26, zt - 0.12, -0.12, 0.02, "stone", bevel=0.0)
+			fbox(B, F, -0.02, F.length + 0.02, zt - 0.12, zt, -0.2, 0.02, "stone", bevel=0.0)
+			wall(B, F, zt, zt + ph, [], "far_plaster")
+			fbox(B, F, -0.06, F.length + 0.06, zt + ph, zt + ph + 0.1, -0.06, 0.3, "stone", bevel=0.0)
+		B.poly([(-hw + 0.25, -hd + 0.25, zt + 0.15), (hw - 0.25, -hd + 0.25, zt + 0.15), (hw - 0.25, hd - 0.25, zt + 0.15), (-hw + 0.25, hd - 0.25, zt + 0.15)], "ground_stone")
+		for F in facades:
+			inner = Facade(F.p(F.length - 0.25, 0, 0.25), -F.r, -F.n, F.length - 0.5)
+			wall(B, inner, zt + 0.15, zt + ph, [], "far_plaster")
+		if rng.random() < 0.6:
+			# An altana: posts, a low tiled roof.
+			ax0, ax1 = -hw + 0.6, -hw + 0.6 + min(4.0, w * 0.5)
+			ay0, ay1 = -hd + 1.2, hd - 1.0
+			zh = zt + 2.5
+			for x in (ax0, ax1):
+				for y in (ay0, ay1):
+					B.box((x, y, (zt + zh) * 0.5), (0.18, 0.18, zh - zt), "wood_dark")
+			ex2, ey2 = (ax1 - ax0) * 0.5 + 0.4, (ay1 - ay0) * 0.5 + 0.4
+			cx = (ax0 + ax1) * 0.5
+			z0 = zh
+			zr = z0 + min(ex2, ey2) * 0.38
+			c = [(cx - ex2, -ey2, z0), (cx + ex2, -ey2, z0), (cx + ex2, ey2, z0), (cx - ex2, ey2, z0)]
+			if ex2 >= ey2:
+				r0, r1 = (cx - (ex2 - ey2), 0, zr), (cx + (ex2 - ey2), 0, zr)
+				faces = [[c[0], c[1], r1, r0], [c[1], c[2], r1], [c[2], c[3], r0, r1], [c[3], c[0], r0]]
+			else:
+				r0, r1 = (cx, -(ey2 - ex2), zr), (cx, ey2 - ex2, zr)
+				faces = [[c[0], c[1], r0], [c[1], c[2], r1, r0], [c[2], c[3], r1], [c[3], c[0], r0, r1]]
+			for f in faces:
+				B.poly(f, "roof", uv_slope=True)
+			B.poly([c[0], c[3], c[2], c[1]], "wood")
+		return B.to_object(name), zt + ph
+	for F in (front, back):
+		fbox(B, F, -0.02, F.length + 0.02, zt - 0.34, zt - 0.2, -0.1, 0.02, "stone", bevel=0.0)
+		fbox(B, F, -0.02, F.length + 0.02, zt - 0.2, zt - 0.06, -0.22, 0.02, "stone", bevel=0.0)
+	ov, ovs = rng.uniform(0.7, 0.95), 0.12
+	ex, ey = hw + ovs, hd + ov
+	pitch = math.radians(rng.uniform(18.0, 24.0))
+	z0 = zt + 0.08
+	# The soffit's planks and the fascia, front and back.
+	for sy in (-1, 1):
+		y0, y1 = sy * hd, sy * ey
+		pts = [(-ex, y1, zt), (ex, y1, zt), (ex, y0, zt), (-ex, y0, zt)]
+		B.poly(list(reversed(pts)) if sy < 0 else pts, "wood")
+		fa = [(-ex, y1, zt), (ex, y1, zt), (ex, y1, z0), (-ex, y1, z0)]
+		B.poly(fa if sy < 0 else list(reversed(fa)), "wood_dark")
+		if detail:
+			k = int(w / 0.75)
+			for i in range(1, k):
+				x = -hw + w * i / k
+				B.box((x, sy * (hd + (ov - 0.05) * 0.5), zt - 0.07), (0.1, ov - 0.05, 0.14), "wood_dark")
+	if roof == "hip":
+		zr = z0 + min(ex, ey) * math.tan(pitch)
+		if ex >= ey:
+			r0, r1 = (-(ex - ey), 0.0, zr), (ex - ey, 0.0, zr)
+			faces = [[(-ex, -ey, z0), (ex, -ey, z0), r1, r0], [(ex, -ey, z0), (ex, ey, z0), r1], [(ex, ey, z0), (-ex, ey, z0), r0, r1], [(-ex, ey, z0), (-ex, -ey, z0), r0]]
+			hips = [((-ex, -ey, z0), r0), ((-ex, ey, z0), r0), ((ex, -ey, z0), r1), ((ex, ey, z0), r1)]
+		else:
+			r0, r1 = (0.0, -(ey - ex), zr), (0.0, ey - ex, zr)
+			faces = [[(-ex, -ey, z0), (ex, -ey, z0), r0], [(ex, -ey, z0), (ex, ey, z0), r1, r0], [(ex, ey, z0), (-ex, ey, z0), r1], [(-ex, ey, z0), (-ex, -ey, z0), r0, r1]]
+			hips = [((-ex, -ey, z0), r0), ((ex, -ey, z0), r0), ((-ex, ey, z0), r1), ((ex, ey, z0), r1)]
+		# The side eaves' soffits (narrow).
+		for sx in (-1, 1):
+			pts = [(sx * ex, -hd, zt), (sx * ex, hd, zt), (sx * hw, hd, zt), (sx * hw, -hd, zt)]
+			B.poly(list(reversed(pts)) if sx > 0 else pts, "wood")
+			fa = [(sx * ex, -ey, zt), (sx * ex, ey, zt), (sx * ex, ey, z0), (sx * ex, -ey, z0)]
+			B.poly(fa if sx > 0 else list(reversed(fa)), "wood_dark")
+		ridges = [(r0, r1)] + hips
+	else:
+		zr = z0 + ey * math.tan(pitch)
+		r0, r1 = (-ex, 0.0, zr), (ex, 0.0, zr)
+		faces = [[(-ex, -ey, z0), (ex, -ey, z0), r1, r0], [(ex, ey, z0), (-ex, ey, z0), r0, r1]]
+		ridges = [(r0, r1)]
+		zh = z0 + (ey - hd) * math.tan(pitch) - 0.02  # the roof's height over the front and back walls
+		for sx in (-1, 1):
+			x = sx * hw
+			gable = [(x, -hd, zt), (x, hd, zt), (x, hd, zh), (x, 0.0, zr - 0.02), (x, -hd, zh)]
+			B.poly(gable if sx > 0 else [(p[0], -p[1], p[2]) for p in gable], "far_plaster")
+			# The verge: the roof's edge boards over the gable.
+			for sy in (-1, 1):
+				a = Vector((sx * ex, sy * ey, z0 - 0.06))
+				b = Vector((sx * ex, 0.0, zr - 0.06))
+				dv = b - a
+				import mathutils
+
+				B.box((a + b) * 0.5, (0.08, dv.length, 0.16), "wood_dark", rot=mathutils.Matrix.Rotation(math.atan2(dv.z, dv.y), 4, "X"))
+	for f in faces:
+		B.poly(f, "roof", uv_slope=True)
+	segs = 5 if detail else 3
+	for a, b in ridges:
+		B.half_tube(Vector(a) + UP * 0.04, Vector(b) + UP * 0.04, 0.12, "roof", up=UP, segments=segs)
+	# A roll of tiles along the front's and back's eaves.
+	for sy in (-1, 1):
+		a, b = Vector((-ex + 0.05, sy * (ey - 0.05), z0 + 0.03)), Vector((ex - 0.05, sy * (ey - 0.05), z0 + 0.03))
+		B.half_tube(a, b, 0.07, "roof", up=UP, segments=segs)
+	# Chimneys.
+	for c in range(rng.choice([1, 2, 2, 3]) if detail else 1):
+		cx = rng.uniform(-0.35, 0.35) * w
+		cy = rng.uniform(-0.25, 0.25) * d
+		top = zr + rng.uniform(0.5, 1.3)
+		B.box((cx, cy, (zt + top) * 0.5), (0.7, 0.55, top - zt), "far_plaster")
+		B.box((cx, cy, top + 0.05), (0.88, 0.72, 0.1), "stone")
+		if detail:
+			for sx in (-1, 1):
+				B.box((cx + sx * 0.28, cy, top + 0.28), (0.12, 0.55, 0.36), "far_plaster")
+			B.box((cx, cy, top + 0.5), (0.95, 0.8, 0.1), "roof")
+	return B.to_object(name), zr
+
+
+def skyline_houses(seed=21):
+	"""The city's houses: prototypes (FAR_WIDTHS x FAR_FLOORS x two of each, a near set and a far one) and their
+	places in the blocks between the streets (the layout skyline() had), a row of houses back to back along each side
+	of a block, each row filled to the block's length (the houses stretched a little to fit), each house its plaster's
+	colour. Returns (objects, places): places a list of [prototype, x, y, turn (radians), stretch, colour (r, g, b),
+	seed]."""
+	import random
+
+	rng = random.Random(seed)
+	objects = []
+	protos = []
+	k = 0
+	for w in FAR_WIDTHS:
+		for fl in FAR_FLOORS:
+			for v in range(2):
+				roof = ("hip", "gable", "terrace")[(k * 7 + v * 2) % 3] if fl < 5 or v == 0 else "hip"
+				for near in (True, False):
+					name = ("HN%02d" if near else "HF%02d") % k
+					obj, _top = far_house(name, w, fl, 1000 + k * 13, roof=roof, detail=near)
+					objects.append(obj)
+				protos.append((k, w, fl))
+				k += 1
+	# The plasters' colours (sRGB): ochres, roses, creams, siennas, a few pale ones.
+	colours = [(0.8, 0.58, 0.36), (0.82, 0.55, 0.45), (0.86, 0.76, 0.58), (0.74, 0.47, 0.32), (0.84, 0.81, 0.74),
+			(0.88, 0.72, 0.45), (0.78, 0.66, 0.52), (0.84, 0.6, 0.5), (0.7, 0.42, 0.3), (0.8, 0.7, 0.6), (0.86, 0.66, 0.4),
+			(0.76, 0.6, 0.5)]
+
+	def clear(x, y, margin):
+		if -42.0 - margin < x < 40.0 + margin and abs(y) < 34.0 + margin:
+			return False  # the square and its houses (open to the west)
+		if math.hypot(x + 70.0, y - 95.0) < 34.0 + margin:
+			return False  # the cathedral
+		if math.hypot(x - 110.0, y - 60.0) < 10.0 + margin:
+			return False
+		return math.hypot(x, y) < 200.0
+
+	places = []
+	turn = 0.06
+	cs, sn = math.cos(turn), math.sin(turn)
+	bw, bd, street = 26.0, 22.0, 6.0
+	for gi in range(-8, 9):
+		for gj in range(-9, 10):
+			cx0 = gi * (bw + street) + rng.uniform(-1.5, 1.5)
+			cy0 = gj * (bd + street) + rng.uniform(-1.5, 1.5)
+			bx, by = cx0 * cs - cy0 * sn, cx0 * sn + cy0 * cs
+			if not clear(bx, by, 0.0):
+				continue
+			for row in (-1, 1):
+				widths = []
+				while sum(widths) < bw - 3.0:
+					widths.append(rng.choice(FAR_WIDTHS))
+				stretch = bw / sum(widths)
+				u = -bw * 0.5
+				for wd in widths:
+					w = wd * stretch
+					fl = rng.choices(FAR_FLOORS, weights=(3, 5, 3))[0]
+					cand = [p for p in protos if p[1] == wd and p[2] == fl]
+					pk = rng.choice(cand)[0]
+					lx, ly = u + w * 0.5, row * (bd * 0.5 - FAR_DEPTH * 0.5)
+					x, y = bx + lx * cs - ly * sn, by + lx * sn + ly * cs
+					if clear(x, y, 4.0):
+						c = rng.choice(colours)
+						j = rng.uniform(0.94, 1.05)
+						col = (min(1.0, c[0] * j), min(1.0, c[1] * j * rng.uniform(0.97, 1.03)), min(1.0, c[2] * j))
+						places.append([pk, round(x, 3), round(y, 3), round(turn + (math.pi if row > 0 else 0.0), 5), round(stretch, 4),
+								[round(v, 3) for v in col], round(rng.random(), 3)])
+					u += w
+	return objects, places
 
 
 def bollard(name="Bollard"):

@@ -26,6 +26,7 @@ shader_parameter/variation = 0.12
 shader_parameter/stains = 0.45
 shader_parameter/ground_dirt = null
 shader_parameter/seed = 3.0
+shader_parameter/instance_tint = null
 shader_parameter/fallen = 0.35
 shader_parameter/patch_albedo = ExtResource("5_qjbc0")
 shader_parameter/patch_normal = ExtResource("6_eayqy")

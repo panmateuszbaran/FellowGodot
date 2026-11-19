@@ -1,124 +1,133 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/rooftops_player.gd" id="1_62pdq"]
-[ext_resource type="ArrayMesh" path="res://rooftops/character/mannequin_mesh.res" id="2_gtwnn"]
-[ext_resource type="Skin" path="res://rooftops/character/mannequin_skin.res" id="3_1of6o"]
-[ext_resource type="AnimationLibrary" path="res://rooftops/character/mannequin_clips.res" id="4_s8fep"]
-[ext_resource type="Animation" path="res://rooftops/character/clip_mantle_low.res" id="5_x374l"]
-[ext_resource type="Animation" path="res://rooftops/character/clip_mantle_high.res" id="6_r17wi"]
-[ext_resource type="Animation" path="res://rooftops/character/clip_vault.res" id="7_t2oxt"]
+[ext_resource type="Script" path="res://scripts/rooftops_player.gd" id="1_gtwnn"]
+[ext_resource type="ArrayMesh" path="res://rooftops/character/mannequin_mesh.res" id="2_1of6o"]
+[ext_resource type="Skin" path="res://rooftops/character/mannequin_skin.res" id="3_s8fep"]
+[ext_resource type="AnimationLibrary" path="res://rooftops/character/mannequin_clips.res" id="4_x374l"]
+[ext_resource type="Animation" path="res://rooftops/character/clip_mantle_low.res" id="5_r17wi"]
+[ext_resource type="Animation" path="res://rooftops/character/clip_mantle_high.res" id="6_t2oxt"]
+[ext_resource type="Animation" path="res://rooftops/character/clip_vault.res" id="7_wxayk"]
+[ext_resource type="Animation" path="res://rooftops/character/clip_hang_climb.res" id="8_ciub2"]
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_wxayk"]
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_nd4pj"]
 radius = 0.3
 height = 1.8
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_ciub2"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_73jlv"]
 animation = &"climb_idle"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_nd4pj"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_afv0a"]
 animation = &"climb_move"
 
-[sub_resource type="AnimationNodeBlendSpace1D" id="AnimationNodeBlendSpace1D_73jlv"]
-blend_point_0/node = SubResource("AnimationNodeAnimation_ciub2")
+[sub_resource type="AnimationNodeBlendSpace1D" id="AnimationNodeBlendSpace1D_fhrde"]
+blend_point_0/node = SubResource("AnimationNodeAnimation_73jlv")
 blend_point_0/pos = 0.0
 blend_point_0/name = &"climb_idle"
-blend_point_1/node = SubResource("AnimationNodeAnimation_nd4pj")
+blend_point_1/node = SubResource("AnimationNodeAnimation_afv0a")
 blend_point_1/pos = 1.0
 blend_point_1/name = &"climb_move"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_afv0a"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_e3yda"]
 animation = &"climb_jump"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_fhrde"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_vjih6"]
 animation = &"dive"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_e3yda"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_cqiky"]
 animation = &"dive_start"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_vjih6"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_ent2m"]
 animation = &"fall"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_cqiky"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_t3nej"]
 animation = &"hang_idle"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_ent2m"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_np62d"]
 animation = &"hang_shimmy"
 
-[sub_resource type="AnimationNodeBlendSpace1D" id="AnimationNodeBlendSpace1D_t3nej"]
-blend_point_0/node = SubResource("AnimationNodeAnimation_cqiky")
+[sub_resource type="AnimationNodeBlendSpace1D" id="AnimationNodeBlendSpace1D_luxny"]
+blend_point_0/node = SubResource("AnimationNodeAnimation_t3nej")
 blend_point_0/pos = 0.0
 blend_point_0/name = &"hang_idle"
-blend_point_1/node = SubResource("AnimationNodeAnimation_ent2m")
+blend_point_1/node = SubResource("AnimationNodeAnimation_np62d")
 blend_point_1/pos = 1.0
 blend_point_1/name = &"hang_shimmy"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_np62d"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_lypc3"]
 animation = &"hang_across_l"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_luxny"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_xvvqj"]
 animation = &"hang_across_r"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_lypc3"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_bb4et"]
 animation = &"hang_leap_l"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_xvvqj"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_lliv7"]
 animation = &"hang_leap_r"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_bb4et"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_g4gj4"]
 animation = &"hang_leap_up"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_lliv7"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_6x4lb"]
 animation = &"hang_reach_l"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_g4gj4"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_jkm75"]
 animation = &"hang_reach_r"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_6x4lb"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_x0b5t"]
 animation = &"hay_exit"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_jkm75"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_kqycj"]
 animation = &"jump"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_x0b5t"]
-animation = &"land"
-
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_kqycj"]
-animation = &"idle"
-
 [sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_kutla"]
-animation = &"walk"
+animation = &"jump_wall"
 
 [sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_i01aa"]
-animation = &"run"
+animation = &"land"
 
 [sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_oyoul"]
+animation = &"idle"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_3ksyj"]
+animation = &"walk"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_qtstg"]
+animation = &"run"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_olmxq"]
 animation = &"sprint"
 
-[sub_resource type="AnimationNodeBlendSpace1D" id="AnimationNodeBlendSpace1D_3ksyj"]
+[sub_resource type="AnimationNodeBlendSpace1D" id="AnimationNodeBlendSpace1D_5yphh"]
 min_space = 0.0
 max_space = 7.5
 sync_mode = 1
-blend_point_0/node = SubResource("AnimationNodeAnimation_kqycj")
+blend_point_0/node = SubResource("AnimationNodeAnimation_oyoul")
 blend_point_0/pos = 0.0
 blend_point_0/name = &"idle"
-blend_point_1/node = SubResource("AnimationNodeAnimation_kutla")
+blend_point_1/node = SubResource("AnimationNodeAnimation_3ksyj")
 blend_point_1/pos = 1.6
 blend_point_1/name = &"walk"
-blend_point_2/node = SubResource("AnimationNodeAnimation_i01aa")
+blend_point_2/node = SubResource("AnimationNodeAnimation_qtstg")
 blend_point_2/pos = 4.4
 blend_point_2/name = &"run"
-blend_point_3/node = SubResource("AnimationNodeAnimation_oyoul")
+blend_point_3/node = SubResource("AnimationNodeAnimation_olmxq")
 blend_point_3/pos = 7.0
 blend_point_3/name = &"sprint"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_qtstg"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_4jejk"]
 animation = &"perch"
 
-[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_olmxq"]
+[sub_resource type="AnimationNodeAnimation" id="AnimationNodeAnimation_i2qmh"]
 animation = &"roll"
 
-[sub_resource type="AnimationNodeTransition" id="AnimationNodeTransition_5yphh"]
+[sub_resource type="Curve" id="Curve_w3f6v"]
+_data = [Vector2(0, 0), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="AnimationNodeTransition" id="AnimationNodeTransition_bvlfh"]
 xfade_time = 0.2
+xfade_curve = SubResource("Curve_w3f6v")
 input_0/name = "loco"
 input_0/auto_advance = false
 input_0/break_loop_at_end = false
@@ -195,66 +204,100 @@ input_18/name = "hang_across_r"
 input_18/auto_advance = false
 input_18/break_loop_at_end = false
 input_18/reset = true
+input_19/name = "jump_wall"
+input_19/auto_advance = false
+input_19/break_loop_at_end = false
+input_19/reset = true
 
-[sub_resource type="AnimationNodeBlendTree" id="AnimationNodeBlendTree_4jejk"]
-nodes/loco/node = SubResource("AnimationNodeBlendSpace1D_3ksyj")
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_cnhru"]
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_p4js2"]
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_kdgx7"]
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_b38es"]
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_kjm1a"]
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_85ump"]
+
+[sub_resource type="AnimationNodeTimeScale" id="AnimationNodeTimeScale_kcr4s"]
+
+[sub_resource type="AnimationNodeBlendTree" id="AnimationNodeBlendTree_nvdj7"]
+nodes/loco/node = SubResource("AnimationNodeBlendSpace1D_5yphh")
 nodes/loco/position = Vector2(0, 0)
-nodes/hang/node = SubResource("AnimationNodeBlendSpace1D_t3nej")
+nodes/hang/node = SubResource("AnimationNodeBlendSpace1D_luxny")
 nodes/hang/position = Vector2(0, 200)
-nodes/climb/node = SubResource("AnimationNodeBlendSpace1D_73jlv")
+nodes/climb/node = SubResource("AnimationNodeBlendSpace1D_fhrde")
 nodes/climb/position = Vector2(0, 400)
-nodes/state/node = SubResource("AnimationNodeTransition_5yphh")
+nodes/state/node = SubResource("AnimationNodeTransition_bvlfh")
 nodes/state/position = Vector2(400, 200)
-nodes/jump/node = SubResource("AnimationNodeAnimation_jkm75")
+nodes/jump/node = SubResource("AnimationNodeAnimation_kqycj")
 nodes/jump/position = Vector2(0, 700)
-nodes/fall/node = SubResource("AnimationNodeAnimation_vjih6")
+nodes/fall/node = SubResource("AnimationNodeAnimation_ent2m")
 nodes/fall/position = Vector2(0, 800)
-nodes/land/node = SubResource("AnimationNodeAnimation_x0b5t")
+nodes/land/node = SubResource("AnimationNodeAnimation_i01aa")
 nodes/land/position = Vector2(0, 900)
-nodes/roll/node = SubResource("AnimationNodeAnimation_olmxq")
+nodes/roll/node = SubResource("AnimationNodeAnimation_i2qmh")
 nodes/roll/position = Vector2(0, 1000)
-nodes/climb_jump/node = SubResource("AnimationNodeAnimation_afv0a")
+nodes/climb_jump/node = SubResource("AnimationNodeAnimation_e3yda")
 nodes/climb_jump/position = Vector2(0, 1300)
-nodes/dive_start/node = SubResource("AnimationNodeAnimation_e3yda")
+nodes/dive_start/node = SubResource("AnimationNodeAnimation_cqiky")
 nodes/dive_start/position = Vector2(0, 1400)
-nodes/dive/node = SubResource("AnimationNodeAnimation_fhrde")
+nodes/dive/node = SubResource("AnimationNodeAnimation_vjih6")
 nodes/dive/position = Vector2(0, 1500)
-nodes/hay_exit/node = SubResource("AnimationNodeAnimation_6x4lb")
+nodes/hay_exit/node = SubResource("AnimationNodeAnimation_x0b5t")
 nodes/hay_exit/position = Vector2(0, 1600)
-nodes/perch/node = SubResource("AnimationNodeAnimation_qtstg")
+nodes/perch/node = SubResource("AnimationNodeAnimation_4jejk")
 nodes/perch/position = Vector2(0, 1700)
-nodes/hang_reach_l/node = SubResource("AnimationNodeAnimation_lliv7")
+nodes/hang_reach_l/node = SubResource("AnimationNodeAnimation_6x4lb")
 nodes/hang_reach_l/position = Vector2(0, 1800)
-nodes/hang_reach_r/node = SubResource("AnimationNodeAnimation_g4gj4")
+nodes/ts_hang_reach_l/node = SubResource("AnimationNodeTimeScale_85ump")
+nodes/ts_hang_reach_l/position = Vector2(200, 1800)
+nodes/hang_reach_r/node = SubResource("AnimationNodeAnimation_jkm75")
 nodes/hang_reach_r/position = Vector2(0, 1900)
-nodes/hang_leap_up/node = SubResource("AnimationNodeAnimation_bb4et")
+nodes/ts_hang_reach_r/node = SubResource("AnimationNodeTimeScale_kcr4s")
+nodes/ts_hang_reach_r/position = Vector2(200, 1900)
+nodes/hang_leap_up/node = SubResource("AnimationNodeAnimation_g4gj4")
 nodes/hang_leap_up/position = Vector2(0, 2000)
-nodes/hang_leap_l/node = SubResource("AnimationNodeAnimation_lypc3")
+nodes/ts_hang_leap_up/node = SubResource("AnimationNodeTimeScale_kjm1a")
+nodes/ts_hang_leap_up/position = Vector2(200, 2000)
+nodes/hang_leap_l/node = SubResource("AnimationNodeAnimation_bb4et")
 nodes/hang_leap_l/position = Vector2(0, 2100)
-nodes/hang_leap_r/node = SubResource("AnimationNodeAnimation_xvvqj")
+nodes/ts_hang_leap_l/node = SubResource("AnimationNodeTimeScale_kdgx7")
+nodes/ts_hang_leap_l/position = Vector2(200, 2100)
+nodes/hang_leap_r/node = SubResource("AnimationNodeAnimation_lliv7")
 nodes/hang_leap_r/position = Vector2(0, 2200)
-nodes/hang_across_l/node = SubResource("AnimationNodeAnimation_np62d")
+nodes/ts_hang_leap_r/node = SubResource("AnimationNodeTimeScale_b38es")
+nodes/ts_hang_leap_r/position = Vector2(200, 2200)
+nodes/hang_across_l/node = SubResource("AnimationNodeAnimation_lypc3")
 nodes/hang_across_l/position = Vector2(0, 2300)
-nodes/hang_across_r/node = SubResource("AnimationNodeAnimation_luxny")
+nodes/ts_hang_across_l/node = SubResource("AnimationNodeTimeScale_cnhru")
+nodes/ts_hang_across_l/position = Vector2(200, 2300)
+nodes/hang_across_r/node = SubResource("AnimationNodeAnimation_xvvqj")
 nodes/hang_across_r/position = Vector2(0, 2400)
-node_connections = [&"output", 0, &"state", &"state", 0, &"loco", &"state", 1, &"jump", &"state", 2, &"fall", &"state", 3, &"land", &"state", 4, &"roll", &"state", 5, &"hang", &"state", 6, &"climb", &"state", 7, &"climb_jump", &"state", 8, &"dive_start", &"state", 9, &"dive", &"state", 10, &"hay_exit", &"state", 11, &"perch", &"state", 12, &"hang_reach_l", &"state", 13, &"hang_reach_r", &"state", 14, &"hang_leap_up", &"state", 15, &"hang_leap_l", &"state", 16, &"hang_leap_r", &"state", 17, &"hang_across_l", &"state", 18, &"hang_across_r"]
+nodes/ts_hang_across_r/node = SubResource("AnimationNodeTimeScale_p4js2")
+nodes/ts_hang_across_r/position = Vector2(200, 2400)
+nodes/jump_wall/node = SubResource("AnimationNodeAnimation_kutla")
+nodes/jump_wall/position = Vector2(0, 2500)
+node_connections = [&"output", 0, &"state", &"state", 0, &"loco", &"state", 1, &"jump", &"state", 2, &"fall", &"state", 3, &"land", &"state", 4, &"roll", &"state", 5, &"hang", &"state", 6, &"climb", &"state", 7, &"climb_jump", &"state", 8, &"dive_start", &"state", 9, &"dive", &"state", 10, &"hay_exit", &"state", 11, &"perch", &"state", 12, &"ts_hang_reach_l", &"state", 13, &"ts_hang_reach_r", &"state", 14, &"ts_hang_leap_up", &"state", 15, &"ts_hang_leap_l", &"state", 16, &"ts_hang_leap_r", &"state", 17, &"ts_hang_across_l", &"state", 18, &"ts_hang_across_r", &"state", 19, &"jump_wall", &"ts_hang_reach_l", 0, &"hang_reach_l", &"ts_hang_reach_r", 0, &"hang_reach_r", &"ts_hang_leap_up", 0, &"hang_leap_up", &"ts_hang_leap_l", 0, &"hang_leap_l", &"ts_hang_leap_r", 0, &"hang_leap_r", &"ts_hang_across_l", 0, &"hang_across_l", &"ts_hang_across_r", 0, &"hang_across_r"]
 
-[node name="Player" type="CharacterBody3D" unique_id=1361580400]
+[node name="Player" type="CharacterBody3D" unique_id=1436891706]
 collision_layer = 8
 floor_max_angle = 0.87266463
 floor_snap_length = 0.3
-script = ExtResource("1_62pdq")
+script = ExtResource("1_gtwnn")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=2051463165]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=455185861]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
-shape = SubResource("CapsuleShape3D_wxayk")
+shape = SubResource("CapsuleShape3D_nd4pj")
 
-[node name="Model" type="Node3D" parent="." unique_id=1963114699]
+[node name="Model" type="Node3D" parent="." unique_id=653749523]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Mannequin" type="Node3D" parent="Model" unique_id=2058554060]
+[node name="Mannequin" type="Node3D" parent="Model" unique_id=244896158]
 
-[node name="Skeleton3D" type="Skeleton3D" parent="Model/Mannequin" unique_id=1234068990]
+[node name="Skeleton3D" type="Skeleton3D" parent="Model/Mannequin" unique_id=1138582859]
 bones/0/name = "Root"
 bones/0/parent = -1
 bones/0/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
@@ -557,22 +600,27 @@ bones/42/position = Vector3(6.016345e-10, 0.14004643, 2.7939677e-09)
 bones/42/rotation = Quaternion(-0.18803409, -0.19119103, 0.05059307, 0.9620445)
 bones/42/scale = Vector3(0.99999994, 0.9999999, 1)
 
-[node name="MannequinBody" type="MeshInstance3D" parent="Model/Mannequin/Skeleton3D" unique_id=194299429]
-mesh = ExtResource("2_gtwnn")
-skin = ExtResource("3_1of6o")
+[node name="MannequinBody" type="MeshInstance3D" parent="Model/Mannequin/Skeleton3D" unique_id=33206590]
+mesh = ExtResource("2_1of6o")
+skin = ExtResource("3_s8fep")
 skeleton = NodePath("..")
 
-[node name="TraversalPose" type="FellowTraversalPose3D" parent="Model/Mannequin/Skeleton3D" unique_id=647878830]
+[node name="TraversalPose" type="FellowTraversalPose3D" parent="Model/Mannequin/Skeleton3D" unique_id=952750196]
+body_sway = 1.0
+sway_frequency = 1.7
+sway_damping = 0.32
+sway_max = 0.16
+limb_smoothing = 0.05
 
-[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=2042342452]
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=1805925316]
 root_node = NodePath("../Model")
-libraries/ = ExtResource("4_s8fep")
+libraries/ = ExtResource("4_x374l")
 
-[node name="AnimationTree" type="AnimationTree" parent="." unique_id=179822939]
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=844656186]
 root_node = NodePath("../Model")
 root_motion_track = NodePath("Mannequin/Skeleton3D:Root")
 callback_mode_process = 0
-tree_root = SubResource("AnimationNodeBlendTree_4jejk")
+tree_root = SubResource("AnimationNodeBlendTree_nvdj7")
 anim_player = NodePath("../AnimationPlayer")
 parameters/loco/blend_position = 0.0
 parameters/hang/blend_position = 0.0
@@ -580,16 +628,25 @@ parameters/climb/blend_position = 0.0
 parameters/state/current_state = ""
 parameters/state/transition_request = ""
 parameters/state/current_index = -1
+parameters/ts_hang_reach_l/scale = 1.0
+parameters/ts_hang_reach_r/scale = 1.0
+parameters/ts_hang_leap_up/scale = 1.0
+parameters/ts_hang_leap_l/scale = 1.0
+parameters/ts_hang_leap_r/scale = 1.0
+parameters/ts_hang_across_l/scale = 1.0
+parameters/ts_hang_across_r/scale = 1.0
 
-[node name="Traversal" type="FellowTraversal3D" parent="." unique_id=1927467013]
-low_clip = ExtResource("5_x374l")
-high_clip = ExtResource("6_r17wi")
-vault_clip = ExtResource("7_t2oxt")
+[node name="Traversal" type="FellowTraversal3D" parent="." unique_id=1210813643]
+low_clip = ExtResource("5_r17wi")
+high_clip = ExtResource("6_t2oxt")
+vault_clip = ExtResource("7_wxayk")
+hang_clip = ExtResource("8_ciub2")
 clip_root_bone = &"Root"
 shimmy_speed = 1.3
 hang_jump_height = 2.3
 hang_reach_up = 1.25
-hang_brace_height = 0.65
+hang_brace_height = 0.42
 hang_reach_side = 0.8
+hang_leap_windup = 0.15
 climb_mask = 2
 climb_speed = 1.5

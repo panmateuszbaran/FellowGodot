@@ -118,6 +118,8 @@ func _make_materials() -> void:
 		mats[n] = _shader_mat("plaster", {"color": plaster[n][0], "fallen": plaster[n][1], "seed": plaster[n][2]})
 		# The city beyond the square: the same plaster, its windows drawn on it (no geometry that far).
 		mats["far_" + n] = _shader_mat("plaster", {"color": plaster[n][0], "fallen": 0.0, "seed": plaster[n][2], "far_windows": true})
+	# Milestone 153: the city's houses (instances): the plaster's colour and its weathering's seed each instance's.
+	mats["far_plaster"] = _shader_mat("plaster", {"color": Color(0.82, 0.7, 0.55), "fallen": 0.12, "instance_tint": true})
 	mats["stone"] = _shader_mat("masonry", {"color": Color(0.76, 0.72, 0.64), "joint_color": Color(0.6, 0.57, 0.51),
 			"block_size": Vector2(0.72, 0.34), "joint_width": 0.006, "joint_depth": 0.006, "chamfer": 0.008,
 			"face_rough": 0.0015, "variation": 0.1})
@@ -227,6 +229,9 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 		photo[n] = _photo("plaster_smooth", {"tint": p_plaster[n][0], "tint_strength": 0.9, "brightness": 1.0, "seed": p_plaster[n][2],
 				"fallen": p_plaster[n][1], "patch_albedo": brick[0], "patch_normal": brick[1], "patch_size": brick[3],
 				"specular": 0.22, "roughness_bias": 0.08, "stains": 0.45, "variation": 0.12})
+	photo["far_plaster"] = _photo("plaster_smooth", {"tint": Color(0.82, 0.7, 0.55), "tint_strength": 0.9, "brightness": 1.0,
+			"fallen": 0.15, "patch_albedo": brick[0], "patch_normal": brick[1], "patch_size": brick[3], "specular": 0.22,
+			"roughness_bias": 0.08, "stains": 0.5, "variation": 0.14, "instance_tint": true})
 	# Laid textures (blocks, bricks, tiles, boards) are not turned for the anti-tiling: their courses must stay level.
 	photo["stone"] = _photo("stone", {"tint": Color(0.8, 0.76, 0.66), "tint_strength": 0.45, "specular": 0.25, "stains": 0.3,
 			"anti_tile": false, "seed": 1.0})
@@ -284,6 +289,11 @@ func _load_model(p_path: String) -> void:
 				info["shapes"].append([shape, (n as Node3D).transform])
 				continue
 			var mesh := _remap((n as MeshInstance3D).mesh, false, "far_" if name == "Skyline" else "")
+			if name == "SkylineHouses":
+				# Milestone 153: the city's houses' prototypes, kept by name (saved with their instances).
+				mesh.resource_name = String(n.name)
+				info.get_or_add("protos", {})[String(n.name)] = mesh
+				continue
 			mesh.resource_name = name
 			info["mesh"] = _save(mesh, "%s/models/%s.res" % [OUT, name])
 		elif n is Node3D and n != root and not (n is ImporterMeshInstance3D):
@@ -440,6 +450,7 @@ func _build_scene() -> void:
 	if models.has("Skyline"):
 		var sky_node := _model(root, "Skyline", _place("Skyline"))
 		(sky_node.get_node("Mesh") as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_skyline_houses(root)
 	_landscape(root)
 	_hay_cart(town)
 	_props(town)
@@ -532,7 +543,10 @@ func _environment(p_root: Node3D) -> void:
 	env.sdfgi_bounce_feedback = 0.6
 	env.sdfgi_energy = 1.0
 	env.fog_enabled = true
-	env.fog_density = 0.0
+	# Milestone 153: the golden hour's haze — the city's far houses and the hills paler and bluer with distance (the
+	# sky's colour mixed in), as the eye reads depth.
+	env.fog_density = 0.0008
+	env.fog_aerial_perspective = 0.8
 	env.fog_light_color = Color(0.85, 0.72, 0.58)
 	env.fog_sky_affect = 0.3
 	env.volumetric_fog_enabled = true
@@ -824,8 +838,50 @@ func _trees(p_root: Node3D) -> void:
 		print("trees %s: %d" % [kind, list.size()])
 
 
+## Milestone 153: the city's houses beyond the square — prototypes made in Blender (SkylineHouses.glb: windows in
+## their openings, shutters, sills, string courses, cornices, eaves on rafters, tiled roofs, terraces, chimneys; a near
+## set and a plainer far one) placed in the blocks (SkylineHouses.json), a MultiMesh for each prototype, each house's
+## plaster its own colour; the near ones (within NEAR_CITY of the square) cast shadows.
+const NEAR_CITY := 95.0
+
+func _skyline_houses(p_root: Node3D) -> void:
+	if not models.has("SkylineHouses") or not FileAccess.file_exists(models_dir.path_join("SkylineHouses.json")):
+		return
+	var places: Array = JSON.parse_string(FileAccess.get_file_as_string(models_dir.path_join("SkylineHouses.json")))
+	var protos: Dictionary = models["SkylineHouses"].get("protos", {})
+	var groups := {}
+	for p in places:
+		# Blender's (x, y) on the ground is (x, -y) here; its turn about Z, this one about Y.
+		var pos := Vector3(float(p[1]), 0.0, -float(p[2]))
+		var near := Vector2(pos.x, pos.z).length() < NEAR_CITY
+		var key := ("HN%02d" if near else "HF%02d") % int(p[0])
+		if not protos.has(key):
+			continue
+		var b := Basis(Vector3.UP, float(p[3])) * Basis.from_scale(Vector3(float(p[4]), 1.0, 1.0))
+		var c: Array = p[5]
+		var g: Array = groups.get_or_add(key, [[], []])
+		g[0].append(Transform3D(b, pos))
+		g[1].append(Color(float(c[0]), float(c[1]), float(c[2]), float(p[6])))
+	var city := Node3D.new()
+	_add(p_root, city, "CityHouses")
+	DirAccess.make_dir_recursive_absolute(OUT + "/models/houses")
+	var keys := groups.keys()
+	keys.sort()
+	var tris := 0
+	for key in keys:
+		var g: Array = groups[key]
+		var mmi := _instances(city, key, protos[key], g[0], g[1], "houses/")
+		if String(key).begins_with("HN"):
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		var t := 0
+		for i in (protos[key] as Mesh).get_surface_count():
+			t += (protos[key] as Mesh).surface_get_array_index_len(i) / 3
+		tris += t * g[0].size()
+	print("city houses: %d in %d prototypes, %d triangles" % [places.size(), keys.size(), tris])
+
+
 ## Instances of a mesh, made into a MultiMesh when the scene starts (scripts/rooftops_multimesh.gd).
-func _instances(p_parent: Node3D, p_name: String, p_mesh: Mesh, p_xforms: Array, p_cols: Array) -> void:
+func _instances(p_parent: Node3D, p_name: String, p_mesh: Mesh, p_xforms: Array, p_cols: Array, p_dir := "") -> MultiMeshInstance3D:
 	var data := PackedFloat32Array()
 	data.resize(p_xforms.size() * 16)
 	for i in p_xforms.size():
@@ -835,17 +891,18 @@ func _instances(p_parent: Node3D, p_name: String, p_mesh: Mesh, p_xforms: Array,
 				t.basis.x.z, t.basis.y.z, t.basis.z.z, t.origin.z, c.r, c.g, c.b, c.a]
 		for k in 16:
 			data[i * 16 + k] = row[k]
-	_save(p_mesh, "%s/models/%s_mesh.res" % [OUT, p_name.to_lower()])
+	_save(p_mesh, "%s/models/%s%s_mesh.res" % [OUT, p_dir, p_name.to_lower()])
 	var inst: Resource = load("res://scripts/rooftops_instances.gd").new()
 	inst.set("count", p_xforms.size())
 	inst.set("data", data)
-	_save(inst, "%s/models/%s_instances.res" % [OUT, p_name.to_lower()])
+	_save(inst, "%s/models/%s%s_instances.res" % [OUT, p_dir, p_name.to_lower()])
 	var mmi := MultiMeshInstance3D.new()
 	mmi.set_script(load("res://scripts/rooftops_multimesh.gd"))
 	mmi.set("mesh", p_mesh)
 	mmi.set("instances", inst)
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_add(p_parent, mmi, p_name)
+	return mmi
 
 
 func _villas(p_root: Node3D) -> void:
@@ -1285,7 +1342,7 @@ func _build_player() -> PackedScene:
 		var anim := lib.get_animation(a)
 		anim.loop_mode = Animation.LOOP_LINEAR if String(a) in LOOPS else Animation.LOOP_NONE
 	# The mantles' clips on their own (FellowTraversal3D plays them, the library refers to them).
-	for a in ["mantle_high", "mantle_low", "vault"]:
+	for a in ["mantle_high", "mantle_low", "vault", "hang_climb"]:
 		_save(lib.get_animation(a), "%s/character/clip_%s.res" % [OUT, a])
 	_save(lib, OUT + "/character/mannequin_clips.res")
 	_mann = [mesh, lib]
@@ -1318,6 +1375,13 @@ func _build_player() -> PackedScene:
 	body_mi.owner = player
 	body_mi.mesh = mesh
 	var pose: Node = ClassDB.instantiate("FellowTraversalPose3D")
+	# The body's weight (decision 0290): the hips swing on when a leap is caught, lag when it starts; the hands' and feet's
+	# targets eased.
+	pose.set("body_sway", 1.0)
+	pose.set("sway_frequency", 1.7)
+	pose.set("sway_damping", 0.32)
+	pose.set("sway_max", 0.16)
+	pose.set("limb_smoothing", 0.05)
 	_add(skel, pose, "TraversalPose")
 	var ap := AnimationPlayer.new()
 	ap.add_animation_library(&"", lib)
@@ -1341,9 +1405,13 @@ func _build_player() -> PackedScene:
 	# the feet braced on the wall.
 	trav.set("hang_reach_up", 1.25)
 	trav.set("hang_jump_height", 2.3)
-	trav.set("hang_brace_height", 0.65)
+	trav.set("hang_brace_height", 0.42)
 	# Across from hold to hold (decision 0285): a gap to a ledge to the side up to 0.8 m reached hand over hand.
 	trav.set("hang_reach_side", 0.8)
+	# A leap winds up for 0.15 s, springs, flies hands first and is caught with its speed (decision 0290); up onto a ledge
+	# from a hang with a clip of its own.
+	trav.set("hang_leap_windup", 0.15)
+	trav.set("hang_clip", lib.get_animation(&"hang_climb"))
 	trav.set("high_clip", lib.get_animation(&"mantle_high"))
 	trav.set("low_clip", lib.get_animation(&"mantle_low"))
 	trav.set("vault_clip", lib.get_animation(&"vault"))
@@ -1466,9 +1534,14 @@ func _anim_tree() -> AnimationNodeBlendTree:
 		climb.add_blend_point(a, pt[1], -1, pt[0])
 	bt.add_node(&"climb", climb, Vector2(0, 400))
 	var states := ["loco", "jump", "fall", "land", "roll", "hang", "climb", "climb_jump", "dive_start", "dive", "hay_exit", "perch",
-			"hang_reach_l", "hang_reach_r", "hang_leap_up", "hang_leap_l", "hang_leap_r", "hang_across_l", "hang_across_r"]
+			"hang_reach_l", "hang_reach_r", "hang_leap_up", "hang_leap_l", "hang_leap_r", "hang_across_l", "hang_across_r", "jump_wall"]
 	var tr := AnimationNodeTransition.new()
 	tr.xfade_time = 0.2
+	# Milestone 153: the cross-fades eased in and out (no linear swap of one pose for the next).
+	var ease := Curve.new()
+	ease.add_point(Vector2(0.0, 0.0), 0.0, 0.0)
+	ease.add_point(Vector2(1.0, 1.0), 0.0, 0.0)
+	tr.xfade_curve = ease
 	for i in states.size():
 		tr.add_input(states[i])
 		tr.set_input_reset(i, true)
@@ -1479,6 +1552,13 @@ func _anim_tree() -> AnimationNodeBlendTree:
 			var a := AnimationNodeAnimation.new()
 			a.animation = n
 			bt.add_node(n, a, Vector2(0, 600 + 100 * i))
-		bt.connect_node(&"state", i, n)
+		if n.begins_with("hang_leap_") or n.begins_with("hang_reach_") or n.begins_with("hang_across_"):
+			# Milestone 153: a move's clip played over the move's time (a leap's depends on its kind and its wind-up).
+			var ts := AnimationNodeTimeScale.new()
+			bt.add_node(&"ts_" + n, ts, Vector2(200, 600 + 100 * i))
+			bt.connect_node(&"ts_" + n, 0, n)
+			bt.connect_node(&"state", i, &"ts_" + n)
+		else:
+			bt.connect_node(&"state", i, n)
 	bt.connect_node(&"output", 0, &"state")
 	return bt

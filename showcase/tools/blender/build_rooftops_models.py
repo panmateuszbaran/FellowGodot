@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bpy  # noqa: E402
 
-from ac_buildings import barrel, bollard, campanile, crate, drain, fountain, hay_cart, house, skyline, stall  # noqa: E402
+from ac_buildings import barrel, bollard, campanile, crate, drain, fountain, hay_cart, house, skyline, skyline_houses, stall  # noqa: E402
 from ac_common import export_glb, reset_scene  # noqa: E402
 
 # name: the function making it, its arguments.
@@ -62,6 +62,14 @@ def main():
 		if name == "Campanile":
 			info["top"] = res[2]
 		done(name, list(bpy.context.scene.objects), **info)
+	if not only or "SkylineHouses" in only:
+		# Milestone 153: the city's houses, prototypes placed many times (SkylineHouses.json: their places).
+		reset_scene()
+		objects, places = skyline_houses()
+		done("SkylineHouses", objects, count=len(places))
+		with open(os.path.join(out, "SkylineHouses.json"), "w") as f:
+			json.dump(places, f)
+		print(f"SkylineHouses: {len(places)} houses", flush=True)
 	for name, seed in (("StallA", 5), ("StallB", 6)):
 		if only and name not in only:
 			continue

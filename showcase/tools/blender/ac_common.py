@@ -32,6 +32,8 @@ MATERIALS = {
 	"cobble": (0.45, 0.42, 0.38, 0.9),
 	"water_stone": (0.62, 0.60, 0.55, 0.85),
 	"cloth": (0.6, 0.15, 0.12, 0.9),
+	# Milestone 153: the city's houses beyond the square (instances), their plaster tinted per instance.
+	"far_plaster": (0.82, 0.70, 0.55, 0.9),
 }
 
 

@@ -43,6 +43,15 @@ func _photo_materials() -> void:
 	while not stack.is_empty():
 		var n: Node = stack.pop_back()
 		stack.append_array(n.get_children())
+		var mmi := n as MultiMeshInstance3D
+		if mmi and mmi.multimesh and mmi.multimesh.mesh:
+			# Milestone 153: the city's houses (instances): their mesh's own materials swapped (it is theirs alone).
+			var mesh := mmi.multimesh.mesh
+			for i in mesh.get_surface_count():
+				var m := mesh.surface_get_material(i)
+				if m and swap.has(m.resource_path):
+					mesh.surface_set_material(i, swap[m.resource_path])
+			continue
 		var mi := n as MeshInstance3D
 		if mi == null or mi.mesh == null:
 			continue

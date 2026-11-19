@@ -14,8 +14,8 @@ extends CharacterBody3D
 enum Mode { GROUND, AIR, TRAVERSE, PERCH, DIVE, HAY, ROLL }
 
 const ONE_SHOTS := {"jump": 0.34, "land": 0.45, "roll": 0.8, "climb_jump": 0.5, "dive_start": 0.55, "hay_exit": 2.2,
-		"hang_reach_l": 0.75, "hang_reach_r": 0.75, "hang_leap_up": 0.45, "hang_leap_l": 0.5, "hang_leap_r": 0.5,
-		"hang_across_l": 0.8, "hang_across_r": 0.8}
+		"hang_reach_l": 0.75, "hang_reach_r": 0.75, "hang_leap_up": 0.6, "hang_leap_l": 0.65, "hang_leap_r": 0.65,
+		"hang_across_l": 0.8, "hang_across_r": 0.8, "jump_wall": 0.9}
 # FellowTraversal3D's Transfer values.
 const TRANSFER_JUMP_ALONG := 2
 const TRANSFER_JUMP_UP := 3
@@ -75,17 +75,25 @@ func _ready() -> void:
 
 
 ## A move from hold to hold: its clip (the hands and feet are put on the stone by the pose's IK over it).
-func _on_transfer(_ledge: Dictionary, how: int, _duration: float, lead: int) -> void:
+func _on_transfer(_ledge: Dictionary, how: int, duration: float, lead: int) -> void:
 	var side := "l" if lead == 0 else "r"
+	var clip := ""
 	match how:
 		TRANSFER_REACH_UP:
-			_play("hang_reach_" + side)
+			clip = "hang_reach_" + side
 		TRANSFER_REACH_SIDE:
-			_play("hang_across_" + side)
+			clip = "hang_across_" + side
 		TRANSFER_JUMP_UP:
-			_play("hang_leap_up")
+			clip = "hang_leap_up"
 		TRANSFER_JUMP_ALONG, TRANSFER_JUMP_DIAGONAL, TRANSFER_JUMP_CORNER, TRANSFER_JUMP_BACK:
-			_play("hang_leap_" + side)
+			clip = "hang_leap_" + side
+	if clip.is_empty():
+		return
+	# Milestone 153: the clip played over the move's time (its wind-up included).
+	var length: float = ONE_SHOTS[clip]
+	tree.set("parameters/ts_%s/scale" % clip, length / maxf(duration, 0.05))
+	_play(clip)
+	_one_shot = duration
 
 
 static func _ensure_actions() -> void:
@@ -195,7 +203,8 @@ func _move(delta: float, speed_goal: float) -> void:
 		velocity.y = jump_velocity
 		mode = Mode.AIR
 		_air_top = global_position.y
-		_play("jump")
+		# Milestone 153: at a wall, the arms reaching up for the hold.
+		_play("jump_wall" if want_sprint and _wall_ahead(1.1) else "jump")
 	if want_drop and on_floor and h.length() > 2.0 and mode == Mode.GROUND:
 		mode = Mode.ROLL
 		_play("roll")
@@ -220,7 +229,7 @@ func _move(delta: float, speed_goal: float) -> void:
 					_play("land")
 				elif _one_shot <= 0.0:
 					_set_state("loco")
-			elif _one_shot <= 0.0 and (velocity.y < 1.0 or state != "jump"):
+			elif _one_shot <= 0.0 and (velocity.y < 1.0 or state != "jump") and not (state == "jump_wall" and velocity.y > -3.0):
 				_set_state("fall")
 		Mode.ROLL:
 			if _one_shot <= 0.0:
