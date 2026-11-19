@@ -9,6 +9,22 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 152 — climbing across, on narrow holds, over eaves and parapets onto the roofs; the RTX's rare failure narrowed (2026-11-19)
+
+- Decision 0284: the hot workers' gate forced (`debug/gate_open_every`: one frame in N, 1 always open, -1 always
+  closed) and its last 64 frames in a late fence's report. The nine failures of decision 0270 read again: each failing
+  frame had the gate closed — its transparent pass replayed whole into the primary command buffer, not into secondary
+  ones as decision 0283 had read it. `f516` (the gate held open): no failure in 30 runs.
+- Decisions 0285-0289, climbing from hold to hold (`FellowTraversal3D`, opt-in): across a gap to a ledge to the side, or
+  up and to the side, hand over hand (`hang_reach_side`, `TRANSFER_REACH_SIDE`); narrow holds held with the hands
+  together (`hold_min_width`, `spread`); a hold under an eave caught and the eave's lip reached, near or far out, and over
+  it onto the roof (the mantle's room on a sloping top had been wrong over 23°); a hold up and beside the hands reached
+  across; holds close over each other found; a hold needs room for the hands; over a parapet from a hang onto the
+  terrace behind it. `climb_check.gd`: 36 lanes (seven new), the 29 of milestone 151 value for value on GodotPhysics3D
+  and Jolt; `--only` and `--times` for picture strips.
+- The rooftops showcase: the pediments' bases and the eaves' fascia in the houses' collision (models and scene
+  rebuilt); CasaCrema climbed from the street to its roof in 5 s; the player reaches across 0.8 m.
+
 ## Milestone 151 — climbing from hold to hold; the rooftops' people, photographs and ring of houses (2026-11-19)
 
 - Decision 0282: climbing from hold to hold, as in Assassin's Creed (opt-in: `FellowTraversal3D.hang_reach_up`,

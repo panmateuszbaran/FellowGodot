@@ -579,6 +579,16 @@ func _build() -> void:
 			[1.6, {"intent": Vector3(0, 1, 0)}], [7.4, {"intent": Vector3()}]])
 	(lst.traversal as FellowTraversal3D).hang_reach_up = 1.25
 	(lst.traversal as FellowTraversal3D).hang_brace_height = 0.65
+	# Milestone 152 (decision 0289): over a terrace's parapet (0.3 m thick, 0.9 m over the terrace at 3.2 m) from a hang: a
+	# corbel at 3.0 m caught, up to the parapet's top, over it onto the terrace.
+	_box(Vector3(184, -0.5, 10.0), Vector3(11.0, 1.0, 10.0), Color(0.36, 0.42, 0.34))
+	_box(Vector3(181, 1.6, 8.0), Vector3(4.0, 3.2, 4.0), Color(0.62, 0.55, 0.48))
+	_box(Vector3(181, 3.65, 9.85), Vector3(4.0, 0.9, 0.3), Color(0.62, 0.55, 0.48))
+	_box(Vector3(181, 3.0 - 0.075, 10.11), Vector3(0.8, 0.15, 0.22), Color(0.72, 0.7, 0.66))
+	var lpa := _lane("parapet", Vector3(181, 0, 12), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}],
+			[1.6, {"intent": Vector3(0, 1, 0)}], [7.4, {"intent": Vector3()}]])
+	(lpa.traversal as FellowTraversal3D).hang_reach_up = 1.25
+	(lpa.traversal as FellowTraversal3D).hang_brace_height = 0.65
 	# None: free_climb off; the wall outside climb_mask; an overhang of 30 degrees.
 	_box(Vector3(40, 2.25, 9.0), Vector3(3.0, 4.5, 2.0), Color(0.6, 0.6, 0.66))
 	_lane("climb_off", Vector3(40, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [4.0, {"intent": Vector3()}]])
@@ -647,6 +657,8 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x + 3.5, 4.0, 14.5), Vector3(x, 3.4, 10.0))
 			"beside_reach":
 				cam.look_at_from_position(Vector3(x - 0.3, 4.0, 14.0), Vector3(x - 0.3, 3.8, 10.0))
+			"parapet":
+				cam.look_at_from_position(Vector3(x + 3.5, 5.5, 14.0), Vector3(x, 3.4, 9.5))
 			_:
 				cam.look_at_from_position(Vector3(x + 2.5, 2.4, 3.2), Vector3(x - 0.4, 1.6, -1.8))
 		if grid:
@@ -916,6 +928,9 @@ func _finish() -> void:
 			"stacked_holds":
 				# Milestone 152: up the base under the course, the course, the top (5.6 m), hand over hand.
 				ok = ok and names.has("hang_started:3.0") and names.count("hang_transferred:reach") == 3 and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 5.6) < 0.05
+			"parapet":
+				# Milestone 152: up to the parapet's top, over it: standing on the terrace (3.2 m) behind it.
+				ok = ok and names.has("hang_started:3.0") and names.count("hang_transferred:reach") == 1 and names.has("mantle_finished:high") and absf(feet.y - 3.2) < 0.05 and feet.z < 9.6
 			"climb_off", "climb_masked", "climb_overhang":
 				# Not climbed: standing at the wall's foot.
 				ok = ok and not names.has("climb_started") and feet.y < 0.05

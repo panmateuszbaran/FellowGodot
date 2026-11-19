@@ -91,6 +91,7 @@ public:
 		float face_lean = 0.0f; // milestone 148: metres the face under the edge goes back from the body per metre up (a slab)
 		float out = 0.0f; // milestone 151: metres the body hangs further out from the edge (past holds below that stand out more)
 		float spread = 0.24f; // milestone 152: each hand this far from the edge's point, along it (closer on a narrow hold)
+		float drop = 0.0f; // milestone 152 (decision 0289): over a parapet, the floor beyond it this far under its top
 		ObjectID collider;
 	};
 
@@ -302,6 +303,7 @@ private:
 	float _edge_end(float p_sign) const;
 	bool _fit_reach(Ledge &r_to, const Vector3 &p_from_feet, const Vector3 &p_bias, const HashSet<RID> &p_exclude, Vector3 &r_control) const;
 	bool _fit_hold(Ledge &r_ledge) const;
+	Vector3 _path_mantle(double p_t, const Vector3 &p_edge, const Vector3 &p_inward, const Vector3 &p_target) const;
 	bool _hands_room(const Ledge &p_ledge, float p_height) const;
 	bool _find_corner(float p_sign, Ledge &r_ledge, Vector3 &r_control, int &r_how) const;
 	bool _find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector3 &r_control, int &r_how) const;

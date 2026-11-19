@@ -67,6 +67,8 @@ const float CLIMB_IN_RATE = 0.8f; // m/s: back in towards it
 const double REACH_UP_DURATION = 0.75;
 // Milestone 152 (decision 0285): a reach across to a ledge to the side within hang_reach_side (s).
 const double REACH_SIDE_DURATION = 0.8;
+// Milestone 152 (decision 0289): over a parapet from a hang, the share of the move that is the mantle onto its top.
+const float OVER_SPLIT = 0.74f;
 
 Vector3 flat(const Vector3 &p_v) {
 	return Vector3(p_v.x, 0.0f, p_v.z);
@@ -434,7 +436,39 @@ FellowTraversal3D::Ledge FellowTraversal3D::_check_ledge(const Vector3 &p_direct
 	const Vector3 over = edge + inward * (radius * 0.5f);
 	// (Over the edge on a sloping top: as high as the top is there, the round end clear of the slope.)
 	const float over_y = top.y - (rr.normal.x * (over.x - top.x) + rr.normal.z * (over.z - top.z)) / rr.normal.y + cr * (1.0f / rr.normal.y - 1.0f);
-	const bool over_free = _capsule_free(Vector3(over.x, over_y + 0.03f, over.z), cr, ch, exclude);
+	bool over_free = _capsule_free(Vector3(over.x, over_y + 0.03f, over.z), cr, ch, exclude);
+	// Milestone 152 (decision 0289): from a hang, climbing from hold to hold (p_min_height given), over a parapet onto a
+	// floor beyond it lower than its top: its far face within 0.6 m, the floor 0.3-1.6 m under the top, room for the body
+	// standing there; over the parapet, room for the body bent going over (1.3 m: a roof over the terrace may come low).
+	if (!room && lift && p_in_air && p_min_height >= 0.0f && _capsule_free(Vector3(over.x, over_y + 0.03f, over.z), cr, 1.3f, exclude)) {
+		PhysicsDirectSpaceState3D::RayParameters oq;
+		oq.from = Vector3(edge.x, top.y - 0.06f, edge.z) + inward * 0.65f;
+		oq.to = Vector3(edge.x, top.y - 0.06f, edge.z);
+		oq.exclude = exclude;
+		oq.collision_mask = collision_mask;
+		PhysicsDirectSpaceState3D::RayResult orr;
+		if (space->intersect_ray(oq, orr) && flat(orr.normal).length() > 0.6f && flat(orr.normal).normalized().dot(inward) > 0.7f) {
+			const float depth = MAX(0.0f, (orr.position - edge).dot(inward));
+			Vector3 land = edge + inward * (depth + radius + 0.12f);
+			PhysicsDirectSpaceState3D::RayParameters dq;
+			dq.from = Vector3(land.x, top.y + 0.1f, land.z);
+			dq.to = Vector3(land.x, top.y - 1.7f, land.z);
+			dq.exclude = exclude;
+			dq.collision_mask = collision_mask;
+			dq.hit_from_inside = true;
+			PhysicsDirectSpaceState3D::RayResult dr;
+			if (space->intersect_ray(dq, dr) && dr.normal != Vector3() && dr.normal.y >= Math::cos(Math::deg_to_rad(max_ledge_slope)) && dr.position.y < top.y - 0.3f && dr.position.y > top.y - 1.6f) {
+				land.y = dr.position.y;
+				if (_capsule_free(land + UP * 0.03f, cr, ch, exclude)) {
+					room = true;
+					over_free = true;
+					top_feet = land;
+					l.drop = top.y - land.y;
+					l.depth = depth;
+				}
+			}
+		}
+	}
 	bool vault_ok = false;
 	if (thin) {
 		const Vector3 middle = edge + inward * (l.depth * 0.5f);
@@ -499,6 +533,9 @@ bool FellowTraversal3D::_start(const Ledge &p_ledge, float p_speed) {
 	if (clip.is_valid() && clip->get_length() > 0.05) {
 		duration = clip->get_length();
 	}
+	if (ledge.drop > 0.0f && action != KIND_VAULT) {
+		duration /= OVER_SPLIT; // decision 0289: the mantle, then over and down
+	}
 	_prepare_clip();
 	const Vector3 scale = start_xf.basis.get_scale();
 	if (align_to_wall) {
@@ -543,6 +580,25 @@ void FellowTraversal3D::_prepare_clip() {
 // above it), then onto the top; a vault keeps going over the obstacle and down beyond it. A clip with root motion gives
 // the path instead, its rise and its advance scaled onto the ledge.
 Vector3 FellowTraversal3D::_path(double p_t, const Vector3 &p_edge, const Vector3 &p_inward, const Vector3 &p_target) const {
+	if (ledge.drop <= 0.0f || action == KIND_VAULT) {
+		return _path_mantle(p_t, p_edge, p_inward, p_target);
+	}
+	// Milestone 152 (decision 0289): over a parapet — the mantle onto its top's middle, then on over its far side (past it
+	// by the body's radius) and down onto the floor, with a little hop.
+	const Vector3 on_top = Vector3(p_edge.x, p_edge.y, p_edge.z) + p_inward * (ledge.depth * 0.5f);
+	const float t = float(p_t);
+	if (t <= OVER_SPLIT) {
+		return _path_mantle(t / OVER_SPLIT, p_edge, p_inward, on_top);
+	}
+	const float u = (t - OVER_SPLIT) / (1.0f - OVER_SPLIT);
+	const float along = smooth(MIN(1.0f, u * 1.5f));
+	const float down = smooth(CLAMP((u - 0.35f) / 0.65f, 0.0f, 1.0f));
+	Vector3 p = on_top.lerp(p_target, along);
+	p.y = Math::lerp(on_top.y, p_target.y, down) + 0.1f * Math::sin(MIN(1.0f, u * 1.6f) * float(Math::PI));
+	return p;
+}
+
+Vector3 FellowTraversal3D::_path_mantle(double p_t, const Vector3 &p_edge, const Vector3 &p_inward, const Vector3 &p_target) const {
 	const float t = float(p_t);
 	const Vector3 p0 = start_feet;
 	const float s0 = flat(p_edge - p0).dot(p_inward);
@@ -636,7 +692,10 @@ Vector3 FellowTraversal3D::_path(double p_t, const Vector3 &p_edge, const Vector
 // What the body's pose follows this frame: the hands on the edge, the feet on the wall's face or the top, the torso
 // tipped towards the wall (windows of the mantle's progress, per kind).
 void FellowTraversal3D::_update_hints(const Vector3 &p_feet, const Vector3 &p_edge, const Vector3 &p_inward) {
-	const float t = float(CLAMP(time / duration, 0.0, 1.0));
+	float t = float(CLAMP(time / duration, 0.0, 1.0));
+	if (ledge.drop > 0.0f && action != KIND_VAULT) {
+		t = MIN(1.0f, t / OVER_SPLIT); // decision 0289: the clip and the pose over the mantle's part
+	}
 	hints.active = active;
 	hints.kind = action;
 	hints.progress = t;
@@ -1565,7 +1624,9 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 		const Node3D *collider = ObjectDB::get_instance<Node3D>(ledge.collider);
 		collider_start = collider ? collider->get_global_transform() : Transform3D();
 		if (jump) {
-			push_armed = false;
+			// Milestone 152 (decision 0289): climbing from hold to hold, a push held through a leap up goes on climbing too
+			// (free-running up a front: over the top at its end).
+			push_armed = hang_reach_up > 0.0f && transfer.how == TRANSFER_JUMP_UP;
 		} else if (reach_up || reach_side) {
 			push_armed = true; // a push held through the reach goes on climbing (over the top, if it is the last ledge)
 		}

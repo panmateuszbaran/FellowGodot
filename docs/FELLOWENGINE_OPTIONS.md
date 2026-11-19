@@ -880,8 +880,10 @@ hands' 0.48 m, down to this wide — a beam's end, a brick — is held from its 
 eave is held where the hands have room and the eave's lip is reached up to, then mantled over onto the roof; a sloping
 top (to `max_ledge_slope`) is climbed onto in any mode. Holds beside and out (milestone 152, decision 0288): with
 `hang_reach_up`, a hold up and 0.3-0.9 m to the side is reached across, an eave's lip 0.3 m or more out is reached up to,
-holds close over each other are found, and a hold needs 0.12 m free over its edge. Bench `bench/climb_check.gd`
-(`hold_climb`, `side_reach`, `narrow_holds`, `eave_roof`, `eave_deep`, `beside_reach`, `stacked_holds`;
+holds close over each other are found, and a hold needs 0.12 m free over its edge. Over a parapet (milestone 152,
+decision 0289): with `hang_reach_up`, from a hang over a top 0.6 m thick at most onto a floor 0.3-1.6 m lower behind it.
+Bench `bench/climb_check.gd` (`hold_climb`, `side_reach`, `narrow_holds`, `eave_roof`, `eave_deep`, `beside_reach`,
+`stacked_holds`, `parapet`;
 `--only=<lanes> --times=<s,...>` for a picture strip of some lanes at given times).
 
 Faces (milestone 83, decision 0191): `FellowFaceAnimator` (a `Node`; nothing changes without it): `mesh_path` (the
