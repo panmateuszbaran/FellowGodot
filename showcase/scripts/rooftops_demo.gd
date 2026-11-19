@@ -177,6 +177,9 @@ func _start(i: int) -> void:
 		_player.facing = deg_to_rad(s["place"][1])
 		_player.rotation.y = _player.facing
 		_player.reset_physics_interpolation()
+		var lock := _player.get_node_or_null("Model/Mannequin/Skeleton3D/FootLock")
+		if lock:
+			lock.call("reset")
 		_player.mode = 0
 		_player.wish = Vector3()
 		_player.want_sprint = false
@@ -272,7 +275,9 @@ func _physics_process(delta: float) -> void:
 	elif not _path.is_empty():
 		var d: Vector3 = (_path[0] as Vector3) - _player.global_position
 		d.y = 0.0
-		if d.length() < 0.35:
+		# Milestone 155: within 0.2 m of a point before the next (0.35 m left the walk onto the beam 0.2 m off its line,
+		# where the edge guard (milestone 154) stopped it).
+		if d.length() < 0.2:
 			_path.pop_front()
 			if _path.is_empty():
 				_player.wish = Vector3()

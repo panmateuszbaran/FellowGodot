@@ -242,7 +242,7 @@ func _move(delta: float, speed_goal: float) -> void:
 				mode = Mode.GROUND
 				_set_state("loco")
 	var hs := Vector2(velocity.x, velocity.z).length() if on_floor else 0.0
-	_loco(hs)
+	_loco(hs, delta)
 
 
 func _traverse(_delta: float) -> void:
@@ -447,22 +447,31 @@ func _hay(_delta: float) -> void:
 
 # ------------------------------------------------------------------ the animation tree
 
-## Milestone 154: the gaits' cycle (s) at a speed (m/s): walk 1.08 s at 1.6, run 0.7 at 4.4, sprint 0.62 at 7.0; slower
-## than a walk, the walk's stride over a longer cycle (the feet still where they stand).
+## Milestone 154: the gaits' cycle (s) at a speed (m/s): walk 0.95 s at 1.6, jog 0.8 at 3.0 (milestone 155), run 0.7 at
+## 4.4, sprint 0.62 at 7.0 (mannequin_anims.py's GAITS); slower than a walk, the walk's stride over a longer cycle.
 static func _gait_cycle(v: float) -> float:
 	if v <= 1.6:
-		return 1.08 * 1.6 / maxf(v, 0.25)
+		return 0.95 * 1.6 / maxf(v, 0.25)
+	if v <= 3.0:
+		return lerpf(0.95, 0.8, (v - 1.6) / 1.4)
 	if v <= 4.4:
-		return lerpf(1.08, 0.7, (v - 1.6) / 2.8)
+		return lerpf(0.8, 0.7, (v - 3.0) / 1.4)
 	return lerpf(0.7, 0.62, clampf((v - 4.4) / 2.6, 0.0, 1.0))
 
 
 ## The locomotion's blend for a ground speed: the gait (walk, run, sprint) at the cycle's rate, idle blended in below
-## 0.6 m/s.
-func _loco(v: float) -> void:
-	tree.set("parameters/loco/gait/blend_position", clampf(v, 1.6, 7.0))
-	tree.set("parameters/loco/rate/scale", 1.0 / _gait_cycle(v))
-	tree.set("parameters/loco/move/blend_amount", clampf(v / 0.6, 0.0, 1.0))
+## 0.6 m/s. Milestone 155: both eased (0.08 s and 0.15 s; with no delta, set at once) — a stop from a sprint took the
+## pose to idle's within a tick (the joints 3.7 times their fastest in any gait).
+var _loco_v := 0.0
+var _loco_move := 0.0
+
+func _loco(v: float, delta: float = 0.0) -> void:
+	var moving := clampf(v / 0.6, 0.0, 1.0)
+	_loco_v = lerpf(_loco_v, v, 1.0 - exp(-delta / 0.08)) if delta > 0.0 else v
+	_loco_move = lerpf(_loco_move, moving, 1.0 - exp(-delta / 0.15)) if delta > 0.0 else moving
+	tree.set("parameters/loco/gait/blend_position", clampf(_loco_v, 1.6, 7.0))
+	tree.set("parameters/loco/rate/scale", 1.0 / _gait_cycle(_loco_v))
+	tree.set("parameters/loco/move/blend_amount", _loco_move)
 
 
 ## Milestone 154: the model (not the capsule) tipped about its feet: into a turn by the turn's rate times the speed
@@ -495,8 +504,14 @@ var _look_off := Vector3(0.0, -0.6, -4.0)
 var _look_weight := 0.0
 @onready var _look_target: Node3D = get_node_or_null("LookTarget")
 @onready var _head_look: SkeletonModifier3D = get_node_or_null("Model/Mannequin/Skeleton3D/HeadLook")
+## Milestone 155 (decision 0295): the feet held where they come down, on the ground (off it, and while the traversal
+## poses the body, nothing to hold); eased in and out over 0.1 s.
+@onready var _foot_lock: SkeletonModifier3D = get_node_or_null("Model/Mannequin/Skeleton3D/FootLock")
 
 func _process(delta: float) -> void:
+	if _foot_lock:
+		var down: bool = mode == Mode.GROUND and is_on_floor() and not traversal.is_active() and not traversal.is_hanging()
+		_foot_lock.influence = move_toward(_foot_lock.influence, 1.0 if down else 0.0, delta / 0.1)
 	if _look_target == null or _head_look == null:
 		return
 	var head := get_global_transform_interpolated().origin + Vector3.UP * 1.6

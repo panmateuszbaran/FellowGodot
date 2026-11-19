@@ -1304,8 +1304,8 @@ func _lamps(p_parent: Node3D) -> void:
 # ------------------------------------------------------------------ the character
 
 ## Clips that loop (glTF says nothing of it).
-const LOOPS := ["idle", "walk", "run", "sprint", "gait_walk", "gait_run", "gait_sprint", "fall", "hang_idle", "hang_shimmy",
-		"climb_idle", "climb_move", "dive", "perch", "sit", "talk"]
+const LOOPS := ["idle", "walk", "jog", "run", "sprint", "gait_walk", "gait_jog", "gait_run", "gait_sprint", "fall", "hang_idle",
+		"hang_shimmy", "climb_idle", "climb_move", "dive", "perch", "sit", "talk"]
 
 
 func _build_player() -> PackedScene:
@@ -1313,7 +1313,9 @@ func _build_player() -> PackedScene:
 	var doc := GLTFDocument.new()
 	var st := GLTFState.new()
 	doc.append_from_file(models_dir.path_join("Mannequin.glb"), st)
-	var src: Node = doc.generate_scene(st)
+	# Milestone 155: the clips at the rate they were made (mannequin_rig.py's FPS, 60): at 30 a foot landing or leaving the
+	# ground was drawn between keys a thirtieth of a second apart and slid by millimetres a frame.
+	var src: Node = doc.generate_scene(st, 60.0)
 	var skel: Skeleton3D = src.find_child("Skeleton3D", true, false)
 	var body_mi: MeshInstance3D = src.find_child("MannequinBody", true, false)
 	var ap_src: AnimationPlayer = src.find_child("AnimationPlayer", true, false)
@@ -1389,7 +1391,16 @@ func _build_player() -> PackedScene:
 	pose.set("limb_smoothing", 0.05)
 	# The hands on the stone (decision 0291): hanging, the body moved until the shoulders are within reach of the holds.
 	pose.set("hang_fit", true)
+	# Milestone 155 (decision 0295): no limb of the climbing's pose snaps straight.
+	pose.set("soft_ik", 0.97)
 	_add(skel, pose, "TraversalPose")
+	# Milestone 155 (decision 0295): the feet held where they come down while the gaits' blend, a turn, a start or a stop
+	# would slide them (the player script gives it its weight: on the ground).
+	var lock: Node = ClassDB.instantiate("FellowFootLock3D")
+	lock.set("influence", 0.0)
+	lock.set("contact_height", 0.012) # the clips' soles come down within a centimetre: grabbed any higher, a landing foot is held short
+	lock.set("blend_halflife", 0.1)
+	_add(skel, lock, "FootLock")
 	# Milestone 154: the head turned to where the body goes (the player script moves the target and sets the weight).
 	var look := LookAtModifier3D.new()
 	look.bone_name = "Head"
@@ -1548,7 +1559,7 @@ func _anim_tree() -> AnimationNodeBlendTree:
 	# the feet do not slide, the legs do not cross as one gait gives way to the next); idle blended in below a walk.
 	var loco := AnimationNodeBlendTree.new()
 	var gait := AnimationNodeBlendSpace1D.new()
-	for pt in [["gait_walk", 1.6], ["gait_run", 4.4], ["gait_sprint", 7.0]]:
+	for pt in [["gait_walk", 1.6], ["gait_jog", 3.0], ["gait_run", 4.4], ["gait_sprint", 7.0]]:
 		var a := AnimationNodeAnimation.new()
 		a.animation = pt[0]
 		gait.add_blend_point(a, pt[1], -1, pt[0])

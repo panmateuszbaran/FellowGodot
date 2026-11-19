@@ -50,75 +50,262 @@ def _rot_x(v, deg):
 	return (v[0], v[1] * c - v[2] * s, v[1] * s + v[2] * c)
 
 
-def foot_on_ground(contact, pitch_up):
-	"""The ankle over a contact on the ground (y forward of the hips), the foot turned toes-up by pitch_up (rolling on
-	its heel) or heel-up by -pitch_up (rolling on its ball)."""
+def foot_on_ground(contact, pitch_up, toe_out=0.0):
+	"""The ankle of a foot whose flat place on the ground has its ankle over contact (y forward of the hips negative),
+	turned out by toe_out degrees (about the up axis, as the rig turns it) and toes-up by pitch_up (rolling on its heel)
+	or heel-up by -pitch_up (rolling on the sole under its ball). Milestone 155: the pivots are the turned foot's own
+	(before, the heel's and the ball's were placed as if the foot were not turned: changing from one to the other moved
+	the foot 1.5 cm sideways), and the ball's is on the sole, not at the ball's joint 2.4 cm over it (the foot sank as its
+	heel began to rise)."""
 	cy, cx = contact
-	if pitch_up >= 0.0:
-		piv = (cx, cy + HEEL[1], 0.0)
-		off = _rot_x((0.0, -HEEL[1], -HEEL[2]), -pitch_up)
-	else:
-		piv = (cx, cy + BALL[1], 0.0)
-		off = _rot_x((0.0, -BALL[1], -BALL[2]), -pitch_up)
+	a = math.radians(toe_out)
+	c, s_ = math.cos(a), math.sin(a)
+
+	def turn(v):
+		return (v[0] * c - v[1] * s_, v[0] * s_ + v[1] * c, v[2])
+
+	local = (0.0, HEEL[1], -ANKLE) if pitch_up >= 0.0 else (0.0, BALL[1], -ANKLE)
+	at = turn(local)
+	piv = (cx + at[0], cy + at[1], 0.0)
+	off = turn(_rot_x((-local[0], -local[1], -local[2]), -pitch_up))
 	return (piv[0] + off[0], piv[1] + off[1], piv[2] + off[2])
 
 
+LEG = 0.43  # the thigh's and the shin's length (m)
+HIP_JOINT = (0.09, 0.94)  # the hip joints at rest: apart (half), height
+
+
+def _keys(keys, u):
+	"""A curve through (u, value) keys, eased between them."""
+	if u <= keys[0][0]:
+		return keys[0][1]
+	for (u0, v0), (u1, v1) in zip(keys, keys[1:]):
+		if u <= u1:
+			return v0 + (v1 - v0) * smooth((u - u0) / max(1e-6, u1 - u0))
+	return keys[-1][1]
+
+
 GAITS = {
-	# speed (m/s), cycle (s), stance share, foot lift (m), hips' height offset, bob (m), sway (m), pelvis yaw and roll
-	# (degrees), lean, arm swing, elbow (back, forward), arms' lowering, feet apart (half, m), heel kick (m)
-	"walk": dict(v=1.6, T=1.08, duty=0.6, lift=0.1, hip=-0.03, bob=0.022, sway=0.025, yaw=6.0, roll=4.0, lean=4.0,
-			swing=24.0, elbow=(12.0, 32.0), lower=79.0, width=0.09, kick=0.0, strike=14.0, toeoff=-38.0, run=False),
-	"run": dict(v=4.4, T=0.7, duty=0.36, lift=0.2, hip=-0.05, bob=0.045, sway=0.012, yaw=10.0, roll=5.0, lean=11.0,
-			swing=48.0, elbow=(78.0, 105.0), lower=74.0, width=0.06, kick=0.2, strike=4.0, toeoff=-48.0, run=True),
-	"sprint": dict(v=7.0, T=0.62, duty=0.31, lift=0.24, hip=-0.06, bob=0.05, sway=0.008, yaw=12.0, roll=5.0, lean=18.0,
-			swing=62.0, elbow=(72.0, 110.0), lower=74.0, width=0.05, kick=0.32, strike=0.0, toeoff=-55.0, run=True),
+	# speed (m/s), cycle (s), stance share, the stance's share ahead of the hips, foot lift (m), the hips' offset (added to
+	# the height the legs give), sway (m), pelvis yaw and roll (degrees), lean, arm swing, elbow (back, forward), arms'
+	# lowering, feet apart (half, m), heel kick (m), the heel's strike pitch; knee: the stance knee's flexion over the stance
+	# (0 the strike, 1 the toe-off); push: where in the stance the heel may begin to rise; heel_max: its rise at most
+	# (degrees, 60 by default); retract: the share of the ground's speed the foot has (backwards under the hips) as it
+	# leaves and reaches the ground (1 by default: none on the ground; running, less — the reach forward kept short).
+	# Milestone 155 (docs/showcase_animation_quality.md): the hips as high as the supporting legs reach at their knee's
+	# flexion, the heel raised as far as the knee's flexion needs — the knee is never left to the IK's reach (which
+	# locked it straight: the ankle had been asked to go 1.0 m from the hip on a 0.86 m leg).
+	"walk": dict(v=1.6, T=0.95, duty=0.58, front=0.46, push=0.5, lift=0.1, hip=0.0, sway=0.025, yaw=6.0, roll=4.0, lean=4.0,
+			swing=24.0, elbow=(12.0, 32.0), lower=79.0, width=0.09, kick=0.0, strike=16.0, run=False,
+			knee=[(0.0, 4.0), (0.2, 15.0), (0.5, 6.0), (0.75, 16.0), (1.0, 42.0)]),
+	# Milestone 155: a jog between the walk and the run, so that a blend of two gaits mixes strides of like stances (a
+	# walk's foot planted while a run's swings dragged the foot as the body sped up).
+	"jog": dict(v=3.0, T=0.8, duty=0.4, front=0.45, push=0.5, heel_max=65.0, retract=0.6, lift=0.2, hip=0.0, sway=0.018,
+			yaw=8.0, roll=4.5, lean=7.0, swing=36.0, elbow=(55.0, 85.0), lower=76.0, width=0.07, kick=0.1, strike=8.0, run=True,
+			knee=[(0.0, 18.0), (0.45, 38.0), (1.0, 20.0)]),
+	"run": dict(v=4.4, T=0.7, duty=0.32, front=0.45, push=0.5, heel_max=70.0, retract=0.45, lift=0.28, hip=0.0, sway=0.012, yaw=10.0, roll=5.0, lean=11.0,
+			swing=48.0, elbow=(78.0, 105.0), lower=74.0, width=0.06, kick=0.2, strike=4.0, run=True,
+			knee=[(0.0, 22.0), (0.45, 47.0), (1.0, 22.0)]),
+	"sprint": dict(v=7.0, T=0.62, duty=0.22, front=0.45, push=0.5, heel_max=70.0, retract=0.45, lift=0.33, hip=0.0, sway=0.008, yaw=12.0, roll=5.0, lean=18.0,
+			swing=62.0, elbow=(72.0, 110.0), lower=74.0, width=0.05, kick=0.16, strike=0.0, run=True,
+			knee=[(0.0, 26.0), (0.45, 48.0), (1.0, 24.0)]),
 }
+
+
+TOE_OUT = 5.0  # the gaits' feet turned out (degrees)
+
+
+def _foot(contact, pitch_up):
+	"""A gait's foot on the ground (foot_on_ground, turned out as the rig turns it: outwards on either side)."""
+	return foot_on_ground(contact, pitch_up, TOE_OUT if contact[1] >= 0.0 else -TOE_OUT)
+
+
+def _cy(G, u):
+	"""The stance foot's place (its ankle's, flat) at u, forward of the hips negative."""
+	stride = G["v"] * G["T"] * G["duty"]
+	return -stride * G["front"] + 0.02 + stride * u
+
+
+def _reach(k_deg):
+	return 2.0 * LEG * math.cos(math.radians(k_deg) * 0.5)
+
+
+def _hip(sx, sway, hz):
+	return (sx * HIP_JOINT[0] + sway, 0.0, HIP_JOINT[1] + hz)
+
+
+# The knee's least flexion for a target the soft IK reaches exactly (mannequin_rig.SOFT of the leg's reach): a stance
+# foot asked for less would be pulled off its place on the ground (it slides).
+K_SOFT = math.degrees(2.0 * math.acos(0.99))
+# A planted leg's least flexion in its push (the heel rising): K_SOFT and a margin for what the reach above leaves out
+# (the pelvis's turn and roll move the hip joints by 1-2 cm).
+K_PUSH = K_SOFT + 6.0
+
+
+def _height_for(x, ankle, k_deg, sway):
+	"""The hips' offset at which a leg reaching ankle has its knee flexed k_deg (at least K_SOFT)."""
+	d = _reach(max(k_deg, K_SOFT))
+	dx = ankle[0] - ((1.0 if x >= 0.0 else -1.0) * HIP_JOINT[0] + sway)
+	return ankle[2] + math.sqrt(max(0.0, d * d - dx * dx - ankle[1] * ankle[1])) - HIP_JOINT[1]
+
+
+def _strike(G, u):
+	return G["strike"] * (1.0 - smooth(u / 0.2)) if u < 0.2 else 0.0
+
+
+def _sway(G, phase_l):
+	w = 2.0 * math.pi * phase_l
+	return G["sway"] * math.cos(w - math.pi * G["duty"])
+
+
+def _hips_z(G, phase_l):
+	"""The hips' height offset over the cycle: as the supporting legs and the flight give it, no higher than every planted
+	foot can be reached (the heel raised as far as it may) — a foot asked for more would slide towards the hips."""
+	z = _hips_z_free(G, phase_l)
+	duty = G["duty"]
+	sway = _sway(G, phase_l)
+	for sx, ph in ((1.0, phase_l), (-1.0, (phase_l + 0.5) % 1.0)):
+		x = sx * G["width"]
+		if ph < duty:
+			u = ph / duty
+			pitch = _strike(G, u) if u <= G["push"] else -G.get("heel_max", 60.0)
+			z = min(z, _height_for(x, _foot((_cy(G, u), x), pitch), K_SOFT if u <= G["push"] else K_PUSH, sway) + G["hip"])
+		else:
+			# The foot about to strike reaches its place exactly (short of it, it would come down and then slide on to it).
+			s_ = (ph - duty) / (1.0 - duty)
+			if s_ > 0.6:
+				cap = _height_for(x, _foot((_cy(G, 0.0), x), _strike(G, 0.0)), K_SOFT, sway) + G["hip"]
+				z = min(z, cap + (1.0 - smooth((s_ - 0.6) / 0.4)) * 0.3)
+	return z
+
+
+def _hips_z_free(G, phase_l):
+	"""The hips' height offset over the cycle, from the supporting legs (and in the air, running, the flight's arc)."""
+	duty = G["duty"]
+	sway = _sway(G, phase_l)
+	legs = []
+	for sx, ph in ((1.0, phase_l), (-1.0, (phase_l + 0.5) % 1.0)):
+		legs.append((sx * G["width"], ph))
+	if not G["run"]:
+		# Walking: each foot holds the hips up through its stance (fading out as its heel rises) and the foot about to
+		# strike draws them down to where it will reach.
+		num = den = 0.0
+		for x, ph in legs:
+			if ph < duty:
+				u = ph / duty
+				w = 1.0 - smooth((u - 0.55) / 0.35)
+				if w > 0.0:
+					ankle = _foot((_cy(G, u), x), _strike(G, u))
+					num += w * _height_for(x, ankle, _keys(G["knee"], u), sway)
+					den += w
+			else:
+				s_ = (ph - duty) / (1.0 - duty)
+				w = smooth((s_ - 0.45) / 0.55)
+				if w > 0.0:
+					ankle = _foot((_cy(G, 0.0), x), _strike(G, 0.0))
+					num += w * _height_for(x, ankle, _keys(G["knee"], 0.0), sway)
+					den += w
+		return num / den + G["hip"]
+	# Running: the stance leg holds the hips at its knee's flexion until its heel rises; from there the body flies on an
+	# arc (the push off, the flight) to where the next foot's strike will take it.
+	push = G["push"]
+	for x, ph in legs:
+		if ph < duty * push:
+			u = ph / duty
+			ankle = _foot((_cy(G, u), x), _strike(G, u))
+			return _height_for(x, ankle, _keys(G["knee"], u), sway) + G["hip"]
+	T = G["T"]
+	# The leg that passed its push last, and the other's next strike.
+	best = None
+	for i, (x, ph) in enumerate(legs):
+		since = ((ph - duty * push) % 1.0) * T
+		if best is None or since < best[0]:
+			best = (since, i)
+	since, i = best
+	x0, _ = legs[i]
+	x1, ph1 = legs[1 - i]
+	until = ((1.0 - ph1) % 1.0) * T
+	total = since + until
+	u0 = push
+	z0 = _height_for(x0, _foot((_cy(G, u0), x0), _strike(G, u0)), _keys(G["knee"], u0), sway)
+	z1 = _height_for(x1, _foot((_cy(G, 0.0), x1), _strike(G, 0.0)), _keys(G["knee"], 0.0), sway)
+	return z0 + (z1 - z0) * since / max(1e-6, total) + 0.5 * 9.8 * since * (total - since) + G["hip"]
+
+
+def _push_pitch(G, x, u, hip):
+	"""The heel's rise (degrees) at which the stance knee is flexed as G's knee curve says at u (the foot on its ball)."""
+	d = _reach(max(_keys(G["knee"], u), K_PUSH))
+	cy = _cy(G, u)
+
+	def dist(p):
+		return math.dist(hip, _foot((cy, x), -p))
+
+	top = G.get("heel_max", 60.0)
+	if dist(0.0) <= d:
+		return 0.0
+	if dist(top) >= d:
+		return top
+	lo, hi = 0.0, top
+	for _ in range(30):
+		mid = 0.5 * (lo + hi)
+		if dist(mid) > d:
+			lo = mid
+		else:
+			hi = mid
+	return 0.5 * (lo + hi)
+
+
+def _stance_pose(G, x, u, phase_l):
+	"""The stance foot at u: its ankle and pitch (toes up positive)."""
+	if u <= G["push"]:
+		pitch = _strike(G, u)
+		return _foot((_cy(G, u), x), pitch), pitch
+	hip = _hip(1.0 if x >= 0.0 else -1.0, _sway(G, phase_l), _hips_z(G, phase_l) - G["hip"])
+	pitch = -_push_pitch(G, x, u, hip)
+	return _foot((_cy(G, u), x), pitch), pitch
 
 
 def gait_pose(name, t):
 	G = GAITS[name]
 	T = G["T"]
 	duty = G["duty"]
-	stride = G["v"] * T * duty  # the ground covered under one stance
 	p = stand()
 	phase_l = (t / T) % 1.0
-	feet = {}
-	for side, sx, ph in (("L", 1.0, phase_l), ("R", -1.0, (phase_l + 0.5) % 1.0)):
-		y_front = -stride * 0.55 + 0.02
-		y_back = stride * 0.45 + 0.02
-		x = sx * G["width"]
-		if ph < duty:
-			u = ph / duty
-			cy = y_front + (y_back - y_front) * u
-			if u < 0.2:
-				pitch = G["strike"] * (1.0 - smooth(u / 0.2))
-			elif u > 0.55:
-				pitch = G["toeoff"] * smooth((u - 0.55) / 0.45) * (0.75 if G["run"] else 1.0)
-			else:
-				pitch = 0.0
-			ankle = foot_on_ground((cy, x), pitch)
-			toes = -pitch if pitch < 0.0 else 0.0
-		else:
-			s = (ph - duty) / (1.0 - duty)
-			e = smoother(s)
-			cy = y_back + (y_front - y_back) * e
-			# The heel kicked up behind (running), then the knee drives forward.
-			cy += G["kick"] * 0.35 * math.sin(math.pi * min(1.0, s * 1.6)) * (1.0 - s)
-			lift = G["lift"] * math.sin(math.pi * s) ** 0.8 + G["kick"] * math.sin(math.pi * min(1.0, s * 1.4)) * (1.0 - s) ** 1.5
-			pitch = G["toeoff"] * (1.0 - smooth(s / 0.35)) * 0.8 + G["strike"] * smooth((s - 0.6) / 0.4)
-			ankle = (x, cy + 0.0, ANKLE + lift)
-			toes = 0.0
-		feet[side] = (ankle, pitch, toes)
-		p["leg_" + side] = {"ik": (ankle, (sx * 0.12, -1.0, 0.0))}
-		p["foot_" + side] = (pitch if ph >= duty or pitch > 0.0 else pitch, 5.0, 0.0)
-		p["toes_" + side] = toes
 	w = 2.0 * math.pi * phase_l
 	mid = 2.0 * math.pi * duty * 0.5
-	bob = G["bob"] * math.cos(2.0 * (w - mid)) * (-1.0 if G["run"] else 1.0)
-	sway = G["sway"] * math.cos(w - mid)
+	sway = _sway(G, phase_l)
+	hz = _hips_z(G, phase_l)
+	for side, sx, ph in (("L", 1.0, phase_l), ("R", -1.0, (phase_l + 0.5) % 1.0)):
+		x = sx * G["width"]
+		if ph < duty:
+			ankle, pitch = _stance_pose(G, x, ph / duty, phase_l)
+			toes = -pitch if pitch < 0.0 else 0.0
+		else:
+			s_ = (ph - duty) / (1.0 - duty)
+			e = smoother(s_)
+			# From where the toe-off left the ankle (the heel up) to where the strike will put it (milestone 155: before, the
+			# swing began with the heel back on the ground — the ankle jumped and the knee went straight).
+			off_phase = (phase_l - (ph - duty)) % 1.0
+			a0, p0 = _stance_pose(G, x, 1.0, off_phase)
+			a1 = _foot((_cy(G, 0.0), x), _strike(G, 0.0))
+			# Leaving and reaching the ground at the ground's speed (backwards at v under the hips; milestone 155: before,
+			# the foot came down still moving forwards with the body and slid on landing) — a Hermite curve.
+			m = G["v"] * (1.0 - duty) * T * G.get("retract", 1.0)
+			h00, h10, h01, h11 = 2 * s_**3 - 3 * s_**2 + 1, s_**3 - 2 * s_**2 + s_, -2 * s_**3 + 3 * s_**2, s_**3 - s_**2
+			cy = h00 * a0[1] + h10 * m + h01 * a1[1] + h11 * m
+			# The heel kicked up behind (running), then the knee drives forward.
+			cy += G["kick"] * 0.35 * math.sin(math.pi * min(1.0, s_ * 1.6)) * (1.0 - s_)
+			lift = G["lift"] * math.sin(math.pi * s_) ** 0.8 + G["kick"] * math.sin(math.pi * min(1.0, s_ * 1.4)) * (1.0 - s_) ** 1.5
+			# The foot kept pointing down while it lifts (turned flat at once, the ball dragged forwards on the ground).
+			pitch = p0 * (1.0 - smooth((s_ - 0.12) / 0.4)) + _strike(G, 0.0) * smooth((s_ - 0.6) / 0.4)
+			ankle = (x, cy, a0[2] + (a1[2] - a0[2]) * e + lift)
+			toes = 0.0
+		p["leg_" + side] = {"ik": (ankle, (sx * 0.12, -1.0, 0.0))}
+		p["foot_" + side] = (pitch, TOE_OUT, 0.0)
+		p["toes_" + side] = toes
 	yaw = -G["yaw"] * math.cos(w)
 	roll = -G["roll"] * math.cos(w - mid)
-	p["hips"] = (sway, 0.0, G["hip"] + bob)
+	p["hips"] = (sway, 0.0, hz)
 	p["hips_rot"] = (G["lean"] * 0.35, yaw, roll)
 	twist = -yaw * 1.5
 	p["spine"] = (G["lean"] * 0.65 + (2.0 if G["run"] else 0.0) * math.cos(2.0 * w), twist, -roll * 0.6)
@@ -782,7 +969,7 @@ def clip_talk():
 
 def clips():
 	out = {}
-	for name in ("walk", "run", "sprint"):
+	for name in ("walk", "jog", "run", "sprint"):
 		G = GAITS[name]
 		out[name] = (G["T"], True, (lambda n: (lambda t: gait_pose(n, t)))(name))
 		# Milestone 154: the same cycle in 1 s (the left foot down at 0, the right at 0.5 for every gait), so that a blend of

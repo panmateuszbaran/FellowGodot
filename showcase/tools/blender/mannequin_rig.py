@@ -11,7 +11,22 @@ import math
 import bpy
 from mathutils import Matrix, Quaternion, Vector
 
-FPS = 30
+FPS = 60
+
+
+# Soft IK (milestone 155, docs/showcase_animation_quality.md): past SOFT of its reach a chain's target is eased towards
+# FULL of it instead of being cut at the reach, so that a limb never snaps straight — a target at the reach bends the
+# knee about 11°, one far beyond it 9°; one within SOFT of it is reached exactly (the knee bent 16° or more).
+SOFT = 0.99
+FULL = 0.997
+
+
+def soft_reach(d, reach):
+	s = SOFT * reach
+	if d <= s:
+		return d
+	top = FULL * reach
+	return s + (top - s) * (1.0 - math.exp(-(d - s) / (top - s)))
 
 
 def Q(axis, deg):
@@ -97,7 +112,7 @@ class Rig:
 		T = Vector(target)
 		d_vec = T - S
 		d = d_vec.length
-		d = min(max(d, abs(L1 - L2) + 1e-4), (L1 + L2) * 0.9995)
+		d = max(soft_reach(d, L1 + L2), abs(L1 - L2) + 1e-4)
 		u = d_vec.normalized()
 		w = Vector(pole_dir) - u * Vector(pole_dir).dot(u)
 		if w.length < 1e-6:
