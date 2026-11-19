@@ -105,8 +105,13 @@ milestone 147's catch — both of the main queue's checkpoints before it, every 
 1920 × 1080, about 64 KB of commands, recorded on worker threads (`cpu/parallel_recording`). Forward+'s frame there:
 the opaque pass (command 65, 256 KB, recorded on worker threads), the sky (66), the screen and depth textures' copies
 (67, 68), then **the transparent pass** (69). Four catches, four times the transparent pass recorded in parallel, never
-the opaque pass recorded the same way. Next: `f512` (parallel recording off) and `f514` (the frame's parallel replay
-off), 40 runs each.
+the opaque pass recorded the same way.
+
+`m151_f512` — the same 40 runs with `cpu/parallel_recording` off (the lists still replayed in parallel, split by their
+draws): **no hang in 40** (as is: 3 in 40; at the rate since milestone 146, one in 20, 40 runs without one happen 13 %
+of the time). The frame 4.56 ms against 4.47 (the render thread records them alone), the GPU's 4.32 ms the same, p99
+7.1 against 6.3 ms. Next: `f514` (parallel recording on, the frame's parallel replay off: the recorded segments replayed
+into the main command buffer) — a hang there is the recorded commands', none the replay of recorded segments'.
 
 ## Decision
 

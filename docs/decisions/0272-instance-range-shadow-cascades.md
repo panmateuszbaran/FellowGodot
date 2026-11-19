@@ -1,6 +1,6 @@
 # 0272 — Instances beyond their range left out of the far shadow cascades
 
-Status: **KEEP** (on; GPU timing pending) · Branch `fellow/geometry` · Code: `servers/rendering/renderer_scene_cull.cpp`
+Status: **KEEP** (on; on the RTX the same frame time, milestone 151) · Branch `fellow/geometry` · Code: `servers/rendering/renderer_scene_cull.cpp`
 (the directional cascades' caster loop), `fellow_settings.{h,cpp}` (`shadows/instance_range_cascades`, the statistic
 `shadow_range_skips`) · Checks: `bench/terrain_check.gd` (new options `--shadow_distance`, `--foliage_kinds`,
 `--grass_range`), the image regression suite, on lavapipe.
@@ -33,12 +33,21 @@ on it). `shadows/instance_range_cascades` (on); FellowEngine's statistics count 
   kinds the check is not deterministic from run to run (the old build against itself: up to 66 levels on the trees'
   edges), and the new build against the old differs on the same edges (up to 159).
 * The image regression suite: 48 of 48 identical (none of its scenes has a cascade beyond an instance range).
-* The RTX (Frontier Lab, Slice Lab: the far cascades' time): pending (the GPU paused).
+* The RTX (job `m147_f511`, milestone 151; 1920 × 1080, on and off interleaved, 3 runs each, the heat soak):
+
+  | | frame, on / off | GPU, on / off | p99, on / off |
+  |---|---:|---:|---:|
+  | Frontier Lab (grass to 80 m, the sun's shadows to 400 m) | 3.661 / 3.651 ms | 3.222 / 3.200 ms | 5.01 / 4.97 ms |
+  | Slice Lab (grass to 90 m, shadows to 300 m) | 4.262 / 4.269 ms | 3.215 / 3.227 ms | 5.53 / 5.67 ms |
+
+  Each difference smaller than its runs' spread (0.02-0.06 ms): the far cascades are cached and drawn again rarely, and
+  the grass they no longer draw is a small part of them when they are.
 
 ## Decision
 
 KEEP, on: the shadow passes no longer draw instances the camera never draws, with nothing changed in what a cascade's
-receivers can see; the cache unaffected. Its saving on a GPU to be measured.
+receivers can see; the cache unaffected. On the RTX its saving is below what three runs can tell in either scene;
+it costs nothing, and a far cascade drawn again (the sun moving, an uncached cascade) has less to draw.
 
 ## Rejected / not done
 
