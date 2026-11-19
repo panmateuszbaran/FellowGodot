@@ -90,6 +90,7 @@ public:
 		bool open_below = false; // the body could go on under the ledge (the automatic mantle leaves it)
 		float face_lean = 0.0f; // milestone 148: metres the face under the edge goes back from the body per metre up (a slab)
 		float out = 0.0f; // milestone 151: metres the body hangs further out from the edge (past holds below that stand out more)
+		float spread = 0.24f; // milestone 152: each hand this far from the edge's point, along it (closer on a narrow hold)
 		ObjectID collider;
 	};
 
@@ -169,6 +170,7 @@ private:
 	float hang_reach_up = 0.0f; // m: a ledge up to this far above is climbed to hand over hand (0: jumped to)
 	float hang_brace_height = 0.0f; // m: the feet braced on the wall found under the ledge, this high over the body's feet (0: off)
 	float hang_reach_side = 0.0f; // milestone 152 (decision 0285), m: a gap to a ledge to the side up to this wide is crossed hand over hand (0: jumped)
+	float hold_min_width = 0.0f; // milestone 152 (decision 0286), m: a hold narrower than both hands' 0.48 m, down to this wide, is held with the hands closer (0: off)
 	// Milestone 84 (decision 0192): walking over an edge, hanging from it.
 	bool drop_to_hang = false;
 	float drop_max_speed = 2.0f; // m/s: faster, the body goes over
@@ -299,6 +301,7 @@ private:
 	void _end_hang(bool p_climbed);
 	float _edge_end(float p_sign) const;
 	bool _fit_reach(Ledge &r_to, const Vector3 &p_from_feet, const Vector3 &p_bias, const HashSet<RID> &p_exclude, Vector3 &r_control) const;
+	bool _fit_hold(Ledge &r_ledge) const;
 	bool _find_corner(float p_sign, Ledge &r_ledge, Vector3 &r_control, int &r_how) const;
 	bool _find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector3 &r_control, int &r_how) const;
 	bool _find_drop(const Vector3 &p_direction, Ledge &r_ledge, Vector3 &r_mid) const;
@@ -435,6 +438,8 @@ public:
 	float get_hang_brace_height() const { return hang_brace_height; }
 	void set_hang_reach_side(float p_gap) { hang_reach_side = CLAMP(p_gap, 0.0f, 1.5f); }
 	float get_hang_reach_side() const { return hang_reach_side; }
+	void set_hold_min_width(float p_width) { hold_min_width = CLAMP(p_width, 0.0f, 0.48f); }
+	float get_hold_min_width() const { return hold_min_width; }
 	void set_drop_to_hang(bool p_enabled) { drop_to_hang = p_enabled; }
 	bool is_drop_to_hang() const { return drop_to_hang; }
 	void set_drop_max_speed(float p_speed) { drop_max_speed = MAX(0.0f, p_speed); }

@@ -58,7 +58,7 @@
 			<return type="Dictionary" />
 			<param index="0" name="direction" type="Vector3" default="Vector3(0, 0, 0)" />
 			<description>
-				Looks for a ledge in [param direction] (by default the intent, else the body's velocity, else its -Z) without starting anything. The result: [code]kind[/code] (a [enum Kind]), [code]reason[/code] (why it is [constant KIND_BLOCKED], [constant KIND_TOO_HIGH] or [constant KIND_NONE]), [code]edge[/code] (the top's edge on the wall's face), [code]inward[/code] (horizontal, into the wall), [code]top_normal[/code], [code]height[/code] (the top over the feet), [code]target[/code] (where the feet go: on the top, or the vault's landing), [code]depth[/code] (a vaulted obstacle's), [code]open_below[/code] (the body could walk on under it) and [code]collider[/code].
+				Looks for a ledge in [param direction] (by default the intent, else the body's velocity, else its -Z) without starting anything. The result: [code]kind[/code] (a [enum Kind]), [code]reason[/code] (why it is [constant KIND_BLOCKED], [constant KIND_TOO_HIGH] or [constant KIND_NONE]), [code]edge[/code] (the top's edge on the wall's face), [code]inward[/code] (horizontal, into the wall), [code]top_normal[/code], [code]height[/code] (the top over the feet), [code]target[/code] (where the feet go: on the top, or the vault's landing), [code]depth[/code] (a vaulted obstacle's), [code]open_below[/code] (the body could walk on under it), [code]spread[/code] (milestone 152: hanging from it, each hand this far from [code]edge[/code] along it; 0.24 m, closer on a narrow hold, see [member hold_min_width]) and [code]collider[/code].
 			</description>
 		</method>
 		<method name="get_action" qualifiers="const">
@@ -293,6 +293,9 @@
 		</member>
 		<member name="high_duration" type="float" setter="set_high_duration" getter="get_high_duration" default="1.1">
 			A procedural [constant KIND_HIGH] mantle's time for a 1.8 m ledge (scaled with the square root of the height, 0.85 to 1.15 times).
+		</member>
+		<member name="hold_min_width" type="float" setter="set_hold_min_width" getter="get_hold_min_width" default="0.0">
+			A hold narrower than both hands' 0.48 m, down to this wide, is held — a brick, a beam's end, a corbel: hung from its middle with each hand 5 cm in from its ends ([code]spread[/code] in the ledge's dictionary), its ends looked for up to 0.3 m either way. It is caught from the air, reached and leapt to like any ledge (the reach up looks 0.16 m either side of the hands' middle too); the body does not shimmy along it. Where a hang starts, the hands must fit on what is held: a ledge narrower than this is not hung from. [code]0[/code]: off, every ledge reached or leapt to needs 0.48 m, and one caught from the air is held with the hands 0.48 m apart whatever its width (milestone 152, decision 0286).
 		</member>
 		<member name="ladder_reach" type="float" setter="set_ladder_reach" getter="get_ladder_reach" default="0.6">
 			How far in front of a ladder (past the capsule's radius) the body takes it.

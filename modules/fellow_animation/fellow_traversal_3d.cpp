@@ -891,6 +891,7 @@ bool FellowTraversal3D::_probe_edge(const Vector3 &p_edge, const Vector3 &p_inwa
 	r_ledge = ledge;
 	r_ledge.kind = KIND_HANG;
 	r_ledge.out = 0.0f;
+	r_ledge.spread = 0.24f;
 	r_ledge.edge = Vector3(fr.position.x, tr.position.y, fr.position.z);
 	r_ledge.inward = inward;
 	r_ledge.top_normal = tr.normal;
@@ -910,6 +911,43 @@ float FellowTraversal3D::_edge_end(float p_sign) const {
 		last = a;
 	}
 	return last;
+}
+
+// Milestone 152 (decision 0286): both hands on r_ledge — 0.24 m either side of where it was found (spread 0.24), or,
+// with hold_min_width, a narrower hold (down to hold_min_width wide; its ends looked for in 2 cm steps up to 0.3 m
+// each way) hung from its middle, each hand 5 cm in from an end. False where the hands do not fit.
+bool FellowTraversal3D::_fit_hold(Ledge &r_ledge) const {
+	Ledge probe;
+	if (_probe_edge(r_ledge.edge, r_ledge.inward, 0.24f, probe) && _probe_edge(r_ledge.edge, r_ledge.inward, -0.24f, probe)) {
+		r_ledge.spread = 0.24f;
+		return true;
+	}
+	if (hold_min_width <= 0.0f) {
+		return false;
+	}
+	float ends[2] = { 0.0f, 0.0f }; // to its left end, to its right end
+	for (int k = 0; k < 2; k++) {
+		for (float a = 0.02f; a <= 0.301f; a += 0.02f) {
+			if (!_probe_edge(r_ledge.edge, r_ledge.inward, k == 0 ? a : -a, probe)) {
+				break;
+			}
+			ends[k] = a;
+		}
+	}
+	const float width = ends[0] + ends[1] + 0.02f;
+	if (width < hold_min_width - 1e-3f) {
+		return false;
+	}
+	Ledge middle;
+	if (!_probe_edge(r_ledge.edge, r_ledge.inward, (ends[0] - ends[1]) * 0.5f, middle)) {
+		return false;
+	}
+	r_ledge.edge = middle.edge;
+	r_ledge.inward = middle.inward;
+	r_ledge.top_normal = middle.top_normal;
+	r_ledge.collider = middle.collider;
+	r_ledge.spread = CLAMP(width * 0.5f - 0.05f, 0.04f, 0.24f);
+	return true;
 }
 
 // Milestone 152 (decision 0285): room for a reach to r_to from p_from_feet — for the body hanging from it (out from it
@@ -1035,7 +1073,7 @@ bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector
 		if (!_probe_edge(Vector3(br.position.x, ledge.edge.y, br.position.z), -ledge.inward, 0.0f, l) || Math::abs(l.edge.y - ledge.edge.y) > 0.3f) {
 			return false;
 		}
-		if (!_probe_edge(l.edge, l.inward, 0.24f, hold) || !_probe_edge(l.edge, l.inward, -0.24f, hold)) {
+		if (!_fit_hold(l)) {
 			return false;
 		}
 		const Vector3 to_feet = _hang_feet_at(l.edge, l.inward);
@@ -1067,8 +1105,13 @@ bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector
 					continue;
 				}
 				const Vector3 level = ledge.edge + UP * dy;
+				const Ledge first = hold;
 				if (!_probe_edge(level, ledge.inward, s * (a + 0.3f), l) || !_probe_edge(level, ledge.inward, s * (a + 0.55f), hold) || Math::abs(l.edge.y - ledge.edge.y - dy) > 0.3f) {
-					break;
+					// Milestone 152 (decision 0286): a narrow hold there, hung from its middle.
+					l = first;
+					if (hold_min_width <= 0.0f || !_fit_hold(l)) {
+						break;
+					}
 				}
 				// Milestone 152 (decision 0285): up and to the side within reach (hang_reach_up, hang_reach_side), hand over hand.
 				if (v > 0.0f && hang_reach_side > 0.0f && hang_reach_up > 0.0f && dy <= hang_reach_up + 0.05f && a - end - 0.05f <= hang_reach_side + 1e-3f && _fit_reach(l, from_feet, -ledge.inward * 0.05f, exclude, r_control)) {
@@ -1096,11 +1139,16 @@ bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector
 		const float end = _edge_end(s);
 		const float a0 = end + 0.3f;
 		for (float a = a0; a <= a0 + hang_jump_distance; a += 0.1f) {
-			if (!_probe_edge(ledge.edge, ledge.inward, s * a, hold)) {
+			Ledge first;
+			if (!_probe_edge(ledge.edge, ledge.inward, s * a, first)) {
 				continue;
 			}
 			if (!_probe_edge(ledge.edge, ledge.inward, s * (a + 0.3f), l) || !_probe_edge(ledge.edge, ledge.inward, s * (a + 0.55f), hold)) {
-				break;
+				// Milestone 152 (decision 0286): a narrow hold there, hung from its middle.
+				l = first;
+				if (hold_min_width <= 0.0f || !_fit_hold(l)) {
+					break;
+				}
 			}
 			// Milestone 152 (decision 0285): a gap within hang_reach_side, the other ledge at about this one's height, is
 			// crossed hand over hand, the body swinging under the hands (out from the ledge where a hold below it is in the way).
@@ -1146,7 +1194,7 @@ bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector
 			if (!_probe_edge(ledge.edge - UP * h, ledge.inward, 0.0f, l) || l.edge.y > ledge.edge.y - 0.4f) {
 				continue;
 			}
-			if (!_probe_edge(l.edge, l.inward, 0.24f, hold) || !_probe_edge(l.edge, l.inward, -0.24f, hold)) {
+			if (!_fit_hold(l)) {
 				continue;
 			}
 			// Out to the lower ledge's face (and 0.15 m more) first, then down: clear of a ledge that stands out.
@@ -1164,10 +1212,15 @@ bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector
 		// wall; one further (to hang_jump_height) is jumped to.
 		const float top = MAX(hang_jump_height, hang_reach_up);
 		for (float h = 0.6f; h <= top + 1e-3f; h += 0.1f) {
-			if (!_probe_edge(ledge.edge + UP * h, ledge.inward, 0.0f, l) || l.edge.y < ledge.edge.y + 0.4f) {
+			bool found = _probe_edge(ledge.edge + UP * h, ledge.inward, 0.0f, l);
+			// Milestone 152 (decision 0286): a narrow hold above may be beside the middle of the hands.
+			for (int k = 0; !found && hold_min_width > 0.0f && k < 2; k++) {
+				found = _probe_edge(ledge.edge + UP * h, ledge.inward, k == 0 ? 0.16f : -0.16f, l);
+			}
+			if (!found || l.edge.y < ledge.edge.y + 0.4f) {
 				continue;
 			}
-			if (!_probe_edge(l.edge, l.inward, 0.24f, hold) || !_probe_edge(l.edge, l.inward, -0.24f, hold)) {
+			if (!_fit_hold(l)) {
 				continue;
 			}
 			const float dy = l.edge.y - ledge.edge.y;
@@ -1357,8 +1410,8 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 	hints.inward = inward;
 	hints.left = left;
 	const Vector3 to_hands[2] = {
-		transfer.to.edge + to_left * 0.24f + transfer.to.inward * 0.06f + UP * 0.02f,
-		transfer.to.edge - to_left * 0.24f + transfer.to.inward * 0.06f + UP * 0.02f,
+		transfer.to.edge + to_left * transfer.to.spread + transfer.to.inward * 0.06f + UP * 0.02f,
+		transfer.to.edge - to_left * transfer.to.spread + transfer.to.inward * 0.06f + UP * 0.02f,
 	};
 	const float hold = jump ? 1.0f - 0.85f * Math::sin(u * float(Math::PI)) : (transfer.how == TRANSFER_DROP ? smooth(MIN(1.0f, u * 2.0f)) : 1.0f);
 	const Vector3 face = feet + inward * (radius + 0.02f) + UP * (hang_brace_height > 0.0f ? hang_brace_height : 0.35f);
@@ -1397,7 +1450,7 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 		// the leading side's first, each off the wall as it steps.
 		const float brace = hang_brace_height > 0.0f ? hang_brace_height : 0.35f;
 		const float s = (transfer.to.edge - transfer.from_feet).dot(UP.cross(transfer.from_inward).normalized()) >= 0.0f ? 1.0f : -1.0f;
-		const Vector3 grab = to_hands[transfer.lead] - to_left * (s * 0.4f); // the near end, where the lead hand takes it first
+		const Vector3 grab = to_hands[transfer.lead] - to_left * (s * (transfer.to.spread + MIN(0.16f, transfer.to.spread))); // the near end, where the lead hand takes it first
 		for (int h = 0; h < 2; h++) {
 			if (h == transfer.lead) {
 				const float k = smooth(CLAMP(u / 0.4f, 0.0f, 1.0f));
@@ -1446,13 +1499,18 @@ bool FellowTraversal3D::_start_hang(const Ledge &p_ledge, bool p_step) {
 	if (!body || !hang || p_ledge.inward == Vector3()) {
 		return false;
 	}
-	const Vector3 feet = _hang_feet_of(p_ledge);
+	// Milestone 152 (decision 0286): with hold_min_width, both hands must fit on it (a narrow hold: hung from its middle).
+	Ledge hold = p_ledge;
+	if (hold_min_width > 0.0f && !_fit_hold(hold)) {
+		return false;
+	}
+	const Vector3 feet = _hang_feet_of(hold);
 	HashSet<RID> exclude;
 	exclude.insert(body->get_rid());
 	if (!_capsule_free(feet + UP * 0.02f, radius * 0.95f, height - 0.04f, exclude)) {
 		return false;
 	}
-	ledge = p_ledge;
+	ledge = hold;
 	ledge.kind = KIND_HANG;
 	action = KIND_HANG;
 	start_xf = body->get_global_transform();
@@ -1589,6 +1647,7 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 		// (Hanging out from the ledge, along it as far out.)
 		const bool found = _probe_edge(ledge.edge, ledge.inward, step + SIGN(step) * radius * 0.6f, ahead) && _probe_edge(ledge.edge, ledge.inward, step, next);
 		next.out = ledge.out;
+		next.spread = ledge.spread;
 		if (found && _capsule_free(_hang_feet_of(next) + UP * 0.02f, radius * 0.95f, height - 0.04f, exclude)) {
 			shimmy_phase += Math::abs(step);
 			if (next.collider != ledge.collider) {
@@ -1641,8 +1700,9 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 	const float stride = 0.3f;
 	const float swing = Math::sin(shimmy_phase / stride * Math::PI);
 	const float sgn = shimmy_velocity >= 0.0f ? 1.0f : -1.0f;
-	hints.hand[0] = ledge.edge + left * (0.24f + 0.08f * swing * sgn) + ledge.inward * 0.06f + UP * 0.02f;
-	hints.hand[1] = ledge.edge - left * (0.24f - 0.08f * swing * sgn) + ledge.inward * 0.06f + UP * 0.02f;
+	const float stretch = 0.08f * swing * sgn * (ledge.spread / 0.24f); // (on a narrow hold, the hands step less)
+	hints.hand[0] = ledge.edge + left * (ledge.spread + stretch) + ledge.inward * 0.06f + UP * 0.02f;
+	hints.hand[1] = ledge.edge - left * (ledge.spread - stretch) + ledge.inward * 0.06f + UP * 0.02f;
 	hints.hand_weight[0] = hints.hand_weight[1] = w;
 	const Vector3 face = ledge.edge - ledge.inward * 0.06f;
 	for (int s = 0; s < 2; s++) {
@@ -2440,6 +2500,7 @@ Dictionary FellowTraversal3D::_ledge_dict(const Ledge &p_ledge) {
 	d["target"] = p_ledge.target;
 	d["depth"] = p_ledge.depth;
 	d["open_below"] = p_ledge.open_below;
+	d["spread"] = p_ledge.spread; // milestone 152
 	d["collider"] = ObjectDB::get_instance(p_ledge.collider);
 	return d;
 }
@@ -2769,6 +2830,8 @@ void FellowTraversal3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_hang_brace_height"), &FellowTraversal3D::get_hang_brace_height);
 	ClassDB::bind_method(D_METHOD("set_hang_reach_side", "gap"), &FellowTraversal3D::set_hang_reach_side);
 	ClassDB::bind_method(D_METHOD("get_hang_reach_side"), &FellowTraversal3D::get_hang_reach_side);
+	ClassDB::bind_method(D_METHOD("set_hold_min_width", "width"), &FellowTraversal3D::set_hold_min_width);
+	ClassDB::bind_method(D_METHOD("get_hold_min_width"), &FellowTraversal3D::get_hold_min_width);
 	ClassDB::bind_method(D_METHOD("set_drop_to_hang", "enabled"), &FellowTraversal3D::set_drop_to_hang);
 	ClassDB::bind_method(D_METHOD("is_drop_to_hang"), &FellowTraversal3D::is_drop_to_hang);
 	ClassDB::bind_method(D_METHOD("set_drop_max_speed", "speed"), &FellowTraversal3D::set_drop_max_speed);
@@ -2836,6 +2899,7 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_reach_up", PROPERTY_HINT_RANGE, "0,2.5,0.01,suffix:m"), "set_hang_reach_up", "get_hang_reach_up");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_brace_height", PROPERTY_HINT_RANGE, "0,1.5,0.01,suffix:m"), "set_hang_brace_height", "get_hang_brace_height");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_reach_side", PROPERTY_HINT_RANGE, "0,1.5,0.01,suffix:m"), "set_hang_reach_side", "get_hang_reach_side");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hold_min_width", PROPERTY_HINT_RANGE, "0,0.48,0.01,suffix:m"), "set_hold_min_width", "get_hold_min_width");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "drop_to_hang"), "set_drop_to_hang", "is_drop_to_hang");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "drop_max_speed", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:m/s"), "set_drop_max_speed", "get_drop_max_speed");
 	ADD_GROUP("Ladders", "");

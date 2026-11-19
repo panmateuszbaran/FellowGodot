@@ -874,8 +874,10 @@ this far over the edge is climbed to hand over hand, 0.75 s, pushing up or at th
 `hang_transfer_started(ledge, how, duration, lead_hand)`; `TRANSFER_REACH_UP`. Across (milestone 152, decision 0285):
 `hang_reach_side` (0 m: a gap to a ledge to the side up to this wide is crossed hand over hand, 0.8 s, holding the wish
 along at the edge's end; with `hang_reach_up`, a ledge up and to the side too, pushing up and along);
-`TRANSFER_REACH_SIDE`. Bench `bench/climb_check.gd` (`hold_climb`, `side_reach`; `--only=<lanes> --times=<s,...>` for a
-picture strip of some lanes at given times).
+`TRANSFER_REACH_SIDE`. Narrow holds (milestone 152, decision 0286): `hold_min_width` (0 m: a hold narrower than both
+hands' 0.48 m, down to this wide — a beam's end, a brick — is held from its middle, each hand 5 cm in from an end;
+`spread` in the ledge's dictionary). Bench `bench/climb_check.gd` (`hold_climb`, `side_reach`, `narrow_holds`;
+`--only=<lanes> --times=<s,...>` for a picture strip of some lanes at given times).
 
 Faces (milestone 83, decision 0191): `FellowFaceAnimator` (a `Node`; nothing changes without it): `mesh_path` (the
 face's `MeshInstance3D`), `voice_path` (an `AudioStreamPlayer`, 2D or 3D), `voice_stream` and `voice_time` (−1: with a

@@ -276,17 +276,19 @@ func _lane(name: String, start: Vector3, program: Array) -> Dictionary:
 		"name": name, "x": start.x, "start": start, "body": body, "traversal": t, "skeleton": sk, "pose": pose,
 		"events": [], "penetration_frames": 0, "hang_frames": 0, "ladder_frames": 0, "edge_start": null, "edge_last": null,
 		"inward_start": null, "inward_last": null, "hand_error_max": 0.0, "foot_error_max": 0.0, "hand_samples": 0,
-		"foot_samples": 0, "wall_gap_max": 0.0, "climb_frames": 0, "climb_top": -1.0, "facing_start": null, "facing_last": null,
+		"foot_samples": 0, "wall_gap_max": 0.0, "spreads": [], "climb_frames": 0, "climb_top": -1.0, "facing_start": null, "facing_last": null,
 	}
 	t.mantle_started.connect(func(kind: int, _ledge: Dictionary) -> void:
 		lane.events.append(["mantle_started", KIND_NAMES[kind], snappedf(frame / 60.0, 0.01)]))
 	t.mantle_finished.connect(func(kind: int) -> void:
 		lane.events.append(["mantle_finished", KIND_NAMES[kind], snappedf(frame / 60.0, 0.01)]))
 	t.hang_started.connect(func(ledge: Dictionary) -> void:
-		lane.events.append(["hang_started", snappedf((ledge["edge"] as Vector3).y, 0.1), snappedf(frame / 60.0, 0.01)]))
+		lane.events.append(["hang_started", snappedf((ledge["edge"] as Vector3).y, 0.1), snappedf(frame / 60.0, 0.01)])
+		lane.spreads.append(snappedf(float(ledge.get("spread", 0.24)), 0.01)))
 	t.hang_finished.connect(func(climbed: bool) -> void:
 		lane.events.append(["hang_finished", climbed, snappedf(frame / 60.0, 0.01)]))
 	t.hang_transferred.connect(func(_ledge: Dictionary, how: int) -> void:
+		lane.spreads.append(snappedf(float(_ledge.get("spread", 0.24)), 0.01))
 		lane.events.append(["hang_transferred", ["outer", "inner", "along", "up", "drop", "down", "diagonal", "back", "corner", "reach", "reach_side"][how], snappedf(frame / 60.0, 0.01)]))
 	t.ladder_started.connect(func(_ladder: Node3D) -> void:
 		lane.events.append(["ladder_started", snappedf(frame / 60.0, 0.01)]))
@@ -519,6 +521,20 @@ func _build() -> void:
 	(ls.traversal as FellowTraversal3D).hang_reach_up = 1.25
 	(ls.traversal as FellowTraversal3D).hang_reach_side = 0.8
 	(ls.traversal as FellowTraversal3D).hang_brace_height = 0.65
+	# Milestone 152 (decision 0286): narrow holds (0.25 m wide, 0.2 m out: a beam's end) with hold_min_width 0.2. A 5.5 m
+	# wall (its own ground) with one at 3.4 m (caught), one at 4.4 m 0.1 m to its left (reached up), one 0.5 m past that
+	# one's end (reached across), then up to the wall's top (a wide ledge again) and over it.
+	_box(Vector3(138, -0.5, 10.0), Vector3(11.0, 1.0, 10.0), Color(0.36, 0.42, 0.34))
+	_box(Vector3(138, 2.75, 9.0), Vector3(8.0, 5.5, 2.0), Color(0.62, 0.55, 0.48))
+	for c in [[138.0, 3.4], [137.9, 4.4], [137.15, 4.4]]:
+		_box(Vector3(c[0], c[1] - 0.075, 10.1), Vector3(0.25, 0.15, 0.2), Color(0.72, 0.7, 0.66))
+	var ln := _lane("narrow_holds", Vector3(138, 0, 12), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}],
+			[1.6, {"intent": Vector3(0, 1, 0)}], [2.2, {"intent": Vector3(-1, 0, 0)}], [3.0, {"intent": Vector3(0, 1, 0)}],
+			[7.4, {"intent": Vector3()}]])
+	(ln.traversal as FellowTraversal3D).hang_reach_up = 1.25
+	(ln.traversal as FellowTraversal3D).hang_reach_side = 0.8
+	(ln.traversal as FellowTraversal3D).hang_brace_height = 0.65
+	(ln.traversal as FellowTraversal3D).hold_min_width = 0.2
 	# None: free_climb off; the wall outside climb_mask; an overhang of 30 degrees.
 	_box(Vector3(40, 2.25, 9.0), Vector3(3.0, 4.5, 2.0), Color(0.6, 0.6, 0.66))
 	_lane("climb_off", Vector3(40, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [4.0, {"intent": Vector3()}]])
@@ -581,6 +597,8 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x + 2.0, 4.6, 16.0), Vector3(x, 4.4, 10.0))
 			"side_reach":
 				cam.look_at_from_position(Vector3(x - 1.4, 4.2, 15.0), Vector3(x - 1.4, 3.6, 10.0))
+			"narrow_holds":
+				cam.look_at_from_position(Vector3(x - 0.5, 4.2, 14.0), Vector3(x - 0.5, 3.9, 10.0))
 			_:
 				cam.look_at_from_position(Vector3(x + 2.5, 2.4, 3.2), Vector3(x - 0.4, 1.6, -1.8))
 		if grid:
@@ -830,6 +848,14 @@ func _finish() -> void:
 			"side_reach":
 				# Milestone 152: across to the second corbel and up across to the third hand over hand, up to the top (5.4 m).
 				ok = ok and names.has("hang_started:3.4") and names.count("hang_transferred:reach_side") == 2 and names.count("hang_transferred:reach") == 1 and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 5.4) < 0.05
+			"narrow_holds":
+				# Milestone 152: caught by a narrow hold, up to the next and across to the third hand over hand, up to the top;
+				# the hands 0.17 m apart on the narrow holds (each 5 cm in from an end), 0.48 m on the top.
+				e["spreads"] = lane.spreads
+				var narrow: bool = lane.spreads.size() == 4 and lane.spreads[3] == 0.24
+				for k in mini(3, lane.spreads.size()):
+					narrow = narrow and lane.spreads[k] >= 0.06 and lane.spreads[k] <= 0.1
+				ok = ok and narrow and names.has("hang_started:3.4") and names.count("hang_transferred:reach") == 2 and names.count("hang_transferred:reach_side") == 1 and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 5.5) < 0.05
 			"climb_off", "climb_masked", "climb_overhang":
 				# Not climbed: standing at the wall's foot.
 				ok = ok and not names.has("climb_started") and feet.y < 0.05
