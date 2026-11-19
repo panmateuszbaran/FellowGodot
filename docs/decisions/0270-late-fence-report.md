@@ -120,6 +120,19 @@ transparent pass and each now a device loss (Windows' timeout reset the GPU; `VK
 rejected. The failure needs a list recorded in parallel replayed into secondary command buffers, however split. Next:
 `f516`, the hot workers' gate held open (the parallel replay in every frame, in Bistro otherwise rare).
 
+`m151_f516` (milestone 152) — the gate held open (`cpu/hot_workers_gate` off: the parallel replay, the submit thread
+and the hot workers in every frame; 33 000 lists replayed in secondary command buffers a run against about 600 in
+`f510`): **no failure in 30** (the frame 4.45 ms, the GPU 4.37, the render thread 1.26 ms against 1.43-1.47, p99 5.5 ms
+against 5.9-6.3). At the rate of `f510` and `f515` (7 in 100), 30 runs without one happen 11 % of the time.
+
+The nine failures' reports read again (decision 0284): in each the gate was **closed** in the frame that failed (every
+submission of its last eight frames the render thread's, not the submit thread's) and had last been open 289-2 409
+frames before. So the failing frame replayed its transparent pass whole into its primary command buffer, as every frame
+of `f514` — not into secondary command buffers, as the earlier jobs read it (decision 0283's premise). They came at a
+few places of the camera path. Left: the cold parallel recording at those places (`f514`'s 40 runs without a failure
+luck, 6 % at the rate), or something the frames with the gate open leave behind. Decision 0284 adds the gate's history
+to the report and `debug/gate_open_every` to force it; next, `f517`: the gate held closed against the gate as it is.
+
 ## Decision
 
 KEEP: the late fence report on by default (2 s; changes no frame), the record off by default (start-up), the fault

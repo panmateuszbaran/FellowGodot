@@ -9372,6 +9372,12 @@ void RenderingDevice::_fellow_late_fence_report(uint32_t p_frame, double p_secon
 		const uint64_t ticket = p_frame < FellowPresentThread::MAX_FRAME_SLOTS ? fellow_present->frame_tickets[p_frame] : 0;
 		print_error(vformat("  Present/submit thread %d: %d jobs handed over, %d issued, %d not issued; the slot's job %d.", fellow_present->thread.get_id(), fellow_present->committed, fellow_present->issued, fellow_present->count, ticket));
 	}
+	if (is_main_instance) {
+		// Decision 0284: the gate decides each frame whether its long lists are replayed in secondary command buffers,
+		// the submit thread submits it and the workers stay hot. The last frame shown is the one submitted last; the
+		// slot's frame is the frames.size()-th from the end.
+		print_error(vformat("  %s The slot's frame: number %d from the end.", Fellow::frame_gate_describe(), frames.size()));
+	}
 	if (transfer_worker_pool_mutex.try_lock()) {
 		for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
 			TransferWorker *worker = transfer_worker_pool[i];

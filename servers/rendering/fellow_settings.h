@@ -1341,6 +1341,8 @@ inline bool cpu_hot_workers_idle_priority() {
 // The main RenderingDevice reports, once per frame, how long the render thread waited for an earlier frame's fence and
 // the time since the previous report (gate of the hot workers).
 void frame_gpu_wait_report(uint64_t p_wait_usec, uint64_t p_frame_usec);
+// Decision 0284: the gate's last 64 frames, how often it opened, when last (render thread; a late fence's report).
+String frame_gate_describe();
 
 // Mix-blended materials (alpha pass, no depth or stencil writes, no alpha antialiasing): fragments whose final alpha is
 // exactly 0 are discarded before lighting — blending them leaves the colour target unchanged (src * 0 + dst * 1), so

@@ -3169,6 +3169,9 @@
 		<member name="rendering/fellow/debug/cluster_verify" type="int" setter="" getter="" default="0">
 			Diagnostics: the light cluster build checked against stock's (2: with a negative control).
 		</member>
+		<member name="rendering/fellow/debug/gate_open_every" type="int" setter="" getter="" default="0">
+			Diagnostics: the hot workers' gate ([member rendering/fellow/cpu/hot_workers_gate]) open in one frame of every this many and closed in the others, whatever the render thread waits for the GPU — its opening and closing at a steady rhythm (1: always open; -1: always closed). Which frames replay their long lists in secondary command buffers, are submitted by the submit thread and keep the workers hot changes; no image does. 0: off, the gate follows the GPU waits. A late fence's report ([member rendering/fellow/debug/late_fence_report_s]) shows the gate's last 64 frames either way. Decision 0284.
+		</member>
 		<member name="rendering/fellow/debug/gpu_checkpoints" type="bool" setter="" getter="" default="false">
 			Diagnostics (read at start-up; NVIDIA GPUs, VK_NV_device_diagnostic_checkpoints): a marker before each command of the frame the GPU records as it passes it — the command's type, a draw or compute list's pass, its index in the frame — and a late fence's report ([code]debug/late_fence_report_s[/code]) names the last one each queue's stages passed: where in the frame the GPU stopped, without the order the pass timestamps impose on the frame's commands. Changes no frame. Decision 0270.
 		</member>

@@ -334,6 +334,9 @@ void Fellow::register_settings() {
 	// (RENDER_GRAPH_FULL_BARRIERS) as diagnostics.
 	GLOBAL_DEF("rendering/fellow/debug/graph_reorder", true);
 	GLOBAL_DEF("rendering/fellow/debug/graph_full_barriers", false);
+	// Milestone 152 (decision 0284): the hot workers' gate open in one frame of every this many and closed in the others,
+	// whatever the GPU waits; -1: always closed (0: off, the gate follows the waits). Diagnostics.
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/gate_open_every", PROPERTY_HINT_RANGE, "-1,1024,1,suffix:frames"), 0);
 	GLOBAL_DEF("rendering/fellow/debug/hitch_sampler", false); // decision 0231: frame steps over the threshold sampled and reported at exit
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/debug/hitch_sampler_ms", PROPERTY_HINT_RANGE, "1,1000,0.1,suffix:ms"), 33.3);
 	FellowHitchSampler::register_debugger(); // decision 0238: the editor's debugger can start it
@@ -480,6 +483,12 @@ void Fellow::register_settings() {
 static double fellow_gate_wait_avg = 0.0;
 static double fellow_gate_frame_avg = 0.0;
 static std::atomic<bool> fellow_gate_open{ true };
+// Decision 0284 (render thread only): the gate's recent history for a late fence's report. Bit i of the history: the
+// gate open (or cpu/hot_workers_gate off) in the frame reported i frames ago.
+static uint64_t fellow_gate_frames = 0;
+static uint64_t fellow_gate_history = 0;
+static uint64_t fellow_gate_opens = 0;
+static uint64_t fellow_gate_last_open = 0; // frames reported when it was last open (0: never)
 
 // Milestone 113 (decision 0222): the streamed texture swap's flags (render thread).
 bool &Fellow::texture_stream_swap_active() {
@@ -545,9 +554,39 @@ void Fellow::frame_gpu_wait_report(uint64_t p_wait_usec, uint64_t p_frame_usec) 
 	} else if (!open && fellow_gate_wait_avg < 0.03 * fellow_gate_frame_avg) {
 		fellow_gate_open.store(true, std::memory_order_relaxed);
 	}
+	const int every = GLOBAL_GET_CACHED(int, "rendering/fellow/debug/gate_open_every");
+	if (every != 0) {
+		fellow_gate_open.store(every > 0 && fellow_gate_frames % uint64_t(every) == 0, std::memory_order_relaxed);
+	}
 	if (!fellow_gate_open.load(std::memory_order_relaxed)) {
 		stats().cpu_hot_gate_closed_frames.increment();
 	}
+	const bool effective = !GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/hot_workers_gate") || fellow_gate_open.load(std::memory_order_relaxed);
+	if (effective && (fellow_gate_frames == 0 || !(fellow_gate_history & 1))) {
+		fellow_gate_opens++;
+	}
+	fellow_gate_history = (fellow_gate_history << 1) | (effective ? 1 : 0);
+	fellow_gate_frames++;
+	if (effective) {
+		fellow_gate_last_open = fellow_gate_frames;
+	}
+}
+
+String Fellow::frame_gate_describe() {
+	// Oldest first: 'o' open, '.' closed; the last character is the frame begun last.
+	const uint32_t shown = uint32_t(MIN(fellow_gate_frames, uint64_t(64)));
+	String bits;
+	uint32_t open = 0;
+	for (int i = int(shown) - 1; i >= 0; i--) {
+		const bool o = (fellow_gate_history >> i) & 1;
+		open += o ? 1 : 0;
+		bits += o ? "o" : ".";
+	}
+	const int every = GLOBAL_GET_CACHED(int, "rendering/fellow/debug/gate_open_every");
+	return vformat("Hot workers' gate (cpu/hot_workers_gate %s%s): open in %d of the last %d frames, oldest first [%s]; opened %d times in %d frames; %s.",
+			GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/hot_workers_gate") ? "on" : "off", every != 0 ? vformat(", debug/gate_open_every %d", every) : String(),
+			open, shown, bits, fellow_gate_opens, fellow_gate_frames,
+			fellow_gate_last_open == 0 ? String("never open") : (fellow_gate_last_open == fellow_gate_frames ? String("open now") : vformat("last open %d frames ago", fellow_gate_frames - fellow_gate_last_open)));
 }
 
 uint64_t Fellow::shadow_atlas_tick_msec() {

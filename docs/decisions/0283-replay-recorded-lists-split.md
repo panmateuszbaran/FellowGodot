@@ -68,6 +68,9 @@ REJECTED: the default goes back to the replay in recorded segments (on). The set
 (`f516`): the parallel replay runs only while the hot workers' gate is open, and in GPU-bound Bistro that state is rare.
 The gate held open will tell whether every such frame can fail or only the opening and closing of the gate.
 
+Later (decision 0284): the failing frames had the gate closed — their lists replayed whole into the primary command
+buffer, not in secondary command buffers. How a list is split for the parallel replay could not matter to them.
+
 ## Rejected / not done
 
 * **Parallel replay off** (`f514`: the same frame, the render thread 0.04 ms shorter in Bistro). It is measured faster
