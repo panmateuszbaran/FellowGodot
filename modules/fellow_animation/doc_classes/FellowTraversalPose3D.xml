@@ -52,6 +52,9 @@
 		<member name="bone_names" type="Dictionary" setter="set_bone_names" getter="get_bone_names" default="{}">
 			Bones named for roles, over the names found by themselves: a role's name ([code]"hips"[/code], [code]"spine"[/code], [code]"chest"[/code], [code]"left_upper_arm"[/code], [code]"left_lower_arm"[/code], [code]"left_hand"[/code], [code]"right_upper_arm"[/code], …, [code]"left_upper_leg"[/code], [code]"left_lower_leg"[/code], [code]"left_foot"[/code], [code]"right_upper_leg"[/code], …) to the bone's name.
 		</member>
+		<member name="clip_blend" type="float" setter="set_clip_blend" getter="get_clip_blend" default="0.0">
+			Seconds over which a clip the traversal plays (a mantle) fades in from the pose this node gave the frame before — the hands and feet on the holds by IK, hanging braced — instead of taking over at once (eased). [code]0[/code]: at once (the braced legs had snapped to the clip's first pose, 74 degrees in a frame). See [code]docs/decisions/0296-the-reference-mannequin.md[/code].
+		</member>
 		<member name="foot_ik" type="bool" setter="set_foot_ik" getter="is_foot_ik" default="true">
 			The feet placed on the wall's face and the top.
 		</member>
@@ -66,6 +69,12 @@
 		</member>
 		<member name="limb_smoothing" type="float" setter="set_limb_smoothing" getter="get_limb_smoothing" default="0.0">
 			The time constant, in seconds, with which the hands' and feet's targets and weights follow the traversal's (no jump where they change: a move's end, a hang's start). [code]0[/code]: off, the targets as given (milestone 153, decision 0290).
+		</member>
+		<member name="max_joint_speed" type="float" setter="set_max_joint_speed" getter="get_max_joint_speed" default="0.0">
+			While this node poses the body: no bone turned faster than this (degrees a second) from the pose this node gave the frame before — where the traversal's hints, a clip's start or an IK solution would turn a joint over in a frame, the turn is spread over the frames it needs. [code]0[/code]: off. See [code]docs/decisions/0296-the-reference-mannequin.md[/code].
+		</member>
+		<member name="pole_follow" type="float" setter="set_pole_follow" getter="get_pole_follow" default="0.0">
+			How strongly a limb's bend (the elbow's, the knee's way out) follows the clip's own bend against the way this node points it (out to the side, down, back for an elbow; to the wall for a knee): the two directions, across the limb, added with this weight on the clip's. Where the target passes the pole's line the pole's direction across the limb turns over in a frame; the clip's does not. [code]0[/code]: the pole's alone. See [code]docs/decisions/0296-the-reference-mannequin.md[/code].
 		</member>
 		<member name="soft_ik" type="float" setter="set_soft_ik" getter="get_soft_ik" default="0.0">
 			Past this share of a limb's reach (0.8 to 0.999), its target is eased towards the reach instead of being cut at it: no arm or leg of the pose snaps straight, and one stretched for a target beyond its reach keeps a little bend (milestone 155, decision 0295: a mantle's legs had been straight a quarter of the time). [code]0[/code]: off (the targets reached up to full extension).

@@ -298,6 +298,14 @@ void FellowTraversalPose3D::_two_bone(Skeleton3D *p_skeleton, int p_upper, int p
 	const float sin_a = Math::sqrt(MAX(0.0f, 1.0f - cos_a * cos_a));
 	Vector3 bend = p_pole - s;
 	bend -= dir * bend.dot(dir);
+	if (pole_follow > 0.0f) {
+		// Milestone 156 (decision 0296): the bend also follows the joint's own (the clip's): where the target passes the
+		// pole's line its projection turns over, and the joint with it (an elbow 150 degrees in four frames, hanging).
+		Vector3 own = (e - s) - dir * (e - s).dot(dir);
+		const float bl = bend.length();
+		const float ol = own.length();
+		bend = (bl > 1e-5f ? bend / bl : Vector3()) + (ol > 1e-5f ? own / ol * pole_follow : Vector3());
+	}
 	if (bend.length() < 1e-4f) {
 		bend = (e - s) - dir * (e - s).dot(dir);
 	}
@@ -325,6 +333,16 @@ void FellowTraversalPose3D::_two_bone(Skeleton3D *p_skeleton, int p_upper, int p
 void FellowTraversalPose3D::_process_modification(double p_delta) {
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	_pose(p_delta);
+	Skeleton3D *skeleton = get_skeleton();
+	if (skeleton && weight > 0.0f && max_joint_speed > 0.0f) {
+		_limit_speed(skeleton, p_delta);
+	} else {
+		speed_valid = false;
+	}
+	// Milestone 156 (decision 0296): the pose a clip fades in from — this node's last before the clip began.
+	if (skeleton && weight > 0.0f && clip_blend > 0.0f && !clip_on) {
+		_snapshot(skeleton);
+	}
 	if (weight > 0.0f) {
 		FellowTraversal3D::global_stats.poses.increment();
 		FellowTraversal3D::global_stats.pose_usec.add(OS::get_singleton()->get_ticks_usec() - t0);
@@ -402,12 +420,18 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 		last.clip.unref();
 		limbs_valid = false;
 		fit = Vector3();
+		clip_on = false;
+		snap_valid = false;
 		return;
 	}
 	_find_bones(skeleton);
 	const FellowTraversal3D::PoseHints &h = last;
 	if (h.clip.is_valid()) {
 		limbs_valid = false;
+		if (!clip_on) {
+			clip_on = true;
+			clip_fade = (clip_blend > 0.0f && snap_valid && int(snap_rot.size()) == skeleton->get_bone_count()) ? 0.0f : 1.0f;
+		}
 		_apply_clip(skeleton, h, weight);
 		// Milestone 153: a clip from a hang (climbing up onto the ledge) starts where the fitted body was, the fit eased out.
 		if (fit != Vector3()) {
@@ -420,8 +444,19 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 				skeleton->set_bone_pose_position(hips_bone, parent >= 0 ? skeleton->get_bone_global_pose(parent).affine_inverse().xform(moved) : moved);
 			}
 		}
+		// Milestone 156 (decision 0296): faded in from the limbs' last pose.
+		if (clip_fade < 1.0f) {
+			clip_fade = MIN(1.0f, clip_fade + float(p_delta) / clip_blend);
+			const float e = clip_fade * clip_fade * (3.0f - 2.0f * clip_fade);
+			for (int b = 0; b < int(snap_rot.size()); b++) {
+				skeleton->set_bone_pose_rotation(b, snap_rot[b].slerp(skeleton->get_bone_pose_rotation(b), e).normalized());
+				skeleton->set_bone_pose_position(b, snap_pos[b].lerp(skeleton->get_bone_pose_position(b), e));
+			}
+		}
+		snap_valid = false;
 		return;
 	}
+	clip_on = false;
 	const Transform3D to_skeleton = sk_xform.affine_inverse();
 	const Vector3 up = to_skeleton.basis.xform(Vector3(0, 1, 0)).normalized();
 	const Vector3 inward = to_skeleton.basis.xform(h.inward).normalized();
@@ -597,6 +632,44 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 	}
 }
 
+// Milestone 156 (decision 0296): no joint turned faster than max_joint_speed from this node's last pose — where the
+// traversal's hints, a clip's start or an IK solution turns a joint over in a frame (a forearm 53 degrees about its
+// own axis in one frame of a leap), the turn is spread over the frames it needs.
+void FellowTraversalPose3D::_limit_speed(Skeleton3D *p_skeleton, double p_delta) {
+	const int n = p_skeleton->get_bone_count();
+	const float step = Math::deg_to_rad(max_joint_speed) * float(p_delta);
+	if (!speed_valid || int(speed_rot.size()) != n) {
+		speed_rot.resize(n);
+		for (int b = 0; b < n; b++) {
+			speed_rot[b] = p_skeleton->get_bone_pose_rotation(b);
+		}
+		speed_valid = true;
+		return;
+	}
+	for (int b = 0; b < n; b++) {
+		Quaternion q = p_skeleton->get_bone_pose_rotation(b);
+		const Quaternion &was = speed_rot[b];
+		const float angle = was.angle_to(q);
+		if (angle > step && angle > 1e-5f) {
+			q = was.slerp(q, step / angle).normalized();
+			p_skeleton->set_bone_pose_rotation(b, q);
+		}
+		speed_rot[b] = q;
+	}
+}
+
+// The pose this frame (every bone's), for a clip to fade in from.
+void FellowTraversalPose3D::_snapshot(Skeleton3D *p_skeleton) {
+	const int n = p_skeleton->get_bone_count();
+	snap_rot.resize(n);
+	snap_pos.resize(n);
+	for (int b = 0; b < n; b++) {
+		snap_rot[b] = p_skeleton->get_bone_pose_rotation(b);
+		snap_pos[b] = p_skeleton->get_bone_pose_position(b);
+	}
+	snap_valid = true;
+}
+
 PackedStringArray FellowTraversalPose3D::get_configuration_warnings() const {
 	PackedStringArray warnings = SkeletonModifier3D::get_configuration_warnings();
 	if (!is_inside_tree()) {
@@ -638,6 +711,9 @@ void FellowTraversalPose3D::_notification(int p_what) {
 		track_frames = 0;
 		limbs_valid = false;
 		fit = Vector3();
+		clip_on = false;
+		snap_valid = false;
+		speed_valid = false;
 	}
 }
 
@@ -646,6 +722,12 @@ void FellowTraversalPose3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_traversal_path"), &FellowTraversalPose3D::get_traversal_path);
 	ClassDB::bind_method(D_METHOD("set_blend_time", "seconds"), &FellowTraversalPose3D::set_blend_time);
 	ClassDB::bind_method(D_METHOD("get_blend_time"), &FellowTraversalPose3D::get_blend_time);
+	ClassDB::bind_method(D_METHOD("set_max_joint_speed", "degrees_per_second"), &FellowTraversalPose3D::set_max_joint_speed);
+	ClassDB::bind_method(D_METHOD("get_max_joint_speed"), &FellowTraversalPose3D::get_max_joint_speed);
+	ClassDB::bind_method(D_METHOD("set_pole_follow", "amount"), &FellowTraversalPose3D::set_pole_follow);
+	ClassDB::bind_method(D_METHOD("get_pole_follow"), &FellowTraversalPose3D::get_pole_follow);
+	ClassDB::bind_method(D_METHOD("set_clip_blend", "seconds"), &FellowTraversalPose3D::set_clip_blend);
+	ClassDB::bind_method(D_METHOD("get_clip_blend"), &FellowTraversalPose3D::get_clip_blend);
 	ClassDB::bind_method(D_METHOD("set_hand_ik", "enabled"), &FellowTraversalPose3D::set_hand_ik);
 	ClassDB::bind_method(D_METHOD("is_hand_ik"), &FellowTraversalPose3D::is_hand_ik);
 	ClassDB::bind_method(D_METHOD("set_foot_ik", "enabled"), &FellowTraversalPose3D::set_foot_ik);
@@ -688,6 +770,9 @@ void FellowTraversalPose3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "limb_smoothing", PROPERTY_HINT_RANGE, "0,0.5,0.005,suffix:s"), "set_limb_smoothing", "get_limb_smoothing");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "hang_fit"), "set_hang_fit", "is_hang_fit");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "soft_ik", PROPERTY_HINT_RANGE, "0,0.999,0.001"), "set_soft_ik", "get_soft_ik");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clip_blend", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"), "set_clip_blend", "get_clip_blend");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "pole_follow", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_pole_follow", "get_pole_follow");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_joint_speed", PROPERTY_HINT_RANGE, "0,5000,1,suffix:°/s"), "set_max_joint_speed", "get_max_joint_speed");
 
 	BIND_ENUM_CONSTANT(ROLE_HIPS);
 	BIND_ENUM_CONSTANT(ROLE_SPINE);

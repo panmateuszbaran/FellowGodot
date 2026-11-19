@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/templates/local_vector.h"
 #include "fellow_traversal_3d.h"
 
 #include "scene/3d/skeleton_modifier_3d.h"
@@ -81,6 +82,21 @@ private:
 	bool hang_fit = false;
 	float soft_ik = 0.0f; // milestone 155 (decision 0295): past this share of a limb's reach its target is eased (0: off)
 	Vector3 fit; // world: the body's move, eased
+	// Milestone 156 (decision 0296): a clip (a mantle from a hang) fades in from the pose the limbs' IK gave the frame
+	// before over clip_blend seconds (0: at once — the braced legs had snapped to the clip's first pose, 74 degrees in a
+	// frame).
+	float clip_blend = 0.0f;
+	float pole_follow = 0.0f; // milestone 156: the limbs' bend pulled towards the clip's own by this much against the pole's
+	float clip_fade = 1.0f;
+	bool clip_on = false;
+	bool snap_valid = false;
+	LocalVector<Quaternion> snap_rot;
+	LocalVector<Vector3> snap_pos;
+	// Milestone 156 (decision 0296): no joint turned faster than this (degrees a second) from this node's last pose (0:
+	// off).
+	float max_joint_speed = 0.0f;
+	LocalVector<Quaternion> speed_rot;
+	bool speed_valid = false;
 
 	// The skeleton's bones for each role (-1: not found).
 	int bones[ROLE_MAX];
@@ -114,6 +130,8 @@ private:
 	void _lean(Skeleton3D *p_skeleton, const Vector3 &p_axis, float p_angle);
 	void _pose(double p_delta);
 	void _two_bone(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_end, const Vector3 &p_target, const Vector3 &p_pole, float p_weight);
+	void _snapshot(Skeleton3D *p_skeleton);
+	void _limit_speed(Skeleton3D *p_skeleton, double p_delta);
 
 protected:
 	void _notification(int p_what);
@@ -134,6 +152,12 @@ public:
 	NodePath get_traversal_path() const { return traversal_path; }
 	void set_blend_time(float p_seconds) { blend_time = MAX(0.0f, p_seconds); }
 	float get_blend_time() const { return blend_time; }
+	void set_clip_blend(float p_seconds) { clip_blend = MAX(0.0f, p_seconds); }
+	void set_pole_follow(float p_amount) { pole_follow = MAX(0.0f, p_amount); }
+	void set_max_joint_speed(float p_degrees_per_second) { max_joint_speed = MAX(0.0f, p_degrees_per_second); }
+	float get_max_joint_speed() const { return max_joint_speed; }
+	float get_pole_follow() const { return pole_follow; }
+	float get_clip_blend() const { return clip_blend; }
 	void set_hand_ik(bool p_enabled) { hand_ik = p_enabled; }
 	bool is_hand_ik() const { return hand_ik; }
 	void set_foot_ik(bool p_enabled) { foot_ik = p_enabled; }

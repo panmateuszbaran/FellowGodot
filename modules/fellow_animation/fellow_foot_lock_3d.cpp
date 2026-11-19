@@ -35,6 +35,10 @@
 
 namespace {
 
+// Milestone 156 (decision 0296): a held foot no further from the hip than this share of the leg's reach (or than the
+// animation puts it, if further).
+const float REACH_SHARE = 0.99f;
+
 // The exact decay of a critically damped spring towards zero over a step (D. Holden, "Spring-It-On").
 void decay(Vector3 &r_x, Vector3 &r_v, float p_halflife, float p_dt) {
 	if (p_halflife <= 0.0f) {
@@ -200,10 +204,25 @@ void FellowFootLock3D::_process_modification(double p_delta) {
 		}
 		Vector3 shown = ankle;
 		if (f.offset.length_squared() > 1e-10f) {
-			const Vector3 target = to_skeleton.xform(ankle + f.offset);
 			const Vector3 knee = sk->get_bone_global_pose(f.lower).origin;
 			const Vector3 hip = sk->get_bone_global_pose(f.upper).origin;
 			const Vector3 foot_now = sk->get_bone_global_pose(f.foot).origin;
+			// Milestone 156 (decision 0296): let go, never eased back from further than the leg reaches — a body speeding
+			// away (a sprint from standing) had left the foot behind with the knee straight while it came back, then the knee
+			// bent 23 degrees in a frame. The way back starts within REACH_SHARE of the leg's reach, or the animated foot's
+			// distance if further.
+			const Vector3 a_vec = to_skeleton.xform(ankle) - hip;
+			const float reach = MAX((hip.distance_to(knee) + knee.distance_to(foot_now)) * REACH_SHARE, a_vec.length());
+			const Vector3 o_vec = to_skeleton.basis.xform(f.offset);
+			if (!f.locked && (a_vec + o_vec).length() > reach) {
+				const float oo = o_vec.length_squared();
+				const float ao = a_vec.dot(o_vec);
+				const float disc = ao * ao - oo * (a_vec.length_squared() - reach * reach);
+				const float k = (oo > 1e-10f && disc >= 0.0f) ? CLAMP((-ao + Math::sqrt(disc)) / oo, 0.0f, 1.0f) : 0.0f;
+				f.offset *= k;
+				f.offset_velocity *= k;
+			}
+			const Vector3 target = to_skeleton.xform(ankle + f.offset);
 			const Vector3 pole = knee + (knee - (hip + foot_now) * 0.5f) * 4.0f;
 			_two_bone(sk, f.upper, f.lower, f.foot, target, pole);
 			shown = xform.xform(sk->get_bone_global_pose(f.foot).origin);

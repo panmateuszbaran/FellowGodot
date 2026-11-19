@@ -71,6 +71,9 @@ const double REACH_SIDE_DURATION = 0.8;
 const float OVER_SPLIT = 0.74f;
 // Milestone 153 (decision 0290): a leap's push off the wall, the share of its flight.
 const float LEAP_PUSH = 0.25f;
+// Milestone 156 (decision 0296): a mantle with a clip's root motion, the share of it over which the body held at the wall
+// is let go towards the clip's root.
+const float MANTLE_RELEASE = 0.18f;
 
 Vector3 flat(const Vector3 &p_v) {
 	return Vector3(p_v.x, 0.0f, p_v.z);
@@ -654,9 +657,26 @@ Vector3 FellowTraversal3D::_path_mantle(double p_t, const Vector3 &p_edge, const
 			float s = flat(r).dot(fwd) * sh;
 			const float y = p0.y + r.y * sv;
 			// Not into the wall before the clip's root is over the top (a clip that leans in early, scaled onto a
-			// higher ledge).
-			if (y < y_top - 0.01f && r.y < rise_max * 0.98f && (i + 1 < int(clip_root.size()) && clip_root[i + 1].y >= r.y)) {
-				s = MIN(s, wall_s);
+			// higher ledge). Milestone 156 (decision 0296): held at the wall up to the last of the clip's samples still
+			// below the top, then let go over MANTLE_RELEASE of the mantle — let go at once, the body had jumped by as
+			// far as the clip's root had leant in meanwhile (0.65 m in two frames over CasaCrema's eave).
+			const int n = int(clip_root.size());
+			int last_held = -1;
+			for (int k = n - 2; k >= 0; k--) {
+				const float yk = p0.y + clip_root[k].y * sv;
+				if (yk < y_top - 0.01f && clip_root[k].y < rise_max * 0.98f && clip_root[k + 1].y >= clip_root[k].y) {
+					last_held = k;
+					break;
+				}
+			}
+			if (last_held >= 0) {
+				const float t_rel = float(last_held + 1) / float(n - 1);
+				if (t < t_rel) {
+					s = MIN(s, wall_s);
+				} else if (t < t_rel + MANTLE_RELEASE) {
+					const float s_rel = flat(clip_root[last_held + 1]).dot(fwd) * sh;
+					s -= MAX(0.0f, s_rel - wall_s) * (1.0f - smooth((t - t_rel) / MANTLE_RELEASE));
+				}
 			}
 			Vector3 p = flat(p0) + p_inward * s + lateral * smooth(t);
 			p.y = y;
