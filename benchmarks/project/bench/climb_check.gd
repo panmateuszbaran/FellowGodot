@@ -547,6 +547,38 @@ func _build() -> void:
 			[1.6, {"intent": Vector3(0, 1, 0)}], [7.4, {"intent": Vector3()}]])
 	(le.traversal as FellowTraversal3D).hang_reach_up = 1.25
 	(le.traversal as FellowTraversal3D).hang_brace_height = 0.65
+	# Milestone 152 (decision 0288): a deep eave (0.85 m out, its lip 0.75 m over the last hold, a roof of 21 degrees) and,
+	# beside it, a hold above and 0.6 m to the side of a long ledge. The eave: a string course at 3.0 m caught, out and up
+	# to the lip, over it. Beside: a string course at 3.0 m, a corbel 1.1 m over it 0.6 m to the left, the wall's top out
+	# of reach over the hands: up and across to the corbel, then up to the top.
+	_box(Vector3(162, -0.5, 10.0), Vector3(11.0, 1.0, 10.0), Color(0.36, 0.42, 0.34))
+	_box(Vector3(159, 1.95, 9.0), Vector3(5.0, 3.9, 2.0), Color(0.62, 0.55, 0.48))
+	_box(Vector3(159, 3.0 - 0.1, 10.075), Vector3(5.0, 0.2, 0.15), Color(0.72, 0.7, 0.66))
+	var deep := _box(Vector3(159, 4.2175, 9.4227), Vector3(5.0, 0.15, 3.0), Color(0.6, 0.3, 0.25))
+	deep.rotation_degrees = Vector3(21, 0, 0)
+	var ld := _lane("eave_deep", Vector3(159, 0, 12), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}],
+			[1.6, {"intent": Vector3(0, 1, 0)}], [7.4, {"intent": Vector3()}]])
+	(ld.traversal as FellowTraversal3D).hang_reach_up = 1.25
+	(ld.traversal as FellowTraversal3D).hang_brace_height = 0.65
+	_box(Vector3(165, 2.6, 9.0), Vector3(4.0, 5.2, 2.0), Color(0.62, 0.55, 0.48))
+	_box(Vector3(165, 3.0 - 0.1, 10.075), Vector3(4.0, 0.2, 0.15), Color(0.72, 0.7, 0.66))
+	_box(Vector3(164.4, 4.1 - 0.075, 10.11), Vector3(0.8, 0.15, 0.22), Color(0.72, 0.7, 0.66))
+	var lb := _lane("beside_reach", Vector3(165, 0, 12), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}],
+			[1.6, {"intent": Vector3(0, 1, 0)}], [7.4, {"intent": Vector3()}]])
+	(lb.traversal as FellowTraversal3D).hang_reach_up = 1.25
+	(lb.traversal as FellowTraversal3D).hang_reach_side = 0.8
+	(lb.traversal as FellowTraversal3D).hang_brace_height = 0.65
+	# Milestone 152 (decision 0288): holds close over each other (a window's pediment base at 4.2 m, a string course
+	# 0.29 m over it, as on the showcase's houses): a string course at 3.0 m caught, up to the base, the course, the top.
+	_box(Vector3(173, -0.5, 10.0), Vector3(11.0, 1.0, 10.0), Color(0.36, 0.42, 0.34))
+	_box(Vector3(171, 2.8, 9.0), Vector3(4.0, 5.6, 2.0), Color(0.62, 0.55, 0.48))
+	_box(Vector3(171, 3.0 - 0.1, 10.075), Vector3(4.0, 0.2, 0.15), Color(0.72, 0.7, 0.66))
+	_box(Vector3(171, 4.2 - 0.05, 10.07), Vector3(1.4, 0.1, 0.14), Color(0.72, 0.7, 0.66))
+	_box(Vector3(171, 4.7 - 0.1, 10.065), Vector3(4.0, 0.2, 0.13), Color(0.72, 0.7, 0.66))
+	var lst := _lane("stacked_holds", Vector3(171, 0, 12), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}],
+			[1.6, {"intent": Vector3(0, 1, 0)}], [7.4, {"intent": Vector3()}]])
+	(lst.traversal as FellowTraversal3D).hang_reach_up = 1.25
+	(lst.traversal as FellowTraversal3D).hang_brace_height = 0.65
 	# None: free_climb off; the wall outside climb_mask; an overhang of 30 degrees.
 	_box(Vector3(40, 2.25, 9.0), Vector3(3.0, 4.5, 2.0), Color(0.6, 0.6, 0.66))
 	_lane("climb_off", Vector3(40, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [4.0, {"intent": Vector3()}]])
@@ -611,8 +643,10 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x - 1.4, 4.2, 15.0), Vector3(x - 1.4, 3.6, 10.0))
 			"narrow_holds":
 				cam.look_at_from_position(Vector3(x - 0.5, 4.2, 14.0), Vector3(x - 0.5, 3.9, 10.0))
-			"eave_roof":
+			"eave_roof", "eave_deep":
 				cam.look_at_from_position(Vector3(x + 3.5, 4.0, 14.5), Vector3(x, 3.4, 10.0))
+			"beside_reach":
+				cam.look_at_from_position(Vector3(x - 0.3, 4.0, 14.0), Vector3(x - 0.3, 3.8, 10.0))
 			_:
 				cam.look_at_from_position(Vector3(x + 2.5, 2.4, 3.2), Vector3(x - 0.4, 1.6, -1.8))
 		if grid:
@@ -755,7 +789,7 @@ func _finish() -> void:
 		e["sequence"] = names
 		if lane.has("penetration_first"):
 			e["penetration_first"] = lane.penetration_first
-		if String(lane.name).begins_with("climb") or lane.name == "eave_roof":
+		if String(lane.name).begins_with("climb") or String(lane.name).begins_with("eave"):
 			var lc: Dictionary = (lane.traversal as FellowTraversal3D).get_last_check()
 			e["last_check"] = {"kind": KIND_NAMES[int(lc.get("kind", 0))], "reason": lc.get("reason", ""), "height": snappedf(float(lc.get("height", 0.0)), 0.01)}
 		var ok: bool = lane.penetration_frames == 0
@@ -873,6 +907,15 @@ func _finish() -> void:
 			"eave_roof":
 				# Milestone 152: caught under the eave, up to its lip, over it: standing on the roof's slope above the wall.
 				ok = ok and names.has("hang_started:3.0") and names.count("hang_transferred:reach") == 1 and names.has("mantle_finished:high") and feet.y > 4.0 and feet.z < 10.2
+			"eave_deep":
+				# Milestone 152: out and up to the deep eave's lip, over it: standing on the roof's overhang.
+				ok = ok and names.has("hang_started:3.0") and names.count("hang_transferred:reach") == 1 and names.has("mantle_finished:high") and feet.y > 3.8 and feet.z > 10.0
+			"beside_reach":
+				# Milestone 152: nothing over the hands; up and across to the corbel beside them, then up to the top (5.2 m).
+				ok = ok and names.has("hang_started:3.0") and names.count("hang_transferred:reach_side") == 1 and names.count("hang_transferred:reach") == 1 and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 5.2) < 0.05
+			"stacked_holds":
+				# Milestone 152: up the base under the course, the course, the top (5.6 m), hand over hand.
+				ok = ok and names.has("hang_started:3.0") and names.count("hang_transferred:reach") == 3 and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 5.6) < 0.05
 			"climb_off", "climb_masked", "climb_overhang":
 				# Not climbed: standing at the wall's foot.
 				ok = ok and not names.has("climb_started") and feet.y < 0.05

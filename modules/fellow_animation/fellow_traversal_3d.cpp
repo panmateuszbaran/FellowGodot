@@ -888,7 +888,14 @@ bool FellowTraversal3D::_probe_edge(const Vector3 &p_edge, const Vector3 &p_inwa
 	tq.collision_mask = collision_mask;
 	tq.hit_from_inside = true;
 	PhysicsDirectSpaceState3D::RayResult tr;
-	if (!space->intersect_ray(tq, tr) || tr.normal == Vector3() || tr.normal.y < Math::cos(Math::deg_to_rad(max_ledge_slope))) {
+	bool top = space->intersect_ray(tq, tr);
+	if (top && tr.normal == Vector3() && hang_reach_up > 0.0f && fr.position.y + 0.2f < tq.from.y) {
+		// Milestone 152 (decision 0288): climbing from hold to hold, the ray down began inside a hold over this one (a
+		// string course just over a pediment's base): looked for again from just over the face found.
+		tq.from.y = fr.position.y + 0.2f;
+		top = space->intersect_ray(tq, tr);
+	}
+	if (!top || tr.normal == Vector3() || tr.normal.y < Math::cos(Math::deg_to_rad(max_ledge_slope))) {
 		return false;
 	}
 	r_ledge = ledge;
@@ -920,6 +927,11 @@ float FellowTraversal3D::_edge_end(float p_sign) const {
 // with hold_min_width, a narrower hold (down to hold_min_width wide; its ends looked for in 2 cm steps up to 0.3 m
 // each way) hung from its middle, each hand 5 cm in from an end. False where the hands do not fit.
 bool FellowTraversal3D::_fit_hold(Ledge &r_ledge) const {
+	// Milestone 152 (decision 0288): climbing from hold to hold, no hold where the hands have no room (a wall's top a
+	// slot under a roof, a cornice under the soffit).
+	if (hang_reach_up > 0.0f && !_hands_room(r_ledge, 0.12f)) {
+		return false;
+	}
 	Ledge probe;
 	if (_probe_edge(r_ledge.edge, r_ledge.inward, 0.24f, probe) && _probe_edge(r_ledge.edge, r_ledge.inward, -0.24f, probe)) {
 		r_ledge.spread = 0.24f;
@@ -954,8 +966,8 @@ bool FellowTraversal3D::_fit_hold(Ledge &r_ledge) const {
 }
 
 // Milestone 152 (decision 0287): climbing from hold to hold (hang_reach_up), a hold with no room for the body over it —
-// under an eave, a balcony — is still held where the hands have room on it (nothing 0.2 m over its edge).
-bool FellowTraversal3D::_hands_room(const Ledge &p_ledge) const {
+// under an eave, a balcony — is still held where the hands have room on it (nothing p_height over its edge).
+bool FellowTraversal3D::_hands_room(const Ledge &p_ledge, float p_height) const {
 	CollisionObject3D *body = _get_body();
 	if (hang_reach_up <= 0.0f || !body || body->get_world_3d().is_null()) {
 		return false;
@@ -965,7 +977,7 @@ bool FellowTraversal3D::_hands_room(const Ledge &p_ledge) const {
 	exclude.insert(body->get_rid());
 	PhysicsDirectSpaceState3D::RayParameters q;
 	q.from = p_ledge.edge + p_ledge.inward * 0.06f + UP * 0.02f;
-	q.to = q.from + UP * 0.2f;
+	q.to = q.from + UP * p_height;
 	q.exclude = exclude;
 	q.collision_mask = collision_mask;
 	PhysicsDirectSpaceState3D::RayResult r;
@@ -1233,7 +1245,8 @@ bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector
 		// Milestone 151 (decision 0282): a ledge within hang_reach_up is climbed to hand over hand, the body close to the
 		// wall; one further (to hang_jump_height) is jumped to.
 		const float top = MAX(hang_jump_height, hang_reach_up);
-		for (float h = 0.6f; h <= top + 1e-3f; h += 0.1f) {
+		// (From hold to hold, from 0.45 m: a hold 0.4-0.5 m over this one, its face under the probe at 0.6 m, is found.)
+		for (float h = hang_reach_up > 0.0f ? 0.45f : 0.6f; h <= top + 1e-3f; h += 0.1f) {
 			bool found = _probe_edge(ledge.edge + UP * h, ledge.inward, 0.0f, l);
 			// Milestone 152 (decision 0286): a narrow hold above may be beside the middle of the hands.
 			for (int k = 0; !found && hold_min_width > 0.0f && k < 2; k++) {
@@ -1266,6 +1279,50 @@ bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector
 				r_control = control;
 				r_how = reach ? TRANSFER_REACH_UP : TRANSFER_JUMP_UP;
 				return true;
+			}
+		}
+		// Milestone 152 (decision 0288): an eave's lip over the hold and out from it (0.3 m at least), within reach: the
+		// body hangs out from the wall under the eave.
+		if (hang_reach_up > 0.0f) {
+			for (float h = 0.1f; h <= hang_reach_up + 1e-3f; h += 0.05f) {
+				bool found = false;
+				for (int k = 0; !found && k < 2; k++) {
+					found = _probe_edge(ledge.edge + UP * h - ledge.inward * (0.4f * float(k)), ledge.inward, 0.0f, l) && (ledge.edge - l.edge).dot(ledge.inward) >= 0.3f && l.edge.y >= ledge.edge.y + 0.1f;
+				}
+				if (!found) {
+					continue;
+				}
+				if (l.edge.y - ledge.edge.y > hang_reach_up + 0.05f || !_fit_hold(l)) {
+					break;
+				}
+				if (_fit_reach(l, from_feet, -ledge.inward * 0.05f, exclude, r_control)) {
+					r_ledge = l;
+					r_how = TRANSFER_REACH_UP;
+					return true;
+				}
+				break;
+			}
+		}
+		// Milestone 152 (decision 0288): nothing over the hands — a hold above and beside them, within reach (hang_reach_up
+		// up, 0.3-0.9 m along the edge, the nearest first, the wish's side first), is reached up and across.
+		if (hang_reach_up > 0.0f && hang_reach_side > 0.0f) {
+			const float first = along < 0.0f ? -1.0f : 1.0f;
+			for (int k = 0; k < 6; k++) {
+				const float a = (0.3f + 0.3f * float(k / 2)) * (k % 2 == 0 ? first : -first);
+				for (float h = 0.6f; h <= hang_reach_up + 1e-3f; h += 0.1f) {
+					if (!_probe_edge(ledge.edge + UP * h, ledge.inward, a, l) || l.edge.y < ledge.edge.y + 0.4f) {
+						continue;
+					}
+					if (l.edge.y - ledge.edge.y > hang_reach_up + 0.05f || !_fit_hold(l)) {
+						break;
+					}
+					if (_fit_reach(l, from_feet, -ledge.inward * 0.05f, exclude, r_control)) {
+						r_ledge = l;
+						r_how = TRANSFER_REACH_SIDE;
+						return true;
+					}
+					break;
+				}
 			}
 		}
 	}
@@ -1649,8 +1706,8 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 			_step_transfer(p_delta);
 			return;
 		}
-		if (_find_jump(UP, to, control, how) && how == TRANSFER_REACH_UP) {
-			_start_transfer(to, control, how, REACH_UP_DURATION);
+		if (_find_jump(UP, to, control, how) && (how == TRANSFER_REACH_UP || how == TRANSFER_REACH_SIDE)) {
+			_start_transfer(to, control, how, how == TRANSFER_REACH_SIDE ? REACH_SIDE_DURATION : REACH_UP_DURATION);
 			_step_transfer(p_delta);
 			return;
 		}
@@ -2650,7 +2707,7 @@ void FellowTraversal3D::_notification(int p_what) {
 							// hang_first, is hung from when its edge is about the hands' reach above the feet.
 							const float over = last_check.edge.y - _feet_of(body->get_global_transform()).y;
 							const bool climbable = last_check.kind == KIND_LOW || last_check.kind == KIND_HIGH;
-							const bool hangable = air && hang && last_check.inward != Vector3() && over > hang_reach - 0.8f && over < hang_reach + 0.4f && ((last_check.kind == KIND_BLOCKED && (last_check.reason != "no room above" || _hands_room(last_check))) || (hang_first && climbable));
+							const bool hangable = air && hang && last_check.inward != Vector3() && over > hang_reach - 0.8f && over < hang_reach + 0.4f && ((last_check.kind == KIND_BLOCKED && (last_check.reason != "no room above" || _hands_room(last_check, 0.2f))) || (hang_first && climbable));
 							if (hangable && _start_hang(last_check)) {
 								// hanging
 							} else if (!(air && last_check.kind == KIND_VAULT) && !(last_check.open_below && !air)) {

@@ -302,7 +302,7 @@ private:
 	float _edge_end(float p_sign) const;
 	bool _fit_reach(Ledge &r_to, const Vector3 &p_from_feet, const Vector3 &p_bias, const HashSet<RID> &p_exclude, Vector3 &r_control) const;
 	bool _fit_hold(Ledge &r_ledge) const;
-	bool _hands_room(const Ledge &p_ledge) const;
+	bool _hands_room(const Ledge &p_ledge, float p_height) const;
 	bool _find_corner(float p_sign, Ledge &r_ledge, Vector3 &r_control, int &r_how) const;
 	bool _find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector3 &r_control, int &r_how) const;
 	bool _find_drop(const Vector3 &p_direction, Ledge &r_ledge, Vector3 &r_mid) const;

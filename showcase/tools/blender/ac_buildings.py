@@ -173,6 +173,9 @@ def window(B, F, u, z, w=1.0, h=1.8, kind="plain", shutters=None, shutters_close
 	elif kind == "pediment":
 		top = z + h + f
 		fbox(B, F, x0 - f - 0.1, x1 + f + 0.1, top, top + 0.1, -0.14, 0.02, "stone", bevel=0.015)
+		if Bc is not None:
+			# Its base: a hold too (milestone 152).
+			fbox(Bc, F, x0 - f - 0.1, x1 + f + 0.1, top, top + 0.1, -0.14, 0.0, "stone", bevel=0.0)
 		half = (w + 2 * f + 0.2) * 0.5
 		rise = 0.38
 		pts = [(u - half, top + 0.1), (u + half, top + 0.1), (u, top + 0.1 + rise)]
@@ -307,6 +310,18 @@ def eaves(B, Bc, facades, w, d, zt, overhang, pitch_deg, kind, rng, chimneys=1):
 	for f in faces:
 		B.poly(f, "roof", uv_slope=True)
 		Bc.poly(f, "roof")
+	# The fascia under the eaves' level edges, in the collision (milestone 152): the eave's lip a ledge to climb over
+	# onto the roof (its front a face, the tiles behind it a top).
+	for i in range(4):
+		a, b = corners[i], corners[(i + 1) % 4]
+		along_x = abs(b[0] - a[0]) > abs(b[1] - a[1])
+		if kind != "hip" and not along_x:
+			continue  # a gable's verge, not level
+		mx, my = (a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5
+		ix = -0.03 if mx > 0 and not along_x else (0.03 if mx < 0 and not along_x else 0.0)
+		iy = -0.03 if my > 0 and along_x else (0.03 if my < 0 and along_x else 0.0)
+		ln = abs(b[0] - a[0]) if along_x else abs(b[1] - a[1])
+		Bc.box((mx + ix, my + iy, (zt + z0) * 0.5), (ln, 0.06, z0 - zt + 0.04) if along_x else (0.06, ln, z0 - zt + 0.04), "wood_dark")
 	# The coppi: at the eaves, a row of half-tubes down the slope; along the ridges and the hips, a row of caps.
 	for i in range(4):
 		a, b = Vector((corners[i][0], corners[i][1], z0)), Vector((corners[(i + 1) % 4][0], corners[(i + 1) % 4][1], z0))
