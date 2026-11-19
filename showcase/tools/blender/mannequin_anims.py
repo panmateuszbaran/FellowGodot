@@ -785,6 +785,9 @@ def clips():
 	for name in ("walk", "run", "sprint"):
 		G = GAITS[name]
 		out[name] = (G["T"], True, (lambda n: (lambda t: gait_pose(n, t)))(name))
+		# Milestone 154: the same cycle in 1 s (the left foot down at 0, the right at 0.5 for every gait), so that a blend of
+		# two gaits mixes the same moment of the stride; the tree plays them at the cycle's rate for the body's speed.
+		out["gait_" + name] = (1.0, True, (lambda n, T: (lambda t: gait_pose(n, t * T)))(name, G["T"]))
 	out["idle"] = clip_idle()
 	out["jump"] = clip_jump()
 	out["fall"] = clip_fall()

@@ -176,6 +176,7 @@ func _start(i: int) -> void:
 		_player.velocity = Vector3()
 		_player.facing = deg_to_rad(s["place"][1])
 		_player.rotation.y = _player.facing
+		_player.reset_physics_interpolation()
 		_player.mode = 0
 		_player.wish = Vector3()
 		_player.want_sprint = false

@@ -163,6 +163,8 @@ func _physics_process(delta: float) -> void:
 	want_jump = false
 	want_drop = false
 	want_perch = false
+	if mode != Mode.DIVE and mode != Mode.HAY and mode != Mode.PERCH:
+		_lean_model(Vector2(velocity.x, velocity.z).length() if mode == Mode.GROUND else 0.0, delta)
 	var moved := global_position - _last_pos
 	_climb_speed = lerpf(_climb_speed, moved.length() / maxf(delta, 1e-4), 1.0 - exp(-10.0 * delta))
 	_last_pos = global_position
@@ -183,6 +185,10 @@ func _move(delta: float, speed_goal: float) -> void:
 		h = h.move_toward(goal.normalized() * maxf(h.length() * 0.98, 3.0) if goal.length() > 0.1 else h * 0.97, 8.0 * delta)
 	else:
 		h = h.move_toward(goal.limit_length(maxf(h.length(), 2.0)), air_control * delta)
+	# Milestone 154: walking or running (not free-running), the body does not go over a drop — the part of its speed
+	# that would carry it over an edge is taken away and it slides along the edge (Assassin's Creed's low profile).
+	if on_floor and mode == Mode.GROUND and not want_sprint and h.length() > 0.05:
+		h = _edge_guard(h)
 	velocity.x = h.x
 	velocity.z = h.z
 	if not on_floor:
@@ -236,7 +242,7 @@ func _move(delta: float, speed_goal: float) -> void:
 				mode = Mode.GROUND
 				_set_state("loco")
 	var hs := Vector2(velocity.x, velocity.z).length() if on_floor else 0.0
-	tree.set("parameters/loco/blend_position", hs)
+	_loco(hs)
 
 
 func _traverse(_delta: float) -> void:
@@ -267,9 +273,38 @@ func _traverse(_delta: float) -> void:
 		_set_state("climb")
 	else:
 		# A mantle or a vault: FellowTraversalPose3D plays its clip over whatever this plays.
-		tree.set("parameters/loco/blend_position", 0.0)
+		_loco(0.0)
 		_set_state("loco")
 	_air_top = global_position.y
+
+
+## Milestone 154: walking or running (not sprinting), the body does not step off an edge. Where the ground ends within
+## EDGE_LOOK the way h goes (a drop of more than EDGE_DROP), the edge's way out is found (the ways round that half of the
+## body with no ground) and h loses its part along it: the body stops at the edge, or goes along it if h was slanting.
+## Only when the way h goes has no ground: a beam or a ridge is walked along, whatever lies either side of it.
+const EDGE_LOOK := 0.42
+const EDGE_DROP := 0.7
+
+func _edge_guard(h: Vector3) -> Vector3:
+	var dir := Vector3(h.x, 0.0, h.z).normalized()
+	if _ground_at(global_position + dir * EDGE_LOOK):
+		return h
+	var out := dir
+	for i in 12:
+		var d := Vector3(sin(TAU * i / 12.0), 0.0, cos(TAU * i / 12.0))
+		if d.dot(dir) > 0.01 and not _ground_at(global_position + d * EDGE_LOOK):
+			out += d
+	out = out.normalized()
+	var slide := h - out * maxf(h.dot(out), 0.0)
+	if slide.length() > 0.05 and _ground_at(global_position + slide.normalized() * EDGE_LOOK):
+		return slide
+	return Vector3()
+
+
+func _ground_at(p: Vector3) -> bool:
+	var q := PhysicsRayQueryParameters3D.create(p + Vector3.UP * 0.5, p + Vector3.DOWN * EDGE_DROP, collision_mask, [get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	return not hit.is_empty() and (hit.normal as Vector3).y >= 0.5
 
 
 ## A wall in front of the chest within p_distance (the way the body faces and wishes to go).
@@ -384,6 +419,9 @@ func _enter_hay(cart: Node3D) -> void:
 	facing = atan2(-side.x, -side.z)
 	rotation.y = facing
 	global_position = Vector3(cart.global_position.x, cart.global_position.y + 0.85, cart.global_position.z)
+	reset_physics_interpolation()
+	# The way out of the hay is the clip's root motion, read at the physics ticks: the tree advanced with them meanwhile.
+	tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
 	_play("hay_exit")
 	if _camera and _camera.has_method("release"):
 		_camera.release()
@@ -403,10 +441,83 @@ func _hay(_delta: float) -> void:
 	if _one_shot <= 0.0:
 		mode = Mode.GROUND
 		velocity = Vector3()
+		tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_IDLE
 		_set_state("loco")
 
 
 # ------------------------------------------------------------------ the animation tree
+
+## Milestone 154: the gaits' cycle (s) at a speed (m/s): walk 1.08 s at 1.6, run 0.7 at 4.4, sprint 0.62 at 7.0; slower
+## than a walk, the walk's stride over a longer cycle (the feet still where they stand).
+static func _gait_cycle(v: float) -> float:
+	if v <= 1.6:
+		return 1.08 * 1.6 / maxf(v, 0.25)
+	if v <= 4.4:
+		return lerpf(1.08, 0.7, (v - 1.6) / 2.8)
+	return lerpf(0.7, 0.62, clampf((v - 4.4) / 2.6, 0.0, 1.0))
+
+
+## The locomotion's blend for a ground speed: the gait (walk, run, sprint) at the cycle's rate, idle blended in below
+## 0.6 m/s.
+func _loco(v: float) -> void:
+	tree.set("parameters/loco/gait/blend_position", clampf(v, 1.6, 7.0))
+	tree.set("parameters/loco/rate/scale", 1.0 / _gait_cycle(v))
+	tree.set("parameters/loco/move/blend_amount", clampf(v / 0.6, 0.0, 1.0))
+
+
+## Milestone 154: the model (not the capsule) tipped about its feet: into a turn by the turn's rate times the speed
+## (up to 14 degrees), forwards as the speed grows and back as it falls (up to 8); eased.
+var _lean := Vector2()
+var _last_facing := 0.0
+var _last_speed := 0.0
+
+func _lean_model(v: float, delta: float) -> void:
+	if delta <= 0.0 or model == null:
+		return
+	var turn := wrapf(facing - _last_facing, -PI, PI) / delta
+	var accel := (v - _last_speed) / delta
+	_last_facing = facing
+	_last_speed = v
+	var goal := Vector2(clampf(-turn * v * 0.018, -0.25, 0.25), clampf(accel * 0.012, -0.14, 0.14))
+	if mode != Mode.GROUND or _one_shot > 0.0:
+		goal = Vector2()
+	_lean = _lean.lerp(goal, 1.0 - exp(-8.0 * delta))
+	model.transform.basis = Basis(Vector3.UP, PI) * Basis(Vector3(0, 0, 1), _lean.x) * Basis(Vector3(1, 0, 0), _lean.y)
+
+
+# ------------------------------------------------------------------ where the eyes go
+
+## Milestone 154: the head turned to where the body is going (a LookAtModifier3D on the head bone, after the climbing's
+## pose): on a wall, the traversal's look (the next hold, the way it shimmies, over the top); on the ground, the way the
+## controller steers — ahead of the body through a turn (Assassin's Creed's head leading the turn). The way and the
+## weight eased; drawn in the idle frames.
+var _look_off := Vector3(0.0, -0.6, -4.0)
+var _look_weight := 0.0
+@onready var _look_target: Node3D = get_node_or_null("LookTarget")
+@onready var _head_look: SkeletonModifier3D = get_node_or_null("Model/Mannequin/Skeleton3D/HeadLook")
+
+func _process(delta: float) -> void:
+	if _look_target == null or _head_look == null:
+		return
+	var head := get_global_transform_interpolated().origin + Vector3.UP * 1.6
+	var ahead := Vector3(-sin(facing), 0.0, -cos(facing))
+	var goal := ahead * 4.0 + Vector3.DOWN * 0.6
+	var weight := 0.0
+	var hints: Dictionary = traversal.get_pose_targets()
+	if hints.get("active", false) and float(hints.get("look_weight", 0.0)) > 0.01:
+		goal = (hints["look"] as Vector3) - head
+		weight = float(hints["look_weight"])
+	elif mode == Mode.GROUND and _one_shot <= 0.0:
+		var w := Vector3(wish.x, 0.0, wish.z)
+		if w.length() > 0.2:
+			goal = w.normalized() * 4.0 + Vector3.DOWN * 0.6
+		weight = 0.85 if w.length() > 0.2 else 0.5
+	if weight > 0.0:
+		_look_off = _look_off.lerp(goal, 1.0 - exp(-9.0 * delta))
+	_look_weight = lerpf(_look_weight, weight, 1.0 - exp(-6.0 * delta))
+	_look_target.global_position = head + _look_off
+	_head_look.influence = _look_weight
+
 
 func _set_state(s: String) -> void:
 	if s == state:

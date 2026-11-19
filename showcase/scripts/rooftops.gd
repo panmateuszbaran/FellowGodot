@@ -8,6 +8,16 @@ extends Node3D
 @export var cloud_density := 0.7
 
 
+func _enter_tree() -> void:
+	# Milestone 154: the player drawn between the physics ticks (the scene's root has interpolation off, the player on):
+	# at a display's 120-165 Hz the body had moved in 60 Hz steps and the camera following it shook.
+	get_tree().physics_interpolation = true
+
+
+func _exit_tree() -> void:
+	get_tree().physics_interpolation = ProjectSettings.get_setting("physics/common/physics_interpolation", false)
+
+
 func _ready() -> void:
 	ProjectSettings.set_setting("rendering/fellow/post/clouds/coverage", cloud_coverage)
 	ProjectSettings.set_setting("rendering/fellow/post/clouds/density", cloud_density)

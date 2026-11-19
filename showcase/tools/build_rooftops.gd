@@ -429,6 +429,10 @@ func _model(p_parent: Node3D, p_name: String, p_xform: Transform3D, p_layer := L
 func _build_scene() -> void:
 	var root := Node3D.new()
 	root.name = "Rooftops"
+	# Milestone 154: physics interpolation (project.godot) for the player alone — the body moved at the physics ticks,
+	# drawn between them, so that the camera following it at the display's rate does not shake; everything else (the
+	# crowd, the birds, the camera) moves in the idle frames and is drawn where it is.
+	root.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	root.set_script(load("res://scripts/rooftops.gd"))
 	scene_root = root
 	_environment(root)
@@ -1300,8 +1304,8 @@ func _lamps(p_parent: Node3D) -> void:
 # ------------------------------------------------------------------ the character
 
 ## Clips that loop (glTF says nothing of it).
-const LOOPS := ["idle", "walk", "run", "sprint", "fall", "hang_idle", "hang_shimmy", "climb_idle", "climb_move", "dive", "perch",
-		"sit", "talk"]
+const LOOPS := ["idle", "walk", "run", "sprint", "gait_walk", "gait_run", "gait_sprint", "fall", "hang_idle", "hang_shimmy",
+		"climb_idle", "climb_move", "dive", "perch", "sit", "talk"]
 
 
 func _build_player() -> PackedScene:
@@ -1349,6 +1353,7 @@ func _build_player() -> PackedScene:
 
 	var player := CharacterBody3D.new()
 	player.name = "Player"
+	player.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
 	player.set_script(load("res://scripts/rooftops_player.gd"))
 	player.collision_layer = 8
 	player.collision_mask = LAYER_WORLD
@@ -1385,6 +1390,29 @@ func _build_player() -> PackedScene:
 	# The hands on the stone (decision 0291): hanging, the body moved until the shoulders are within reach of the holds.
 	pose.set("hang_fit", true)
 	_add(skel, pose, "TraversalPose")
+	# Milestone 154: the head turned to where the body goes (the player script moves the target and sets the weight).
+	var look := LookAtModifier3D.new()
+	look.bone_name = "Head"
+	look.forward_axis = SkeletonModifier3D.BONE_AXIS_PLUS_Z
+	look.primary_rotation_axis = Vector3.AXIS_Y
+	look.use_secondary_rotation = true
+	look.relative = true
+	look.use_angle_limitation = true
+	look.symmetry_limitation = true
+	look.primary_limit_angle = deg_to_rad(110.0) # ±55° to the sides
+	look.primary_damp_threshold = 0.6
+	look.secondary_limit_angle = deg_to_rad(70.0) # ±35° up and down
+	look.secondary_damp_threshold = 0.6
+	look.duration = 0.25
+	look.transition_type = Tween.TRANS_SINE
+	look.ease_type = Tween.EASE_IN_OUT
+	look.influence = 0.0
+	_add(skel, look, "HeadLook")
+	var look_target := Node3D.new()
+	look_target.top_level = true
+	look_target.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF # moved in the idle frames
+	_add(player, look_target, "LookTarget")
+	look.target_node = NodePath("../../../../LookTarget")
 	var ap := AnimationPlayer.new()
 	ap.add_animation_library(&"", lib)
 	_add(player, ap, "AnimationPlayer")
@@ -1395,9 +1423,10 @@ func _build_player() -> PackedScene:
 	at.anim_player = NodePath("../AnimationPlayer")
 	at.root_node = NodePath("../Model")
 	at.root_motion_track = NodePath("Mannequin/Skeleton3D:Root")
-	# Advanced with the physics ticks that read its root motion (the way out of the hay): at the idle frame's rate a
-	# tick would read the same motion twice, or none, whenever the two rates differ.
-	at.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
+	# Advanced in the idle frames (milestone 154: smooth at any display rate; at the physics ticks the limbs moved in 60 Hz
+	# steps under a body drawn between them); the player switches it to the physics ticks for the way out of the hay,
+	# whose root motion the ticks read (at the idle frame's rate a tick would read the same motion twice, or none).
+	at.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_IDLE
 	var trav: Node = ClassDB.instantiate("FellowTraversal3D")
 	trav.set("climb_mask", LAYER_CLIMB)
 	trav.set("collision_mask", LAYER_WORLD)
@@ -1514,14 +1543,28 @@ func _crowd(p_root: Node3D) -> void:
 
 func _anim_tree() -> AnimationNodeBlendTree:
 	var bt := AnimationNodeBlendTree.new()
-	var loco := AnimationNodeBlendSpace1D.new()
-	for pt in [["idle", 0.0], ["walk", 1.6], ["run", 4.4], ["sprint", 7.0]]:
+	# Milestone 154: the gaits blended at the same moment of their stride — each a cycle of 1 s (gait_walk, gait_run,
+	# gait_sprint) played together at the cycle's rate for the body's speed (loco/rate/scale, set by the controller:
+	# the feet do not slide, the legs do not cross as one gait gives way to the next); idle blended in below a walk.
+	var loco := AnimationNodeBlendTree.new()
+	var gait := AnimationNodeBlendSpace1D.new()
+	for pt in [["gait_walk", 1.6], ["gait_run", 4.4], ["gait_sprint", 7.0]]:
 		var a := AnimationNodeAnimation.new()
 		a.animation = pt[0]
-		loco.add_blend_point(a, pt[1], -1, pt[0])
-	loco.min_space = 0.0
-	loco.max_space = 7.5
-	loco.sync = true
+		gait.add_blend_point(a, pt[1], -1, pt[0])
+	gait.min_space = 1.6
+	gait.max_space = 7.0
+	gait.sync = true
+	loco.add_node(&"gait", gait, Vector2(0, 0))
+	loco.add_node(&"rate", AnimationNodeTimeScale.new(), Vector2(200, 0))
+	loco.connect_node(&"rate", 0, &"gait")
+	var idle := AnimationNodeAnimation.new()
+	idle.animation = "idle"
+	loco.add_node(&"idle", idle, Vector2(200, 200))
+	loco.add_node(&"move", AnimationNodeBlend2.new(), Vector2(400, 100))
+	loco.connect_node(&"move", 0, &"idle")
+	loco.connect_node(&"move", 1, &"rate")
+	loco.connect_node(&"output", 0, &"move")
 	bt.add_node(&"loco", loco, Vector2(0, 0))
 	var hang := AnimationNodeBlendSpace1D.new()
 	for pt in [["hang_idle", 0.0], ["hang_shimmy", 1.0]]:
