@@ -9,6 +9,23 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 153 — the body's weight while climbing; the city's houses built (2026-11-19)
+
+- Decision 0290 (opt-in): a leap from a hold winds up, springs from rest and is caught with its speed, its hands thrown
+  to the ledge ahead of the body at full IK weight and its feet pushing off the wall and braced again
+  (`FellowTraversal3D.hang_leap_windup`); the hips on a damped spring behind the body — they swing on when a leap is
+  caught and lag when it starts, never lower than the arms reach — and the limbs' targets eased
+  (`FellowTraversalPose3D.body_sway`, `sway_frequency`, `sway_damping`, `sway_max`, `limb_smoothing`); a clip of its own
+  for a mantle from a hang (`hang_clip`). `climb_check.gd`: a new lane `leap_style`; the other 36 value for value on
+  GodotPhysics3D and Jolt; the regression scenes exact.
+- The rooftops showcase: the hang braced lower (the feet under the hips, not drawn up to the chest) and its clips remade;
+  leaps that wind up, fly with the legs together and swing in to the wall when caught, scaled to each move's time; a
+  climb up from a hang (pulled up, a knee onto the top, standing up); a jump at a wall with the arms reaching for the
+  hold; eased cross-fades. The city beyond the square rebuilt: 794 houses (30 prototypes, a near and a far set, as
+  instances; 1.1 million triangles) with windows in their openings, shutters, sills, string courses, cornices, eaves on
+  rafters, tiled hip and gable roofs with their ridges' tiles, terraces with altane, loggias, balconies and chimneys,
+  each its own plaster's colour — in place of boxes with windows drawn on them; the golden hour's haze over the distance.
+
 ## Milestone 152 — climbing across, on narrow holds, over eaves and parapets onto the roofs; the RTX's rare failure narrowed (2026-11-19)
 
 - Decision 0284: the hot workers' gate forced (`debug/gate_open_every`: one frame in N, 1 always open, -1 always
