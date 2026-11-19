@@ -728,6 +728,18 @@ func _on_skeleton_updated(lane: Dictionary) -> void:
 				var hand: Vector3 = sk.global_transform * sk.get_bone_global_pose(sk.find_bone("LeftHand" if side == 0 else "RightHand")).origin
 				lane["grip_error_max"] = maxf(lane.get("grip_error_max", 0.0), hand.distance_to(targets["hand_left" if side == 0 else "hand_right"]))
 				lane["grip_samples"] = int(lane.get("grip_samples", 0)) + 1
+	# Milestone 154 (decision 0293): through a move from hold to hold the look is on the next hold (where the hands are
+	# when the move ends).
+	if pose.hang_fit and t.is_hanging() and targets.get("active", false):
+		if t.is_transferring():
+			if float(targets.get("look_weight", 0.0)) >= 0.999:
+				lane["look_pending"] = targets.look
+				lane["look_frames"] = int(lane.get("look_frames", 0)) + 1
+		elif lane.has("look_pending"):
+			var mid: Vector3 = (targets.hand_left + targets.hand_right) * 0.5
+			lane["look_error_max"] = maxf(lane.get("look_error_max", 0.0), (lane.look_pending as Vector3).distance_to(mid))
+			lane["look_moves"] = int(lane.get("look_moves", 0)) + 1
+			lane.erase("look_pending")
 	if not targets.get("active", false) or not (t.is_hanging() or t.is_on_ladder() or t.is_climbing()):
 		return
 	var pairs := [["LeftHand", "hand_left", targets.hand_weights.x, "LeftUpperArm", "LeftLowerArm"],
@@ -973,7 +985,9 @@ func _finish() -> void:
 				e["sway_max_cm"] = snappedf(float(lane.get("sway_max", 0.0)) * 100.0, 0.1)
 				e["grip_error_max_cm"] = snappedf(float(lane.get("grip_error_max", 0.0)) * 100.0, 0.1)
 				e["grip_samples"] = int(lane.get("grip_samples", 0))
-				ok = ok and names.has("hang_started:3.7") and names.count("hang_transferred:reach") == 2 and names.count("hang_transferred:up") == 1 and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 7.4) < 0.05 and lane.get("sway_max", 0.0) > 0.01 and int(lane.get("grip_samples", 0)) > 100 and float(lane.get("grip_error_max", 1.0)) < 0.02
+				e["look_moves"] = int(lane.get("look_moves", 0))
+				e["look_error_max_cm"] = snappedf(float(lane.get("look_error_max", 0.0)) * 100.0, 0.1)
+				ok = ok and names.has("hang_started:3.7") and names.count("hang_transferred:reach") == 2 and names.count("hang_transferred:up") == 1 and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 7.4) < 0.05 and lane.get("sway_max", 0.0) > 0.01 and int(lane.get("grip_samples", 0)) > 100 and float(lane.get("grip_error_max", 1.0)) < 0.02 and int(lane.get("look_moves", 0)) >= 2 and float(lane.get("look_error_max", 1.0)) < 0.03
 			"climb_off", "climb_masked", "climb_overhang":
 				# Not climbed: standing at the wall's foot.
 				ok = ok and not names.has("climb_started") and feet.y < 0.05

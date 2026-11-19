@@ -890,7 +890,11 @@ hands thrown to the ledge ahead of the body and held, the feet pushing off and b
 it changes, never lower than the arms reach), `sway_frequency` (1.6 Hz), `sway_damping` (0.35 of critical), `sway_max`
 (0.15 m), `limb_smoothing` (0 s: the hands' and feet's targets eased with this time constant); `get_sway()`. The hands
 on the stone (decision 0291): `hang_fit` (off: hanging, the body moved up to 0.75 m until the shoulders are within reach
-of the holds the hands grip — `hand_grips` in `get_pose_targets()`), `get_hang_fit_offset()`.
+of the holds the hands grip — `hand_grips` in `get_pose_targets()`), `get_hang_fit_offset()`. Drawn between the ticks
+(milestone 154, decision 0292): with physics interpolation on, the pose's targets are placed relative to the skeleton's
+interpolated transform. The eyes on the hold (decision 0293): `look` and `look_weight` in `get_pose_targets()` (the
+next hold through a move, along the ledge or up the wall the way the controller wishes while hanging, over the top
+through a mantle) — for a `LookAtModifier3D` on the head.
 Bench `bench/climb_check.gd` (`hold_climb`, `side_reach`, `narrow_holds`, `eave_roof`, `eave_deep`, `beside_reach`,
 `stacked_holds`, `parapet`, `leap_style`;
 `--only=<lanes> --times=<s,...>` for a picture strip of some lanes at given times).

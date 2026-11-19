@@ -9,6 +9,23 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 154 — a camera that does not shake; gaits in step; no step off a roof; the eyes on the next hold (2026-11-19)
+
+- Decision 0292: `FellowTraversalPose3D` places the hands and feet relative to the skeleton where it is drawn (its
+  interpolated transform; with physics interpolation off, the same as before). The rooftops showcase interpolates its
+  player between the physics ticks and advances its animation in the idle frames: at 144 Hz over 60 Hz physics the
+  body and the camera move 3.06 cm every frame running at 4.4 m/s (before: 0 to 7.3 cm — the camera shook).
+- Decision 0293: the traversal's hints say where the climber looks (`look`, `look_weight` in `get_pose_targets()`):
+  the next hold from a move's start, along the ledge or up the wall the way the controller wishes while hanging, over
+  the top through a mantle. The showcase turns the head to it with Godot's `LookAtModifier3D`, and on the ground to
+  where the controller steers. `climb_check.gd`: `leap_style` checks the look; the 37 lanes value for value on
+  GodotPhysics3D and Jolt; the regression scenes exact.
+- Decision 0294 (the showcase): the gaits' cycles normalized and blended at the same moment of the stride, played at
+  the cycle's rate for the body's speed — the planted foot slides half as much or less between gaits (walk to run 0.95
+  → 0.50 m/s, run to sprint 1.29 → 0.35, stopping 1.44 → 0.73); the body leans into turns and with its speed's changes;
+  walking or running it no longer steps off an edge (stopped at it, or along it at a slant; a beam walked along;
+  sprinting still goes over).
+
 ## Milestone 153 — the body's weight while climbing; the city's houses built (2026-11-19)
 
 - Decision 0290 (opt-in): a leap from a hold winds up, springs from rest and is caught with its speed, its hands thrown

@@ -725,6 +725,9 @@ void FellowTraversal3D::_update_hints(const Vector3 &p_feet, const Vector3 &p_ed
 	hints.inward = p_inward;
 	hints.body_offset = Vector3();
 	hints.left = UP.cross(p_inward).normalized();
+	// Milestone 154 (decision 0293): over the top, where the body goes.
+	hints.look = p_edge + p_inward * 0.8f + UP * 0.1f;
+	hints.look_weight = 1.0f;
 	const Vector3 left = hints.left;
 	const float ankle = 0.08f;
 	hints.hand[0] = p_edge + left * 0.22f + p_inward * 0.06f + UP * 0.02f;
@@ -855,6 +858,7 @@ void FellowTraversal3D::_finish(bool p_cancelled) {
 	hints.active = false;
 	hints.hand_weight[0] = hints.hand_weight[1] = 0.0f;
 	hints.hand_grip[0] = hints.hand_grip[1] = 0.0f;
+	hints.look_weight = 0.0f;
 	hints.foot_weight[0] = hints.foot_weight[1] = 0.0f;
 	hints.lean = 0.0f;
 	hints.hips_drop = 0.0f;
@@ -1591,6 +1595,9 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 		transfer.to.edge - to_left * transfer.to.spread + transfer.to.inward * 0.06f + UP * 0.02f,
 	};
 	const float hold = jump ? 1.0f - 0.85f * Math::sin(u * float(Math::PI)) : (transfer.how == TRANSFER_DROP ? smooth(MIN(1.0f, u * 2.0f)) : 1.0f);
+	// Milestone 154 (decision 0293): the eyes on the next hold from the move's start (a leap's wind-up included).
+	hints.look = (to_hands[0] + to_hands[1]) * 0.5f;
+	hints.look_weight = 1.0f;
 	const Vector3 face = feet + inward * (radius + 0.02f) + UP * (hang_brace_height > 0.0f ? hang_brace_height : 0.35f);
 	for (int h = 0; h < 2; h++) {
 		hints.hand[h] = transfer.from_hands[h].lerp(to_hands[h], w);
@@ -1928,6 +1935,14 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 	hints.hand[1] = ledge.edge - left * (ledge.spread - stretch) + ledge.inward * 0.06f + UP * 0.02f;
 	hints.hand_weight[0] = hints.hand_weight[1] = w;
 	hints.hand_grip[0] = hints.hand_grip[1] = 1.0f;
+	// Milestone 154 (decision 0293): hanging, the eyes on the hold, along the ledge the way the controller wishes to go,
+	// up the wall when it wishes to climb.
+	{
+		const float aside = CLAMP(wish.dot(left), -1.0f, 1.0f);
+		const float up = CLAMP(wish.dot(ledge.inward) + wish.y, 0.0f, 1.0f);
+		hints.look = ledge.edge + left * (0.9f * aside) + UP * (0.05f + 0.7f * up);
+		hints.look_weight = w;
+	}
 	const Vector3 face = ledge.edge - ledge.inward * 0.06f;
 	for (int s = 0; s < 2; s++) {
 		hints.foot[s] = Vector3(face.x, hang_feet.y + 0.35f, face.z) + left * (s == 0 ? 0.14f : -0.14f);
@@ -1951,6 +1966,7 @@ void FellowTraversal3D::_end_hang(bool p_climbed) {
 	hints.active = false;
 	hints.hand_weight[0] = hints.hand_weight[1] = 0.0f;
 	hints.hand_grip[0] = hints.hand_grip[1] = 0.0f;
+	hints.look_weight = 0.0f;
 	hints.foot_weight[0] = hints.foot_weight[1] = 0.0f;
 	climb_requested = false;
 	release_requested = false;
@@ -2109,6 +2125,7 @@ void FellowTraversal3D::_step_ladder(double p_delta) {
 	const int phase = int(Math::floor(ladder_h / spacing));
 	hints.active = true;
 	hints.kind = KIND_LADDER;
+	hints.look_weight = 0.0f;
 	hints.progress = top > 0.0f ? ladder_h / top : 0.0f;
 	hints.inward = -out;
 	hints.left = left;
@@ -2132,6 +2149,7 @@ void FellowTraversal3D::_end_ladder(bool p_at_top, const Vector3 &p_velocity) {
 	hints.active = false;
 	hints.hand_weight[0] = hints.hand_weight[1] = 0.0f;
 	hints.hand_grip[0] = hints.hand_grip[1] = 0.0f;
+	hints.look_weight = 0.0f;
 	hints.foot_weight[0] = hints.foot_weight[1] = 0.0f;
 	release_requested = false;
 	cooldown = p_at_top ? 0.0 : 0.5;
@@ -2492,6 +2510,8 @@ void FellowTraversal3D::_step_climb(double p_delta) {
 		const Vector3 l2 = n.cross(t_up).normalized();
 		hints.active = true;
 		hints.kind = KIND_CLIMB;
+	hints.look_weight = 0.0f;
+		hints.look_weight = 0.0f;
 		hints.inward = -nf;
 		hints.left = flat(l2).normalized();
 		for (int s = 0; s < 2; s++) {
@@ -2610,6 +2630,7 @@ void FellowTraversal3D::_step_climb(double p_delta) {
 	const int phase = int(Math::floor(climb_travel / CLIMB_STEP));
 	hints.active = true;
 	hints.kind = KIND_CLIMB;
+	hints.look_weight = 0.0f;
 	hints.progress = 0.0f;
 	hints.inward = -nf;
 	hints.left = flat(l2).normalized();
@@ -2633,6 +2654,7 @@ void FellowTraversal3D::_end_climb(bool p_at_top, const Vector3 &p_velocity) {
 	hints.active = false;
 	hints.hand_weight[0] = hints.hand_weight[1] = 0.0f;
 	hints.hand_grip[0] = hints.hand_grip[1] = 0.0f;
+	hints.look_weight = 0.0f;
 	hints.foot_weight[0] = hints.foot_weight[1] = 0.0f;
 	hints.lean = 0.0f;
 	release_requested = false;
@@ -2709,6 +2731,8 @@ Dictionary FellowTraversal3D::get_pose_targets() const {
 	d["hand_right"] = hints.hand[1];
 	d["hand_weights"] = Vector2(hints.hand_weight[0], hints.hand_weight[1]);
 	d["hand_grips"] = Vector2(hints.hand_grip[0], hints.hand_grip[1]);
+	d["look"] = hints.look;
+	d["look_weight"] = hints.look_weight;
 	d["foot_left"] = hints.foot[0];
 	d["foot_right"] = hints.foot[1];
 	d["foot_weights"] = Vector2(hints.foot_weight[0], hints.foot_weight[1]);

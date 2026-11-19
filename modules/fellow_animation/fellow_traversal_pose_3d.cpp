@@ -384,7 +384,11 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 	weight = blend_time > 0.0f ? Math::move_toward(weight, goal, float(p_delta) / blend_time) : goal;
 	hips_drop = 0.0f;
 	// Milestone 153: the spring follows the body even while it is off (the body's speed known when it comes on).
-	_sway_step(skeleton->get_global_transform().origin + (now.active ? now.body_offset : Vector3()), p_delta, now.active && !now.clip.is_valid());
+	// Milestone 154 (decision 0292): the skeleton where it is drawn — between two physics ticks with physics interpolation
+	// on (the body moved at the ticks, the frame drawn between them: the hands would slide on their holds by the
+	// difference); the same as its transform with it off.
+	const Transform3D sk_xform = skeleton->get_global_transform_interpolated();
+	_sway_step(sk_xform.origin + (now.active ? now.body_offset : Vector3()), p_delta, now.active && !now.clip.is_valid());
 	if (weight <= 0.0f) {
 		last.clip.unref();
 		limbs_valid = false;
@@ -401,7 +405,7 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 			fit = fit.lerp(Vector3(), 1.0f - Math::exp(-float(p_delta) / 0.2f));
 			const int hips_bone = bones[ROLE_HIPS];
 			if (hips_bone >= 0) {
-				const Transform3D to_sk = skeleton->get_global_transform().affine_inverse();
+				const Transform3D to_sk = sk_xform.affine_inverse();
 				const Vector3 moved = skeleton->get_bone_global_pose(hips_bone).origin + to_sk.basis.xform(fit) * weight;
 				const int parent = skeleton->get_bone_parent(hips_bone);
 				skeleton->set_bone_pose_position(hips_bone, parent >= 0 ? skeleton->get_bone_global_pose(parent).affine_inverse().xform(moved) : moved);
@@ -409,7 +413,7 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 		}
 		return;
 	}
-	const Transform3D to_skeleton = skeleton->get_global_transform().affine_inverse();
+	const Transform3D to_skeleton = sk_xform.affine_inverse();
 	const Vector3 up = to_skeleton.basis.xform(Vector3(0, 1, 0)).normalized();
 	const Vector3 inward = to_skeleton.basis.xform(h.inward).normalized();
 	const Vector3 left = to_skeleton.basis.xform(h.left).normalized();
@@ -481,7 +485,7 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 			move += need / MAX(count, 1.0f);
 		}
 		move = move.limit_length(0.75f * meter);
-		fit_goal = skeleton->get_global_transform().basis.xform(move);
+		fit_goal = sk_xform.basis.xform(move);
 	}
 	if (hang_fit) {
 		fit = fit.lerp(fit_goal, 1.0f - Math::exp(-float(p_delta) / 0.1f));
