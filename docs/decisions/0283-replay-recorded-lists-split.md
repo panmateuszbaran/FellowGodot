@@ -1,9 +1,9 @@
 # 0283 — Lists recorded in parallel replayed as any other (the RTX's rare hang)
 
-Status: **PENDING the RTX** (`f515`; off by default from milestone 151) · Branch `fellow/geometry` · Code:
-`servers/rendering/rendering_device_graph.cpp` (`_fellow_split_draw_list()`), `fellow_settings.{h,cpp}`
-(`frame/replay_recorded_segments`) · Checks: the RTX's jobs `m147_f510`, `m151_f512`, `m151_f514`; lavapipe (a
-scene of 1 200 transparent meshes, the image regression suite's draw-heavy scenes).
+Status: **REJECTED** (the RTX: `f515`, 4 failures in 60 runs; the setting stays, on, for diagnostics) · Branch
+`fellow/geometry` · Code: `servers/rendering/rendering_device_graph.cpp` (`_fellow_split_draw_list()`), `fellow_settings.{h,cpp}`
+(`frame/replay_recorded_segments`) · Checks: the RTX's jobs `m147_f510`, `m151_f512`, `m151_f514`, `m151_f515`;
+lavapipe (a scene of 1 200 transparent meshes, the image regression suite's draw-heavy scenes).
 
 ## Problem
 
@@ -30,15 +30,15 @@ Two of FellowEngine's parallel paths meet in such a list:
 | `m151_f514` | on | off (every list replayed whole) | 0 | 4.47 ms | 1.43 ms | 6.01 ms |
 
 The commands recorded in segments do not hang the GPU when they are replayed whole (`f514`). Lists split by their draws
-do not hang it either (`f512`). Only lists replayed in their recorded segments did. A check of every recorded segment's
-first draw against the state set before it found nothing missing on lavapipe: a scene of 1 200 transparent meshes, 24
-lists recorded in parallel. So the fault is not identified; the replay of recorded segments is avoided.
+do not hang it either (`f512`). The hypothesis tested here: only lists replayed in their recorded segments hang, a
+segment needing state set before it. A check of every recorded segment's first draw against the state set before it
+found nothing missing on lavapipe: a scene of 1 200 transparent meshes, 24 lists recorded in parallel.
 
 ## Change
 
-`frame/replay_recorded_segments` (off): a list recorded in parallel is split by its draws for the replay, as any other
-list is, each part starting with the state the instructions before it set. On restores the replay in its recorded
-segments. The same commands in the same order: the same images.
+`frame/replay_recorded_segments`: off, a list recorded in parallel is split by its draws for the replay, as any other
+list is, each part starting with the state the instructions before it set; on (the default again), it is replayed in
+its recorded segments. The same commands in the same order: the same images.
 
 ## Checks
 
@@ -46,12 +46,27 @@ segments. The same commands in the same order: the same images.
   0, 348 segments in 29 lists, against 98 in their recorded segments). The image regression suite's draw-heavy scenes
   (`instances`, `crowd`, `stress`, `geometry`, `materials`, the render thread's and the crowd groups' crowds) are
   identical.
-* The RTX (`f515`, pending): Bistro exterior streamed as `f510`, with this build's defaults, 60 runs. If the hang were
-  as frequent as in `f510`, 60 runs without one would happen once in 100; at one in 20 runs, once in 20.
+* The RTX (`m151_f515`): Bistro exterior streamed as `f510`, the setting off, 60 runs — **4 failures** (runs 12, 29,
+  30 and 34), each inside the transparent pass (command 69 or 71) as before. This time each ended in a device loss:
+  Windows reset the GPU after its timeout, and `VK_EXT_device_fault` gave no address. The frame took 4.42 ms, the
+  render thread 1.41 ms, p99 5.9 ms.
+
+| job | parallel recording | parallel replay | failures |
+|---|---|---|---:|
+| `f510` | on | on, in the recorded segments | 3 in 40 |
+| `f515` | on | on, split by draws | 4 in 60 |
+| `f512` | off | on, split by draws | 0 in 40 |
+| `f514` | on | off | 0 in 40 |
+
+How the replay splits a recorded list does not matter: the failure needs a list recorded in parallel **and** replayed
+into secondary command buffers. The commands are fine replayed whole, and a list recorded alone is fine replayed in
+secondaries.
 
 ## Decision
 
-Off from milestone 151, pending `f515`. `f512` and `f514` already show that neither parallel path alone hangs.
+REJECTED: the default goes back to the replay in recorded segments (on). The setting stays for diagnostics. Next
+(`f516`): the parallel replay runs only while the hot workers' gate is open, and in GPU-bound Bistro that state is rare.
+The gate held open will tell whether every such frame can fail or only the opening and closing of the gate.
 
 ## Rejected / not done
 

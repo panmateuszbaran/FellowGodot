@@ -115,8 +115,10 @@ into the main command buffer) — a hang there is the recorded commands', none t
 
 `m151_f514` — parallel recording on, the parallel replay off: **no hang in 40** (the frame 4.47 ms, the render thread
 1.43 ms against 1.47, p99 6.0 ms). Neither path alone hangs; both together, where a list recorded in segments is
-replayed in those segments, did (3 in 40). Decision 0283: such lists are now split for the replay as any other
-(`frame/replay_recorded_segments` off); `f515` runs Bistro so 60 times.
+replayed in those segments, did (3 in 40). Decision 0283 split such lists for the replay as any other: `m151_f515`, 4 failures in 60 runs, each inside the
+transparent pass and each now a device loss (Windows' timeout reset the GPU; `VK_EXT_device_fault` no address) —
+rejected. The failure needs a list recorded in parallel replayed into secondary command buffers, however split. Next:
+`f516`, the hot workers' gate held open (the parallel replay in every frame, in Bistro otherwise rare).
 
 ## Decision
 
