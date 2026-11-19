@@ -74,6 +74,7 @@ public:
 		TRANSFER_JUMP_BACK, // milestone 95: to a ledge on the wall behind
 		TRANSFER_JUMP_CORNER, // milestone 149: round the corner past the edge's end, to a ledge on the side
 		TRANSFER_REACH_UP, // milestone 151: up to a ledge within hang_reach_up, hand over hand
+		TRANSFER_REACH_SIDE, // milestone 152: across to a ledge within hang_reach_side to the side (or up and to the side), hand over hand
 	};
 
 	// A check's result (global space).
@@ -167,6 +168,7 @@ private:
 	// Milestone 151 (decision 0282): climbing from hold to hold.
 	float hang_reach_up = 0.0f; // m: a ledge up to this far above is climbed to hand over hand (0: jumped to)
 	float hang_brace_height = 0.0f; // m: the feet braced on the wall found under the ledge, this high over the body's feet (0: off)
+	float hang_reach_side = 0.0f; // milestone 152 (decision 0285), m: a gap to a ledge to the side up to this wide is crossed hand over hand (0: jumped)
 	// Milestone 84 (decision 0192): walking over an edge, hanging from it.
 	bool drop_to_hang = false;
 	float drop_max_speed = 2.0f; // m/s: faster, the body goes over
@@ -238,6 +240,7 @@ private:
 	double corner_wait = 0.0; // after a corner looked for in vain, the next look (s)
 	double reach_wait = 0.0; // milestone 151: after a ledge above looked for in vain, the next look (s)
 	int reach_lead = 1; // milestone 151: the hand that led the last reach up (0: left, 1: right); the next leads with the other
+	double reach_side_wait = 0.0; // milestone 152: after a ledge to the side looked for in vain at an edge's end, the next look (s)
 	float climb_input = 0.0f; // the controller's up (1) or down (-1) on a ladder; 0: from the intent
 	ObjectID ladder_id;
 	float ladder_h = 0.0f; // the feet's height along the ladder from its foot
@@ -295,6 +298,7 @@ private:
 	void _step_hang(double p_delta);
 	void _end_hang(bool p_climbed);
 	float _edge_end(float p_sign) const;
+	bool _fit_reach(Ledge &r_to, const Vector3 &p_from_feet, const Vector3 &p_bias, const HashSet<RID> &p_exclude, Vector3 &r_control) const;
 	bool _find_corner(float p_sign, Ledge &r_ledge, Vector3 &r_control, int &r_how) const;
 	bool _find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector3 &r_control, int &r_how) const;
 	bool _find_drop(const Vector3 &p_direction, Ledge &r_ledge, Vector3 &r_mid) const;
@@ -429,6 +433,8 @@ public:
 	float get_hang_reach_up() const { return hang_reach_up; }
 	void set_hang_brace_height(float p_height) { hang_brace_height = CLAMP(p_height, 0.0f, 1.5f); }
 	float get_hang_brace_height() const { return hang_brace_height; }
+	void set_hang_reach_side(float p_gap) { hang_reach_side = CLAMP(p_gap, 0.0f, 1.5f); }
+	float get_hang_reach_side() const { return hang_reach_side; }
 	void set_drop_to_hang(bool p_enabled) { drop_to_hang = p_enabled; }
 	bool is_drop_to_hang() const { return drop_to_hang; }
 	void set_drop_max_speed(float p_speed) { drop_max_speed = MAX(0.0f, p_speed); }

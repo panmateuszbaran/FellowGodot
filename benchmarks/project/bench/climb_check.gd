@@ -39,6 +39,7 @@ var save_frames := false
 var grid := false
 var shot_size := Vector2i(480, 360)
 var strip_times := [0.5, 1.5, 3.0, 4.5, 6.5, 8.5]
+var only := PackedStringArray()
 var shots := {}
 var viewports := {}
 var probe_shape: CapsuleShape3D
@@ -62,6 +63,13 @@ func _initialize() -> void:
 	grid = _arg("grid", "0") == "1"
 	var ss: PackedStringArray = _arg("shot", "480x360").split("x")
 	shot_size = Vector2i(int(ss[0]), int(ss[1]))
+	# Milestone 152: the strip's times (--times=2.2,4.0) and its lanes (--only=side_reach,hold_climb).
+	if args.has("times"):
+		strip_times = []
+		for t in String(args["times"]).split(","):
+			strip_times.append(float(t))
+	if args.has("only"):
+		only = String(args["only"]).split(",")
 	_build.call_deferred()
 
 
@@ -279,7 +287,7 @@ func _lane(name: String, start: Vector3, program: Array) -> Dictionary:
 	t.hang_finished.connect(func(climbed: bool) -> void:
 		lane.events.append(["hang_finished", climbed, snappedf(frame / 60.0, 0.01)]))
 	t.hang_transferred.connect(func(_ledge: Dictionary, how: int) -> void:
-		lane.events.append(["hang_transferred", ["outer", "inner", "along", "up", "drop", "down", "diagonal", "back", "corner", "reach"][how], snappedf(frame / 60.0, 0.01)]))
+		lane.events.append(["hang_transferred", ["outer", "inner", "along", "up", "drop", "down", "diagonal", "back", "corner", "reach", "reach_side"][how], snappedf(frame / 60.0, 0.01)]))
 	t.ladder_started.connect(func(_ladder: Node3D) -> void:
 		lane.events.append(["ladder_started", snappedf(frame / 60.0, 0.01)]))
 	t.ladder_finished.connect(func(at_top: bool) -> void:
@@ -498,6 +506,19 @@ func _build() -> void:
 	(lh.traversal as FellowTraversal3D).hang_reach_up = 1.25
 	(lh.traversal as FellowTraversal3D).hang_jump_height = 2.3
 	(lh.traversal as FellowTraversal3D).hang_brace_height = 0.65
+	# Milestone 152 (decision 0285): across from hold to hold. A 5.4 m wall (its own ground) with corbels at 3.4 m (the
+	# one caught, and one 0.6 m to its left) and at 4.3 m, 0.4 m past that one's end: a jump at the wall, along to the
+	# first's end and across to the second hand over hand, up and to the left across to the third, up to the top.
+	_box(Vector3(126, -0.5, 10.0), Vector3(11.0, 1.0, 10.0), Color(0.36, 0.42, 0.34))
+	_box(Vector3(125.5, 2.7, 9.0), Vector3(8.0, 5.4, 2.0), Color(0.62, 0.55, 0.48))
+	for c in [[127.0, 3.4], [125.6, 3.4], [124.4, 4.3]]:
+		_box(Vector3(c[0], c[1] - 0.075, 10.11), Vector3(0.8, 0.15, 0.22), Color(0.72, 0.7, 0.66))
+	var ls := _lane("side_reach", Vector3(127, 0, 12), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}],
+			[1.6, {"intent": Vector3(-1, 0, 0)}], [3.6, {"intent": Vector3(-0.7, 0.7, 0)}], [4.2, {"intent": Vector3(0, 1, 0)}],
+			[7.4, {"intent": Vector3()}]])
+	(ls.traversal as FellowTraversal3D).hang_reach_up = 1.25
+	(ls.traversal as FellowTraversal3D).hang_reach_side = 0.8
+	(ls.traversal as FellowTraversal3D).hang_brace_height = 0.65
 	# None: free_climb off; the wall outside climb_mask; an overhang of 30 degrees.
 	_box(Vector3(40, 2.25, 9.0), Vector3(3.0, 4.5, 2.0), Color(0.6, 0.6, 0.66))
 	_lane("climb_off", Vector3(40, 0, 12), [[0.0, {"intent": walk, "speed": 1.5}], [4.0, {"intent": Vector3()}]])
@@ -529,6 +550,8 @@ func _make_viewports() -> void:
 		get_root().add_child(grid_box)
 	for lane in lanes:
 		var name: String = lane.name
+		if not only.is_empty() and not only.has(name):
+			continue
 		var vp := SubViewport.new()
 		vp.size = shot_size
 		vp.world_3d = get_root().world_3d
@@ -554,6 +577,10 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x + 4.5, 4.5, 3.5), Vector3(x - 0.3, 3.4, -2.6))
 			"drop_hang", "drop_run":
 				cam.look_at_from_position(Vector3(x + 4.0, 3.6, 3.0), Vector3(x - 0.3, 2.2, -2.8))
+			"hold_climb":
+				cam.look_at_from_position(Vector3(x + 2.0, 4.6, 16.0), Vector3(x, 4.4, 10.0))
+			"side_reach":
+				cam.look_at_from_position(Vector3(x - 1.4, 4.2, 15.0), Vector3(x - 1.4, 3.6, 10.0))
 			_:
 				cam.look_at_from_position(Vector3(x + 2.5, 2.4, 3.2), Vector3(x - 0.4, 1.6, -1.8))
 		if grid:
@@ -800,6 +827,9 @@ func _finish() -> void:
 			"hold_climb":
 				# Milestone 151: up the corbels hand over hand and by a leap, over the wall's top (7.4 m), standing on it.
 				ok = ok and names.has("hang_started:3.7") and names.count("hang_transferred:reach") == 2 and names.count("hang_transferred:up") == 1 and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 7.4) < 0.05
+			"side_reach":
+				# Milestone 152: across to the second corbel and up across to the third hand over hand, up to the top (5.4 m).
+				ok = ok and names.has("hang_started:3.4") and names.count("hang_transferred:reach_side") == 2 and names.count("hang_transferred:reach") == 1 and (names.has("mantle_finished:high") or names.has("mantle_finished:low")) and absf(feet.y - 5.4) < 0.05
 			"climb_off", "climb_masked", "climb_overhang":
 				# Not climbed: standing at the wall's foot.
 				ok = ok and not names.has("climb_started") and feet.y < 0.05
@@ -828,7 +858,8 @@ func _save_strip() -> void:
 	var h := shot_size.y
 	var names := []
 	for lane in lanes:
-		names.append(lane.name)
+		if only.is_empty() or only.has(lane.name):
+			names.append(lane.name)
 	var strip := Image.create(w * strip_times.size(), h * names.size(), false, Image.FORMAT_RGBA8)
 	for r in names.size():
 		for k in strip_times.size():

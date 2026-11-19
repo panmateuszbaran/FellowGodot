@@ -2,7 +2,7 @@ extends CharacterBody3D
 ## The rooftops' character: the mannequin (made in Blender: tools/blender/build_mannequin.py) moved by this controller
 ## and by FellowTraversal3D — running, sprinting, jumping and rolling on the ground; mantling, vaulting; climbing the
 ## buildings from hold to hold as in Assassin's Creed (sills, hoods, string courses, corbels and beams: hanging braced
-## on the wall, shimmying along a ledge, reaching up hand over hand to the next, leaping to one further up or along —
+## on the wall, shimmying along a ledge, reaching up or across hand over hand to the next, leaping to one further —
 ## the traversal moves the body, FellowTraversalPose3D puts the hands and the feet on the stone over the clips);
 ## perching on the bell tower's beam, the leap of faith and the way out of the hay.
 ##
@@ -22,6 +22,7 @@ const TRANSFER_JUMP_DIAGONAL := 6
 const TRANSFER_JUMP_BACK := 7
 const TRANSFER_JUMP_CORNER := 8
 const TRANSFER_REACH_UP := 9
+const TRANSFER_REACH_SIDE := 10
 
 @export var walk_speed := 1.6
 @export var run_speed := 4.4
@@ -76,7 +77,7 @@ func _ready() -> void:
 func _on_transfer(_ledge: Dictionary, how: int, _duration: float, lead: int) -> void:
 	var side := "l" if lead == 0 else "r"
 	match how:
-		TRANSFER_REACH_UP:
+		TRANSFER_REACH_UP, TRANSFER_REACH_SIDE:
 			_play("hang_reach_" + side)
 		TRANSFER_JUMP_UP:
 			_play("hang_leap_up")

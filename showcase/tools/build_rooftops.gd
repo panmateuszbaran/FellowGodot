@@ -1342,6 +1342,8 @@ func _build_player() -> PackedScene:
 	trav.set("hang_reach_up", 1.25)
 	trav.set("hang_jump_height", 2.3)
 	trav.set("hang_brace_height", 0.65)
+	# Across from hold to hold (decision 0285): a gap to a ledge to the side up to 0.8 m reached hand over hand.
+	trav.set("hang_reach_side", 0.8)
 	trav.set("high_clip", lib.get_animation(&"mantle_high"))
 	trav.set("low_clip", lib.get_animation(&"mantle_low"))
 	trav.set("vault_clip", lib.get_animation(&"vault"))
