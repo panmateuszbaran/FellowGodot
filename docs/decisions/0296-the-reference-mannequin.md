@@ -89,8 +89,9 @@ Compared, frame by frame:
   colours not boosted (saturation 1.0).
 * **The demo** (`rooftops_demo.gd`): the house's shots filmed as the reference is — a camera in the character's frame
   (`orbit`): beside the runner, a little ahead, at the chest's height; close behind and below the climber, looking up
-  the wall; beside the body on the tiles at the roof's height; then the camera rising over the roofs. After the mantle,
-  up the tiles on hands and feet for 3 s.
+  the wall; beside the body on the tiles at the roof's height; then the camera rising over the roofs (drawn in along
+  the line from the chest where a wall crosses it, at once, and back out eased: running beside the house's front it had
+  passed behind a pilaster). After the mantle, up the tiles on hands and feet for 3 s.
 
 ## Checks
 

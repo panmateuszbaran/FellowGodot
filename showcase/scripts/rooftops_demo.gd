@@ -15,6 +15,7 @@ var _rig: Node3D
 var _cam: Camera3D
 var _cam_pos := Vector3()
 var _cam_look := Vector3()
+var _cam_dist := 0.0 # milestone 156: the orbit camera's distance from the chest, drawn in by walls
 var _target := Vector3()
 var _has_target := false
 var _quit_at_end := false
@@ -337,7 +338,19 @@ func _process(delta: float) -> void:
 			var snap := t < 0.05
 			_cam_pos = want if snap else _cam_pos.lerp(want, 1.0 - exp(-float(c.get("rate", 3.0)) * delta))
 			_cam_look = look if snap else _cam_look.lerp(look, 1.0 - exp(-6.0 * delta))
-			_cam.global_transform = Transform3D(Basis(), _cam_pos).looking_at(_cam_look)
+			# Not inside a wall: drawn in along the line from the chest where the world's collision crosses it (at once),
+			# back out eased (the run beside a house's front had taken the camera behind its pilaster).
+			var line := _cam_pos - chest
+			var reach := line.length()
+			var q := PhysicsRayQueryParameters3D.create(chest, chest + line.normalized() * (reach + 0.3), _player.collision_mask)
+			q.exclude = [_player.get_rid()]
+			var hit := _player.get_world_3d().direct_space_state.intersect_ray(q)
+			var allowed := reach
+			if not hit.is_empty():
+				allowed = maxf(0.4, chest.distance_to(hit.position) - 0.3)
+			_cam_dist = allowed if (snap or allowed < _cam_dist) else lerpf(_cam_dist, allowed, 1.0 - exp(-4.0 * delta))
+			var shown := chest + line.normalized() * minf(_cam_dist, reach)
+			_cam.global_transform = Transform3D(Basis(), shown).looking_at(_cam_look)
 			_cam.fov = float(c.get("fov", 50.0))
 		"chase":
 			# Milestone 152: behind and beside the character by an offset, eased.
