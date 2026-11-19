@@ -67,6 +67,9 @@
 		<member name="limb_smoothing" type="float" setter="set_limb_smoothing" getter="get_limb_smoothing" default="0.0">
 			The time constant, in seconds, with which the hands' and feet's targets and weights follow the traversal's (no jump where they change: a move's end, a hang's start). [code]0[/code]: off, the targets as given (milestone 153, decision 0290).
 		</member>
+		<member name="soft_ik" type="float" setter="set_soft_ik" getter="get_soft_ik" default="0.0">
+			Past this share of a limb's reach (0.8 to 0.999), its target is eased towards the reach instead of being cut at it: no arm or leg of the pose snaps straight, and one stretched for a target beyond its reach keeps a little bend (milestone 155, decision 0295: a mantle's legs had been straight a quarter of the time). [code]0[/code]: off (the targets reached up to full extension).
+		</member>
 		<member name="sway_damping" type="float" setter="set_sway_damping" getter="get_sway_damping" default="0.35">
 			The [member body_sway] spring's damping, a share of critical damping (1: no swing past the rest).
 		</member>

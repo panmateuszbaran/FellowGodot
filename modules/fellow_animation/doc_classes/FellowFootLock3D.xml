@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowFootLock3D" inherits="SkeletonModifier3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a character's feet held where they come down while the animation under them would slide them — a blend of two gaits, a turn, a start or a stop.
+	</brief_description>
+	<description>
+		A modifier of the character's [Skeleton3D], after the animation's (an [AnimationTree] or [AnimationPlayer] plays under it). Each foot is locked where its sole comes down — under the heel or under the ball (the toe bone's joint), whichever is lower, within [member contact_height] of the ground (the skeleton's origin's height: a character standing on its origin). While locked, the foot is moved across the ground by as much as the animation moves that point: the heel's and the ball's roll stay the animation's and only their slide is taken out, by two-bone IK on the leg (the foot's parent and grandparent bones; the knee in its animated plane, the foot keeping its animated turn). From the heel to the ball the lock is handed over where the ball is shown. A foot is let go when the animation lifts it or pulls it further than [member unlock_radius] from the lock, and returns to the animated foot over [member blend_halflife].
+		A blend of two gaits mixes the same moment of their strides, but not of their stances: a walk's foot is down while a run's is in the air, and the blend drags the foot over the ground. Held, it stays where it came down. Give it its weight with [member SkeletonModifier3D.influence]: on the ground, not in the air or while another modifier poses the legs. Placed elsewhere (a cut), call [method reset]. See [code]docs/decisions/0295-legs-that-bear-weight.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_slide" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="foot" type="int" />
+			<description>
+				Metres the shown [param foot] (0 left, 1 right) has moved across the ground while down since the last [method reset].
+			</description>
+		</method>
+		<method name="is_locked" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="foot" type="int" />
+			<description>
+				[code]true[/code] while [param foot] (0 left, 1 right) is held where it came down.
+			</description>
+		</method>
+		<method name="reset">
+			<return type="void" />
+			<description>
+				Lets go of both feet at once (no blend back from where they were) and clears [method get_slide]: for a character placed elsewhere.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="blend_halflife" type="float" setter="set_blend_halflife" getter="get_blend_halflife" default="0.06">
+			The seconds in which a foot let go halves its way back to the animated foot (a critically damped spring).
+		</member>
+		<member name="contact_height" type="float" setter="set_contact_height" getter="get_contact_height" default="0.03">
+			How close to the ground (metres) the sole under the heel or the ball comes for the foot to be down. A foot the animation brings to the ground faster than it stops is grabbed early by a high value and held short of where it lands.
+		</member>
+		<member name="heel_offset" type="float" setter="set_heel_offset" getter="get_heel_offset" default="0.05">
+			How far behind the ankle (metres, away from the toe) the sole under the heel is.
+		</member>
+		<member name="left_foot_bone" type="StringName" setter="set_left_foot_bone" getter="get_left_foot_bone" default="&amp;&quot;LeftFoot&quot;">
+			The left foot's bone; its parent is the lower leg, its grandparent the upper.
+		</member>
+		<member name="left_toe_bone" type="StringName" setter="set_left_toe_bone" getter="get_left_toe_bone" default="&amp;&quot;LeftToes&quot;">
+			The left foot's toes' bone (its joint is the ball). Empty: the foot is held by its heel only.
+		</member>
+		<member name="right_foot_bone" type="StringName" setter="set_right_foot_bone" getter="get_right_foot_bone" default="&amp;&quot;RightFoot&quot;">
+			The right foot's bone; its parent is the lower leg, its grandparent the upper.
+		</member>
+		<member name="right_toe_bone" type="StringName" setter="set_right_toe_bone" getter="get_right_toe_bone" default="&amp;&quot;RightToes&quot;">
+			The right foot's toes' bone (its joint is the ball). Empty: the foot is held by its heel only.
+		</member>
+		<member name="unlock_radius" type="float" setter="set_unlock_radius" getter="get_unlock_radius" default="0.3">
+			How far (metres) the animation may pull a locked foot from where it is held before it is let go.
+		</member>
+	</members>
+</class>

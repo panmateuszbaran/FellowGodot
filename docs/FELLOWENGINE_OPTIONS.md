@@ -894,7 +894,14 @@ of the holds the hands grip — `hand_grips` in `get_pose_targets()`), `get_hang
 (milestone 154, decision 0292): with physics interpolation on, the pose's targets are placed relative to the skeleton's
 interpolated transform. The eyes on the hold (decision 0293): `look` and `look_weight` in `get_pose_targets()` (the
 next hold through a move, along the ledge or up the wall the way the controller wishes while hanging, over the top
-through a mantle) — for a `LookAtModifier3D` on the head.
+through a mantle) — for a `LookAtModifier3D` on the head. Legs that bear weight (milestone 155, decision 0295):
+`FellowTraversalPose3D.soft_ik` (0: off; past this share of a limb's reach, 0.8-0.999, its target is eased towards the
+reach — no limb snaps straight); `FellowFootLock3D` (a `SkeletonModifier3D`; nothing changes without it): each foot held
+where its sole comes down (under the heel or the ball, within `contact_height`, 0.03 m, of the skeleton's origin's
+height), only its slide taken out, by two-bone IK; let go when lifted or pulled `unlock_radius` (0.3 m) away, back to the
+animation over `blend_halflife` (0.06 s); `heel_offset` (0.05 m), `left_foot_bone`, `right_foot_bone` (`LeftFoot`,
+`RightFoot`; their parents are the legs), `left_toe_bone`, `right_toe_bone` (`LeftToes`, `RightToes`); `is_locked()`,
+`get_slide()`, `reset()`.
 Bench `bench/climb_check.gd` (`hold_climb`, `side_reach`, `narrow_holds`, `eave_roof`, `eave_deep`, `beside_reach`,
 `stacked_holds`, `parapet`, `leap_style`;
 `--only=<lanes> --times=<s,...>` for a picture strip of some lanes at given times).

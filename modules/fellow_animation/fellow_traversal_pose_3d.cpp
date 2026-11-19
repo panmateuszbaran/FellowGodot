@@ -284,6 +284,15 @@ void FellowTraversalPose3D::_two_bone(Skeleton3D *p_skeleton, int p_upper, int p
 		return;
 	}
 	const Vector3 dir = to / d;
+	if (soft_ik > 0.0f) {
+		// Milestone 155 (decision 0295): past soft_ik of the reach the target eased towards it (a limb never snaps straight:
+		// a mantle's legs had been straight a quarter of the time).
+		const float reach = a + b - 1e-3f;
+		const float soft = reach * soft_ik;
+		if (d > soft) {
+			d = soft + (reach - soft) * (1.0f - Math::exp(-(d - soft) / (reach - soft)));
+		}
+	}
 	d = CLAMP(d, Math::abs(a - b) + 1e-3f, a + b - 1e-3f);
 	const float cos_a = CLAMP((a * a + d * d - b * b) / (2.0f * a * d), -1.0f, 1.0f);
 	const float sin_a = Math::sqrt(MAX(0.0f, 1.0f - cos_a * cos_a));
@@ -659,6 +668,8 @@ void FellowTraversalPose3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_hang_fit", "enabled"), &FellowTraversalPose3D::set_hang_fit);
 	ClassDB::bind_method(D_METHOD("is_hang_fit"), &FellowTraversalPose3D::is_hang_fit);
 	ClassDB::bind_method(D_METHOD("get_hang_fit_offset"), &FellowTraversalPose3D::get_hang_fit_offset);
+	ClassDB::bind_method(D_METHOD("set_soft_ik", "share"), &FellowTraversalPose3D::set_soft_ik);
+	ClassDB::bind_method(D_METHOD("get_soft_ik"), &FellowTraversalPose3D::get_soft_ik);
 	ClassDB::bind_method(D_METHOD("get_role_bone", "role"), &FellowTraversalPose3D::get_role_bone);
 	ClassDB::bind_method(D_METHOD("get_hips_drop"), &FellowTraversalPose3D::get_hips_drop);
 	ClassDB::bind_method(D_METHOD("get_weight"), &FellowTraversalPose3D::get_weight);
@@ -676,6 +687,7 @@ void FellowTraversalPose3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sway_max", PROPERTY_HINT_RANGE, "0,0.5,0.01,suffix:m"), "set_sway_max", "get_sway_max");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "limb_smoothing", PROPERTY_HINT_RANGE, "0,0.5,0.005,suffix:s"), "set_limb_smoothing", "get_limb_smoothing");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "hang_fit"), "set_hang_fit", "is_hang_fit");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "soft_ik", PROPERTY_HINT_RANGE, "0,0.999,0.001"), "set_soft_ik", "get_soft_ik");
 
 	BIND_ENUM_CONSTANT(ROLE_HIPS);
 	BIND_ENUM_CONSTANT(ROLE_SPINE);

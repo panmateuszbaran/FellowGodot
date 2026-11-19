@@ -10,6 +10,7 @@ def configure(env):
 def get_doc_classes():
     return [
         "FellowFaceAnimator",
+        "FellowFootLock3D",
         "FellowHeadMotion3D",
         "FellowLadder3D",
         "FellowMotionDatabase",

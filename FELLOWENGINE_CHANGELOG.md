@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 155 — legs that bear weight; the showcase's animation measured in a loop (2026-11-19)
+
+- A quality loop for the showcase's animation (`docs/showcase_animation_quality.md`): `showcase/tools/anim_quality.gd`
+  reads the bones after the modifiers through fixed programs (the gaits and the changes between them, a stop, a turn,
+  the climb up CasaCrema) and `anim_quality.py` holds 32 gates from gait analysis — the knee's, hip's and ankle's
+  flexion over the stride, straight knees, the planted foot's skate, the feet in the ground, the joints' speed through
+  a change, the climbing's knees — against a baseline build.
+- Decision 0295: the owner's "over-straightened legs" measured (the walking knee within 5° of straight in 57 % of the
+  frames, running 31 %, mantling 25 %) and their cause found (the stance ankle asked to go 1.0 m from the hip on a
+  0.86 m leg); the gaits rebuilt from the supporting leg, soft IK, and `FellowFootLock3D` (a new node: each foot held
+  where its sole comes down, only its slide taken out); `FellowTraversalPose3D.soft_ik` (off by default). Straight
+  knees 0 % in every gait and in the mantle; the feet dragged 2.2-2.3 cm through a change of gait (7.7-20.6). 25 of the
+  32 gates pass (14). `climb_check.gd`: events, places and times value for value on GodotPhysics3D and Jolt; the
+  regression scenes exact.
+
 ## Milestone 154 — a camera that does not shake; gaits in step; no step off a roof; the eyes on the next hold (2026-11-19)
 
 - Decision 0292: `FellowTraversalPose3D` places the hands and feet relative to the skeleton where it is drawn (its

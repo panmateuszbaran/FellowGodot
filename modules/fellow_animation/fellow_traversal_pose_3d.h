@@ -79,6 +79,7 @@ private:
 	// Milestone 153 (decision 0291): hanging, the body moved until the shoulders are within the arms' reach of the holds
 	// the hands grip (the hands on the stone whatever the clip's pose and the capsule's place).
 	bool hang_fit = false;
+	float soft_ik = 0.0f; // milestone 155 (decision 0295): past this share of a limb's reach its target is eased (0: off)
 	Vector3 fit; // world: the body's move, eased
 
 	// The skeleton's bones for each role (-1: not found).
@@ -150,6 +151,8 @@ public:
 	void set_sway_max(float p_meters) { sway_max = CLAMP(p_meters, 0.0f, 0.5f); }
 	float get_sway_max() const { return sway_max; }
 	void set_hang_fit(bool p_enabled) { hang_fit = p_enabled; }
+	void set_soft_ik(float p_share) { soft_ik = p_share <= 0.0f ? 0.0f : CLAMP(p_share, 0.8f, 0.999f); }
+	float get_soft_ik() const { return soft_ik; }
 	bool is_hang_fit() const { return hang_fit; }
 	Vector3 get_hang_fit_offset() const { return fit; }
 	void set_limb_smoothing(float p_seconds) { limb_smoothing = CLAMP(p_seconds, 0.0f, 0.5f); }
