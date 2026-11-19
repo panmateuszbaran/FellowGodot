@@ -119,11 +119,11 @@ func _make_shots() -> void:
 		{
 			# Milestone 152: across to CasaCrema and up its front from the street to the roof, from hold to hold (impost band,
 			# rustication, sill, pediment, sill, hood), out to the eave's lip and over it. Milestone 156 (the owner's
-			# reference video): filmed as it is — beside the runner, a little ahead, at the height of the chest; close
-			# behind and below the climber, looking up the wall; beside the body on the tiles at the roof's height.
+			# reference video): filmed as it is — behind the runner and to its side as it comes at the wall; close behind
+			# and below the climber, looking up the wall; beside the body on the tiles at the roof's height.
 			"name": "house", "duration": 8.0, "until_y": 2.0,
 			"place": [Vector3(13.1, 0.0, -7.0), 0.0],
-			"cam": {"mode": "orbit", "offset": Vector3(-2.7, -0.15, -1.5), "rate": 4.0, "fov": 50.0},
+			"cam": {"mode": "orbit", "offset": Vector3(-1.7, -0.1, 3.0), "look_up": 0.3, "rate": 4.0, "fov": 50.0},
 			"prog": [[0.5, {"house": [Vector3(13.1, 0.0, -12.9), Vector3(0.0, 0.0, -1.0)], "sprint": true}]],
 		},
 		{
@@ -347,7 +347,7 @@ func _process(delta: float) -> void:
 			var hit := _player.get_world_3d().direct_space_state.intersect_ray(q)
 			var allowed := reach
 			if not hit.is_empty():
-				allowed = maxf(0.4, chest.distance_to(hit.position) - 0.3)
+				allowed = maxf(1.2, chest.distance_to(hit.position) - 0.3)
 			_cam_dist = allowed if (snap or allowed < _cam_dist) else lerpf(_cam_dist, allowed, 1.0 - exp(-4.0 * delta))
 			var shown := chest + line.normalized() * minf(_cam_dist, reach)
 			_cam.global_transform = Transform3D(Basis(), shown).looking_at(_cam_look)
