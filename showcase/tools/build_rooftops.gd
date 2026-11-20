@@ -53,6 +53,13 @@ const FOOTPRINTS := {
 	"CasaRosa": Vector2(10.2, 9.2), "CasaRiferimento": Vector2(6.64, 6.5), # its front as measured (milestone 160)
 }
 const PAVEMENT := 1.2 ## the raised pavements' width along the fronts (m)
+## Milestone 163: the coppi's clay (clay_tile.gdshader) — three firings, as the reference's roofs: a terracotta, a
+## browner and darker one, an oranger and brighter one.
+const COPPO := {
+	"coppo": {"color": Color(0.64, 0.34, 0.22), "seed": 1.0},
+	"coppo_b": {"color": Color(0.52, 0.28, 0.19), "seed": 2.0, "roughness": 0.55},
+	"coppo_c": {"color": Color(0.72, 0.38, 0.22), "seed": 3.0, "roughness": 0.45},
+}
 const KERB := 0.08 ## and their height
 
 ## The physics layers: 1 the world, 2 what can be climbed (the buildings' walls), 3 the hay (a leap's landing).
@@ -147,9 +154,10 @@ func _make_materials() -> void:
 			"face_rough": 0.004, "variation": 0.2, "grime": 0.0, "ground_dirt": 0.0, "seed": 6.0})
 	mats["roof"] = _shader_mat("roof_tiles", {})
 	# Milestone 158: the coppi over the roofs (ac_buildings.eaves), weathered terracotta.
-	mats["coppo"] = _shader_mat("plaster", {"color": Color(0.7, 0.43, 0.31), "fallen": 0.0, "seed": 9.0})
-	mats["coppo_b"] = _shader_mat("plaster", {"color": Color(0.54, 0.32, 0.24), "fallen": 0.0, "seed": 10.0})
-	mats["coppo_c"] = _shader_mat("plaster", {"color": Color(0.78, 0.45, 0.28), "fallen": 0.0, "seed": 11.0})
+	# Milestone 163: smooth fired clay (rooftops/shaders/clay_tile.gdshader), each tile its own shade, as the
+	# reference's; with or without the photographs.
+	for n in COPPO:
+		mats[n] = _shader_mat("clay_tile", COPPO[n])
 	# The ground: the square's slabs and bands, the fan round the fountain, the pavements along the fronts, the streets'
 	# cobbles (rooftops/shaders/paving.gdshader), told where the houses stand.
 	var walls := PackedVector4Array()
@@ -303,17 +311,10 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 	# on the coppi its colour spread wide (a coppo's own weathering, no tiles drawn on it).
 	# Milestone 159: the clay smooth (the photograph's tiles stretched along each coppo had read as bark): its colour
 	# only, blurred to its weathering's broad patches.
-	photo["coppo"] = _photo("roof", {"tint": Color(0.66, 0.33, 0.2), "tint_strength": 0.85, "brightness": 0.85,
-			"specular": 0.22, "roughness_bias": 0.08, "stains": 0.3, "variation": 0.25, "ground_dirt": 0.0, "anti_tile": false,
-			"seed": 12.0, "tex_size": 6.0, "normal_strength": 0.04, "albedo_soften": 0.7, "soften_lod": 5.0})
-	# Milestone 162: each tile its own firing (the reference's roof is no single colour): a browner, darker one and an
-	# oranger, brighter one.
-	photo["coppo_b"] = _photo("roof", {"tint": Color(0.48, 0.26, 0.18), "tint_strength": 0.85, "brightness": 0.75,
-			"specular": 0.22, "roughness_bias": 0.1, "stains": 0.4, "variation": 0.25, "ground_dirt": 0.0, "anti_tile": false,
-			"seed": 13.0, "tex_size": 6.0, "normal_strength": 0.04, "albedo_soften": 0.7, "soften_lod": 5.0})
-	photo["coppo_c"] = _photo("roof", {"tint": Color(0.74, 0.38, 0.22), "tint_strength": 0.85, "brightness": 0.92,
-			"specular": 0.22, "roughness_bias": 0.06, "stains": 0.25, "variation": 0.25, "ground_dirt": 0.0, "anti_tile": false,
-			"seed": 14.0, "tex_size": 6.0, "normal_strength": 0.04, "albedo_soften": 0.7, "soften_lod": 5.0})
+	# Milestone 163: no photograph on them at all (its grain, box-projected facet by facet, had read as gravel beside
+	# the reference's smooth clay): the procedural clay's.
+	for n in COPPO:
+		photo[n] = _shader_mat("clay_tile", COPPO[n])
 	photo["roof"] = _photo("roof", {"tint": Color(0.8, 0.62, 0.52), "tint_strength": 0.55, "brightness": 0.8, "specular": 0.22,
 			"roughness_bias": 0.05, "stains": 0.25, "variation": 0.15, "ground_dirt": 0.0, "anti_tile": false, "seed": 6.0,
 			"tex_size": 4.2, "parallax_depth": 0.06, "height_lo": 0.2, "height_hi": 0.85, "cavity": 0.3})

@@ -202,18 +202,28 @@ class Builder:
 		o0, o1 = ring(p0, r0), ring(p1, r1)
 		i0 = ring(p0, r0 - lip)
 		i1 = ring(p0 + axis * 0.06, r0 - lip - (r0 - r1) * 0.06 / max(1e-6, (p1 - p0).length))
+		# Milestone 163: the tile's own UVs (the clay's shader, clay_tile.gdshader): u = 2 * its id + the place across
+		# the arch (0..1), v along it (0 at the lower end, 1 at the upper; the end's lip below 0); the pans' ids from
+		# 4096. Kept by to_object (uvmode 2).
+		uvl = self.bm.loops.layers.uv.get("UVMap") or self.bm.loops.layers.uv.new("UVMap")
+		self._tiles = getattr(self, "_tiles", 0) + 1
+		tid = (self._tiles % 4096) + (4096 if concave else 0)
 		faces = []
-		def quad(a, b, c, d):
+		def quad(a, b, c, d, uvs):
 			vs = [self.bm.verts.new(v) for v in (a, b, c, d)]
 			f = self.bm.faces.new(vs)
 			f.smooth = True
 			f.material_index = mat(material)
+			f[self._uvtag()] = 2
+			for loop, (s, t) in zip(f.loops, uvs):
+				loop[uvl].uv = (2.0 * tid + s, t)
 			faces.append(f)
 		for i in range(segments):
-			quad(o0[i], o1[i], o1[i + 1], o0[i + 1])
+			a, b = i / segments, (i + 1) / segments
+			quad(o0[i], o1[i], o1[i + 1], o0[i + 1], [(a, 0.0), (a, 1.0), (b, 1.0), (b, 0.0)])
 			if lip > 0.0:
-				quad(i0[i + 1], o0[i + 1], o0[i], i0[i])
-				quad(i1[i], i1[i + 1], i0[i + 1], i0[i])
+				quad(i0[i + 1], o0[i + 1], o0[i], i0[i], [(b, -0.05), (b, 0.0), (a, 0.0), (a, -0.05)])
+				quad(i1[i], i1[i + 1], i0[i + 1], i0[i], [(a, -0.1), (b, -0.1), (b, -0.05), (a, -0.05)])
 		return faces
 
 	def lathe(self, profile, center, material, segments=24, smooth=True):
@@ -240,10 +250,19 @@ class Builder:
 		bm = self.bm
 		bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
 		bm.normal_update()
-		uv = bm.loops.layers.uv.new("UVMap")
+		uv = bm.loops.layers.uv.get("UVMap") or bm.loops.layers.uv.new("UVMap")
 		tag = bm.faces.layers.int.get("uvmode")
+		if tag is not None:
+			# Milestone 163: a coppo's end (its lip) sharp against its arch: welded, their normals had been averaged
+			# over the whole tile's length (one ring of vertices at each end), shading it from end to end.
+			for e in bm.edges:
+				fs = e.link_faces
+				if len(fs) == 2 and fs[0][tag] == 2 and fs[1][tag] == 2 and fs[0].normal.angle(fs[1].normal, 0.0) > math.radians(50.0):
+					e.smooth = False
 		for f in bm.faces:
 			n = f.normal
+			if tag is not None and f[tag] == 2:
+				continue  # a coppo's own UVs (Builder.coppo)
 			if tag is not None and f[tag] == 1 and abs(n.z) < 0.999:
 				# A roof's face: u along the eave, v up the slope (metres), so that the tiles' rows run along it.
 				nh = Vector((n.x, n.y, 0.0)).normalized()
