@@ -562,6 +562,14 @@ vertical from the clip's way to the simulation's, the spine turned back so that 
 motion turned with them). Decision 0306; Matching Lab's `--matching_orient`, `--matching_orient_max`,
 `--matching_strafe=1` (walkers face the centre), `matching_video.gd --follow=walker`.
 
+Milestone 166: `FellowPhysicalAnimation3D`, a modifier after the animating ones (the skeleton's modifiers in the
+physics step): the bones as bodies built at run time on a `PhysicalBoneSimulator3D` it adds (`min_bone_length` 0.08 m,
+`total_mass` 70 kg, `collision_layer` 16, `collision_mask` 1), driven each step towards the animation (`position_gain`,
+`rotation_gain` 0.5; `strength` 1, its cube the step's share; pins while driven, cones of `swing_limit` 50° and
+`twist_limit` 30° once under 0.5); `apply_hit(position, impulse)` weakens the struck body by `hit_weakening` 0.85,
+recovering with `recovery_halflife` 0.3 s; `strength` 0 is a ragdoll (Jolt Physics); `simulate`, `build()`,
+`reset_bodies()`, `get_stats()`. Decision 0307; `bench/physical_check.gd`, `bench/physical_video.gd`.
+
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
 Module `fellow_world`; nothing changes without the node (decision 0187). `FellowVehicleEffects3D` (a `Node3D`, a child

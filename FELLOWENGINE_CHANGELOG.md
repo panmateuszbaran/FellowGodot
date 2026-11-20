@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 166 — physical animation (2026-11-21)
+
+- Decision 0307: `FellowPhysicalAnimation3D`, a new node. Placed on a skeleton after the modifiers that animate it, it
+  builds the bones' rigid bodies at run time on the stock `PhysicalBoneSimulator3D` and drives them every physics step
+  towards the animation: the animation's motion fed forward, half the error taken back, the gravity allowed for, the
+  strength cubed as the step's share.
+  - With nothing pushing, the bodies follow a walk within 3-4 mm.
+  - `apply_hit()` knocks the struck part (10 cm for a 40 N·s push at the chest, 21 cm for 20 N·s at the head) and
+    weakens it and its neighbours. The hips barely move, and every body is back within 3 cm in 0.3 s.
+  - Strength 0 is a ragdoll that falls and lies still on Jolt Physics. Godot Physics' joints jitter: the node warns.
+  - The joints are pins while driven and cones about the pose it went limp in. The bodies start at the first animated
+    pose, and one held far from its bone is put back.
+- `bench/physical_check.gd` (tracking, hits, ragdoll, cost), `bench/physical_video.gd` (a film).
+
 ## Milestone 165 — motion matching's orientation warping (2026-11-20)
 
 - Decision 0306: `FellowMotionMatcher3D.orientation_warping`, on by default. When the clip found goes another way

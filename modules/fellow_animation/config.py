@@ -15,6 +15,7 @@ def get_doc_classes():
         "FellowLadder3D",
         "FellowMotionDatabase",
         "FellowMotionMatcher3D",
+        "FellowPhysicalAnimation3D",
         "FellowTraversal3D",
         "FellowTraversalPose3D",
     ]

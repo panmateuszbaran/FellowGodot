@@ -36,6 +36,7 @@
 #include "fellow_ladder_3d.h"
 #include "fellow_motion_database.h"
 #include "fellow_motion_matcher_3d.h"
+#include "fellow_physical_animation_3d.h"
 #include "fellow_traversal_3d.h"
 #include "fellow_traversal_pose_3d.h"
 
@@ -85,6 +86,7 @@ void initialize_fellow_animation_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
 		GDREGISTER_CLASS(FellowMotionDatabase);
 		GDREGISTER_CLASS(FellowMotionMatcher3D);
+		GDREGISTER_CLASS(FellowPhysicalAnimation3D);
 		GDREGISTER_CLASS(FellowLadder3D); // milestone 75
 		GDREGISTER_CLASS(FellowTraversal3D);
 		GDREGISTER_CLASS(FellowTraversalPose3D);

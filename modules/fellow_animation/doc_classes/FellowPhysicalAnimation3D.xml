@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowPhysicalAnimation3D" inherits="SkeletonModifier3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Physical animation: the skeleton's bones as rigid bodies that follow the animation until something pushes them (FellowEngine).
+	</brief_description>
+	<description>
+		Milestone 166 (decision 0307). Placed on a [Skeleton3D] after the modifiers that animate it (a [FellowMotionMatcher3D], say), it builds the skeleton's bodies at run time and drives them every physics step towards where the animation has their bones. The body then moves as the animation does, and also as the physics world pushes it. Set the skeleton's [member Skeleton3D.modifier_callback_mode_process] to [constant Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS].
+		[b]The bodies[/b] are built on the stock [PhysicalBoneSimulator3D], which it adds to the skeleton after itself (named [code]FellowPhysicalBones[/code]), as the editor's Create Physical Skeleton makes them:
+		- a capsule along each bone at least [member min_bone_length] long, to its farthest child; the chain from the root to the head's end below 80 % of its height as thick as a torso (11 cm);
+		- a sphere for the root;
+		- a small body for every bone between two bodies, so that no joint spans a bone that turns;
+		- a sphere for a leaf bone named like a head when the bone above it has no body.
+		Their masses go by volume and together make [member total_mass]. Each body is joined to the nearest body up the bones: by a pin while the bodies are driven (their angles are the animation's), by a cone limited to [member swing_limit] and [member twist_limit] about the pose it went limp in once [member strength] is under 0.5. The bodies are on [member collision_layer] and meet [member collision_mask]; they do not meet one another.
+		[b]The drive[/b] runs each physics step. Each body's velocity goes towards the animation's own motion plus a share of the error ([member position_gain], [member rotation_gain] of it a step), less the gravity the step will add. The share of the step it takes is the strength cubed, so a weakened body is let go of. With nothing pushing, the bodies stay within millimetres of the animation.
+		[b]Hits[/b] ([method apply_hit]): the impulse goes to the body nearest the point. That body is weakened by [member hit_weakening], its neighbours by half of it a link (two links), and the weakness fades with [member recovery_halflife], so the body gives way and comes back.
+		[b]A ragdoll[/b]: [member strength] 0. Use Jolt Physics; Godot Physics' joints jitter there.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="apply_hit">
+			<return type="void" />
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="impulse" type="Vector3" />
+			<description>
+				Pushes the body nearest [param position] (world, by its capsule's axis) with [param impulse] (newton-seconds) at that point, and weakens it and its neighbours for a moment (see [member hit_weakening]).
+			</description>
+		</method>
+		<method name="apply_hit_to_bone">
+			<return type="void" />
+			<param index="0" name="bone" type="StringName" />
+			<param index="1" name="impulse" type="Vector3" />
+			<description>
+				[method apply_hit] at the body of [param bone].
+			</description>
+		</method>
+		<method name="build">
+			<return type="void" />
+			<description>
+				Builds the bodies (anew; called by itself at run time when the node is ready). They are put where the animation has their bones, and simulated, at the next pose.
+			</description>
+		</method>
+		<method name="clear">
+			<return type="void" />
+			<description>
+				Removes the bodies and their simulator.
+			</description>
+		</method>
+		<method name="get_body_bones" qualifiers="const">
+			<return type="PackedStringArray" />
+			<description>
+				The bones that have a body, in the bodies' order.
+			</description>
+		</method>
+		<method name="get_body_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				How many bodies were built.
+			</description>
+		</method>
+		<method name="get_body_errors" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<description>
+				Each body's distance from where the animation has it (metres).
+			</description>
+		</method>
+		<method name="get_body_targets" qualifiers="const">
+			<return type="Transform3D[]" />
+			<description>
+				Where the animation has each body (world).
+			</description>
+		</method>
+		<method name="get_body_weakness" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<description>
+				Each body's weakness from hits (0 to 1).
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Since [method reset_stats]:
+				- [code]tracking_error_mean_m[/code], [code]tracking_angle_mean_rad[/code], [code]tracking_error_max_m[/code]: the bodies' distance and angle from the animation's bones, while driven at full strength;
+				- [code]speed_max_m_s[/code]: the fastest body;
+				- [code]drive_usec_per_step[/code]: the drive's time a physics step;
+				- [code]rescues[/code]: bodies put back on their bones, held more than 0.75 m from them (behind a wall, under the ground);
+				- [code]bodies[/code], [code]weakness_max[/code].
+			</description>
+		</method>
+		<method name="is_built" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether the bodies have been built.
+			</description>
+		</method>
+		<method name="reset_bodies">
+			<return type="void" />
+			<description>
+				Puts every body where the animation has its bone, at rest, and makes the joints anew there (after a teleport, say).
+			</description>
+		</method>
+		<method name="reset_stats">
+			<return type="void" />
+			<description>
+				Resets [method get_stats]'s statistics.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="collision_layer" type="int" setter="set_collision_layer" getter="get_collision_layer" default="32768">
+			The bodies' physics layers (when they are built).
+		</member>
+		<member name="collision_mask" type="int" setter="set_collision_mask" getter="get_collision_mask" default="1">
+			The physics layers the bodies meet (when they are built). Not their own: they do not meet one another.
+		</member>
+		<member name="hit_weakening" type="float" setter="set_hit_weakening" getter="get_hit_weakening" default="0.85">
+			How far a hit weakens the struck body (its neighbours half as much a link, two links).
+		</member>
+		<member name="min_bone_length" type="float" setter="set_min_bone_length" getter="get_min_bone_length" default="0.08">
+			A bone at least this long gets a capsule (when the bodies are built).
+		</member>
+		<member name="position_gain" type="float" setter="set_position_gain" getter="get_position_gain" default="0.5">
+			The share of a body's distance from its bone the drive takes back each physics step, beyond following the animation's motion.
+		</member>
+		<member name="recovery_halflife" type="float" setter="set_recovery_halflife" getter="get_recovery_halflife" default="0.3">
+			How fast a hit's weakness fades (seconds to halve).
+		</member>
+		<member name="rotation_gain" type="float" setter="set_rotation_gain" getter="get_rotation_gain" default="0.5">
+			The share of a body's angle from its bone the drive takes back each physics step.
+		</member>
+		<member name="simulate" type="bool" setter="set_simulate" getter="is_simulating" default="true">
+			Whether the bodies are simulated and driven. Off, the simulator stops and the animation shows; on again, the bodies start where the animation is.
+		</member>
+		<member name="strength" type="float" setter="set_strength" getter="get_strength" default="1.0">
+			How hard the bodies are driven: 1, they follow the animation as far as they can; under 0.5, the joints are made cones about the pose at that moment; 0, a ragdoll.
+		</member>
+		<member name="swing_limit" type="float" setter="set_swing_limit" getter="get_swing_limit" default="0.87266463">
+			A limp body's cone joint: how far it swings from the pose it went limp in (radians).
+		</member>
+		<member name="total_mass" type="float" setter="set_total_mass" getter="get_total_mass" default="70.0">
+			The bodies' mass together (kilograms; when they are built).
+		</member>
+		<member name="twist_limit" type="float" setter="set_twist_limit" getter="get_twist_limit" default="0.5235988">
+			A limp body's cone joint: how far it twists (radians).
+		</member>
+	</members>
+</class>
