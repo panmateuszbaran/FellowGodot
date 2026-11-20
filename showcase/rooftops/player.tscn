@@ -313,23 +313,23 @@ nodes/ts_crawl/node = SubResource("AnimationNodeTimeScale_85ump")
 nodes/ts_crawl/position = Vector2(200, 2600)
 node_connections = [&"output", 0, &"state", &"state", 0, &"loco", &"state", 1, &"jump", &"state", 2, &"fall", &"state", 3, &"land", &"state", 4, &"roll", &"state", 5, &"hang", &"state", 6, &"climb", &"state", 7, &"climb_jump", &"state", 8, &"dive_start", &"state", 9, &"dive", &"state", 10, &"hay_exit", &"state", 11, &"perch", &"state", 12, &"ts_hang_reach_l", &"state", 13, &"ts_hang_reach_r", &"state", 14, &"ts_hang_leap_up", &"state", 15, &"ts_hang_leap_l", &"state", 16, &"ts_hang_leap_r", &"state", 17, &"ts_hang_across_l", &"state", 18, &"ts_hang_across_r", &"state", 19, &"jump_wall", &"state", 20, &"ts_crawl", &"ts_hang_reach_l", 0, &"hang_reach_l", &"ts_hang_reach_r", 0, &"hang_reach_r", &"ts_hang_leap_up", 0, &"hang_leap_up", &"ts_hang_leap_l", 0, &"hang_leap_l", &"ts_hang_leap_r", 0, &"hang_leap_r", &"ts_hang_across_l", 0, &"hang_across_l", &"ts_hang_across_r", 0, &"hang_across_r", &"ts_crawl", 0, &"crawl"]
 
-[node name="Player" type="CharacterBody3D" unique_id=911419933]
+[node name="Player" type="CharacterBody3D" unique_id=1465528523]
 physics_interpolation_mode = 1
 collision_layer = 8
 floor_max_angle = 0.87266463
 floor_snap_length = 0.3
 script = ExtResource("1_gtwnn")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1452343299]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=2023248562]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("CapsuleShape3D_nd4pj")
 
-[node name="Model" type="Node3D" parent="." unique_id=1373848297]
+[node name="Model" type="Node3D" parent="." unique_id=950727953]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Mannequin" type="Node3D" parent="Model" unique_id=1965591438]
+[node name="Mannequin" type="Node3D" parent="Model" unique_id=1399352345]
 
-[node name="Skeleton3D" type="Skeleton3D" parent="Model/Mannequin" unique_id=1423752569]
+[node name="Skeleton3D" type="Skeleton3D" parent="Model/Mannequin" unique_id=1228065039]
 bones/0/name = "Root"
 bones/0/parent = -1
 bones/0/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
@@ -632,12 +632,12 @@ bones/42/position = Vector3(6.016345e-10, 0.14004643, 2.7939677e-09)
 bones/42/rotation = Quaternion(-0.18803409, -0.19119103, 0.05059307, 0.9620445)
 bones/42/scale = Vector3(0.99999994, 0.9999999, 1)
 
-[node name="MannequinBody" type="MeshInstance3D" parent="Model/Mannequin/Skeleton3D" unique_id=831536178]
+[node name="MannequinBody" type="MeshInstance3D" parent="Model/Mannequin/Skeleton3D" unique_id=1245401430]
 mesh = ExtResource("2_1of6o")
 skin = ExtResource("3_s8fep")
 skeleton = NodePath("..")
 
-[node name="TraversalPose" type="FellowTraversalPose3D" parent="Model/Mannequin/Skeleton3D" unique_id=1972844352]
+[node name="TraversalPose" type="FellowTraversalPose3D" parent="Model/Mannequin/Skeleton3D" unique_id=30167095]
 body_sway = 1.0
 sway_frequency = 1.7
 sway_damping = 0.32
@@ -649,12 +649,12 @@ clip_blend = 0.25
 pole_follow = 1.0
 max_joint_speed = 2000.0
 
-[node name="FootLock" type="FellowFootLock3D" parent="Model/Mannequin/Skeleton3D" unique_id=1853725680]
+[node name="FootLock" type="FellowFootLock3D" parent="Model/Mannequin/Skeleton3D" unique_id=1524380597]
 influence = 0.0
 contact_height = 0.012
 blend_halflife = 0.1
 
-[node name="HeadLook" type="LookAtModifier3D" parent="Model/Mannequin/Skeleton3D" unique_id=815834444]
+[node name="HeadLook" type="LookAtModifier3D" parent="Model/Mannequin/Skeleton3D" unique_id=859612447]
 influence = 0.0
 target_node = NodePath("../../../../LookTarget")
 bone_name = "Head"
@@ -669,15 +669,15 @@ primary_damp_threshold = 0.6
 secondary_limit_angle = 1.2217305
 secondary_damp_threshold = 0.6
 
-[node name="LookTarget" type="Node3D" parent="." unique_id=1015868158]
+[node name="LookTarget" type="Node3D" parent="." unique_id=1000661962]
 physics_interpolation_mode = 2
 top_level = true
 
-[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=1347942175]
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=166209066]
 root_node = NodePath("../Model")
 libraries/ = ExtResource("4_x374l")
 
-[node name="AnimationTree" type="AnimationTree" parent="." unique_id=1926827215]
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=1924495193]
 root_node = NodePath("../Model")
 root_motion_track = NodePath("Mannequin/Skeleton3D:Root")
 tree_root = SubResource("AnimationNodeBlendTree_82as3")
@@ -699,7 +699,7 @@ parameters/ts_hang_across_l/scale = 1.0
 parameters/ts_hang_across_r/scale = 1.0
 parameters/ts_crawl/scale = 1.0
 
-[node name="Traversal" type="FellowTraversal3D" parent="." unique_id=189545785]
+[node name="Traversal" type="FellowTraversal3D" parent="." unique_id=1894232044]
 low_clip = ExtResource("5_r17wi")
 high_clip = ExtResource("6_t2oxt")
 vault_clip = ExtResource("7_wxayk")

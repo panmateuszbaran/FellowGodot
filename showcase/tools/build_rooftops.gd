@@ -24,7 +24,8 @@ const PLACES := {
 	# Milestone 157: the house of the owner's reference video (its measures), closing the square's west street.
 	"CasaRiferimento": [Vector2(-22.25, 0.0), 90.0],
 	"Fountain": [Vector2(-3.5, 1.0), 22.5],
-	"StallA": [Vector2(-12.5, 4.0), 80.0],
+	# (Milestone 160: out of the reference shot's view — its runner crosses an open square.)
+	"StallA": [Vector2(-12.0, -6.5), 80.0],
 	"StallB": [Vector2(11.0, 7.5), -105.0],
 	"Skyline": [Vector2(0.0, 0.0), 0.0],
 }
@@ -35,7 +36,9 @@ const BUILDINGS := ["PalazzoOcra", "Campanile", "CasaCrema", "PalazzoSiena", "Ca
 ## The ring of houses round the square (copies of its houses, their meshes shared): closing its west side, lining the
 ## streets out of it before the city's blocks (the Skyline model leaves this ring empty). [model, position, degrees]
 const NEAR := [
-	["CasaBianca", Vector2(-23.6, -9.5), 90.0], ["CasaCrema", Vector2(-23.1, 10.2), 90.0],
+	# (Milestone 160: south of the reference's house a low one — beyond it the video's climber sees, from the roof, the
+	# city's roofs low to its towers, not a front three floors high.)
+	["CasaBianca", Vector2(-23.6, -9.5), 90.0], ["CasaOcraBassa", Vector2(-23.1, 11.2), 90.0],
 	["CasaOcraBassa", Vector2(-36.0, 2.0), 90.0],
 	["CasaBianca", Vector2(-8.6, 28.0), 90.0], ["CasaCrema", Vector2(4.7, 27.6), -90.0],
 	["CasaRosa", Vector2(33.5, -2.7), 0.0], ["CasaOcraBassa", Vector2(33.6, 8.4), 180.0],
@@ -1127,8 +1130,8 @@ func _props(p_parent: Node3D) -> void:
 				continue
 			_model(p_parent, "Bollard", Transform3D(Basis(Vector3.UP, randf() * TAU), p), LAYER_WORLD).name = "Bollard%d" % k
 			k += 1
-	var goods := [["Barrel", Vector3(-13.4, 0, 1.6)], ["Barrel", Vector3(-12.8, 0, 1.2)], ["Crate", Vector3(-13.6, 0, 6.6)],
-			["Crate", Vector3(-13.5, 0.5, 6.5)], ["Barrel", Vector3(12.6, 0, 9.6)], ["Crate", Vector3(9.7, 0, 9.8)],
+	var goods := [["Barrel", Vector3(-13.6, 0, -9.0)], ["Barrel", Vector3(-13.0, 0, -9.4)], ["Crate", Vector3(-10.6, 0, -9.6)],
+			["Crate", Vector3(-10.7, 0.5, -9.5)], ["Barrel", Vector3(12.6, 0, 9.6)], ["Crate", Vector3(9.7, 0, 9.8)],
 			["Barrel", Vector3(-6.0, 0.08, -12.2)], ["Crate", Vector3(15.1, 0.08, -12.2)], ["Barrel", Vector3(15.9, 0.08, 2.9)]]
 	for g in goods:
 		if models.has(g[0]):

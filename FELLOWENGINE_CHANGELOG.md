@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 161 — the reference's surroundings opened (2026-11-20)
+
+- Decision 0302: behind the reference shot's runner the open square, not the stall and its barrels (moved to the
+  square's north-west side); south of the reference's house a low house, so that the roof's view goes over it. The
+  video's low, grazing sun was tried from four directions: in our square its south side shades the house's front, so
+  ours is kept. 38 of 38 animation gates.
+
 ## Milestone 160 — the reference matchmoved: its camera, its house, its climber (2026-11-20)
 
 - Decision 0301: the reference video's camera solved from its own background — structure from motion (in the cloud):
