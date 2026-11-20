@@ -140,6 +140,8 @@ godot --headless --path showcase -s res://tools/build_rooftops.gd -- <dir>
   weathering, stone, rustication, brick, roof tiles, wood, shutters, sampled twice against tiling; from milestone 158 the
   stone's and tiles' relief by parallax from their height maps;
   `paving_pbr.gdshader`: the ground by zone); without them the procedural shaders (`plaster`, `masonry`, `paving`, …).
+  The coppi, with or without them, are smooth fired clay (`clay_tile.gdshader`, milestone 163: each tile its own
+  shade, its id in its UVs from `Builder.coppo`).
 * `tools/reference_look.gd` (milestone 158): the demo's reference shot rendered at chosen frames of the owner's
   reference video, each after the light has settled, beside the video's frames (`--frames=`, `--ref=<dir>`, `--out=`).
 * `scripts/rooftops_player.gd` (the controller), `rooftops_camera.gd` (the camera: damped springs, look-ahead,
