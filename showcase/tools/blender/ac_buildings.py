@@ -678,63 +678,82 @@ def house(name, w, d, floors, plaster, roof="hip", seed=1, shutters="shutter_gre
 	return obj, col, top
 
 
+def reference_house_measures():
+	"""Milestone 160: the reference's house as measured through its matchmoved camera (reference_performance.json's
+	"house", in metres: positions along the front from its left corner, heights from the ground)."""
+	import json
+	import os
+
+	path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reference_performance.json")
+	with open(path) as f:
+		return json.load(f)["house"]
+
+
 def casa_riferimento(name="CasaRiferimento", seed=17):
-	"""Milestone 157: the house of the owner's reference video, built to its measures (reference_performance.json's
-	"house": the climbed window's balconette 1.70 m up and 0.40 m out, the eave's lip 3.25 m up and 0.47 m out, the
-	roof at 22 degrees) — a low house of rough sandstone ashlar: on its front a door, a window with a plain sill and,
-	near the right corner, the climbed window over a balconette on carved corbels; a stone bench along the front; no
-	cornice, the eave's rafters straight out of the wall, a gutter at its lip; a gable roof of coppi. The front faces
-	-Y; the replica's frame in reference_performance.json is this model's."""
+	"""The house of the owner's reference video (milestone 157), built to its measures — since milestone 160 as its
+	front was measured through the video's own camera, matchmoved from its background (reference_performance.json's
+	"house"): a low house of honey sandstone ashlar; on its front, near the left corner, an arched door under a tall
+	window with louvred shutters open; near the right corner the climbed window — a stone frame, a casement, no
+	shutters — over a balconette on two carved corbels with a mask between them; a stone bench below it; no cornice,
+	the eave's rafters straight out of the wall, a zinc gutter at its lip; a gable roof of coppi. The front faces -Y;
+	the replica's frame in reference_performance.json is this model's."""
 	import random
 
+	H = reference_house_measures()
 	rng = random.Random(seed)
 	B = Builder(seed)
 	Bc = Collider(seed)
-	w, d = 8.0, 6.5
-	sill, lip, lip_out, pitch = 1.70, 3.25, 0.25, 22.0
-	zt = lip - 0.08
-	win_top = 2.87
+	w, d = H["w"], H["d"]
+	lip_out, pitch = H["lip_out"], H["pitch"]
+	zt = H["zt"]
 	facades = rect_facades(w, d)
 	for F in facades:
 		F.plaster = "plaster_cream"
 	front = facades[0]
-	u1 = w * 0.5 + 2.3  # the climbed window's centre along the front
-	ww = 1.1
 	opens = []
-	# The door, arched, oak.
-	opens.append(opening(0.75, 1.95, 0.0, 2.55, arch=True, back="wood_dark", depth=0.3))
-	fbox(B, front, 0.75 - 0.14, 0.75, 0.0, 2.0, -0.05, 0.02, "stone")
-	fbox(B, front, 1.95, 1.95 + 0.14, 0.0, 2.0, -0.05, 0.02, "stone")
-	fbox(B, front, 0.6, 2.1, 0.0, 0.14, -0.3, 0.02, "stone", bevel=0.015)
-	# The plain window.
-	opens.append(window(B, front, 3.6, sill, 1.0, win_top - sill, "plain", "shutter_brown", False, rng, Bc=Bc))
-	# The climbed window: its opening, its stone frame, its shutters open, a hood; the balconette under it.
-	x0, x1 = u1 - ww * 0.5, u1 + ww * 0.5
-	opens.append(opening(x0, x1, sill, win_top, arch=False, back="glass", depth=0.22))
-	f = 0.12
-	fbox(B, front, x0 - f, x0, sill, win_top + f, -0.05, 0.02, "stone")
-	fbox(B, front, x1, x1 + f, sill, win_top + f, -0.05, 0.02, "stone")
-	fbox(B, front, x0, x1, win_top, win_top + f, -0.05, 0.02, "stone")
-	sw = ww * 0.5
-	casement(B, front, x0, x1, sill, win_top)
-	for a, b in ((x0 - f - sw - 0.02, x0 - f - 0.02), (x1 + f + 0.02, x1 + f + sw + 0.02)):
-		louvred_shutter(B, front, a, b, sill + 0.03, win_top, -0.09, -0.055, "shutter_brown")
-	# The balconette: a slab on a carved frieze and three corbels (scrolls: two blocks each, the lower one shorter).
-	fbox(B, front, x0 - 0.3, x1 + 0.3, sill - 0.12, sill, -0.40, 0.02, "stone", bevel=0.025)
-	# its moulded edge: a roll under the slab's front
-	B.cylinder(front.p(x0 - 0.3, sill - 0.13, -0.37), front.p(x1 + 0.3, sill - 0.13, -0.37), 0.025, "stone", segments=8)
-	fbox(B, front, x0 - 0.22, x1 + 0.22, sill - 0.24, sill - 0.12, -0.30, 0.02, "stone", bevel=0.02)
-	for bu in (x0 - 0.12, u1, x1 + 0.12):
-		corbel(B, front, bu, sill - 0.24, 0.28, 0.5, 0.15)
-	fbox(Bc, front, x0 - 0.3, x1 + 0.3, sill - 0.24, sill, -0.40, 0.0, "stone", bevel=0.0)
-	# The bench along the front between the door and the climbed window (Florence's panche di via).
-	fbox(B, front, 2.4, 5.0, 0.0, 0.38, -0.34, 0.02, "stone_rustic", bevel=0.02)
-	fbox(B, front, 2.37, 5.03, 0.38, 0.46, -0.42, 0.02, "stone", bevel=0.02)
-	fbox(Bc, front, 2.37, 5.03, 0.0, 0.46, -0.42, 0.0, "stone", bevel=0.0)
+	# The door: arched, oak, in a frame of voussoirs.
+	d0, d1, dtop = H["door"]
+	od = window(B, front, (d0 + d1) * 0.5, 0.0, d1 - d0, dtop, "arched", None, False, rng)
+	od["back"] = "wood_dark"
+	od["depth"] = 0.3
+	opens.append(od)
+	fbox(B, front, d0 - 0.25, d1 + 0.25, 0.0, 0.12, -0.25, 0.02, "stone", bevel=0.015)
+	# The tall window over it: its sill, frame and hood; louvred shutters open.
+	a0, a1, az0, az1 = H["window1"]
+	opens.append(window(B, front, (a0 + a1) * 0.5, az0, a1 - a0, az1 - az0, "plain", "shutter_brown", False, rng, Bc=Bc))
+	# The climbed window: its opening, a stone frame up to a lintel, a casement; the balconette under it.
+	x0, x1, wz0, wz1 = H["window"]
+	sill = H["sill"]
+	opens.append(opening(x0, x1, wz0, wz1, arch=False, back="glass", depth=0.22))
+	ftop = H["window_frame_top"]
+	f = 0.1
+	fbox(B, front, x0 - f, x0, wz0, ftop, -0.05, 0.02, "stone")
+	fbox(B, front, x1, x1 + f, wz0, ftop, -0.05, 0.02, "stone")
+	fbox(B, front, x0 - f, x1 + f, wz1, ftop, -0.05, 0.02, "stone")
+	fbox(B, front, x0 - f - 0.05, x1 + f + 0.05, ftop, ftop + 0.08, -0.09, 0.02, "stone", bevel=0.015)
+	casement(B, front, x0, x1, wz0, wz1)
+	# The balconette: a slab with a moulded roll under its front, on two carved corbels; a mask between them.
+	b0, b1, bt, bout = H["balconette"]
+	fbox(B, front, b0, b1, sill - bt, sill, -bout, 0.02, "stone", bevel=0.025)
+	B.cylinder(front.p(b0, sill - bt - 0.01, -bout + 0.03), front.p(b1, sill - bt - 0.01, -bout + 0.03), 0.022, "stone", segments=8)
+	cb = H["corbel_bottom"]
+	for bu in H["corbels"]:
+		corbel(B, front, bu, sill - bt, bout - 0.04, sill - bt - cb, 0.14)
+	mu, mz0, mz1 = H["mask"]
+	mr = (mz1 - mz0) * 0.5
+	B.cylinder(front.p(mu, (mz0 + mz1) * 0.5, 0.0), front.p(mu, (mz0 + mz1) * 0.5, -0.07), mr, "stone", segments=14)
+	B.cylinder(front.p(mu, (mz0 + mz1) * 0.5 - mr * 0.15, -0.07), front.p(mu, (mz0 + mz1) * 0.5 - mr * 0.15, -0.12), mr * 0.55, "stone", segments=12)
+	fbox(Bc, front, b0, b1, sill - bt, sill, -bout, 0.0, "stone", bevel=0.0)
+	# The bench along the front under the climbed window (Florence's panche di via).
+	s0, s1, sh, sd = H["bench"]
+	s1 = min(s1, w - 0.15)
+	fbox(B, front, s0, s1, 0.0, sh - 0.08, -sd + 0.06, 0.02, "stone_rustic", bevel=0.02)
+	fbox(B, front, s0 - 0.03, s1 + 0.03, sh - 0.08, sh, -sd, 0.02, "stone", bevel=0.02)
+	fbox(Bc, front, s0 - 0.03, s1 + 0.03, 0.0, sh, -sd, 0.0, "stone", bevel=0.0)
 	wall(B, front, 0.0, zt, opens, "plaster_cream")
 	# The other walls: a window each.
 	for F in facades[1:]:
-		o = [window(B, F, F.length * 0.5, sill, 1.0, win_top - sill, "plain", "shutter_brown", rng.random() < 0.5, rng, Bc=Bc)]
+		o = [window(B, F, F.length * 0.5, sill, 1.0, wz1 - wz0, "plain", "shutter_brown", rng.random() < 0.5, rng, Bc=Bc)]
 		wall(B, F, 0.0, zt, o, "plaster_cream")
 	quoins(B, facades, 0.1, zt - 0.1)
 	# A plinth along the walls' foot.

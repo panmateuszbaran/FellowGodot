@@ -11,6 +11,8 @@ render_mode diffuse_burley, specular_schlick_ggx;
 uniform vec4 walls[12];
 uniform int wall_count = 0;
 uniform vec4 square = vec4(-16.0, -13.0, 17.5, 14.0);
+// Milestone 160: the west street before the reference's house, flagged as the video's (no bands): x0, z0, x1, z1.
+uniform vec4 flagged = vec4(0.0);
 uniform vec2 fountain = vec2(-3.5, 1.0);
 uniform float pavement_width = 1.2;
 uniform float puddles = 0.3;
@@ -79,6 +81,7 @@ void fragment() {
 	vec2 p = world_pos.xz;
 	float wd = wall_distance(p);
 	bool in_square = p.x > square.x && p.y > square.y && p.x < square.z && p.y < square.w;
+	bool in_flagged = p.x > flagged.x && p.y > flagged.y && p.x < flagged.z && p.y < flagged.w;
 	vec3 col;
 	vec3 nrm;
 	vec3 arm;
@@ -106,14 +109,14 @@ void fragment() {
 			uv = vec2(a * 5.6, rf) / cob_size;
 			col = sample_set(cob_albedo, cob_normal, cob_arm, uv, p, nrm, arm);
 		}
-	} else if (in_square) {
+	} else if (in_square || in_flagged) {
 		uv = p / slabs_size;
 		col = sample_set(slabs_albedo, slabs_normal, slabs_arm, uv, p, nrm, arm);
 		col = mix(col, slabs_tint * dot(col, vec3(0.3, 0.55, 0.15)) / slabs_lum, slabs_tint_strength);
 		// The travertine bands every 7 m.
 		vec2 g = abs(fract(p / 7.0 + 0.5) - 0.5) * 7.0;
 		float band = 1.0 - smoothstep(0.15, 0.17, min(g.x, g.y));
-		if (band > 0.0) {
+		if (band > 0.0 && in_square) {
 			float along = g.x < g.y ? p.y : p.x;
 			float seg = fract(along / 0.62);
 			float joint = 1.0 - smoothstep(0.004, 0.01, min(min(seg, 1.0 - seg) * 0.62, 0.16 - min(g.x, g.y)));

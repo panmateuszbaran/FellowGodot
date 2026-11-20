@@ -86,8 +86,10 @@ courses, the bell tower's corbels and beams. Play it with `godot --path showcase
 `godot --path showcase res://rooftops/rooftops.tscn -- --demo` (`--demo_from=<shot>`, `--demo_only=<name>`,
 `--demo_quit`; with `--write-movie <file> --fixed-fps 30` it is the showcase's video). Its second shot, `reference`
 (milestone 157), is the owner's reference video performed 1:1 — its motion measured from the video
-(`tools/blender/reference_performance.json`), at a replica of its house (`CasaRiferimento`, the square's west side),
-through its camera: `-- --demo --demo_only=reference --demo_quit` with `--fixed-fps 24` frame for frame with it.
+(`tools/blender/reference_performance.json`), at a replica of its house (`CasaRiferimento`, the square's west side,
+built to the measures taken through the video's camera — milestone 160), through its camera, matchmoved from the
+video's background: `-- --demo --demo_only=reference --demo_quit` with `--fixed-fps 24` frame for frame with it (its
+first pose held a second first, while the light settles).
 
 | keys | |
 |---|---|

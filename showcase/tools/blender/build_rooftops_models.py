@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bpy  # noqa: E402
 
-from ac_buildings import barrel, bollard, campanile, casa_riferimento, crate, drain, fountain, hay_cart, house, skyline, skyline_houses, stall  # noqa: E402
+from ac_buildings import barrel, bollard, campanile, casa_riferimento, crate, reference_house_measures, drain, fountain, hay_cart, house, skyline, skyline_houses, stall  # noqa: E402
 from ac_common import export_glb, reset_scene  # noqa: E402
 
 # name: the function making it, its arguments.
@@ -56,7 +56,8 @@ def main():
 		# Milestone 157: the house of the owner's reference video, to its measures (mannequin_reference.py's shot).
 		reset_scene()
 		obj, col, top = casa_riferimento()
-		done("CasaRiferimento", list(bpy.context.scene.objects), top=top, w=8.0, d=6.5, roof="gable")
+		hm = reference_house_measures()
+		done("CasaRiferimento", list(bpy.context.scene.objects), top=top, w=hm["w"], d=hm["d"], roof="gable")
 	for name, fn in (("Campanile", campanile), ("HayCart", hay_cart), ("Fountain", fountain), ("Skyline", skyline),
 			("Bollard", bollard), ("Barrel", barrel), ("Crate", crate), ("Drain", drain)):
 		if only and name not in only:

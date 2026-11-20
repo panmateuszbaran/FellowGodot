@@ -269,6 +269,12 @@ func _show_reference(p_on: bool) -> void:
 		ap.play(&"reference")
 		ap.seek(0.0, true)
 		cam.make_current()
+		if Engine.get_process_frames() < 30:
+			# Milestone 160: the scene just started (--demo_only=reference): its first pose held a second while the
+			# sky's and the bounce's light settle at the shot's camera (they had made the clip's first frames hazy).
+			ap.pause()
+			shots[shot]["duration"] = float(shots[shot]["duration"]) + 1.0
+			get_tree().create_timer(1.0).timeout.connect(func() -> void: ap.play(&"reference"))
 	else:
 		ap.stop()
 		_cam.make_current()

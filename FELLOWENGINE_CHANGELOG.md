@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 160 — the reference matchmoved: its camera, its house, its climber (2026-11-20)
+
+- Decision 0301: the reference video's camera solved from its own background — structure from motion (in the cloud):
+  11 722 points over all 96 frames, 0.50 px. It cranes straight up 2.1 m out from the house's wall, where decision
+  0297's camera had moved in along it; on the roof its turn is 30-40° off.
+- The house measured through it, on its front rectified onto a metric grid: 6.64 m wide, an arched door under a tall
+  shuttered window, the climbed window's sill 2.01 m up over a balconette on two corbels with a mask, the gutter
+  3.85 m up. `casa_riferimento()` is built from those measures (`reference_performance.json`'s `"house"`).
+- The climber fitted in the world through that camera, its holds on the replica's surfaces, the scene's scale against
+  the mannequin solved. The street before the house is flagged, with no posts and no raised pavement.
+- Beside the video, with its edges drawn over FellowEngine's frames: the windows, the balconette, the eave and the
+  climber lie on the video's, frame by frame.
+
 ## Milestone 159 — the reference's light (2026-11-20)
 
 - Decision 0300: the rooftops scene's light as the owner's reference video's — soft, warm, bright in the shade.

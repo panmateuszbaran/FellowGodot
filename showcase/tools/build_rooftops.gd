@@ -47,7 +47,7 @@ const NEAR := [
 const FOOTPRINTS := {
 	"PalazzoOcra": Vector2(14.2, 10.2), "Campanile": Vector2(6.44, 6.44), "CasaCrema": Vector2(8.6, 8.2),
 	"PalazzoSiena": Vector2(9.8, 11.2), "CasaBianca": Vector2(7.6, 9.2), "CasaOcraBassa": Vector2(11.2, 8.2),
-	"CasaRosa": Vector2(10.2, 9.2), "CasaRiferimento": Vector2(8.0, 6.5),
+	"CasaRosa": Vector2(10.2, 9.2), "CasaRiferimento": Vector2(6.64, 6.5), # its front as measured (milestone 160)
 }
 const PAVEMENT := 1.2 ## the raised pavements' width along the fronts (m)
 const KERB := 0.08 ## and their height
@@ -252,7 +252,7 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 		# beige).
 		for n in p_plaster:
 			# Milestone 159: warmer (beside the reference's honey-coloured sandstone ours had read as a white limestone).
-			var shade: Color = Color(0.9, 0.8, 0.66).lerp(p_plaster[n][0], 0.15)
+			var shade: Color = Color(0.84, 0.74, 0.6).lerp(p_plaster[n][0], 0.15)
 			# Milestone 158 (the reference beside the replica, frame for frame): the blocks at the photograph's own scale
 			# halved to the reference's courses (some 29 cm: the climber's shin spans one and a half; at 1.25 m they had
 			# been 15 cm, a wall of bricks), dressed — their faces flat (the photograph's rock-faced relief left to a
@@ -261,10 +261,10 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 			# reference our walls' fine detail was half as contrasty again): the faces smooth — only the joints and their
 			# arrises sunk (the height map's lowest 5 %: at 0.44-0.6 the rough faces had been sunk in bumps), the normal
 			# map weaker still, the photograph's own baked shading mostly blurred out.
-			photo[n] = _photo("ashlar", {"tint": shade, "tint_strength": 0.45, "brightness": 1.2, "seed": p_plaster[n][2],
+			photo[n] = _photo("ashlar", {"tint": shade, "tint_strength": 0.5, "brightness": 0.95, "seed": p_plaster[n][2],
 					"tex_size": 2.5, "normal_strength": 0.08, "specular": 0.2, "roughness_bias": 0.05, "stains": 0.25,
-					"variation": 0.08, "anti_tile": false, "parallax_depth": 0.02, "height_lo": 0.4, "height_hi": 0.52,
-					"albedo_soften": 0.85, "cavity": 0.3})
+					"variation": 0.18, "anti_tile": false, "parallax_depth": 0.02, "height_lo": 0.38, "height_hi": 0.5,
+					"albedo_soften": 0.85, "cavity": 0.65})
 		photo["far_plaster"] = _photo("ashlar", {"tint": Color(0.9, 0.84, 0.74), "tint_strength": 0.3, "brightness": 1.2,
 				"tex_size": 2.5, "normal_strength": 0.55, "specular": 0.2, "stains": 0.3, "variation": 0.1, "anti_tile": false,
 				"instance_tint": true, "parallax_depth": 0.0})
@@ -279,7 +279,7 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 	# Laid textures (blocks, bricks, tiles, boards) are not turned for the anti-tiling: their courses must stay level.
 	# Milestone 159: dressed (the quoins, the frames, the balconette: smooth in the reference; at full strength the
 	# photograph's normals had made them rock-faced).
-	photo["stone"] = _photo("stone", {"tint": Color(0.84, 0.76, 0.64), "tint_strength": 0.45, "specular": 0.25, "stains": 0.3,
+	photo["stone"] = _photo("stone", {"tint": Color(0.76, 0.68, 0.57), "tint_strength": 0.5, "specular": 0.25, "stains": 0.3,
 			"anti_tile": false, "seed": 1.0, "parallax_depth": 0.006, "normal_strength": 0.35, "albedo_soften": 0.6})
 	photo["water_stone"] = _photo("stone", {"tint": Color(0.82, 0.8, 0.74), "tint_strength": 0.6, "specular": 0.25, "stains": 0.5,
 			"anti_tile": false, "seed": 2.0})
@@ -321,6 +321,7 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 	var cob := _texset("cobbles")
 	var pav := _texset("pavement")
 	photo["paving"] = _shader_mat("paving_pbr", {"walls": walls, "wall_count": walls.size(), "pavement_width": PAVEMENT,
+			"flagged": Vector4(-26.0, -6.0, -16.0, 6.0),
 			"fountain": PLACES["Fountain"][0], "slabs_albedo": sl[0], "slabs_normal": sl[1], "slabs_arm": sl[2], "slabs_size": sl[3] * (0.75 if _tex.has("ashlar") else 2.2),
 			"slabs_lum": sl[4], "slabs_tint": Color(0.74, 0.7, 0.64) if _tex.has("ashlar") else Color(0.62, 0.59, 0.54), "slabs_tint_strength": 0.8,
 			"fan_albedo": fan[0], "fan_normal": fan[1], "fan_arm": fan[2], "fan_size": fan[3],
@@ -412,6 +413,10 @@ func _pavements(p_root: Node3D) -> void:
 	side.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var k := 0
 	for n in FOOTPRINTS:
+		if n == "CasaRiferimento":
+			# Milestone 160: the reference's house stands on the flagged street itself (its runner's last steps are
+			# a metre from its front: a raised pavement would have buried its feet).
+			continue
 		var f := _footprint(n)
 		var hx := f.z + PAVEMENT
 		var hz := f.w + PAVEMENT
@@ -1112,12 +1117,13 @@ func _props(p_parent: Node3D) -> void:
 					posts.append(Vector3(f.x + sx * (f.z + PAVEMENT + 0.3), 0.0, f.y + sz * (f.w + PAVEMENT + 0.3)))
 		for x in [-3.2, -0.3]:
 			posts.append(Vector3(x, 0.0, 13.3))
-		# Across the west street's mouth.
-		for z in [-4.5, -1.0, 2.5, 5.0]:
-			posts.append(Vector3(-18.0, 0.0, z))
+		# (Milestone 160: none across the west street's mouth — the reference's runner comes up it to its house.)
 		for p in posts:
-			# Not in the way of the climb up the tower's front, nor in the square's middle.
+			# Not in the way of the climb up the tower's front, nor in the square's middle; nor about the reference's house
+			# (the video's has none).
 			if (p as Vector3).distance_to(Vector3(1.26, 0.0, -11.0)) < 2.5:
+				continue
+			if absf((p as Vector3).x - PLACES["CasaRiferimento"][0].x) < 8.0 and absf((p as Vector3).z - PLACES["CasaRiferimento"][0].y) < 8.0:
 				continue
 			_model(p_parent, "Bollard", Transform3D(Basis(Vector3.UP, randf() * TAU), p), LAYER_WORLD).name = "Bollard%d" % k
 			k += 1
