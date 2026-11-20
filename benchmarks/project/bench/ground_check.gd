@@ -10,6 +10,7 @@ extends SceneTree
 ##   godot --headless --path benchmarks/project -s res://bench/ground_check.gd -- [--speed=1.3] [--seconds=10]
 
 const STEP := 1.0 / 60.0
+var layer := {}
 var lab
 var speed := 1.3
 var seconds := 10.0
@@ -84,6 +85,15 @@ func _walk(kind: String, mode: String) -> Dictionary:
 	mm.auto_update = false
 	mm.ground_adaptation = mode != "off"
 	mm.ground_foot_placement = mode == "on"
+	# Milestone 164: the AAA layer's options (--matching_bias, --matching_jump, --matching_stride, --matching_lean).
+	if layer.has("matching_bias"):
+		mm.transition_cost_bias = float(layer["matching_bias"])
+	if layer.has("matching_jump"):
+		mm.transition_jump_threshold = float(layer["matching_jump"])
+	if layer.has("matching_stride"):
+		mm.stride_warping = layer["matching_stride"] == "1"
+	if layer.has("matching_lean"):
+		mm.lean_amount = float(layer["matching_lean"])
 	skel.add_child(mm)
 	mm.teleport(Vector3(0, 0, 0), Vector3(0, 0, 1))
 	mm.desired_velocity = Vector3(0, 0, speed)
@@ -117,6 +127,7 @@ func _run() -> void:
 			var kv := a.substr(2).split("=", true, 1)
 			args[kv[0]] = kv[1]
 	speed = float(args.get("speed", "1.3"))
+	layer = args
 	seconds = float(args.get("seconds", "10"))
 	lab = load("res://scenes/matching_lab.gd").new()
 	get_root().add_child(lab)

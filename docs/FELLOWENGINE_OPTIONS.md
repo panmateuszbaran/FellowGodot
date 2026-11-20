@@ -548,6 +548,15 @@ swapped; pairs by name or `mirror_pairs`) and `tags` (a clip's name to its tags,
 options, the matcher's `tags_required` and `tags_excluded`. Decision 0157; `bench/ground_check.gd`,
 `bench/matching_tags_check.gd`, Matching Lab's `--matching_mirror=1`.
 
+Milestone 164, on by default (`foot_ik` needed for the last two): `transition_cost_bias` (2.0: the playing pose
+continues unless a frame is cheaper by this much) and `transition_jump_threshold` (0.25 s: the playing clip's nearby
+frames are not candidates); `stride_warping` (on, `stride_warping_limits` 0.75-1.35: each foot's place along the way
+scaled about the hips by the character's speed over its animation's, the hips lowered to reach); `lean_amount` (1.0,
+`lean_max_angle` 20°: the body turned about the ground under the hips into the acceleration the character has beyond
+its animation's, `atan(a / g)`). `get_stats()` adds the lean's statistics against balance's and the stride's ratio.
+Decision 0305; Matching Lab's `--matching_bias`, `--matching_jump`, `--matching_stride`, `--matching_lean` (also
+`bench/ground_check.gd`), `bench/matching_video.gd` films a character.
+
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
 Module `fellow_world`; nothing changes without the node (decision 0187). `FellowVehicleEffects3D` (a `Node3D`, a child

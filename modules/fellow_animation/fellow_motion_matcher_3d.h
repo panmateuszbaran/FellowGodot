@@ -117,8 +117,8 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 		float ratio_velocity = 0.0f;
 		float hips_drop = 0.0f;
 		float hips_drop_velocity = 0.0f;
-		Vector2 lean; // Radians: about the character's forward axis (to its +X side) and its side axis (forwards).
-		Vector2 lean_velocity;
+		float lean[2] = {}; // Radians: about the character's forward axis (to its +X side) and its side axis (forwards).
+		float lean_velocity[2] = {};
 	};
 	Warp warp;
 	void _update_warp(float p_dt, const Vector3 &p_anim_velocity);

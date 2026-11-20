@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 164 — motion matching's AAA layer (2026-11-20)
+
+- The owner turned from the showcase to the engine ("the animations are not nice … we must work on the engine
+  itself"), starting with animation, without the GPU. Decision 0305: `FellowMotionMatcher3D` gets what makes motion
+  capture look grounded, on by default. Matching Lab, 16 characters on the CMU database:
+  - transitions only when they are worth their blend (`transition_cost_bias`, `transition_jump_threshold`):
+    4.9 → 2.4 a second;
+  - the stride warped to the character's speed, the hips lowered to reach (`stride_warping`): the feet's sliding in
+    contact 0.109 → 0.062 m/s, halved on slopes, stairs and uneven ground too;
+  - the body leaning into turns and starts as balance asks, over planted feet (`lean_amount`): its lean 37 → 67 % of
+    `atan(a / g)`, error 3.7 → 2.8°.
+- The body's lean against balance's in the stats; Matching Lab's and `ground_check.gd`'s options; `matching_video.gd`
+  films a character. The popping measure no longer counts a return from a lower LOD as a frame's jump.
+
 ## Milestone 163 — the reference's camera smooth over the eave; the tiles smooth clay (2026-11-20)
 
 - Decision 0304, on the owner's word: "why are the tiles not smooth like the reference's? why does the camera jump

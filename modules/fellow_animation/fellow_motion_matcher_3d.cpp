@@ -360,7 +360,7 @@ void FellowMotionMatcher3D::_update_warp(float p_dt, const Vector3 &p_anim_veloc
 	float ratio_goal = 1.0f;
 	if (stride_warping && sa > 0.2f) {
 		const float w = CLAMP((sa - 0.2f) / 0.4f, 0.0f, 1.0f);
-		ratio_goal = 1.0f + (CLAMP(sc / sa, stride_warping_limits.x, stride_warping_limits.y) - 1.0f) * w;
+		ratio_goal = 1.0f + (CLAMP(sc / sa, float(stride_warping_limits.x), float(stride_warping_limits.y)) - 1.0f) * w;
 		const Vector3 t = to_character.xform(sc > 0.2f ? cv : av);
 		const Vector3 flat(t.x, 0.0f, t.z);
 		if (flat.length() > 1e-4f) {
@@ -376,16 +376,14 @@ void FellowMotionMatcher3D::_update_warp(float p_dt, const Vector3 &p_anim_veloc
 	}
 
 	// The lean: the acceleration the character has beyond its animation's, in the character's space.
-	Vector2 lean_goal;
+	float lean_goal[2] = {};
 	if (lean_amount > 0.0f) {
 		const Vector3 a = to_character.xform(warp.char_acceleration - warp.anim_acceleration);
 		const float g = 9.81f;
 		// To the side: about the forward axis, the top towards the acceleration; forwards half as much (a runner
 		// leans into a start less than into a turn: the legs push).
-		lean_goal.x = Math::atan(a.x / g) * lean_amount;
-		lean_goal.y = Math::atan(a.z / g) * lean_amount * 0.5f;
-		lean_goal.x = CLAMP(lean_goal.x, -lean_max_angle, lean_max_angle);
-		lean_goal.y = CLAMP(lean_goal.y, -lean_max_angle, lean_max_angle);
+		lean_goal[0] = CLAMP(float(Math::atan(a.x / g)) * lean_amount, -lean_max_angle, lean_max_angle);
+		lean_goal[1] = CLAMP(float(Math::atan(a.z / g)) * lean_amount * 0.5f, -lean_max_angle, lean_max_angle);
 	}
 	for (int i = 0; i < 2; i++) {
 		float e = warp.lean[i] - lean_goal[i];
@@ -505,12 +503,13 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 			warp.hips_drop = 0.0f;
 		}
 	}
-	const bool leaning = lean_amount > 0.0f && (Math::abs(warp.lean.x) > 1e-5f || Math::abs(warp.lean.y) > 1e-5f);
+	// (Only with the leg IK, which holds the feet where they were while the body turns over them.)
+	const bool leaning = foot_ik && lean_amount > 0.0f && (Math::abs(warp.lean[0]) > 1e-5f || Math::abs(warp.lean[1]) > 1e-5f);
 	if (warp.hips_drop > 1e-5f || leaning) {
 		Vector3 &hp = out_positions[hips_bone];
 		hp.y -= warp.hips_drop;
 		if (leaning) {
-			const Quaternion turn = (Quaternion(Vector3(0, 0, 1), -warp.lean.x) * Quaternion(Vector3(1, 0, 0), warp.lean.y)).normalized();
+			const Quaternion turn = (Quaternion(Vector3(0, 0, 1), -warp.lean[0]) * Quaternion(Vector3(1, 0, 0), warp.lean[1])).normalized();
 			const Vector3 pivot(hp.x, 0.0f, hp.z);
 			hp = pivot + turn.xform(hp - pivot);
 			out_rotations[hips_bone] = (turn * out_rotations[hips_bone]).normalized();
@@ -914,6 +913,10 @@ void FellowMotionMatcher3D::_update(float p_dt, int p_lod) {
 	pose_ready = true;
 	if (lod == 0) {
 		_measure_pop();
+	} else {
+		// (Milestone 164: popping is measured between consecutive full updates only — a pose from before a stretch at a
+		// lower LOD had counted as a frame's jump.)
+		joint_history_count = 0;
 	}
 
 	const uint64_t us = OS::get_singleton()->get_ticks_usec() - t_start;
@@ -1096,7 +1099,7 @@ Dictionary FellowMotionMatcher3D::get_stats() const {
 	d["lean_sum_xy"] = lean_sum_xy;
 	d["stride_ratio_mean"] = stride_ratio_samples > 0.0 ? stride_ratio_sum / stride_ratio_samples : 1.0;
 	d["stride_ratio"] = warp.ratio;
-	d["lean"] = Vector2(warp.lean.x, warp.lean.y);
+	d["lean"] = Vector2(warp.lean[0], warp.lean[1]);
 	d["stride_hips_drop_mm"] = warp.hips_drop * 1000.0f;
 	return d;
 }
