@@ -5414,7 +5414,7 @@ void RenderForwardClustered::_fellow_rt_lighting(const RenderDataRD *p_render_da
 }
 
 // FellowEngine DDGI (docs/decisions/0083-ddgi.md): the probe volume around the camera, traced and blended.
-void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness) {
+void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness, bool p_sdf) {
 	RENDER_TIMESTAMP("FellowEngine DDGI");
 	const Ref<RenderSceneBuffersRD> &rb = p_render_buffers;
 	RenderBufferDataForwardClustered *rbd = const_cast<RenderBufferDataForwardClustered *>(p_rb_data.ptr());
@@ -5535,6 +5535,27 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 	params.hysteresis = Math::pow(CLAMP(Fellow::raytracing_gi_hysteresis(), 0.0f, 0.999f), float(params.update_interval));
 	params.distance_hysteresis = params.hysteresis;
 	params.frame = rbd->fellow_ddgi_frame;
+	if (p_sdf) {
+		// FellowEngine 0308: the rays through SDFGI's distance field cascades, lit by its voxels (every light, emission,
+		// its own bounce). Its voxel light is the scene shader's diffuse light (albedo x light x N.L) for the stock light
+		// units, pi times it with physical light units (SDFGI leaves out Lambert's 1 / pi there).
+		Ref<RendererRD::GI::SDFGI> sdfgi = rb->get_custom_data(RB_SCOPE_SDFGI);
+		params.sdf_cascade_count = MIN(int(sdfgi->cascades.size()), int(RendererRD::FellowDDGI::Params::SDF_MAX_CASCADES));
+		for (int i = 0; i < params.sdf_cascade_count; i++) {
+			params.sdf_distance[i] = sdfgi->cascades[i].sdf_tex;
+			params.sdf_light[i] = sdfgi->cascades[i].light_tex;
+			params.sdf_aniso0[i] = sdfgi->cascades[i].light_aniso_0_tex;
+			params.sdf_aniso1[i] = sdfgi->cascades[i].light_aniso_1_tex;
+		}
+		params.sdf_cascades_ubo = sdfgi->cascades_ubo;
+		params.sdf_cascade_size = float(sdfgi->cascade_size);
+		params.sdf_y_mult = sdfgi->y_mult;
+		params.sdf_max_steps = Fellow::sdfgi_ddgi_max_steps();
+		params.sdf_light_scale = is_using_physical_light_units() ? float(1.0 / Math::PI) : 1.0f;
+		// The environment's SDFGI energy as SDFGI's own lookups apply it.
+		params.volume.spacing[3] *= environment_get_sdfgi_energy(p_render_data->environment);
+		volume.spacing[3] = params.volume.spacing[3];
+	}
 	if (p_normal_roughness.is_valid()) {
 		// The screen pass: the irradiance per pixel of the depth pre-pass, for the opaque colour passes.
 		const Size2i size = rb->get_internal_size();
@@ -5550,7 +5571,7 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 		params.inv_projection = (correction * _fellow_jittered_projection(p_render_data)).inverse();
 		params.view_to_world = p_render_data->scene_data->cam_transform;
 		// The path-traced reference in place of the probes (debug): accumulated while the camera stands still.
-		const int reference = Fellow::raytracing_gi_reference();
+		const int reference = p_sdf ? 0 : Fellow::raytracing_gi_reference(); // the path tracer needs the ray tracing scene
 		if (reference > 0) {
 			bool restart = false;
 			if (!rb->has_texture(scope, SNAME("reference"))) { // recreated with the render buffers on a resize
@@ -7027,6 +7048,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (fellow_rt_tlas.is_valid() && Fellow::raytracing_gi() && fellow_rt_instance_buffer.is_valid()) {
 		const bool screen_pass = depth_pre_pass && !use_msaa && normal_roughness_views[0].is_valid() && !Fellow::raytracing_gi_in_shader();
 		_fellow_process_ddgi(p_render_data, rb, rb_data, radiance_texture, screen_pass ? normal_roughness_views[0] : RID());
+	} else if (using_sdfgi && Fellow::sdfgi_ddgi() && rb_data.is_valid() && !is_reflection_probe && rb->get_view_count() == 1 && rb->has_custom_data(RB_SCOPE_SDFGI)) {
+		// FellowEngine 0308: DDGI's probes traced through SDFGI's distance fields (no ray tracing).
+		const bool screen_pass = depth_pre_pass && !use_msaa && normal_roughness_views[0].is_valid() && !Fellow::raytracing_gi_in_shader();
+		_fellow_process_ddgi(p_render_data, rb, rb_data, radiance_texture, screen_pass ? normal_roughness_views[0] : RID(), true);
 	}
 	base_specialization.fellow_ddgi = fellow_ddgi_volume_ubo.is_valid();
 	// FellowEngine ray-traced reflections (decision 0084): in place of SSR where the environment enables it.

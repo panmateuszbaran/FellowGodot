@@ -1588,7 +1588,7 @@ private:
 	const FellowRTMaterial &_fellow_rt_material(RID p_material, uint64_t p_frame);
 	static Projection _fellow_jittered_projection(const RenderDataRD *p_render_data);
 	RID _fellow_first_directional_light(const RenderDataRD *p_render_data);
-	void _fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness);
+	void _fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness, bool p_sdf = false);
 	RID fellow_rt_shadow_mask; // this render's traced sun shadow (RID(): the shadow map), read by the opaque colour passes
 	RID fellow_rt_tlas; // the frame's ray tracing scene (RID() when no ray-traced effect runs)
 	LocalVector<RD::AccelerationStructureInstance> fellow_rt_build;

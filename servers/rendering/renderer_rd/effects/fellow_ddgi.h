@@ -101,6 +101,19 @@ public:
 		int reference_bounces = 0;
 		RID reference_accumulation; // RGBA32F, the screen's size
 		bool reference_restart = false;
+		// SDFGI's distance field cascades in place of the ray tracing scene (sdfgi/ddgi_probes, decision 0308):
+		// sdf_cascade_count > 0 traces the rays through them (tlas and instances unused).
+		static constexpr int SDF_MAX_CASCADES = 8; // as SDFGI's
+		int sdf_cascade_count = 0;
+		RID sdf_distance[SDF_MAX_CASCADES];
+		RID sdf_light[SDF_MAX_CASCADES];
+		RID sdf_aniso0[SDF_MAX_CASCADES];
+		RID sdf_aniso1[SDF_MAX_CASCADES];
+		RID sdf_cascades_ubo;
+		float sdf_cascade_size = 128.0;
+		float sdf_y_mult = 1.0;
+		int sdf_max_steps = 64;
+		float sdf_light_scale = 1.0; // the voxels' light to the scene shader's units
 	};
 
 	static constexpr int IRRADIANCE_TILE = 8; // as fellow_ddgi_inc.glsl
@@ -121,10 +134,12 @@ private:
 		MODE_REFERENCE_FETCH,
 		MODE_REFERENCE_ARRAY,
 		MODE_REFERENCE_FETCH_ARRAY,
+		MODE_TRACE_SDF,
+		MODE_TRACE_SDF_ARRAY,
 		MODE_MAX,
 	};
 
-	struct UBO { // std140, as Params in fellow_ddgi.glsl (544 bytes)
+	struct UBO { // std140, as Params in fellow_ddgi.glsl (576 bytes)
 		Volume volume;
 		float ray_rotation[16];
 		float sun_direction[4];
@@ -139,6 +154,8 @@ private:
 		float view_to_world[16];
 		int32_t screen[4]; // xy size, z the reference's bounces
 		Volume outer;
+		float sdf[4]; // SDFGI's cascade size, cascades, y scale, steps per cascade
+		float sdf_light[4]; // x the voxels' light to the scene shader's units
 	};
 
 	FellowDdgiShaderRD shader;

@@ -591,6 +591,15 @@ inline int raytracing_gi_cascades() {
 inline bool raytracing_gi_probe_relocation() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/gi_probe_relocation");
 }
+// sdfgi/ddgi_probes (decision 0308): where the environment enables SDFGI and ray-traced DDGI does not run, DDGI's
+// probe volumes (raytracing/gi_* settings) trace their rays through SDFGI's distance field cascades and take the light of
+// its voxels; the colour passes read them in place of SDFGI's diffuse light (its reflections stay).
+inline bool sdfgi_ddgi() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/sdfgi/ddgi_probes");
+}
+inline int sdfgi_ddgi_max_steps() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/sdfgi/ddgi_max_steps");
+}
 // raytracing/reflections (decision 0084): where the environment enables SSR, a traced reflection per pixel up to
 // reflections_max_roughness in place of SSR (and of the probes' and the sky's specular light there).
 inline bool raytracing_reflections() {

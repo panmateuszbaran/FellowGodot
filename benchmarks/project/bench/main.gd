@@ -86,6 +86,7 @@ const SCENES := {
 	"world": "res://scenes/world_lab.gd",
 	"slice": "res://scenes/slice_lab.gd",
 	"frontier": "res://scenes/frontier_lab.gd",
+	"gi": "res://scenes/gi_lab.gd",
 }
 const DT := 1.0 / 60.0
 

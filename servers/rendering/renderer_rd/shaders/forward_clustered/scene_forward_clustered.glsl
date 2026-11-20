@@ -2686,7 +2686,9 @@ void fragment_shader(in SceneData scene_data) {
 				}
 			}
 
-			ambient_light = diffuse;
+			if (!sc_fellow_ddgi()) { // FellowEngine 0308: DDGI's probes (traced through SDFGI's fields) keep the diffuse light
+				ambient_light = diffuse;
+			}
 			if (use_specular) {
 				indirect_specular_light = specular;
 			}
@@ -2769,7 +2771,8 @@ void fragment_shader(in SceneData scene_data) {
 		vec4 buffer_reflection = textureLod(sampler2D(reflection_buffer, SAMPLER_LINEAR_CLAMP), coord, 0.0);
 #endif // USE_MULTIVIEW
 
-		ambient_light = mix(ambient_light, buffer_ambient.rgb, buffer_ambient.a);
+		// FellowEngine 0308: with DDGI's probes the diffuse light stays theirs (SDFGI's reflections are kept).
+		ambient_light = mix(ambient_light, buffer_ambient.rgb, sc_fellow_ddgi() ? 0.0 : buffer_ambient.a);
 		indirect_specular_light = mix(indirect_specular_light, buffer_reflection.rgb, buffer_reflection.a);
 	}
 #endif // !USE_LIGHTMAP

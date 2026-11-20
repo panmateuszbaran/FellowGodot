@@ -103,6 +103,8 @@ D = {
     "raytracing/gi_update_interval": "Frames between a probe's updates (a share of the probes traced per frame).",
     "raytracing/gi_cascades": "2: a coarser volume (4 times the spacing, updated half as often) around the fine one, read where the fine one ends.",
     "raytracing/gi_probe_relocation": "Probes moved out of geometry and away from surfaces, within their cell.",
+    "sdfgi/ddgi_probes": "Where the environment enables SDFGI and no ray-traced DDGI runs, DDGI's probe volumes (the raytracing/gi_* settings) trace their rays through SDFGI's distance fields and take the light of its voxels (every light, emission, SDFGI's bounce); the colour passes read them in place of SDFGI's diffuse light, SDFGI's reflections stay. Needs no ray tracing hardware. Decision 0308.",
+    "sdfgi/ddgi_max_steps": "A DDGI ray's steps through each of SDFGI's cascades before it goes on in the next, coarser one.",
     "raytracing/reflections": "Reflections traced against the ray tracing scene in place of SSR where the environment enables SSR: off-screen and hidden objects reflected. Decision 0084.",
     "raytracing/reflections_max_roughness": "Surfaces up to this roughness get traced reflections.",
     "raytracing/reflections_interleaved": "Surfaces rougher than 0.3 traced in a quarter of their pixels per frame.",

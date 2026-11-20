@@ -3847,6 +3847,12 @@
 		<member name="rendering/fellow/raytracing/sun_shadows_interleaved" type="bool" setter="" getter="" default="true">
 			A quarter of the pixels traced per frame, the others from the history clamped to their traced neighbours.
 		</member>
+		<member name="rendering/fellow/sdfgi/ddgi_max_steps" type="int" setter="" getter="" default="64">
+			A DDGI ray's steps through each of SDFGI's cascades before it goes on in the next, coarser one.
+		</member>
+		<member name="rendering/fellow/sdfgi/ddgi_probes" type="bool" setter="" getter="" default="false">
+			Where the environment enables SDFGI and no ray-traced DDGI runs, DDGI's probe volumes (the raytracing/gi_* settings) trace their rays through SDFGI's distance fields and take the light of its voxels (every light, emission, SDFGI's bounce); the colour passes read them in place of SDFGI's diffuse light, SDFGI's reflections stay. Needs no ray tracing hardware. Decision 0308.
+		</member>
 		<member name="rendering/fellow/shading/absent_features_specialized" type="int" setter="" getter="" default="63">
 			The colour passes compiled without the decal, probe, directional, omni, spot and positional shadow code the frame cannot run (bits per feature; 63: all): GPU 5-9 % faster. Exact: the same image or results as stock Godot. Decision 0057.
 		</member>
