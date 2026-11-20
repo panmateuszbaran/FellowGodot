@@ -683,7 +683,7 @@ uint32_t FellowMotionDatabase::get_tag_mask(const PackedStringArray &p_tags) con
 	return mask;
 }
 
-FellowMotionDatabase::SearchResult FellowMotionDatabase::search(const float *p_query, int p_current_frame, bool p_include_current, uint32_t p_required, uint32_t p_excluded) const {
+FellowMotionDatabase::SearchResult FellowMotionDatabase::search(const float *p_query, int p_current_frame, bool p_include_current, uint32_t p_required, uint32_t p_excluded, float p_current_bias, int p_jump_frames) const {
 	SearchResult result;
 	result.cost = FLT_MAX;
 	if (!is_valid() || searchable.size() != uint32_t(frame_count)) {
@@ -698,7 +698,15 @@ FellowMotionDatabase::SearchResult FellowMotionDatabase::search(const float *p_q
 			cost += e * e;
 		}
 		result.frame = p_current_frame;
-		result.cost = cost;
+		result.cost = MAX(cost - p_current_bias, 0.0f);
+	}
+	// The playing clip's frames near the current one (milestone 164): skipped.
+	int jump_lo = -1;
+	int jump_hi = -1;
+	if (p_jump_frames > 0 && p_current_frame >= 0 && p_current_frame < frame_count) {
+		const int r = get_range_of(p_current_frame);
+		jump_lo = MAX(p_current_frame - p_jump_frames, get_range_start(r));
+		jump_hi = MIN(p_current_frame + p_jump_frames, get_range_stop(r) - 1);
 	}
 	int i = 0;
 	while (i < frame_count) {
@@ -716,7 +724,7 @@ FellowMotionDatabase::SearchResult FellowMotionDatabase::search(const float *p_q
 				continue;
 			}
 			for (; i < small_end; i++) {
-				if (!searchable[i] || (filtered && !tags_match(frame_tags[i], p_required, p_excluded))) {
+				if (!searchable[i] || (filtered && !tags_match(frame_tags[i], p_required, p_excluded)) || (i >= jump_lo && i <= jump_hi)) {
 					continue;
 				}
 				result.frames_checked++;

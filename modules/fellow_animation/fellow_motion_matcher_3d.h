@@ -91,6 +91,50 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 	bool foot_ik = true;
 	bool auto_update = true;
 	PackedFloat32Array lod_distances;
+	// Milestone 164 (decision 0305): the AAA layer over the matched animation.
+	// Transitions: the playing pose continues unless a frame is cheaper by `transition_cost_bias`; frames of the
+	// playing clip within `transition_jump_threshold` of it are not candidates (a jump there is a stutter, not a
+	// transition).
+	float transition_cost_bias = 0.0f;
+	float transition_jump_threshold = 0.0f; // Seconds.
+	// Stride warping: each foot's place along the way the character goes scaled about the hips by its speed over the
+	// animation's (within the limits), the hips lowered where a leg must reach farther.
+	bool stride_warping = false;
+	Vector2 stride_warping_limits = Vector2(0.75f, 1.35f);
+	// Lean: the body turned about the ground under the hips into the acceleration the character has and its
+	// animation has not (a turn sharper or a start faster than the clip's), as far as balance asks (atan(a / g)).
+	float lean_amount = 0.0f;
+	float lean_max_angle = Math::deg_to_rad(20.0f);
+	struct Warp {
+		bool has_prev = false;
+		Vector3 prev_char_position;
+		Vector3 char_velocity; // Smoothed, world.
+		Vector3 anim_velocity; // The animation's root motion, smoothed, world.
+		Vector3 char_acceleration;
+		Vector3 anim_acceleration;
+		Vector3 travel; // Character space, unit.
+		float ratio = 1.0f;
+		float ratio_velocity = 0.0f;
+		float hips_drop = 0.0f;
+		float hips_drop_velocity = 0.0f;
+		Vector2 lean; // Radians: about the character's forward axis (to its +X side) and its side axis (forwards).
+		Vector2 lean_velocity;
+	};
+	Warp warp;
+	void _update_warp(float p_dt, const Vector3 &p_anim_velocity);
+	// The body's lean beside balance's (statistics): both smoothed over a stride.
+	float stat_body_lean = 0.0f;
+	float stat_physics_lean = 0.0f;
+	bool stat_lean_init = false;
+	double lean_samples = 0.0;
+	double lean_error_sq = 0.0;
+	double lean_sum_xy = 0.0;
+	double lean_sum_xx = 0.0;
+	double lean_sum_x = 0.0;
+	double lean_sum_y = 0.0;
+	double stride_ratio_sum = 0.0;
+	double stride_ratio_samples = 0.0;
+
 	// Tags (milestone 56): the clips searched — every required tag, none of the excluded ones.
 	PackedStringArray tags_required;
 	PackedStringArray tags_excluded;
@@ -279,6 +323,18 @@ public:
 	bool is_ground_alignment() const { return ground_alignment; }
 	void set_ground_foot_placement(bool p_enable) { ground_foot_placement = p_enable; }
 	bool is_ground_foot_placement() const { return ground_foot_placement; }
+	void set_transition_cost_bias(float p_bias) { transition_cost_bias = MAX(p_bias, 0.0f); }
+	float get_transition_cost_bias() const { return transition_cost_bias; }
+	void set_transition_jump_threshold(float p_seconds) { transition_jump_threshold = MAX(p_seconds, 0.0f); }
+	float get_transition_jump_threshold() const { return transition_jump_threshold; }
+	void set_stride_warping(bool p_enable) { stride_warping = p_enable; }
+	bool is_stride_warping() const { return stride_warping; }
+	void set_stride_warping_limits(const Vector2 &p_limits) { stride_warping_limits = Vector2(CLAMP(p_limits.x, 0.1f, 1.0f), MAX(p_limits.y, 1.0f)); }
+	Vector2 get_stride_warping_limits() const { return stride_warping_limits; }
+	void set_lean_amount(float p_amount) { lean_amount = CLAMP(p_amount, 0.0f, 2.0f); }
+	float get_lean_amount() const { return lean_amount; }
+	void set_lean_max_angle(float p_radians) { lean_max_angle = CLAMP(p_radians, 0.0f, Math::deg_to_rad(60.0f)); }
+	float get_lean_max_angle() const { return lean_max_angle; }
 	void set_lod_distances(const PackedFloat32Array &p_distances) { lod_distances = p_distances; }
 	PackedFloat32Array get_lod_distances() const { return lod_distances; }
 

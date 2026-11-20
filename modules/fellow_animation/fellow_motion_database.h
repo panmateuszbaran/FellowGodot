@@ -126,7 +126,9 @@ public:
 
 	// Search: the frame whose features are nearest the query (normalised with normalize_query), at most p_best_cost.
 	// Only frames whose clip has every tag of p_required and none of p_excluded (masks of get_tag_mask()).
-	SearchResult search(const float *p_query, int p_current_frame, bool p_include_current, uint32_t p_required = 0, uint32_t p_excluded = 0) const;
+	// Milestone 164: the current frame's cost lowered by p_current_bias (another frame must beat it by that much), and
+	// the current clip's frames within p_jump_frames of it not searched.
+	SearchResult search(const float *p_query, int p_current_frame, bool p_include_current, uint32_t p_required = 0, uint32_t p_excluded = 0, float p_current_bias = 0.0f, int p_jump_frames = 0) const;
 	// Brute force over the trajectory dimensions only (a start without a pose).
 	int search_trajectory(const float *p_query, uint32_t p_required = 0, uint32_t p_excluded = 0) const;
 	uint32_t get_tag_mask(const PackedStringArray &p_tags) const;

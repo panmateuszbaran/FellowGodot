@@ -301,6 +301,16 @@ func _build_crowd() -> void:
 		mm.inertialization = args.get("matching_inertialization", "1") == "1"
 		mm.synchronization = args.get("matching_sync", "1") == "1"
 		mm.search_interval = float(args.get("matching_interval", "0.1"))
+		# Milestone 164: the AAA layer — --matching_bias=<cost>, --matching_jump=<s>, --matching_stride=0|1,
+		# --matching_lean=<amount> (the node's defaults when not given).
+		if args.has("matching_bias"):
+			mm.transition_cost_bias = float(args["matching_bias"])
+		if args.has("matching_jump"):
+			mm.transition_jump_threshold = float(args["matching_jump"])
+		if args.has("matching_stride"):
+			mm.stride_warping = args["matching_stride"] == "1"
+		if args.has("matching_lean"):
+			mm.lean_amount = float(args["matching_lean"])
 		if args.has("matching_require"):
 			mm.tags_required = str(args["matching_require"]).split("+", false)
 		if args.has("matching_exclude"):
@@ -397,12 +407,38 @@ func sample_extra() -> Dictionary:
 	var slide_locked := 0.0
 	var contact := 0.0
 	var traj := 0.0
+	# Milestone 164: the body's lean against balance's (atan(a / g)), and the stride's warping.
+	var ln := 0.0
+	var le := 0.0
+	var lx := 0.0
+	var ly := 0.0
+	var lxx := 0.0
+	var lxy := 0.0
+	var stride := 0.0
 	for mm in _matchers:
 		var s: Dictionary = mm.get_stats()
 		slide += float(s["foot_slide_distance"])
 		slide_locked += float(s["foot_slide_locked"])
 		contact += float(s["foot_contact_time"])
 		traj += float(s["trajectory_error"])
+		if s.has("lean_samples"):
+			ln += float(s["lean_samples"])
+			le += float(s["lean_error_sq"])
+			lx += float(s["lean_sum_x"])
+			ly += float(s["lean_sum_y"])
+			lxx += float(s["lean_sum_xx"])
+			lxy += float(s["lean_sum_xy"])
+			stride += float(s["stride_ratio_mean"])
+	if ln > 0.0:
+		var lyy := le + 2.0 * lxy - lxx
+		var vx := ln * lxx - lx * lx
+		var vy := ln * lyy - ly * ly
+		d["matching_lean_rms_error_deg"] = rad_to_deg(sqrt(le / ln))
+		d["matching_lean_physics_rms_deg"] = rad_to_deg(sqrt(lxx / ln))
+		d["matching_lean_body_rms_deg"] = rad_to_deg(sqrt(maxf(lyy, 0.0) / ln))
+		d["matching_lean_gain"] = (ln * lxy - lx * ly) / maxf(vx, 1e-12)
+		d["matching_lean_correlation"] = (ln * lxy - lx * ly) / maxf(sqrt(maxf(vx, 0.0) * maxf(vy, 0.0)), 1e-12)
+		d["matching_stride_ratio_mean"] = stride / _matchers.size()
 	d["matching_foot_slide_speed"] = slide / maxf(contact, 1e-6)
 	d["matching_foot_slide_locked_speed"] = slide_locked / maxf(contact, 1e-6)
 	d["matching_foot_contact_time"] = contact
