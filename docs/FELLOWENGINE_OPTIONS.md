@@ -557,6 +557,11 @@ its animation's, `atan(a / g)`). `get_stats()` adds the lean's statistics agains
 Decision 0305; Matching Lab's `--matching_bias`, `--matching_jump`, `--matching_stride`, `--matching_lean` (also
 `bench/ground_check.gd`), `bench/matching_video.gd` films a character.
 
+Milestone 165, on by default: `orientation_warping` (`orientation_warping_max_angle` 90°: the hips turned about the
+vertical from the clip's way to the simulation's, the spine turned back so that the chest keeps the facing, the root
+motion turned with them). Decision 0306; Matching Lab's `--matching_orient`, `--matching_orient_max`,
+`--matching_strafe=1` (walkers face the centre), `matching_video.gd --follow=walker`.
+
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
 Module `fellow_world`; nothing changes without the node (decision 0187). `FellowVehicleEffects3D` (a `Node3D`, a child

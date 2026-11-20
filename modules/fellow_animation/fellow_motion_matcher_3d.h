@@ -104,12 +104,23 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 	// Lean: the body turned about the ground under the hips into the acceleration the character has and its
 	// animation has not (a turn sharper or a start faster than the clip's), as far as balance asks (atan(a / g)).
 	float lean_amount = 1.0f;
+	// Orientation warping (milestone 165): the hips turned about the vertical towards the way the character goes from
+	// the way its clip goes (a strafe between the database's, a walk at an angle to the facing), the spine turned
+	// back over its bones so that the chest keeps the facing; within the largest angle.
+	bool orientation_warping = true;
+	float orientation_warping_max_angle = Math::deg_to_rad(90.0f);
+	LocalVector<int> spine_chain;
+	const void *spine_chain_of = nullptr;
+	void _find_spine_chain();
+	double orientation_sum = 0.0;
+	double orientation_time = 0.0;
 	float lean_max_angle = Math::deg_to_rad(20.0f);
 	struct Warp {
 		bool has_prev = false;
 		Vector3 prev_char_position;
 		Vector3 char_velocity; // Smoothed, world.
-		Vector3 anim_velocity; // The animation's root motion, smoothed, world.
+		Vector3 anim_velocity; // The animation's root motion, smoothed, world (turned by orientation warping).
+		Vector3 clip_velocity; // The clip's own root motion, smoothed, world.
 		Vector3 char_acceleration;
 		Vector3 anim_acceleration;
 		Vector3 travel; // Character space, unit.
@@ -119,9 +130,11 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 		float hips_drop_velocity = 0.0f;
 		float lean[2] = {}; // Radians: about the character's forward axis (to its +X side) and its side axis (forwards).
 		float lean_velocity[2] = {};
+		float orientation = 0.0f; // Radians about the vertical: from the clip's way to the character's.
+		float orientation_velocity = 0.0f;
 	};
 	Warp warp;
-	void _update_warp(float p_dt, const Vector3 &p_anim_velocity);
+	void _update_warp(float p_dt, const Vector3 &p_anim_velocity, const Vector3 &p_clip_velocity);
 	// The body's lean beside balance's (statistics): both smoothed over a stride.
 	float stat_body_lean = 0.0f;
 	float stat_physics_lean = 0.0f;
@@ -335,6 +348,10 @@ public:
 	float get_lean_amount() const { return lean_amount; }
 	void set_lean_max_angle(float p_radians) { lean_max_angle = CLAMP(p_radians, 0.0f, Math::deg_to_rad(60.0f)); }
 	float get_lean_max_angle() const { return lean_max_angle; }
+	void set_orientation_warping(bool p_enable) { orientation_warping = p_enable; }
+	bool is_orientation_warping() const { return orientation_warping; }
+	void set_orientation_warping_max_angle(float p_radians) { orientation_warping_max_angle = CLAMP(p_radians, 0.0f, Math::deg_to_rad(150.0f)); }
+	float get_orientation_warping_max_angle() const { return orientation_warping_max_angle; }
 	void set_lod_distances(const PackedFloat32Array &p_distances) { lod_distances = p_distances; }
 	PackedFloat32Array get_lod_distances() const { return lod_distances; }
 

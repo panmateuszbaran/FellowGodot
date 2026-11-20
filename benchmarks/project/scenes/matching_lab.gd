@@ -311,6 +311,12 @@ func _build_crowd() -> void:
 			mm.stride_warping = args["matching_stride"] == "1"
 		if args.has("matching_lean"):
 			mm.lean_amount = float(args["matching_lean"])
+		# Milestone 165: --matching_orient=0|1 (orientation warping), --matching_strafe=1 (every character faces the
+		# square's centre while it walks to its waypoints: a third-person game's aiming).
+		if args.has("matching_orient"):
+			mm.orientation_warping = args["matching_orient"] == "1"
+		if args.has("matching_orient_max"):
+			mm.orientation_warping_max_angle = deg_to_rad(float(args["matching_orient_max"]))
 		if args.has("matching_require"):
 			mm.tags_required = str(args["matching_require"]).split("+", false)
 		if args.has("matching_exclude"):
@@ -327,6 +333,10 @@ func _build_crowd() -> void:
 		_rng_state.append({"wp": _waypoint(r), "pause": r.randf_range(0.0, 1.0), "speed": sp, "rng": r, "pause_bias": pause_bias})
 	_last_t = 0.0
 	_acc = 0.0
+	_strafe = str(args.get("matching_strafe", "0")) == "1"
+
+
+var _strafe := false
 
 
 func _waypoint(r: RandomNumberGenerator) -> Vector3:
@@ -369,6 +379,11 @@ func _steer(i: int, dt: float) -> void:
 	if v.length() > float(s["speed"]):
 		v = v.normalized() * float(s["speed"])
 	mm.desired_velocity = v
+	if _strafe and float(s["speed"]) < 2.0:
+		# Facing the centre (milestone 165), the way it goes when near it; walkers only (a third-person game's aiming
+		# walk: runners face the way they run).
+		var to_c := -pos
+		mm.desired_facing = to_c.normalized() if to_c.length() > 2.0 else Vector3.ZERO
 
 
 func _step(dt: float) -> void:
@@ -415,6 +430,7 @@ func sample_extra() -> Dictionary:
 	var lxx := 0.0
 	var lxy := 0.0
 	var stride := 0.0
+	var orient := 0.0
 	for mm in _matchers:
 		var s: Dictionary = mm.get_stats()
 		slide += float(s["foot_slide_distance"])
@@ -429,6 +445,8 @@ func sample_extra() -> Dictionary:
 			lxx += float(s["lean_sum_xx"])
 			lxy += float(s["lean_sum_xy"])
 			stride += float(s["stride_ratio_mean"])
+		if s.has("orientation_mean"):
+			orient += float(s["orientation_mean"])
 	if ln > 0.0:
 		var lyy := le + 2.0 * lxy - lxx
 		var vx := ln * lxx - lx * lx
@@ -439,6 +457,7 @@ func sample_extra() -> Dictionary:
 		d["matching_lean_gain"] = (ln * lxy - lx * ly) / maxf(vx, 1e-12)
 		d["matching_lean_correlation"] = (ln * lxy - lx * ly) / maxf(sqrt(maxf(vx, 0.0) * maxf(vy, 0.0)), 1e-12)
 		d["matching_stride_ratio_mean"] = stride / _matchers.size()
+		d["matching_orientation_mean_deg"] = rad_to_deg(orient / _matchers.size())
 	d["matching_foot_slide_speed"] = slide / maxf(contact, 1e-6)
 	d["matching_foot_slide_locked_speed"] = slide_locked / maxf(contact, 1e-6)
 	d["matching_foot_contact_time"] = contact

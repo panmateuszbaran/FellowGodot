@@ -169,6 +169,12 @@
 		<member name="lod_distances" type="PackedFloat32Array" setter="set_lod_distances" getter="get_lod_distances" default="PackedFloat32Array()">
 			Distances from the camera: beyond the first, searches half as often and no foot IK; beyond the second, a quarter as often and updates at a quarter of the rate.
 		</member>
+		<member name="orientation_warping" type="bool" setter="set_orientation_warping" getter="is_orientation_warping" default="true">
+			Orientation warping (milestone 165): when the clip found goes another way than the simulation (a strafe between the database's, a walk at an angle to [member desired_facing]), the hips turn about the vertical towards the simulation's way, by at most [member orientation_warping_max_angle], and the spine turns back over its bones so that the chest keeps the facing. The root motion turns with them. The spine is found from the hips: the child that leads to neither leg, then on while a bone has one child.
+		</member>
+		<member name="orientation_warping_max_angle" type="float" setter="set_orientation_warping_max_angle" getter="get_orientation_warping_max_angle" default="1.5708">
+			The largest turn of the hips (radians).
+		</member>
 		<member name="root_path" type="NodePath" setter="set_root_path" getter="get_root_path" default="NodePath(&quot;&quot;)">
 			The node moved with the character; empty: the skeleton's parent.
 		</member>

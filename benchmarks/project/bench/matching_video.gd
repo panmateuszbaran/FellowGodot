@@ -2,7 +2,7 @@ extends SceneTree
 ## Matching Lab filmed (milestone 164): one character followed by a camera at its side, the simulation at 60 Hz and a
 ## frame saved every second step (30 fps), for looking at the motion itself: its feet, turns, starts and stops.
 ##   godot --path benchmarks/project --rendering-driver vulkan --resolution 960x540 -s res://bench/matching_video.gd -- \
-##       --out=<dir> --seconds=12 --follow=0 [--matching_crowd=6 and the lab's other args]
+##       --out=<dir> --seconds=12 --follow=0|walker [--matching_crowd=6 and the lab's other args]
 
 const STEP := 1.0 / 60.0
 
@@ -26,7 +26,15 @@ func _run() -> void:
 		printerr(lab.load_error)
 		quit(1)
 		return
-	var follow := int(args.get("follow", "0"))
+	# --follow=<index>, or --follow=walker: the first character that walks (milestone 165: the strafing walk).
+	var follow := 0
+	if str(args.get("follow", "0")) == "walker":
+		for i in lab._matchers.size():
+			if float(lab._rng_state[i]["speed"]) < 2.0 and float(lab._rng_state[i]["pause_bias"]) < 0.5:
+				follow = i
+				break
+	else:
+		follow = int(args.get("follow", "0"))
 	var mm = lab._matchers[follow]
 	var cam := Camera3D.new()
 	cam.fov = 40.0

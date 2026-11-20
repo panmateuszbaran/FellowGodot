@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 165 — motion matching's orientation warping (2026-11-20)
+
+- Decision 0306: `FellowMotionMatcher3D.orientation_warping`, on by default. When the clip found goes another way
+  than the simulation (a strafe between the database's, a walk at an angle to the facing), the hips turn towards the
+  simulation's way and the spine turns back over its bones, so the chest keeps the facing; the root motion turns with
+  them. Matching Lab:
+  - walkers strafing (facing the centre): the feet's sliding 0.158 → 0.127 m/s, the trajectory error 9.1 → 7.7 cm;
+  - walking as before: the trajectory error 4.3 → 3.8 cm, the lean in turns 67 → 71 % of balance's.
+- Matching Lab's `--matching_orient`, `--matching_orient_max`, `--matching_strafe=1`; `matching_video.gd
+  --follow=walker`.
+
 ## Milestone 164 — motion matching's AAA layer (2026-11-20)
 
 - The owner turned from the showcase to the engine ("the animations are not nice … we must work on the engine

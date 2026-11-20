@@ -323,7 +323,7 @@ void FellowMotionMatcher3D::_forward_kinematics(LocalVector<Vector3> &r_gp, Loca
 	}
 }
 
-void FellowMotionMatcher3D::_update_warp(float p_dt, const Vector3 &p_anim_velocity) {
+void FellowMotionMatcher3D::_update_warp(float p_dt, const Vector3 &p_anim_velocity, const Vector3 &p_clip_velocity) {
 	// What the character's motion asks of the pose beyond its animation's (milestone 164): its speed over the
 	// animation's root motion (the stride) and the acceleration the animation does not have (the lean). Velocities
 	// smoothed over a few frames, their derivatives too: a frame's synchronization step is not an acceleration.
@@ -336,6 +336,7 @@ void FellowMotionMatcher3D::_update_warp(float p_dt, const Vector3 &p_anim_veloc
 		warp.prev_char_position = char_position;
 		warp.char_velocity = flat_anim;
 		warp.anim_velocity = flat_anim;
+		warp.clip_velocity = Vector3(p_clip_velocity.x, 0.0f, p_clip_velocity.z);
 		warp.char_acceleration = Vector3();
 		warp.anim_acceleration = Vector3();
 		warp.travel = Vector3(0, 0, 1);
@@ -347,11 +348,14 @@ void FellowMotionMatcher3D::_update_warp(float p_dt, const Vector3 &p_anim_veloc
 	const float k = 1.0f - Math::exp(-0.69314718056f * p_dt / 0.05f);
 	const Vector3 cv = warp.char_velocity.lerp(moved, k);
 	const Vector3 av = warp.anim_velocity.lerp(flat_anim, k);
+	// The clip's own acceleration for the lean: unwarped (orientation warping turns the clip without leaning it).
+	const Vector3 clv = warp.clip_velocity.lerp(Vector3(p_clip_velocity.x, 0.0f, p_clip_velocity.z), k);
 	const float ka = 1.0f - Math::exp(-0.69314718056f * p_dt / 0.08f);
 	warp.char_acceleration = warp.char_acceleration.lerp((cv - warp.char_velocity) / p_dt, ka);
-	warp.anim_acceleration = warp.anim_acceleration.lerp((av - warp.anim_velocity) / p_dt, ka);
+	warp.anim_acceleration = warp.anim_acceleration.lerp((clv - warp.clip_velocity) / p_dt, ka);
 	warp.char_velocity = cv;
 	warp.anim_velocity = av;
+	warp.clip_velocity = clv;
 	const Basis to_character = Basis(char_rotation).inverse();
 
 	// The stride.
@@ -375,6 +379,28 @@ void FellowMotionMatcher3D::_update_warp(float p_dt, const Vector3 &p_anim_veloc
 		stride_ratio_samples += p_dt;
 	}
 
+	// The orientation (milestone 165): from the way the clip goes to the way the character goes, about the vertical.
+	{
+		float goal = 0.0f;
+		const Vector3 a = to_character.xform(Vector3(p_clip_velocity.x, 0.0f, p_clip_velocity.z));
+		const Vector3 c = to_character.xform(Vector3(sim_velocity.x, 0.0f, sim_velocity.z));
+		const float ca = a.length();
+		const float cs = c.length();
+		if (orientation_warping && ca > 0.3f && cs > 0.3f) {
+			// From the clip's root motion to the simulation's velocity (the way the character is asked to go).
+			const float angle = Math::atan2(a.z * c.x - a.x * c.z, a.x * c.x + a.z * c.z);
+			const float w = CLAMP((MIN(ca, cs) - 0.3f) / 0.4f, 0.0f, 1.0f);
+			goal = CLAMP(angle, -orientation_warping_max_angle, orientation_warping_max_angle) * w;
+		}
+		float e = warp.orientation - goal;
+		decay_spring_damper_exact(e, warp.orientation_velocity, 0.1f, p_dt);
+		warp.orientation = goal + e;
+		if (orientation_warping && sc > 0.3f) {
+			orientation_sum += Math::abs(warp.orientation) * p_dt;
+			orientation_time += p_dt;
+		}
+	}
+
 	// The lean: the acceleration the character has beyond its animation's, in the character's space.
 	float lean_goal[2] = {};
 	if (lean_amount > 0.0f) {
@@ -392,9 +418,67 @@ void FellowMotionMatcher3D::_update_warp(float p_dt, const Vector3 &p_anim_veloc
 	}
 }
 
+void FellowMotionMatcher3D::_find_spine_chain() {
+	// The spine: from the hips, the child that leads to neither leg, then on while a bone has one child (CMU: LowerBack,
+	// Spine, Spine1 — the last the chest, where the neck and the shoulders branch).
+	spine_chain.clear();
+	spine_chain_of = database.ptr();
+	const int bones = database->get_bone_count();
+	const int hips = database->get_bone_role(FellowMotionDatabase::ROLE_HIPS);
+	if (hips < 0) {
+		return;
+	}
+	const int legs[2] = { database->get_bone_role(FellowMotionDatabase::ROLE_LEFT_UPPER_LEG), database->get_bone_role(FellowMotionDatabase::ROLE_RIGHT_UPPER_LEG) };
+	auto leads_to = [&](int p_from, int p_to) {
+		for (int b = p_to; b >= 0; b = database->get_bone_parent(b)) {
+			if (b == p_from) {
+				return true;
+			}
+		}
+		return false;
+	};
+	int bone = -1;
+	for (int b = 0; b < bones && bone < 0; b++) {
+		if (database->get_bone_parent(b) == hips && !(legs[0] >= 0 && leads_to(b, legs[0])) && !(legs[1] >= 0 && leads_to(b, legs[1]))) {
+			bone = b;
+		}
+	}
+	while (bone >= 0 && spine_chain.size() < 6) {
+		spine_chain.push_back(bone);
+		int child = -1;
+		int children = 0;
+		for (int b = 0; b < bones; b++) {
+			if (database->get_bone_parent(b) == bone) {
+				child = b;
+				children++;
+			}
+		}
+		bone = children == 1 ? child : -1;
+	}
+}
+
 void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 	thread_local LocalVector<Vector3> gp;
 	thread_local LocalVector<Quaternion> gq;
+	// Orientation warping (milestone 165): the hips turned to the way the character goes, the spine back to its facing.
+	if (orientation_warping && Math::abs(warp.orientation) > 1e-4f) {
+		if (spine_chain_of != database.ptr()) {
+			_find_spine_chain();
+		}
+		const int hb = database->get_bone_role(FellowMotionDatabase::ROLE_HIPS);
+		const Vector3 up(0, 1, 0);
+		out_rotations[hb] = (Quaternion(up, warp.orientation) * out_rotations[hb]).normalized();
+		if (spine_chain.size() > 0) {
+			const float share = -warp.orientation / float(spine_chain.size());
+			Quaternion parent_global = out_rotations[hb];
+			for (uint32_t i = 0; i < spine_chain.size(); i++) {
+				const int b = spine_chain[i];
+				const Vector3 axis = parent_global.inverse().xform(up).normalized();
+				out_rotations[b] = (Quaternion(axis, share) * out_rotations[b]).normalized();
+				parent_global = parent_global * out_rotations[b];
+			}
+		}
+	}
 	// Ground adaptation (milestone 56): each foot placed on the ground under it — its height over the root's ground
 	// added to the animated foot's — and the hips lowered as far as the lower foot must reach down, so that the leg
 	// over the higher ground bends rather than the lower one overstretching.
@@ -849,7 +933,9 @@ void FellowMotionMatcher3D::_update(float p_dt, int p_lod) {
 	simulation_rotation_update(sim_rotation, sim_angular_velocity, desired_rotation, rotation_halflife, dt);
 
 	// The character: the animation's root motion, pulled towards the simulation.
-	char_velocity = char_rotation.xform(root_velocity + offset_root_velocity);
+	const Vector3 clip_world_velocity = char_rotation.xform(root_velocity + offset_root_velocity);
+	// Orientation warping (milestone 165): the root motion turned with the hips, the way the simulation goes.
+	char_velocity = (orientation_warping && Math::abs(warp.orientation) > 1e-4f) ? Quaternion(Vector3(0, 1, 0), warp.orientation).xform(clip_world_velocity) : clip_world_velocity;
 	const Vector3 anim_world_velocity = char_velocity;
 	char_yaw_rate = yaw_rate + offset_yaw_rate;
 	char_position += char_velocity * dt;
@@ -898,7 +984,7 @@ void FellowMotionMatcher3D::_update(float p_dt, int p_lod) {
 	}
 	trajectory_error_sum += Vector2(char_position.x - sim_position.x, char_position.z - sim_position.z).length() * dt;
 	trajectory_time += dt;
-	_update_warp(dt, anim_world_velocity);
+	_update_warp(dt, anim_world_velocity, clip_world_velocity);
 
 	if (lod == 0) {
 		_solve_feet(dt);
@@ -1101,6 +1187,8 @@ Dictionary FellowMotionMatcher3D::get_stats() const {
 	d["stride_ratio"] = warp.ratio;
 	d["lean"] = Vector2(warp.lean[0], warp.lean[1]);
 	d["stride_hips_drop_mm"] = warp.hips_drop * 1000.0f;
+	d["orientation"] = warp.orientation;
+	d["orientation_mean"] = orientation_time > 0.0 ? orientation_sum / orientation_time : 0.0;
 	return d;
 }
 
@@ -1155,6 +1243,8 @@ void FellowMotionMatcher3D::reset_stats() {
 	lean_sum_xy = 0.0;
 	stride_ratio_sum = 0.0;
 	stride_ratio_samples = 0.0;
+	orientation_sum = 0.0;
+	orientation_time = 0.0;
 }
 
 Dictionary FellowMotionMatcher3D::get_global_stats() {
@@ -1272,6 +1362,10 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_lean_amount"), &FellowMotionMatcher3D::get_lean_amount);
 	ClassDB::bind_method(D_METHOD("set_lean_max_angle", "radians"), &FellowMotionMatcher3D::set_lean_max_angle);
 	ClassDB::bind_method(D_METHOD("get_lean_max_angle"), &FellowMotionMatcher3D::get_lean_max_angle);
+	ClassDB::bind_method(D_METHOD("set_orientation_warping", "enable"), &FellowMotionMatcher3D::set_orientation_warping);
+	ClassDB::bind_method(D_METHOD("is_orientation_warping"), &FellowMotionMatcher3D::is_orientation_warping);
+	ClassDB::bind_method(D_METHOD("set_orientation_warping_max_angle", "radians"), &FellowMotionMatcher3D::set_orientation_warping_max_angle);
+	ClassDB::bind_method(D_METHOD("get_orientation_warping_max_angle"), &FellowMotionMatcher3D::get_orientation_warping_max_angle);
 	ClassDB::bind_method(D_METHOD("set_lod_distances", "distances"), &FellowMotionMatcher3D::set_lod_distances);
 	ClassDB::bind_method(D_METHOD("get_lod_distances"), &FellowMotionMatcher3D::get_lod_distances);
 	ClassDB::bind_method(D_METHOD("advance", "delta"), &FellowMotionMatcher3D::advance);
@@ -1317,6 +1411,8 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "foot_ik"), "set_foot_ik", "is_foot_ik");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "unlock_radius", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:m"), "set_unlock_radius", "get_unlock_radius");
 	ADD_GROUP("Warping", "");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "orientation_warping"), "set_orientation_warping", "is_orientation_warping");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "orientation_warping_max_angle", PROPERTY_HINT_RANGE, "0,150,0.1,radians_as_degrees"), "set_orientation_warping_max_angle", "get_orientation_warping_max_angle");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "stride_warping"), "set_stride_warping", "is_stride_warping");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "stride_warping_limits"), "set_stride_warping_limits", "get_stride_warping_limits");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lean_amount", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_lean_amount", "get_lean_amount");
