@@ -95,15 +95,15 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 	// Transitions: the playing pose continues unless a frame is cheaper by `transition_cost_bias`; frames of the
 	// playing clip within `transition_jump_threshold` of it are not candidates (a jump there is a stutter, not a
 	// transition).
-	float transition_cost_bias = 0.0f;
-	float transition_jump_threshold = 0.0f; // Seconds.
+	float transition_cost_bias = 2.0f;
+	float transition_jump_threshold = 0.25f; // Seconds.
 	// Stride warping: each foot's place along the way the character goes scaled about the hips by its speed over the
 	// animation's (within the limits), the hips lowered where a leg must reach farther.
-	bool stride_warping = false;
+	bool stride_warping = true;
 	Vector2 stride_warping_limits = Vector2(0.75f, 1.35f);
 	// Lean: the body turned about the ground under the hips into the acceleration the character has and its
 	// animation has not (a turn sharper or a start faster than the clip's), as far as balance asks (atan(a / g)).
-	float lean_amount = 0.0f;
+	float lean_amount = 1.0f;
 	float lean_max_angle = Math::deg_to_rad(20.0f);
 	struct Warp {
 		bool has_prev = false;
