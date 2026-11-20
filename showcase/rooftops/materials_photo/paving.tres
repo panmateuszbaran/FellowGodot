@@ -10,9 +10,9 @@
 [ext_resource type="Texture2D" path="res://rooftops/textures/precast_stone_paving_diff_2k.jpg" id="8_oc30p"]
 [ext_resource type="Texture2D" path="res://rooftops/textures/precast_stone_paving_arm_2k.jpg" id="9_33oo2"]
 [ext_resource type="Texture2D" path="res://rooftops/textures/precast_stone_paving_nor_gl_2k.jpg" id="10_r6rfn"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_08_diff_2k.jpg" id="11_8yhcw"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_08_arm_2k.jpg" id="12_2qjdk"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_08_nor_gl_2k.jpg" id="13_2pjcx"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/square_cobblestone_diff_2k.jpg" id="11_8yhcw"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/square_cobblestone_arm_2k.jpg" id="12_2qjdk"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/square_cobblestone_nor_gl_2k.jpg" id="13_2pjcx"]
 
 [resource]
 render_priority = 0
@@ -27,10 +27,14 @@ shader_parameter/puddles = null
 shader_parameter/slabs_albedo = ExtResource("11_8yhcw")
 shader_parameter/slabs_normal = ExtResource("13_2pjcx")
 shader_parameter/slabs_arm = ExtResource("12_2qjdk")
-shader_parameter/slabs_size = 2.25
-shader_parameter/slabs_tint = Color(0.74, 0.7, 0.64, 1)
-shader_parameter/slabs_lum = 0.29968594340607535
-shader_parameter/slabs_tint_strength = 0.8
+shader_parameter/slabs_size = 3.6
+shader_parameter/slabs_anti_tile = 0.0
+shader_parameter/slabs_bias = 1.5
+shader_parameter/band_strength = 0.0
+shader_parameter/slabs_normal_strength = 0.45
+shader_parameter/slabs_tint = Color(0.8, 0.62, 0.52, 1)
+shader_parameter/slabs_lum = 0.1273160193484727
+shader_parameter/slabs_tint_strength = 0.7
 shader_parameter/fan_albedo = ExtResource("5_m387q")
 shader_parameter/fan_normal = ExtResource("7_jb8kw")
 shader_parameter/fan_arm = ExtResource("6_oqvfa")

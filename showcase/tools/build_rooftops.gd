@@ -148,6 +148,8 @@ func _make_materials() -> void:
 	mats["roof"] = _shader_mat("roof_tiles", {})
 	# Milestone 158: the coppi over the roofs (ac_buildings.eaves), weathered terracotta.
 	mats["coppo"] = _shader_mat("plaster", {"color": Color(0.7, 0.43, 0.31), "fallen": 0.0, "seed": 9.0})
+	mats["coppo_b"] = _shader_mat("plaster", {"color": Color(0.54, 0.32, 0.24), "fallen": 0.0, "seed": 10.0})
+	mats["coppo_c"] = _shader_mat("plaster", {"color": Color(0.78, 0.45, 0.28), "fallen": 0.0, "seed": 11.0})
 	# The ground: the square's slabs and bands, the fan round the fountain, the pavements along the fronts, the streets'
 	# cobbles (rooftops/shaders/paving.gdshader), told where the houses stand.
 	var walls := PackedVector4Array()
@@ -301,9 +303,17 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 	# on the coppi its colour spread wide (a coppo's own weathering, no tiles drawn on it).
 	# Milestone 159: the clay smooth (the photograph's tiles stretched along each coppo had read as bark): its colour
 	# only, blurred to its weathering's broad patches.
-	photo["coppo"] = _photo("roof", {"tint": Color(0.66, 0.36, 0.22), "tint_strength": 0.85, "brightness": 0.95,
+	photo["coppo"] = _photo("roof", {"tint": Color(0.66, 0.33, 0.2), "tint_strength": 0.85, "brightness": 0.85,
 			"specular": 0.22, "roughness_bias": 0.08, "stains": 0.3, "variation": 0.25, "ground_dirt": 0.0, "anti_tile": false,
-			"seed": 12.0, "tex_size": 6.0, "normal_strength": 0.04, "albedo_soften": 1.0, "soften_lod": 6.0})
+			"seed": 12.0, "tex_size": 6.0, "normal_strength": 0.04, "albedo_soften": 0.7, "soften_lod": 5.0})
+	# Milestone 162: each tile its own firing (the reference's roof is no single colour): a browner, darker one and an
+	# oranger, brighter one.
+	photo["coppo_b"] = _photo("roof", {"tint": Color(0.48, 0.26, 0.18), "tint_strength": 0.85, "brightness": 0.75,
+			"specular": 0.22, "roughness_bias": 0.1, "stains": 0.4, "variation": 0.25, "ground_dirt": 0.0, "anti_tile": false,
+			"seed": 13.0, "tex_size": 6.0, "normal_strength": 0.04, "albedo_soften": 0.7, "soften_lod": 5.0})
+	photo["coppo_c"] = _photo("roof", {"tint": Color(0.74, 0.38, 0.22), "tint_strength": 0.85, "brightness": 0.92,
+			"specular": 0.22, "roughness_bias": 0.06, "stains": 0.25, "variation": 0.25, "ground_dirt": 0.0, "anti_tile": false,
+			"seed": 14.0, "tex_size": 6.0, "normal_strength": 0.04, "albedo_soften": 0.7, "soften_lod": 5.0})
 	photo["roof"] = _photo("roof", {"tint": Color(0.8, 0.62, 0.52), "tint_strength": 0.55, "brightness": 0.8, "specular": 0.22,
 			"roughness_bias": 0.05, "stains": 0.25, "variation": 0.15, "ground_dirt": 0.0, "anti_tile": false, "seed": 6.0,
 			"tex_size": 4.2, "parallax_depth": 0.06, "height_lo": 0.2, "height_hi": 0.85, "cavity": 0.3})
@@ -319,14 +329,19 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 	for n in FOOTPRINTS:
 		walls.append(_footprint(n))
 	# Milestone 156: the square laid with large slabs (the smooth sandstone's blocks, greyed), as in the reference.
-	var sl := _texset("stone") if _tex.has("ashlar") else _texset("square_slabs")
+	# Milestone 162: as the reference's square closer to: oblong setts in running courses, worn smooth, warm.
+	var setts := _tex.has("setts")
+	var sl := _texset("setts") if setts else (_texset("stone") if _tex.has("ashlar") else _texset("square_slabs"))
 	var fan := _texset("street_fan")
 	var cob := _texset("cobbles")
 	var pav := _texset("pavement")
 	photo["paving"] = _shader_mat("paving_pbr", {"walls": walls, "wall_count": walls.size(), "pavement_width": PAVEMENT,
 			"flagged": Vector4(-26.0, -6.0, -16.0, 6.0),
-			"fountain": PLACES["Fountain"][0], "slabs_albedo": sl[0], "slabs_normal": sl[1], "slabs_arm": sl[2], "slabs_size": sl[3] * (0.75 if _tex.has("ashlar") else 2.2),
-			"slabs_lum": sl[4], "slabs_tint": Color(0.74, 0.7, 0.64) if _tex.has("ashlar") else Color(0.62, 0.59, 0.54), "slabs_tint_strength": 0.8,
+			"fountain": PLACES["Fountain"][0], "slabs_albedo": sl[0], "slabs_normal": sl[1], "slabs_arm": sl[2], "slabs_size": sl[3] * (1.8 if setts else (0.75 if _tex.has("ashlar") else 2.2)),
+			"slabs_anti_tile": 0.0 if setts else 1.0, "slabs_bias": 1.5 if setts else 0.0, "band_strength": 0.0 if setts else 1.0,
+			"slabs_normal_strength": 0.45 if setts else 1.0,
+			"slabs_lum": sl[4], "slabs_tint": Color(0.8, 0.62, 0.52) if setts else (Color(0.74, 0.7, 0.64) if _tex.has("ashlar") else Color(0.62, 0.59, 0.54)),
+			"slabs_tint_strength": 0.7 if setts else 0.8,
 			"fan_albedo": fan[0], "fan_normal": fan[1], "fan_arm": fan[2], "fan_size": fan[3],
 			"cob_albedo": cob[0], "cob_normal": cob[1], "cob_arm": cob[2], "cob_size": cob[3],
 			"pave_albedo": pav[0], "pave_normal": pav[1], "pave_arm": pav[2], "pave_size": pav[3]})

@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 162 — the reference's ground, tiles and feet (2026-11-20)
+
+- Decision 0303, on the owner's word from the reference's frames:
+  - The ground: the square and the reference's street laid with oblong setts in running courses (Poly Haven's
+    `square_cobblestone`, fetched as `setts`): warm, their courses straight, their grain softened, no travertine bands,
+    running to the reference house's wall.
+  - The tiles on every roof: wide, low rounded covers in columns with dark valleys and stepped courses, each tile one of
+    three firings (`Builder.coppo`'s `flat`, `coppo_b`, `coppo_c`). Their geometry is halved where nothing shows.
+  - The mannequin's feet: a slim slipper (9 cm across, the forefoot 6 cm high), the ankle smaller and half sunk.
+  - 38 of 38 animation gates.
+
 ## Milestone 161 — the reference's surroundings opened (2026-11-20)
 
 - Decision 0302: behind the reference shot's runner the open square, not the stall and its barrels (moved to the

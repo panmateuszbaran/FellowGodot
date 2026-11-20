@@ -427,8 +427,8 @@ def eaves(B, Bc, facades, w, d, zt, overhang, pitch_deg, kind, rng, chimneys=1, 
 
 		xs = [q[0] for q in poly2]
 		ys = [q[1] for q in poly2]
-		col = 0.26
-		row = 0.38
+		col = 0.31
+		row = 0.4
 		ncol = int((max(xs) - min(xs)) / col)
 		x_start = min(xs) + ((max(xs) - min(xs)) - ncol * col) * 0.5
 		up = (UP - slope * slope.dot(UP)).normalized()
@@ -437,23 +437,30 @@ def eaves(B, Bc, facades, w, d, zt, overhang, pitch_deg, kind, rng, chimneys=1, 
 			y = -0.02
 			k = 0
 			while y < max(ys):
-				y0, y1 = y, y + 0.45
+				y0, y1 = y, y + 0.48
 				if inside(x, y0 + 0.05) and inside(x, min(y1, max(ys) - 0.02) - 0.05) and inside(x - 0.08, y0 + 0.2) and inside(x + 0.08, y0 + 0.2):
 					# Milestone 159 (the reference's roof close up: each coppo's lower end a thick rounded step over
 					# the one below, the channels between the rows dark): tapered cover tiles, wide end down, lifted
 					# at their lower end over the course below; a pan tile in each channel, concave, under them.
 					jx = rng.uniform(-0.012, 0.012)
 					# the cover's edges down on the pans' rims; its wide lower end over the narrow head of the one below
-					base = a + t * (x + jx) + slope * y0 + nrm * (0.02 + rng.uniform(-0.004, 0.004))
-					tip = base + slope * (min(y1, max(ys) - 0.02) - y0) - nrm * 0.008 + t * rng.uniform(-0.01, 0.01)
+					base = a + t * (x + jx) + slope * y0 + nrm * (0.03 + rng.uniform(-0.004, 0.004))
+					tip = base + slope * (min(y1, max(ys) - 0.02) - y0) - nrm * 0.016 + t * rng.uniform(-0.01, 0.01)
 					if k == 0:
 						base = base - slope * 0.04
-					rr = rng.uniform(-0.005, 0.004)
-					B.coppo(base, tip, 0.09 + rr, 0.074 + rr, "coppo", up=up, segments=6)
+					# Milestone 162 (the reference's roof beside ours: its tiles wide, low rounded humps in columns, a
+					# narrow dark valley between them, each tile its own shade, each course's end a thick rounded step):
+					# the cover 0.28 m wide (beside the reference's climber's hand: half again as wide as it) and 9 cm
+					# high, tapering, tilted so that its wide end stands proud of the course below; a narrow pan in the
+					# valley under its edges; the clay one of three firings.
+					rr = rng.uniform(-0.004, 0.004)
+					m = rng.choices(("coppo", "coppo_b", "coppo_c"), weights=(0.5, 0.25, 0.25))[0]
+					B.coppo(base, tip, 0.14 + rr, 0.124 + rr, m, up=up, segments=7, lip=0.02, flat=0.62)
 					if inside(x + col * 0.5, y0 + 0.2) and inside(x + col * 0.5 + 0.1, y0 + 0.2):
-						pb = a + t * (x + col * 0.5) + slope * y0 + nrm * 0.093
+						# (the pan low in its valley: the valley's floor deep and in shade, as the reference's)
+						pb = a + t * (x + col * 0.5) + slope * y0 + nrm * 0.05
 						pt = pb + slope * (min(y1, max(ys) - 0.02) - y0)
-						B.coppo(pb, pt, 0.09, 0.078, "coppo", up=up, segments=5, lip=0.012, concave=True)
+						B.coppo(pb, pt, 0.065, 0.06, "coppo_b", up=up, segments=3, lip=0.0, concave=True)
 				y += row
 				k += 1
 	for a, b in ridges:
@@ -760,7 +767,8 @@ def casa_riferimento(name="CasaRiferimento", seed=17):
 	for F in facades:
 		fbox(B, F, -0.04, F.length + 0.04, 0.0, 0.3, -0.04, 0.02, "stone_rustic", bevel=0.02)
 	Bc.box((0, 0, zt * 0.5), (w, d, zt), "stone")
-	top = eaves(B, Bc, facades, w, d, zt, lip_out, pitch, "gable", rng, chimneys=1, cornice=False)
+	# (Milestone 162: no chimney — the reference's roof has none where its climber crosses it.)
+	top = eaves(B, Bc, facades, w, d, zt, lip_out, pitch, "gable", rng, chimneys=0, cornice=False)
 	# The gutter at the front's and back's eaves: a half-round of weathered zinc hung just under the lip, open above.
 	for sy in (-1, 1):
 		y = sy * (d * 0.5 + lip_out + 0.045)

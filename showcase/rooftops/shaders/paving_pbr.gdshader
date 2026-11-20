@@ -21,6 +21,12 @@ uniform sampler2D slabs_albedo : source_color, filter_linear_mipmap_anisotropic,
 uniform sampler2D slabs_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D slabs_arm : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float slabs_size = 1.85;
+// Milestone 162: the setts' courses kept straight (no turned second sample), their grain softened; the travertine
+// bands' strength (0: none, as the reference's square).
+uniform float slabs_anti_tile = 1.0;
+uniform float slabs_bias = 0.0;
+uniform float band_strength = 1.0;
+uniform float slabs_normal_strength = 1.0;
 // The slabs' stone: the photograph's brightness times this colour (its mean luminance slabs_lum: the colour where the
 // photograph is average) — pale grey-brown sandstone, not the photograph's dark tile.
 uniform vec3 slabs_tint : source_color = vec3(0.6, 0.57, 0.52);
@@ -63,18 +69,20 @@ float wall_distance(vec2 p) {
 
 // A texture set sampled at uv (in texture units) and again turned and scaled, blended by noise; the normal map's
 // second sample turned back. Returns the colour; the normal texel and ARM out.
-vec3 sample_set(sampler2D a, sampler2D n, sampler2D r, vec2 uv, vec2 noise_p, out vec3 nrm, out vec3 arm) {
-	vec3 c = texture(a, uv).rgb;
+// (Milestone 162: `anti` scales the second sample's blend — 0 for a laid pattern whose courses must keep their
+// direction; `bias` blurs the colour's grain.)
+vec3 sample_set(sampler2D a, sampler2D n, sampler2D r, vec2 uv, vec2 noise_p, out vec3 nrm, out vec3 arm, float anti, float bias) {
+	vec3 c = texture(a, uv, bias).rgb;
 	nrm = texture(n, uv).rgb;
 	arm = texture(r, uv).rgb;
 	float ang = 2.1;
 	vec2 uv2 = rt_rotate(uv * 0.71, ang) + vec2(0.29, 0.53);
-	float m = smoothstep(0.42, 0.58, rt_fbm(noise_p * 0.09, 3));
+	float m = smoothstep(0.42, 0.58, rt_fbm(noise_p * 0.09, 3)) * anti;
 	vec3 n2 = texture(n, uv2).rgb;
 	vec2 nb = rt_rotate(n2.xy * 2.0 - 1.0, -ang) * 0.5 + 0.5;
 	nrm = mix(nrm, vec3(nb, n2.z), m);
 	arm = mix(arm, texture(r, uv2).rgb, m);
-	return mix(c, texture(a, uv2).rgb, m);
+	return mix(c, texture(a, uv2, bias).rgb, m);
 }
 
 void fragment() {
@@ -87,9 +95,10 @@ void fragment() {
 	vec3 arm;
 	vec2 uv;
 	float rf = length(p - fountain);
-	if (wd < pavement_width) {
+	// (Milestone 162: no pavement's flags before the reference's house — the setts run to its wall, as the video's.)
+	if (wd < pavement_width && !in_flagged) {
 		uv = p / pave_size;
-		col = sample_set(pave_albedo, pave_normal, pave_arm, uv, p, nrm, arm) * vec3(0.95, 0.96, 0.98);
+		col = sample_set(pave_albedo, pave_normal, pave_arm, uv, p, nrm, arm, 1.0, 0.0) * vec3(0.95, 0.96, 0.98);
 	} else if (in_square && rf < 7.9) {
 		if (rf < 3.75 || rf > 7.45) {
 			// The marble bands, cut in segments round the fountain.
@@ -107,35 +116,40 @@ void fragment() {
 			// The cobbles laid round the fountain: the texture bent into the ring.
 			float a = atan(p.y - fountain.y, p.x - fountain.x);
 			uv = vec2(a * 5.6, rf) / cob_size;
-			col = sample_set(cob_albedo, cob_normal, cob_arm, uv, p, nrm, arm);
+			col = sample_set(cob_albedo, cob_normal, cob_arm, uv, p, nrm, arm, 1.0, 0.0);
 		}
 	} else if (in_square || in_flagged) {
 		uv = p / slabs_size;
-		col = sample_set(slabs_albedo, slabs_normal, slabs_arm, uv, p, nrm, arm);
+		col = sample_set(slabs_albedo, slabs_normal, slabs_arm, uv, p, nrm, arm, slabs_anti_tile, slabs_bias);
+		nrm = mix(vec3(0.5, 0.5, 1.0), nrm, slabs_normal_strength);
 		col = mix(col, slabs_tint * dot(col, vec3(0.3, 0.55, 0.15)) / slabs_lum, slabs_tint_strength);
 		// The travertine bands every 7 m.
 		vec2 g = abs(fract(p / 7.0 + 0.5) - 0.5) * 7.0;
 		float band = 1.0 - smoothstep(0.15, 0.17, min(g.x, g.y));
+		band *= band_strength;
 		if (band > 0.0 && in_square) {
 			float along = g.x < g.y ? p.y : p.x;
 			float seg = fract(along / 0.62);
 			float joint = 1.0 - smoothstep(0.004, 0.01, min(min(seg, 1.0 - seg) * 0.62, 0.16 - min(g.x, g.y)));
-			vec3 tc = vec3(0.8, 0.77, 0.69) * (0.88 + 0.2 * rt_fbm(p * 4.0, 3)) * (0.95 + 0.1 * rt_hash12(vec2(floor(along / 0.62), 3.0)));
+			// (Milestone 162: a warm stone a shade paler than the setts, not a white stripe — the reference's square has
+			// none.)
+			vec3 tc = vec3(0.66, 0.57, 0.49) * (0.88 + 0.2 * rt_fbm(p * 4.0, 3)) * (0.95 + 0.1 * rt_hash12(vec2(floor(along / 0.62), 3.0)));
 			tc = mix(tc, vec3(0.22, 0.2, 0.18), joint);
-			col = mix(col, tc, band);
+			col = mix(col, tc, band * 0.8);
 			nrm = mix(nrm, vec3(0.5, 0.5, 1.0), band);
 			arm = mix(arm, vec3(1.0 - 0.4 * joint, 0.5, 0.0), band);
 		}
 	} else {
 		uv = p / fan_size;
-		col = sample_set(fan_albedo, fan_normal, fan_arm, uv, p, nrm, arm);
+		col = sample_set(fan_albedo, fan_normal, fan_arm, uv, p, nrm, arm, 1.0, 0.0);
 	}
 	// The stone's tone over the square; dirt and damp by the walls, moss in it; worn paths.
 	col *= 0.9 + 0.2 * rt_fbm(p * 0.05, 3);
 	float damp = 1.0 - smoothstep(0.0, 1.3, wd);
-	col = mix(col, col * vec3(0.66, 0.66, 0.6), damp * 0.55);
+	// (Milestone 162: lighter by the walls — beside the reference's clean stone ours had been a dark, mossy band.)
+	col = mix(col, col * vec3(0.66, 0.66, 0.6), damp * 0.3);
 	float moss = damp * smoothstep(0.55, 0.75, rt_fbm(p * 0.7, 3)) * (1.0 - smoothstep(0.35, 0.6, dot(col, vec3(0.33))));
-	col = mix(col, vec3(0.18, 0.22, 0.1), moss * 0.5);
+	col = mix(col, vec3(0.18, 0.22, 0.1), moss * 0.25);
 	float grime = smoothstep(0.4, 0.85, rt_fbm(p * 0.3, 4));
 	col *= 1.0 - 0.15 * grime;
 	float rough = arm.g;

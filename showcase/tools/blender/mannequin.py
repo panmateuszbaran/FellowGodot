@@ -529,27 +529,32 @@ def build_mesh(armature):
 			(0.29, 0.046, 0.04, 0.052),
 			(0.2, 0.036, 0.034, 0.037),
 			(0.14, 0.032, 0.032, 0.032),
-			(0.126, 0.024, 0.024, 0.024),
+			(0.126, 0.026, 0.026, 0.026),
+			(0.113, 0.019, 0.019, 0.019),  # (milestone 162: down to the ankle's ball, no gap — the reference's)
 		]
 		S.loft(leg_secs(shin, lambda z: 0.092, lambda z: -0.006 + 0.02 * (0.51 - z) / 0.425, 2.1), prefix + "LowerLeg", 0, segments=24)
 		# The ankle, dark; the foot like a shoe (its sole flat at z = 0), the toes.
-		S.ball(P(0.092, 0.014, 0.085), 0.038, prefix + "Foot", 1, segments=18, rings=12)
+		# Milestone 162 (the owner: "use these shots for the feet" — beside the reference's run and its feet on the wall
+		# ours were chunky wedges with a bulbous toe cap): the reference's slipper of a foot — slim (9 cm across, 11
+		# before), its top rising round the ankle's ball and falling evenly from it to a rounded point (the forefoot 6
+		# cm high, 8.5), the toes' piece flush with it; the ankle's ball smaller, half sunk in it.
+		S.ball(P(0.092, 0.014, 0.085), 0.032, prefix + "Foot", 1, segments=18, rings=12)
 		foot = [
-			(0.076, 0.016, 0.02, 0.038),
-			(0.066, 0.035, 0.036, 0.042),
-			(0.04, 0.045, 0.047, 0.05),
-			(0.0, 0.049, 0.048, 0.051),
-			(-0.04, 0.052, 0.041, 0.044),
-			(-0.08, 0.054, 0.032, 0.035),
-			(-0.106, 0.054, 0.027, 0.029),
+			(0.074, 0.02, 0.024, 0.034),
+			(0.062, 0.034, 0.036, 0.04),
+			(0.035, 0.041, 0.042, 0.045),
+			(0.0, 0.043, 0.039, 0.042),
+			(-0.04, 0.045, 0.03, 0.033),
+			(-0.08, 0.045, 0.022, 0.025),
+			(-0.106, 0.044, 0.019, 0.021),
 		]
 		S.loft([(P(0.094, y, zc), Vector((0, -1, 0)), Vector((sx, 0, 0)), a, b, b, 2.7) for y, a, b, zc in foot], prefix + "Foot", 0, segments=20)
 		toes = [
-			(-0.106, 0.054, 0.027, 0.029),
-			(-0.14, 0.052, 0.022, 0.024),
-			(-0.17, 0.046, 0.018, 0.019),
-			(-0.19, 0.034, 0.013, 0.014),
-			(-0.2, 0.017, 0.007, 0.009),
+			(-0.106, 0.044, 0.019, 0.021),
+			(-0.14, 0.041, 0.016, 0.018),
+			(-0.17, 0.034, 0.013, 0.015),
+			(-0.19, 0.024, 0.009, 0.011),
+			(-0.203, 0.011, 0.005, 0.007),
 		]
 		S.loft([(P(0.097, y, zc), Vector((0, -1, 0)), Vector((sx, 0, 0)), a, b, b, 2.7) for y, a, b, zc in toes], prefix + "Toes", 0, segments=20)
 	shell = bpy.data.materials.new("mannequin_shell")

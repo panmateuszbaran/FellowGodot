@@ -33,6 +33,8 @@ SETS = {
     "shutter_painted": "distressed_painted_planks",
     # Milestone 156: the owner's reference — a city of warm, rough-faced sandstone ashlar.
     "ashlar": "sandstone_blocks_05",
+    # Milestone 162: its square's ground — oblong setts in running courses, worn smooth.
+    "setts": "square_cobblestone",
 }
 # Milestone 158: and its height (Poly Haven's displacement map): the parallax's depth (the stone's joints, the tiles').
 MAPS = {"Diffuse": "diff", "nor_gl": "nor_gl", "arm": "arm", "Displacement": "disp"}
