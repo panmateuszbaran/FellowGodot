@@ -54,6 +54,8 @@ points turned 10° round, and the wall leaned 6.5° off the ground's normal.
 
 * each tile's id written into its UVs by `Builder.coppo` (u = 2 × its id + the place across the arch; v along it);
 * each tile its own brightness (±14 %) and a leaning to a warmer hue;
+* the grime of the valleys and of the crevice under each course's lip (the albedo to 0.72 and 0.62 there; the pans
+  at 0.6), so that the courses read as dark steps, as the video's do;
 * broad pale patches of weathering over the roof, and a faint mottling of the clay that fades with distance;
 * roughness 0.5, specular 0.4: a soft sheen;
 * the arch's sides darker where they dip into the valley; the band under the course above's lip in its shadow; the pans
@@ -65,11 +67,17 @@ come from the video's tiles: lit crowns about (194, 132, 97) in sRGB.
 
 ## Checks
 
-* The background's motion, the video's beside the render's (`zz_flowcmp.py`, cloud only): see the report.
-* The tiles at frames 84, 88 and 93 beside the video's: smooth, sheened, each tile its own shade; the courses' steps
-  shaded.
+* The background's motion over the whole shot, the video's beside the render's (`zz_flowcmp.py`, the median optical
+  flow in the frame's outer thirds, cloud only):
+  * its change from frame to frame peaks at 8.3 px, the video's at 8.4 (51.8 before), and averages 1.7 px (the
+    video's 1.6, ours 4.4 before);
+  * the render's motion differs from the video's by 1.8 px a frame on average (3.1 before), 6.4 at most (29.4).
+* The tiles at frames 84, 88, 90, 93 and 94 beside the video's: smooth, sheened, each tile its own shade, the courses'
+  steps dark. The lit crowns are (192-203, 132-145, 107-117) beside the video's (180-197, 131-145, 103-114). The
+  contrast of their lit to their dark parts is 3.9-5.5, the video's 4.5-4.8 (3.5-3.7 at first, without the
+  crevices' grime).
 * `reference163_sbs.mp4`: the whole shot beside the video.
-* 38 of 38 animation gates.
+* 38 of 38 animation gates, every one at milestone 158's baseline value.
 
 ## Decision
 

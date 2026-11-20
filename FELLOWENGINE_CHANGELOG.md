@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 163 — the reference's camera smooth over the eave; the tiles smooth clay (2026-11-20)
+
+- Decision 0304, on the owner's word: "why are the tiles not smooth like the reference's? why does the camera jump
+  while he pulls himself onto the roof?"
+  - The camera: where it rises over the eave (frames 76-85) the matchmove's tracks hand over from the wall to the
+    roof, and its free solve had jittered and jumped (8 m/s, 83°/s for a frame). It is re-solved against its own
+    points, held still, its path held smooth. Those frames move onto the even path the video's background takes; the
+    others stay. The background's motion now changes from frame to frame by at most 8.3 px, the video's 8.4 (51.8
+    before). The climber is refitted through it, the scene's scale held.
+  - The tiles: smooth fired clay (`clay_tile.gdshader`), with no photograph. Each tile has its own shade (its id in its
+    UVs, from `Builder.coppo`) and a soft sheen. The valleys and the crevices under each course are dark, and the lower
+    ends are rounded over. A coppo's lip is kept sharp against its arch.
+  - 38 of 38 animation gates.
+
 ## Milestone 162 — the reference's ground, tiles and feet (2026-11-20)
 
 - Decision 0303, on the owner's word from the reference's frames:

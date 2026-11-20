@@ -38,14 +38,19 @@ void fragment() {
 	float crown = 1.0 - abs(u - 0.5) * 2.0;
 	float ao;
 	if (pan) {
-		// In the valley: under the covers at its sides, its floor deep.
+		// In the valley: under the covers at its sides, its floor deep, dirt gathered in it.
 		ao = mix(0.35, 0.6, smoothstep(0.1, 0.6, crown));
+		col *= 0.6;
 	} else {
-		// The arch's sides dip into the valley; the upper end lies under the course above.
+		// The arch's sides dip into the valley (darker there: the dirt the rain leaves); the upper end lies under the
+		// course above.
 		ao = mix(0.6, 1.0, smoothstep(0.0, 0.5, crown));
+		col *= mix(0.72, 1.0, smoothstep(0.0, 0.4, crown));
 		ao *= mix(1.0, 0.55, smoothstep(0.8, 1.0, along));
-		// Below the course above's lip (it lies at 0.83 of the tile's length: courses 0.4 m, tiles 0.48): its shadow.
+		// Below the course above's lip (it lies at 0.83 of the tile's length: courses 0.4 m, tiles 0.48): its shadow,
+		// and the grime in the crevice — the reference's courses read as dark steps.
 		ao *= mix(1.0, 0.62, smoothstep(0.64, 0.83, along));
+		col *= mix(1.0, 0.62, smoothstep(0.6, 0.83, along));
 		// The lower end's very edge: a darker crust, worn.
 		col *= mix(0.84, 1.0, smoothstep(0.0, 0.05, along));
 	}
