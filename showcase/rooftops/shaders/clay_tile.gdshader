@@ -8,7 +8,7 @@ render_mode diffuse_burley, specular_schlick_ggx;
 #include "rooftops_common.gdshaderinc"
 
 uniform vec3 color : source_color = vec3(0.66, 0.36, 0.24);
-uniform float variation = 0.1; // each tile's brightness, +-
+uniform float variation = 0.14; // each tile's brightness, +-
 uniform float warmth = 0.5; // how far a tile's hue may lean warmer
 uniform float weathering = 0.3; // broad pale patches (a dust of lime and lichen) over the roof
 uniform float roughness = 0.5;
@@ -44,6 +44,8 @@ void fragment() {
 		// The arch's sides dip into the valley; the upper end lies under the course above.
 		ao = mix(0.6, 1.0, smoothstep(0.0, 0.5, crown));
 		ao *= mix(1.0, 0.55, smoothstep(0.8, 1.0, along));
+		// Below the course above's lip (it lies at 0.83 of the tile's length: courses 0.4 m, tiles 0.48): its shadow.
+		ao *= mix(1.0, 0.62, smoothstep(0.64, 0.83, along));
 		// The lower end's very edge: a darker crust, worn.
 		col *= mix(0.84, 1.0, smoothstep(0.0, 0.05, along));
 	}

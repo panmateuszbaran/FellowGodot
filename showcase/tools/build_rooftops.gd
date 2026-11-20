@@ -56,9 +56,9 @@ const PAVEMENT := 1.2 ## the raised pavements' width along the fronts (m)
 ## Milestone 163: the coppi's clay (clay_tile.gdshader) — three firings, as the reference's roofs: a terracotta, a
 ## browner and darker one, an oranger and brighter one.
 const COPPO := {
-	"coppo": {"color": Color(0.64, 0.34, 0.22), "seed": 1.0},
-	"coppo_b": {"color": Color(0.52, 0.28, 0.19), "seed": 2.0, "roughness": 0.55},
-	"coppo_c": {"color": Color(0.72, 0.38, 0.22), "seed": 3.0, "roughness": 0.45},
+	"coppo": {"color": Color(0.64, 0.315, 0.18), "seed": 1.0},
+	"coppo_b": {"color": Color(0.52, 0.26, 0.155), "seed": 2.0, "roughness": 0.55},
+	"coppo_c": {"color": Color(0.72, 0.355, 0.18), "seed": 3.0, "roughness": 0.45},
 }
 const KERB := 0.08 ## and their height
 

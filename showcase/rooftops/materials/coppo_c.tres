@@ -1,16 +1,15 @@
 [gd_resource type="ShaderMaterial" format=3]
 
-[ext_resource type="Shader" path="res://rooftops/shaders/plaster.gdshader" id="1_217rn"]
+[ext_resource type="Shader" path="res://rooftops/shaders/clay_tile.gdshader" id="1_217rn"]
 
 [resource]
 render_priority = 0
 shader = ExtResource("1_217rn")
-shader_parameter/color = Color(0.78, 0.45, 0.28, 1)
+shader_parameter/color = Color(0.72, 0.355, 0.18, 1)
 shader_parameter/variation = null
-shader_parameter/stains = null
-shader_parameter/fallen = 0.0
-shader_parameter/brick_color = null
-shader_parameter/ground_dirt = null
-shader_parameter/seed = 11.0
-shader_parameter/far_windows = null
-shader_parameter/instance_tint = null
+shader_parameter/warmth = null
+shader_parameter/weathering = null
+shader_parameter/roughness = 0.45
+shader_parameter/specular = null
+shader_parameter/end_round = null
+shader_parameter/seed = 3.0
