@@ -109,9 +109,9 @@ The screen gather, the same captures (bias / error in stops):
 | SDFGI's bounce feedback 1 (stock 0.5) | +0.08 / 0.46 | −0.42 / 0.52 | −0.03 / 0.12 | +0.36 / 0.36 | +0.01 / 0.37 | 0.019 |
 | SDFGI alone, bounce feedback 1 | +0.11 / 0.47 | −0.25 / 0.47 | +0.02 / 0.17 | +0.62 / 0.63 | +0.13 / 0.44 | 0.042 |
 
-* In GI Lab's room the gather is right to 0.1 stops a pixel, from SDFGI's 0.41: the ceiling lit by the floor's sunlit
-  patch, the walls' colours where they face each other, the corners dark. The band of light at the top of the red wall
-  is gone.
+* In GI Lab the gather is right to 0.1 stops a pixel, from SDFGI's 0.41 (its room's two views 0.18 from 0.76, the
+  views outdoors 0.02-0.03 from 0.05-0.06): the ceiling lit by the floor's sunlit patch, the walls' colours where they
+  face each other, the corners dark. The band of light at the top of the red wall is gone.
 * Bistro interior: 0.12 stops from 0.17. Sponza: as SDFGI (0.46). Bistro exterior: darker than SDFGI (0.63 from 0.55).
   Its streets lack light from SDFGI's voxels (they are darker than the path tracer's hits in both); SDFGI's probe
   interpolation had made up for some of it.
@@ -207,7 +207,7 @@ accuracy (it is off by default).
 KEEP both, off by default:
 
 * without ray tracing, with SDFGI in the environment: an error a pixel of 0.34 stops from SDFGI's 0.41 (0.10 from 0.41 in
-  GI Lab's room; a quarter of SDFGI's leak), for 0.3 ms at 1080p;
+  GI Lab, 0.18 from 0.76 in its room; a quarter of SDFGI's leak), for 0.3 ms at 1080p;
 * with ray-traced DDGI: 0.29 stops from 0.94-1.10, the closest diffuse light to the truth FellowEngine has, for 0.7 ms;
   but it flickers on Sponza's curtains (10.9 % of the pixels of a still view, DDGI 3.8 %): a temporal filter of its
   resolved light is the next step.

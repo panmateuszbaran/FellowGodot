@@ -28,8 +28,9 @@ log₂ of the luminance ratio over the lit pixels, then the means):
 * The screen gather traces the first bounce from the surfaces on screen (a probe per 16 x 16 pixels, 16 rays a frame,
   averaged over frames and neighbours on the same surface): through SDFGI's distance fields without ray tracing, against
   the ray tracing scene with it.
-* Without ray tracing, in GI Lab's sunlit room it is right to 0.10 stops a pixel (SDFGI 0.41) and leaks a quarter of
-  SDFGI's light through thin walls; Bistro's street is a little darker than SDFGI's (both are too dark there).
+* Without ray tracing, in GI Lab it is right to 0.10 stops a pixel (SDFGI 0.41; its sunlit room's two views 0.18,
+  SDFGI 0.76) and leaks a quarter of SDFGI's light through thin walls; Bistro's street is a little darker than
+  SDFGI's (both are too dark there).
 * With ray tracing, Sponza's arcades and Bistro's street come within a quarter of a stop (from 1.5 stops). It flickers on
   Sponza's curtains, though (10.9 % of a still view's pixels change by more than 2 levels from frame to frame, DDGI's
   3.8 %); a temporal filter of its resolved light is the next step. Off by default, as the SDF gather.

@@ -22,8 +22,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
     a hit takes the light of the voxel it reaches;
   - the probes are averaged over frames where their surface stays in view and over their neighbours on the same
     surface, and written into SDFGI's diffuse buffer (its reflections stay).
-  - 0.34 stops off a pixel from SDFGI's 0.41; in GI Lab's room, lit through a window, 0.10 from 0.41; a quarter of
-    SDFGI's leak through 10 cm walls. +0.3 ms at 1080p; no ray tracing needed.
+  - 0.34 stops off a pixel from SDFGI's 0.41; in GI Lab 0.10 from 0.41 (its room, lit through a window, 0.18 from
+    0.76); a quarter of SDFGI's leak through 10 cm walls. +0.3 ms at 1080p; no ray tracing needed.
 - `raytracing/gi_screen_gather`: with ray-traced DDGI, the same probes trace their rays against the ray tracing scene,
   the hits lit as DDGI's (DDGI's probes for the further bounces), without the sky leak. 0.29 stops off a pixel from
   0.94-1.10, +0.7 ms at 1080p; it still flickers on Sponza's normal-mapped curtains (a temporal filter of its resolved
