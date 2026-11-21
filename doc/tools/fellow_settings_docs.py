@@ -350,6 +350,7 @@ D = {
     "debug/raytracing_decode_positions": "Diagnostics: compressed vertex positions decoded for the acceleration structures even where the device builds from them.",
     "debug/raytracing_gi_dump_every": "Diagnostics: the DDGI probes written to [code]user://fellow_ddgi_dump.bin[/code] every n updates (stalls the GPU; 0: never).",
     "debug/raytracing_gi_reference": "Diagnostics: n > 0, a path traced per pixel (n bounces, accumulated while the camera stands still) in place of the probes: a reference for DDGI.",
+    "debug/raytracing_gi_hidden_coverage": "Diagnostics: where DDGI's probes around a point are hidden from it, the point's coverage falls by their weight against this share and the rest of its light comes from the ambient light (or SDFGI's); 0: hidden probes still cover. Decision 0308.",
     "debug/raytracing_gi_in_shader": "Diagnostics: DDGI looked up by the opaque passes themselves instead of a screen pass.",
     "debug/raytracing_view": "Diagnostics: with the viewport's SSAO debug draw, the ray tracing scene seen from the camera instead (1 its hit distances, 2 where it matches the depth buffer).",
     "debug/batched_taps_kinds": "Diagnostics: the lights [member rendering/fellow/shadows/batched_taps] applies to (bits: directional, positional).",

@@ -133,6 +133,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/debug/raytracing_decode_positions", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/raytracing_gi_dump_every", PROPERTY_HINT_RANGE, "0,10000,1"), 0); // DDGI probes written to user://fellow_ddgi_dump.bin every n updates (diagnostics; stalls the GPU)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/raytracing_gi_reference", PROPERTY_HINT_RANGE, "0,16,1"), 0); // n > 0: a path traced per pixel (n bounces, accumulated while the camera stands still) in place of the probes' irradiance: a reference for DDGI
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/debug/raytracing_gi_hidden_coverage", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.2); // decision 0308: where the probes around a point are hidden from it (DDGI's visibility), its coverage falls by their weight against this share (the rest from the ambient light, or SDFGI's); 0: hidden probes cover
 	GLOBAL_DEF("rendering/fellow/debug/raytracing_gi_in_shader", false); // DDGI looked up by the opaque passes themselves (no screen pass): for comparisons
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/raytracing_view", PROPERTY_HINT_ENUM, "Off,Hit Distance,Depth Match"), 0); // compressed positions decoded even where the device builds from them
 	GLOBAL_DEF("rendering/fellow/animation/elide_modifier_backup", true); // decision 0076 (exact; on from fellow168)

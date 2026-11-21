@@ -50,7 +50,7 @@ public:
 		int32_t base_cell[4] = { 0, 0, 0, 0 }; // w 1: holds data
 		float spacing[4] = { 1.0, 0.0, 0.0, 1.0 }; // spacing, normal bias, view bias, energy
 		float atlas_inv_size[4] = { 1.0, 1.0, 1.0, 1.0 };
-		float shading[4] = { 0.0, 0.0, 0.0, 0.0 }; // sky leak, 1: probes relocated
+		float shading[4] = { 0.0, 0.0, 0.0, 0.2 }; // sky leak, 1: probes relocated, 1: SDFGI's diffuse light where the probes do not cover (0308), hidden probes' share of the coverage
 	};
 
 	struct Params {

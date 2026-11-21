@@ -13,7 +13,7 @@ struct FellowDDGIVolume {
 	ivec4 base_cell; // xyz the first cell in the volume, w 1 when the volume holds data
 	vec4 spacing; // x spacing, y normal bias, z view bias (in spacings), w energy multiplier
 	vec4 atlas_inv_size; // xy irradiance atlas 1 / size, zw distance atlas 1 / size
-	vec4 shading; // x sky leak: the share of the environment's ambient light added to the volume's (scene shader), y 1: probes relocated, z 1: SDFGI's diffuse light where the probes do not cover the point (decision 0308)
+	vec4 shading; // x sky leak: the share of the environment's ambient light added to the volume's (scene shader), y 1: probes relocated, z 1: SDFGI's diffuse light where the probes do not cover the point (decision 0308), w hidden probes' share of the coverage (0.2; 0: they count as covering)
 };
 
 #define FELLOW_DDGI_IRRADIANCE_TILE 8
@@ -105,8 +105,8 @@ vec3 fellow_ddgi_irradiance(texture2D p_irradiance, texture2D p_distance, sample
 	// Where every active probe around the point is hidden from it (their weights crushed), the normalized sum would be
 	// whatever the least hidden one holds — often a probe in a sealed void or behind a wall, black: blend towards the
 	// ambient light instead, by how visible the probes are (an unoccluded probe weighs at least 0.2 of its trilinear
-	// weight).
-	r_coverage = coverage * clamp(wsum / max(0.2 * coverage, 1e-6), 0.0, 1.0);
+	// weight; shading.w, debug/raytracing_gi_hidden_coverage: 0, the coverage is the active probes' alone).
+	r_coverage = p_volume.shading.w > 0.0 ? coverage * clamp(wsum / max(p_volume.shading.w * coverage, 1e-6), 0.0, 1.0) : coverage;
 	if (wsum <= 0.0) {
 		return vec3(0.0);
 	}

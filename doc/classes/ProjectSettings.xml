@@ -3205,6 +3205,9 @@
 		<member name="rendering/fellow/debug/raytracing_gi_dump_every" type="int" setter="" getter="" default="0">
 			Diagnostics: the DDGI probes written to [code]user://fellow_ddgi_dump.bin[/code] every n updates (stalls the GPU; 0: never).
 		</member>
+		<member name="rendering/fellow/debug/raytracing_gi_hidden_coverage" type="float" setter="" getter="" default="0.2">
+			Diagnostics: where DDGI's probes around a point are hidden from it, the point's coverage falls by their weight against this share and the rest of its light comes from the ambient light (or SDFGI's); 0: hidden probes still cover. Decision 0308.
+		</member>
 		<member name="rendering/fellow/debug/raytracing_gi_in_shader" type="bool" setter="" getter="" default="false">
 			Diagnostics: DDGI looked up by the opaque passes themselves instead of a screen pass.
 		</member>

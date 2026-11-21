@@ -576,6 +576,9 @@ inline int raytracing_gi_dump_every() {
 inline int raytracing_gi_reference() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/debug/raytracing_gi_reference");
 }
+inline float raytracing_gi_hidden_coverage() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/debug/raytracing_gi_hidden_coverage");
+}
 inline bool raytracing_gi_in_shader() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/raytracing_gi_in_shader");
 }
