@@ -591,6 +591,11 @@ inline int raytracing_gi_update_interval() {
 inline int raytracing_gi_cascades() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/gi_cascades");
 }
+// raytracing/gi_screen_gather (decision 0308): DDGI's screen pass replaced by a first bounce traced per screen probe
+// (the screen gather's tile, rays, history and filter: sdfgi/screen_gather_*), its hits lit with DDGI's probes.
+inline bool raytracing_gi_screen_gather() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/gi_screen_gather");
+}
 inline bool raytracing_gi_probe_relocation() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/gi_probe_relocation");
 }

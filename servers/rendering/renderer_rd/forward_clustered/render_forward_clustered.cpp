@@ -5414,16 +5414,20 @@ void RenderForwardClustered::_fellow_rt_lighting(const RenderDataRD *p_render_da
 }
 
 // FellowEngine SDF screen gather (docs/decisions/0308-sdf-screen-gather.md).
-void RenderForwardClustered::_fellow_sdf_screen_gather(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness) {
-	RENDER_TIMESTAMP("FellowEngine SDF Screen Gather");
+void RenderForwardClustered::_fellow_screen_gather(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness, bool p_rt) {
+	RENDER_TIMESTAMP("FellowEngine Screen Gather");
 	const Ref<RenderSceneBuffersRD> &rb = p_render_buffers;
 	RenderBufferDataForwardClustered *rbd = const_cast<RenderBufferDataForwardClustered *>(p_rb_data.ptr());
-	if (!rb->has_texture(RB_SCOPE_GI, RB_TEX_AMBIENT)) {
+	// The destination: SDFGI's ambient buffer, or DDGI's screen pass texture (ray-traced).
+	if (p_rt ? fellow_ddgi_screen.is_null() : !rb->has_texture(RB_SCOPE_GI, RB_TEX_AMBIENT)) {
 		return;
 	}
-	Ref<RendererRD::GI::SDFGI> sdfgi = rb->get_custom_data(RB_SCOPE_SDFGI);
-	if (sdfgi.is_null() || sdfgi->cascades.is_empty()) {
-		return;
+	Ref<RendererRD::GI::SDFGI> sdfgi;
+	if (!p_rt) {
+		sdfgi = rb->get_custom_data(RB_SCOPE_SDFGI);
+		if (sdfgi.is_null() || sdfgi->cascades.is_empty()) {
+			return;
+		}
 	}
 	const int tile = CLAMP(Fellow::sdfgi_screen_gather_tile(), 4, 64);
 	const Size2i size = rb->get_internal_size();
@@ -5445,25 +5449,47 @@ void RenderForwardClustered::_fellow_sdf_screen_gather(RenderDataRD *p_render_da
 	if (!fellow_sdf_gather) {
 		fellow_sdf_gather = memnew(RendererRD::FellowSDFGather);
 	}
-	RendererRD::FellowSDFGather::Params params;
-	params.cascade_count = MIN(int(sdfgi->cascades.size()), int(RendererRD::FellowSDFGather::MAX_CASCADES));
-	for (int i = 0; i < params.cascade_count; i++) {
-		params.sdf_distance[i] = sdfgi->cascades[i].sdf_tex;
-		params.sdf_light[i] = sdfgi->cascades[i].light_tex;
-		params.sdf_aniso0[i] = sdfgi->cascades[i].light_aniso_0_tex;
-		params.sdf_aniso1[i] = sdfgi->cascades[i].light_aniso_1_tex;
+	if (p_rt && !fellow_sdf_gather->is_rt_supported()) {
+		return;
 	}
-	params.sdf_cascades_ubo = sdfgi->cascades_ubo;
-	params.cascade_size = float(sdfgi->cascade_size);
-	params.y_mult = sdfgi->y_mult;
-	params.max_steps = Fellow::sdfgi_trace_max_steps();
-	// SDFGI's voxel light is the scene shader's diffuse light for the stock light units, pi times it with physical light
-	// units (as for DDGI's probes traced through it).
-	params.light_scale = is_using_physical_light_units() ? float(1.0 / Math::PI) : 1.0f;
-	params.energy = environment_get_sdfgi_energy(p_render_data->environment);
-	params.normal_bias = environment_get_sdfgi_normal_bias(p_render_data->environment);
+	RendererRD::FellowSDFGather::Params params;
 	FellowRTLighting lighting;
 	_fellow_rt_lighting(p_render_data, rb, p_radiance_texture, lighting);
+	if (p_rt) {
+		// The rays against the ray tracing scene, their hits lit as DDGI's (its probes for the further bounces).
+		params.rt = true;
+		params.tlas = fellow_rt_tlas;
+		params.instances = fellow_rt_instance_buffer;
+		params.ddgi_irradiance = fellow_ddgi_irradiance;
+		params.ddgi_distance = fellow_ddgi_distance;
+		params.ddgi_volume = fellow_ddgi_volume;
+		params.ddgi_outer = fellow_ddgi_outer_volume;
+		params.ddgi_outer_irradiance = fellow_ddgi_outer_irradiance;
+		params.ddgi_outer_distance = fellow_ddgi_outer_distance;
+		params.has_sun = lighting.has_sun;
+		params.sun_direction = lighting.sun_direction;
+		params.sun_color = lighting.sun_color;
+		params.sun_shadow = lighting.sun_shadow;
+		params.ray_length = Fellow::raytracing_radius();
+		params.energy = Fellow::raytracing_gi_energy();
+	} else {
+		params.cascade_count = MIN(int(sdfgi->cascades.size()), int(RendererRD::FellowSDFGather::MAX_CASCADES));
+		for (int i = 0; i < params.cascade_count; i++) {
+			params.sdf_distance[i] = sdfgi->cascades[i].sdf_tex;
+			params.sdf_light[i] = sdfgi->cascades[i].light_tex;
+			params.sdf_aniso0[i] = sdfgi->cascades[i].light_aniso_0_tex;
+			params.sdf_aniso1[i] = sdfgi->cascades[i].light_aniso_1_tex;
+		}
+		params.sdf_cascades_ubo = sdfgi->cascades_ubo;
+		params.cascade_size = float(sdfgi->cascade_size);
+		params.y_mult = sdfgi->y_mult;
+		params.max_steps = Fellow::sdfgi_trace_max_steps();
+		// SDFGI's voxel light is the scene shader's diffuse light for the stock light units, pi times it with physical
+		// light units (as for DDGI's probes traced through it).
+		params.light_scale = is_using_physical_light_units() ? float(1.0 / Math::PI) : 1.0f;
+		params.energy = environment_get_sdfgi_energy(p_render_data->environment);
+		params.normal_bias = environment_get_sdfgi_normal_bias(p_render_data->environment);
+	}
 	params.radiance = lighting.radiance;
 	params.radiance_array = lighting.radiance_array;
 	params.radiance_border[0] = lighting.radiance_border[0];
@@ -5486,9 +5512,14 @@ void RenderForwardClustered::_fellow_sdf_screen_gather(RenderDataRD *p_render_da
 	params.prev_world_to_clip = rbd->fellow_sdf_gather_history ? rbd->fellow_sdf_gather_prev_world_to_clip : world_to_clip;
 	// A pixel's size 1 m from the camera (the vertical field of view over the internal height).
 	params.pixel_footprint = 2.0f / MAX(1.0f, Math::abs(float(p_render_data->scene_data->cam_projection.columns[1][1]))) / float(MAX(1, size.y));
-	params.ambient = rb->get_texture(RB_SCOPE_GI, RB_TEX_AMBIENT);
-	const RD::TextureFormat ambient_format = rb->get_texture_format(RB_SCOPE_GI, RB_TEX_AMBIENT); // half the size with gi/use_half_resolution
-	params.ambient_size = Size2i(ambient_format.width, ambient_format.height);
+	if (p_rt) {
+		params.ambient = fellow_ddgi_screen; // the internal size
+		params.ambient_size = size;
+	} else {
+		params.ambient = rb->get_texture(RB_SCOPE_GI, RB_TEX_AMBIENT);
+		const RD::TextureFormat ambient_format = rb->get_texture_format(RB_SCOPE_GI, RB_TEX_AMBIENT); // half the size with gi/use_half_resolution
+		params.ambient_size = Size2i(ambient_format.width, ambient_format.height);
+	}
 	for (int i = 0; i < 2; i++) {
 		params.irradiance[i] = rb->get_texture(scope, names[0][i]);
 		params.position[i] = rb->get_texture(scope, names[1][i]);
@@ -7145,9 +7176,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	fellow_ddgi_outer_volume.base_cell[3] = 0;
 	fellow_ddgi_outer_irradiance = RID();
 	fellow_ddgi_outer_distance = RID();
+	fellow_rt_screen_gather_frame = false;
 	if (fellow_rt_tlas.is_valid() && Fellow::raytracing_gi() && fellow_rt_instance_buffer.is_valid()) {
 		const bool screen_pass = depth_pre_pass && !use_msaa && normal_roughness_views[0].is_valid() && !Fellow::raytracing_gi_in_shader();
 		_fellow_process_ddgi(p_render_data, rb, rb_data, radiance_texture, screen_pass ? normal_roughness_views[0] : RID());
+		// FellowEngine 0308: the first bounce per screen probe, traced, into DDGI's screen pass texture.
+		if (screen_pass && fellow_ddgi_screen.is_valid() && Fellow::raytracing_gi_screen_gather() && Fellow::raytracing_gi_reference() == 0) {
+			_fellow_screen_gather(p_render_data, rb, rb_data, radiance_texture, normal_roughness_views[0], true);
+			fellow_rt_screen_gather_frame = true;
+		}
 	} else if (using_sdfgi && Fellow::sdfgi_ddgi() && rb_data.is_valid() && !is_reflection_probe && rb->get_view_count() == 1 && rb->has_custom_data(RB_SCOPE_SDFGI)) {
 		// FellowEngine 0308: DDGI's probes traced through SDFGI's distance fields (no ray tracing).
 		const bool screen_pass = depth_pre_pass && !use_msaa && normal_roughness_views[0].is_valid() && !Fellow::raytracing_gi_in_shader();
@@ -7160,7 +7197,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	_pre_opaque_render(p_render_data, using_ssao, using_ssil, using_ssr && !fellow_rt_reflections_on, using_sdfgi || using_voxelgi, normal_roughness_views, rb_data.is_valid() && rb_data->has_voxelgi() ? rb_data->get_voxelgi() : RID());
 	// FellowEngine SDF screen gather (decision 0308): SDFGI's diffuse light, just gathered, replaced by its screen probes'.
 	if (using_sdfgi && Fellow::sdfgi_screen_gather() && rb_data.is_valid() && !is_reflection_probe && rb->get_view_count() == 1 && rb->has_custom_data(RB_SCOPE_SDFGI) && normal_roughness_views[0].is_valid()) {
-		_fellow_sdf_screen_gather(p_render_data, rb, rb_data, radiance_texture, normal_roughness_views[0]);
+		if (!fellow_rt_screen_gather_frame) {
+			_fellow_screen_gather(p_render_data, rb, rb_data, radiance_texture, normal_roughness_views[0], false);
+		}
 	}
 	if (fellow_rt_reflections_on) {
 		fellow_rt_reflection_texture = _fellow_process_rt_reflections(p_render_data, rb, rb_data, normal_roughness_views[0], radiance_texture);

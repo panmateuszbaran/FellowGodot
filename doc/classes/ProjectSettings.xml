@@ -3814,6 +3814,9 @@
 		<member name="rendering/fellow/raytracing/gi_rays" type="int" setter="" getter="" default="128">
 			Rays per probe update.
 		</member>
+		<member name="rendering/fellow/raytracing/gi_screen_gather" type="bool" setter="" getter="" default="false">
+			With DDGI's screen pass: the first bounce traced per screen probe (against the ray tracing scene, its hits lit by the sun and by DDGI's probes for the further bounces), in place of the probes' interpolated light; the probes per tile, rays, history and filter of sdfgi/screen_gather_*. Decision 0308.
+		</member>
 		<member name="rendering/fellow/raytracing/gi_sky_leak" type="float" setter="" getter="" default="0.1">
 			The share of the ambient light kept where the probes are dark.
 		</member>

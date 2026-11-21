@@ -35,6 +35,7 @@
 #include "core/math/basis.h"
 #include "core/math/projection.h"
 #include "core/math/transform_3d.h"
+#include "servers/rendering/renderer_rd/effects/fellow_ddgi.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_sdf_gather.glsl.gen.h"
 #include "servers/rendering/rendering_device.h"
 
@@ -93,6 +94,23 @@ public:
 		uint32_t frame = 0;
 		bool history = false;
 		float max_samples = 16.0;
+		// The rays against the ray tracing scene instead (raytracing/gi_screen_gather): the hits lit as DDGI's rays' are
+		// (the sun, its probes for the further bounces, emission); `ambient` is then DDGI's screen pass texture.
+		bool rt = false;
+		RID tlas;
+		RID instances;
+		RID ddgi_irradiance;
+		RID ddgi_distance;
+		RID ddgi_outer_irradiance;
+		RID ddgi_outer_distance;
+		FellowDDGI::Volume ddgi_volume;
+		FellowDDGI::Volume ddgi_outer; // base_cell[3] 0: none
+		Vector3 sun_direction; // towards the light
+		Color sun_color; // scene units
+		bool has_sun = false;
+		bool sun_shadow = false;
+		float ray_length = 100.0;
+		float energy_keep = 0.95;
 	};
 
 private:
@@ -101,7 +119,19 @@ private:
 		MODE_TRACE_ARRAY,
 		MODE_RESOLVE,
 		MODE_FILTER,
+		MODE_TRACE_RT,
+		MODE_TRACE_RT_ARRAY,
+		MODE_TRACE_RT_FETCH,
+		MODE_TRACE_RT_FETCH_ARRAY,
 		MODE_MAX,
+	};
+
+	struct RTUBO { // std140, as RTParams in fellow_sdf_gather.glsl (208 bytes)
+		FellowDDGI::Volume volume;
+		FellowDDGI::Volume outer;
+		float sun_direction[4];
+		float sun_color[4];
+		float trace[4];
 	};
 
 	struct UBO { // std140, as Params in fellow_sdf_gather.glsl (400 bytes)
@@ -124,8 +154,12 @@ private:
 	RID shader_version;
 	RID pipelines[MODE_MAX];
 	RID ubo;
+	RID rt_ubo;
+	bool rt_supported = false;
+	bool position_fetch = false;
 
 public:
+	bool is_rt_supported() const { return rt_supported; }
 	void process(const Params &p_params);
 
 	FellowSDFGather();

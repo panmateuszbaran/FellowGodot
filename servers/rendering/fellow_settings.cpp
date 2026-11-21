@@ -132,6 +132,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_rays", PROPERTY_HINT_RANGE, "8,64,1"), 32); // rays per screen probe and frame
 	GLOBAL_DEF("rendering/fellow/sdfgi/screen_gather_filter", true); // the probes' light averaged over their neighbours on the same surface before the pixels read it
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_history", PROPERTY_HINT_RANGE, "1,64,1"), 16); // frames a probe's light is averaged over (where its surface stays in view)
+	GLOBAL_DEF("rendering/fellow/raytracing/gi_screen_gather", false); // decision 0308: with DDGI's screen pass, the first bounce traced per screen probe (sdfgi/screen_gather_* tile, rays, history, filter), DDGI's probes for the further bounces
 	GLOBAL_DEF("rendering/fellow/raytracing/reflections", false); // decision 0084: traced reflections in place of SSR
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/reflections_max_roughness", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.7); // SSR's range (it fades out from 0.6 to 0.7)
 	GLOBAL_DEF("rendering/fellow/raytracing/reflections_interleaved", true); // surfaces rougher than 0.3 traced a quarter of the pixels per frame

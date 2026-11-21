@@ -1,8 +1,15 @@
 #[compute]
 
-#version 450
+#version 460
 
 #VERSION_DEFINES
+
+#if defined(FELLOW_TRACE_RT)
+#extension GL_EXT_ray_query : require
+#if defined(FELLOW_POSITION_FETCH)
+#extension GL_EXT_ray_tracing_position_fetch : require
+#endif
+#endif
 
 // FellowEngine SDF screen gather (docs/decisions/0308-sdf-screen-gather.md): SDFGI's diffuse light gathered per screen
 // probe instead of interpolated from its world probes. A probe every `tile` pixels (one pixel of its tile, jittered per
@@ -11,13 +18,19 @@
 // normal), a ray that leaves the last cascade the environment's ambient light. The mean is the irradiance (the
 // "ambient light" the scene shader multiplies by albedo), accumulated over frames where the previous frame's probe at
 // the reprojected point lies on the same surface.
-// MODE_TRACE: one workgroup per probe, one invocation per ray.
+// MODE_TRACE: one workgroup per probe, one invocation per ray. With FELLOW_TRACE_RT (raytracing/gi_screen_gather) the
+// rays are traced against the ray tracing scene instead and their hits lit as DDGI's (the sun with a shadow ray, the
+// probes' irradiance at the hit for the further bounces, emission): the first bounce per screen probe, DDGI's probes
+// for the rest; the result goes to DDGI's screen pass texture.
 // MODE_FILTER: per probe, the probes of the 5 x 5 tiles around it on its surface (their distance from its plane, their
 // normal) averaged, for the resolve (the history keeps the unfiltered light).
 // MODE_RESOLVE: per pixel of SDFGI's ambient buffer, the probes of the 2 x 2 tiles around it weighed by their distance
 // from its plane and their normal; written in place of SDFGI's diffuse light (its reflections stay).
 
 #include "../oct_inc.glsl"
+#if defined(FELLOW_TRACE_RT)
+#include "../fellow_ddgi_inc.glsl"
+#endif
 
 layout(set = 0, binding = 0, std140) uniform Params {
 	mat4 inv_projection; // NDC (x, y, depth * 2 - 1) to view
@@ -73,18 +86,43 @@ bool surface_at(ivec2 p_pixel, out vec3 r_pos, out vec3 r_normal, out float r_di
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
+#if !defined(FELLOW_TRACE_RT)
 #define FELLOW_SDF_MAX_CASCADES 8 // as SDFGI's
 
 layout(set = 0, binding = 3) uniform texture3D sdf_cascades[FELLOW_SDF_MAX_CASCADES];
 layout(set = 0, binding = 4) uniform texture3D light_cascades[FELLOW_SDF_MAX_CASCADES];
 layout(set = 0, binding = 5) uniform texture3D aniso0_cascades[FELLOW_SDF_MAX_CASCADES];
 layout(set = 0, binding = 6) uniform texture3D aniso1_cascades[FELLOW_SDF_MAX_CASCADES];
+#else
+layout(set = 0, binding = 3) uniform accelerationStructureEXT tlas;
+struct FellowRTInstance { // as fellow_ddgi.glsl's
+	vec4 albedo; // rgb: linear albedo, w: 1 if double-sided
+	vec4 emission; // rgb: emission in the scene's units, w: metallic
+};
+layout(set = 0, binding = 4, std430) restrict readonly buffer Instances {
+	FellowRTInstance data[];
+}
+instances;
+layout(set = 0, binding = 5) uniform texture2D ddgi_irradiance;
+layout(set = 0, binding = 6) uniform texture2D ddgi_distance;
+layout(set = 0, binding = 19) uniform texture2D ddgi_outer_irradiance;
+layout(set = 0, binding = 20) uniform texture2D ddgi_outer_distance;
+layout(set = 0, binding = 18, std140) uniform RTParams {
+	FellowDDGIVolume volume;
+	FellowDDGIVolume outer; // base_cell.w 0: none
+	vec4 sun_direction; // xyz towards the light, w 1 if there is one
+	vec4 sun_color; // rgb in the scene's units, w 1 if it casts shadows
+	vec4 trace; // x the rays' length, y energy kept per bounce
+}
+rt;
+#endif
 #if defined(FELLOW_RADIANCE_ARRAY)
 layout(set = 0, binding = 8) uniform texture2DArray radiance_octmap;
 #else
 layout(set = 0, binding = 8) uniform texture2D radiance_octmap;
 #endif
 
+#if !defined(FELLOW_TRACE_RT)
 struct FellowSDFCascade { // as SDFGI's CascadeData
 	vec3 offset; // the cell (0, 0, 0) in SDFGI's space (y scaled)
 	float to_cell;
@@ -97,6 +135,7 @@ layout(set = 0, binding = 9, std140) uniform SDFCascades {
 	FellowSDFCascade data[FELLOW_SDF_MAX_CASCADES];
 }
 sdf_cascades_data;
+#endif
 
 layout(rgba16f, set = 0, binding = 10) uniform restrict writeonly image2D out_irradiance; // rgb irradiance, a samples
 layout(rgba32f, set = 0, binding = 11) uniform restrict writeonly image2D out_position; // xyz world, w 1: valid
@@ -147,6 +186,7 @@ float radical_inverse(uint p_bits) {
 	return float(p_bits) * 2.3283064365386963e-10;
 }
 
+#if !defined(FELLOW_TRACE_RT)
 // The radiance a ray from p_origin (world) brings: the voxel it reaches through SDFGI's cascades, or the ambient light.
 vec3 trace(vec3 p_origin, vec3 p_dir) {
 	const float y_mult = params.sdf.z;
@@ -208,6 +248,70 @@ vec3 trace(vec3 p_origin, vec3 p_dir) {
 	return light * params.light.x;
 }
 
+// Where the rays start: off the surface's own voxels.
+vec3 ray_origin(vec3 p_pos, vec3 p_normal, vec3 p_dir, float p_distance) {
+	float cell = 1.0 / sdf_cascades_data.data[0].to_cell;
+	return p_pos + p_normal * (params.light.w * cell) + p_dir * (0.5 * cell);
+}
+#else
+// The radiance a ray from p_origin (world) brings: its hit in the ray tracing scene lit as DDGI's rays' are, or the
+// ambient light.
+vec3 trace(vec3 p_origin, vec3 p_dir) {
+	rayQueryEXT rq;
+	rayQueryInitializeEXT(rq, tlas, gl_RayFlagsOpaqueEXT, 0x01, p_origin, 0.0, p_dir, rt.trace.x);
+	while (rayQueryProceedEXT(rq)) {
+	}
+	if (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCommittedIntersectionNoneEXT) {
+		return ambient_in(p_dir);
+	}
+	float t = rayQueryGetIntersectionTEXT(rq, true);
+	FellowRTInstance inst = instances.data[rayQueryGetIntersectionInstanceCustomIndexEXT(rq, true)];
+	if (!rayQueryGetIntersectionFrontFaceEXT(rq, true) && inst.albedo.w == 0.0) {
+		return vec3(0.0); // the inside of a closed mesh
+	}
+	vec3 n;
+#if defined(FELLOW_POSITION_FETCH)
+	vec3 tri[3];
+	rayQueryGetIntersectionTriangleVertexPositionsEXT(rq, true, tri);
+	mat4x3 o2w = rayQueryGetIntersectionObjectToWorldEXT(rq, true);
+	vec3 wn = cross(mat3(o2w) * (tri[1] - tri[0]), mat3(o2w) * (tri[2] - tri[0]));
+	float wl = dot(wn, wn);
+	n = wl > 1e-20 ? wn * inversesqrt(wl) : -p_dir;
+	if (dot(n, p_dir) > 0.0) {
+		n = -n;
+	}
+#else
+	n = -p_dir;
+#endif
+	vec3 hit = p_origin + p_dir * t;
+	vec3 light = vec3(0.0);
+	if (rt.sun_direction.w != 0.0) {
+		float ndl = dot(n, rt.sun_direction.xyz);
+		if (ndl > 0.0) {
+			float visible = 1.0;
+			if (rt.sun_color.w != 0.0) {
+				rayQueryEXT sq;
+				rayQueryInitializeEXT(sq, tlas, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsCullFrontFacingTrianglesEXT, 0x02, hit + n * 0.01, 0.0, rt.sun_direction.xyz, rt.trace.x);
+				while (rayQueryProceedEXT(sq)) {
+				}
+				visible = rayQueryGetIntersectionTypeEXT(sq, true) == gl_RayQueryCommittedIntersectionNoneEXT ? 1.0 : 0.0;
+			}
+			light += rt.sun_color.rgb * ndl * visible;
+		}
+	}
+	// The further bounces: DDGI's probes at the hit.
+	float coverage;
+	vec3 bounce = fellow_ddgi_irradiance_cascades(ddgi_irradiance, ddgi_distance, rt.volume, ddgi_outer_irradiance, ddgi_outer_distance, rt.outer, linear_sampler, hit, n, -p_dir, coverage);
+	light += mix(ambient_in(n) * 0.5, bounce, clamp(coverage, 0.0, 1.0)) * rt.trace.y;
+	return inst.albedo.rgb * (1.0 - inst.emission.w) * light + inst.emission.rgb;
+}
+
+// Where the rays start: off the surface, by its distance from the camera (as DDGI's reference).
+vec3 ray_origin(vec3 p_pos, vec3 p_normal, vec3 p_dir, float p_distance) {
+	return p_pos + p_normal * (0.003 + 0.0015 * p_distance);
+}
+#endif
+
 void main() {
 	ivec2 probe = ivec2(gl_WorkGroupID.xy);
 	uint ray = gl_LocalInvocationIndex;
@@ -241,9 +345,7 @@ void main() {
 		vec2 shift = vec2(float(h & 0xFFFFu), float(hash(h) & 0xFFFFu)) / 65536.0;
 		vec2 u = fract(vec2((float(ray) + 0.5) / float(rays), radical_inverse(ray)) + shift);
 		vec3 dir = cosine_direction(normal, u);
-		float cell = 1.0 / sdf_cascades_data.data[0].to_cell;
-		vec3 origin = pos + normal * (params.light.w * cell) + dir * (0.5 * cell);
-		radiance = trace(origin, dir);
+		radiance = trace(ray_origin(pos, normal, dir, distance), dir);
 		if (any(isnan(radiance)) || any(isinf(radiance))) {
 			radiance = vec3(0.0);
 		}

@@ -44,16 +44,34 @@ FellowSDFGather::FellowSDFGather() {
 	modes.push_back("\n#define MODE_TRACE\n#define FELLOW_RADIANCE_ARRAY\n");
 	modes.push_back("\n#define MODE_RESOLVE\n");
 	modes.push_back("\n#define MODE_FILTER\n");
+	modes.push_back("\n#define MODE_TRACE\n#define FELLOW_TRACE_RT\n");
+	modes.push_back("\n#define MODE_TRACE\n#define FELLOW_TRACE_RT\n#define FELLOW_RADIANCE_ARRAY\n");
+	modes.push_back("\n#define MODE_TRACE\n#define FELLOW_TRACE_RT\n#define FELLOW_POSITION_FETCH\n");
+	modes.push_back("\n#define MODE_TRACE\n#define FELLOW_TRACE_RT\n#define FELLOW_POSITION_FETCH\n#define FELLOW_RADIANCE_ARRAY\n");
 	shader.initialize(modes);
+	rt_supported = RD::get_singleton()->has_feature(RD::SUPPORTS_RAY_QUERY);
+	position_fetch = rt_supported && RD::get_singleton()->fellow_ray_position_fetch_supported();
+	if (!rt_supported) {
+		shader.set_variant_enabled(MODE_TRACE_RT, false);
+		shader.set_variant_enabled(MODE_TRACE_RT_ARRAY, false);
+	}
+	if (!position_fetch) {
+		shader.set_variant_enabled(MODE_TRACE_RT_FETCH, false);
+		shader.set_variant_enabled(MODE_TRACE_RT_FETCH_ARRAY, false);
+	}
 	shader_version = shader.version_create();
 	for (int i = 0; i < MODE_MAX; i++) {
-		pipelines[i] = RD::get_singleton()->compute_pipeline_create(shader.version_get_shader(shader_version, i));
+		if (shader.is_variant_enabled(i)) {
+			pipelines[i] = RD::get_singleton()->compute_pipeline_create(shader.version_get_shader(shader_version, i));
+		}
 	}
 	ubo = RD::get_singleton()->uniform_buffer_create(sizeof(UBO));
+	rt_ubo = RD::get_singleton()->uniform_buffer_create(sizeof(RTUBO));
 }
 
 FellowSDFGather::~FellowSDFGather() {
 	RD::get_singleton()->free_rid(ubo);
+	RD::get_singleton()->free_rid(rt_ubo);
 	shader.version_free(shader_version);
 }
 
@@ -72,7 +90,8 @@ void FellowSDFGather::process(const Params &p_params) {
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
 	ERR_FAIL_NULL(material_storage);
 	TextureStorage *texture_storage = TextureStorage::get_singleton();
-	ERR_FAIL_COND(p_params.cascade_count <= 0 || p_params.grid.x <= 0 || p_params.grid.y <= 0);
+	ERR_FAIL_COND(p_params.grid.x <= 0 || p_params.grid.y <= 0);
+	ERR_FAIL_COND(p_params.rt ? (!rt_supported || p_params.tlas.is_null()) : p_params.cascade_count <= 0);
 	RID linear = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	RID nearest = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
@@ -127,8 +146,53 @@ void FellowSDFGather::process(const Params &p_params) {
 	RD::Uniform u_nr(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ nearest, p_params.normal_roughness }));
 	RD::Uniform u_sampler(RD::UNIFORM_TYPE_SAMPLER, 7, linear);
 
-	RD::get_singleton()->draw_command_begin_label("FellowEngine SDF Screen Gather");
-	{
+	RD::get_singleton()->draw_command_begin_label("FellowEngine Screen Gather");
+	if (p_params.rt) {
+		RTUBO r;
+		r.volume = p_params.ddgi_volume;
+		r.outer = p_params.ddgi_outer;
+		const bool outer = p_params.ddgi_outer.base_cell[3] != 0 && p_params.ddgi_outer_irradiance.is_valid() && p_params.ddgi_outer_distance.is_valid();
+		if (!outer) {
+			r.outer.base_cell[3] = 0;
+		}
+		r.sun_direction[0] = p_params.sun_direction.x;
+		r.sun_direction[1] = p_params.sun_direction.y;
+		r.sun_direction[2] = p_params.sun_direction.z;
+		r.sun_direction[3] = p_params.has_sun ? 1.0f : 0.0f;
+		r.sun_color[0] = p_params.sun_color.r;
+		r.sun_color[1] = p_params.sun_color.g;
+		r.sun_color[2] = p_params.sun_color.b;
+		r.sun_color[3] = p_params.sun_shadow ? 1.0f : 0.0f;
+		r.trace[0] = p_params.ray_length;
+		r.trace[1] = p_params.energy_keep;
+		r.trace[2] = 0.0f;
+		r.trace[3] = 0.0f;
+		RD::get_singleton()->buffer_update(rt_ubo, 0, sizeof(RTUBO), &r);
+		const bool array = p_params.radiance_array && sky;
+		const Mode mode = position_fetch ? (array ? MODE_TRACE_RT_FETCH_ARRAY : MODE_TRACE_RT_FETCH) : (array ? MODE_TRACE_RT_ARRAY : MODE_TRACE_RT);
+		RID radiance = sky ? p_params.radiance : texture_storage->texture_rd_get_default(array ? TextureStorage::DEFAULT_RD_TEXTURE_2D_ARRAY_BLACK : TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+		RID black = texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+		RD::Uniform u_tlas(RD::UNIFORM_TYPE_ACCELERATION_STRUCTURE, 3, p_params.tlas);
+		RD::Uniform u_inst(RD::UNIFORM_TYPE_STORAGE_BUFFER, 4, p_params.instances);
+		RD::Uniform u_ddgi_irr(RD::UNIFORM_TYPE_TEXTURE, 5, p_params.ddgi_irradiance);
+		RD::Uniform u_ddgi_dist(RD::UNIFORM_TYPE_TEXTURE, 6, p_params.ddgi_distance);
+		RD::Uniform u_rad(RD::UNIFORM_TYPE_TEXTURE, 8, radiance);
+		RD::Uniform u_out_irr(RD::UNIFORM_TYPE_IMAGE, 10, p_params.irradiance[cur]);
+		RD::Uniform u_out_pos(RD::UNIFORM_TYPE_IMAGE, 11, p_params.position[cur]);
+		RD::Uniform u_out_nrm(RD::UNIFORM_TYPE_IMAGE, 12, p_params.normal[cur]);
+		RD::Uniform u_prev_irr(RD::UNIFORM_TYPE_TEXTURE, 13, p_params.irradiance[prev]);
+		RD::Uniform u_prev_pos(RD::UNIFORM_TYPE_TEXTURE, 14, p_params.position[prev]);
+		RD::Uniform u_prev_nrm(RD::UNIFORM_TYPE_TEXTURE, 15, p_params.normal[prev]);
+		RD::Uniform u_rt(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 18, rt_ubo);
+		RD::Uniform u_outer_irr(RD::UNIFORM_TYPE_TEXTURE, 19, outer ? p_params.ddgi_outer_irradiance : black);
+		RD::Uniform u_outer_dist(RD::UNIFORM_TYPE_TEXTURE, 20, outer ? p_params.ddgi_outer_distance : black);
+		RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
+		RID shader_rd = shader.version_get_shader(shader_version, mode);
+		RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[mode]);
+		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_nr, u_tlas, u_inst, u_ddgi_irr, u_ddgi_dist, u_sampler, u_rad, u_out_irr, u_out_pos, u_out_nrm, u_prev_irr, u_prev_pos, u_prev_nrm, u_rt, u_outer_irr, u_outer_dist), 0);
+		RD::get_singleton()->compute_list_dispatch(list, p_params.grid.x, p_params.grid.y, 1);
+		RD::get_singleton()->compute_list_end();
+	} else {
 		const Mode mode = (p_params.radiance_array && sky) ? MODE_TRACE_ARRAY : MODE_TRACE;
 		RID radiance = sky ? p_params.radiance : texture_storage->texture_rd_get_default(mode == MODE_TRACE_ARRAY ? TextureStorage::DEFAULT_RD_TEXTURE_2D_ARRAY_BLACK : TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
 		RID unused = texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_3D_WHITE);
