@@ -274,10 +274,12 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 			# reference our walls' fine detail was half as contrasty again): the faces smooth — only the joints and their
 			# arrises sunk (the height map's lowest 5 %: at 0.44-0.6 the rough faces had been sunk in bumps), the normal
 			# map weaker still, the photograph's own baked shading mostly blurred out.
-			photo[n] = _photo("ashlar", {"tint": shade, "tint_strength": 0.5, "brightness": 0.95, "seed": p_plaster[n][2],
+			# Milestone 168: darker (the light's balance above made the sun brighter), each block's tone more its own and the
+			# photograph's colour less blurred (beside the reference our fronts had been an even cream).
+			photo[n] = _photo("ashlar", {"tint": shade, "tint_strength": 0.5, "brightness": 0.76, "seed": p_plaster[n][2],
 					"tex_size": 2.5, "normal_strength": 0.08, "specular": 0.2, "roughness_bias": 0.05, "stains": 0.25,
-					"variation": 0.18, "anti_tile": false, "parallax_depth": 0.02, "height_lo": 0.38, "height_hi": 0.5,
-					"albedo_soften": 0.85, "cavity": 0.65})
+					"variation": 0.29, "anti_tile": false, "parallax_depth": 0.02, "height_lo": 0.38, "height_hi": 0.5,
+					"albedo_soften": 0.5, "cavity": 0.65})
 		photo["far_plaster"] = _photo("ashlar", {"tint": Color(0.9, 0.84, 0.74), "tint_strength": 0.3, "brightness": 1.2,
 				"tex_size": 2.5, "normal_strength": 0.55, "specular": 0.2, "stains": 0.3, "variation": 0.1, "anti_tile": false,
 				"instance_tint": true, "parallax_depth": 0.0})
@@ -331,6 +333,7 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 		walls.append(_footprint(n))
 	# Milestone 156: the square laid with large slabs (the smooth sandstone's blocks, greyed), as in the reference.
 	# Milestone 162: as the reference's square closer to: oblong setts in running courses, worn smooth, warm.
+	# Milestone 168: the setts' tint greyer (beside the reference our square had read pink).
 	var setts := _tex.has("setts")
 	var sl := _texset("setts") if setts else (_texset("stone") if _tex.has("ashlar") else _texset("square_slabs"))
 	var fan := _texset("street_fan")
@@ -341,7 +344,7 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 			"fountain": PLACES["Fountain"][0], "slabs_albedo": sl[0], "slabs_normal": sl[1], "slabs_arm": sl[2], "slabs_size": sl[3] * (1.8 if setts else (0.75 if _tex.has("ashlar") else 2.2)),
 			"slabs_anti_tile": 0.0 if setts else 1.0, "slabs_bias": 1.5 if setts else 0.0, "band_strength": 0.0 if setts else 1.0,
 			"slabs_normal_strength": 0.45 if setts else 1.0,
-			"slabs_lum": sl[4], "slabs_tint": Color(0.8, 0.62, 0.52) if setts else (Color(0.74, 0.7, 0.64) if _tex.has("ashlar") else Color(0.62, 0.59, 0.54)),
+			"slabs_lum": sl[4], "slabs_tint": Color(0.66, 0.58, 0.5) if setts else (Color(0.74, 0.7, 0.64) if _tex.has("ashlar") else Color(0.62, 0.59, 0.54)),
 			"slabs_tint_strength": 0.7 if setts else 0.8,
 			"fan_albedo": fan[0], "fan_normal": fan[1], "fan_arm": fan[2], "fan_size": fan[3],
 			"cob_albedo": cob[0], "cob_normal": cob[1], "cob_arm": cob[2], "cob_size": cob[3],
@@ -614,7 +617,10 @@ func _environment(p_root: Node3D) -> void:
 	# Milestone 156 (the owner's reference): the shade lighter — the warm stone's light bounced into it and the sky's.
 	# Milestone 159 (beside the reference: our shade 2-3 times darker than its warm, bounced shade): the sky's and the
 	# bounce's light doubled.
-	env.ambient_light_energy = 3.0
+	# Milestone 168 (the owner: "still far from AAA"; beside the reference frame by frame): back to the sky's own light,
+	# the bounce's too — tripled, they had flattened every shadow (the reference's climber casts a dark, clear shadow on
+	# the sunlit wall; ours had been a pale smudge); the sun stronger instead.
+	env.ambient_light_energy = 1.0
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_AGX
 	env.tonemap_exposure = 1.3
@@ -627,14 +633,14 @@ func _environment(p_root: Node3D) -> void:
 	env.ssr_enabled = false
 	env.ssil_enabled = true
 	env.ssil_radius = 4.0
-	env.ssil_intensity = 1.2
+	env.ssil_intensity = 1.0
 	# The light bounced off the sunlit fronts into the shade (the square's other side, the streets): SDFGI.
 	env.sdfgi_enabled = true
 	env.sdfgi_use_occlusion = true
 	env.sdfgi_cascades = 4
 	env.sdfgi_min_cell_size = 0.25
 	env.sdfgi_bounce_feedback = 0.6
-	env.sdfgi_energy = 2.0
+	env.sdfgi_energy = 1.0
 	env.fog_enabled = true
 	# Milestone 153: the golden hour's haze — the city's far houses and the hills paler and bluer with distance (the
 	# sky's colour mixed in), as the eye reads depth.
@@ -643,13 +649,15 @@ func _environment(p_root: Node3D) -> void:
 	env.fog_light_color = Color(0.85, 0.72, 0.58)
 	env.fog_sky_affect = 0.3
 	env.volumetric_fog_enabled = true
-	env.volumetric_fog_density = 0.0016
+	# Milestone 168: a quarter as dense — beside the reference the square's far side had been lost in a bright haze (with
+	# the camera's depth of field, three quarters of the reference shot's run veiled); the dust's shafts kept faintly.
+	env.volumetric_fog_density = 0.0004
 	env.volumetric_fog_albedo = Color(0.92, 0.93, 0.96)
 	env.volumetric_fog_anisotropy = 0.7
 	env.volumetric_fog_length = 64.0
 	env.volumetric_fog_sky_affect = 0.0
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 0.8
+	env.adjustment_saturation = 0.9
 	env.adjustment_contrast = 1.0
 	# Milestone 158 (the reference beside the scene): its softer light — AgX's contrast lower, the shade lighter, the
 	# colours a little less saturated.
@@ -661,7 +669,7 @@ func _environment(p_root: Node3D) -> void:
 	_add(p_root, we, "WorldEnvironment")
 	# The sun low in the west-south-west: the golden hour, long shadows across the square.
 	var sun := DirectionalLight3D.new()
-	sun.light_energy = 3.3
+	sun.light_energy = 4.0
 	sun.light_color = Color(1.0, 0.9, 0.78) # the atmosphere colours it further (rendering/fellow/post/atmosphere/sun_transmittance)
 	# Milestone 159: the reference's soft shadows — a hazy sun, its penumbrae wide (at 0.6 degrees they had been knife
 	# edges).
@@ -1618,7 +1626,8 @@ func _reference_shot(p_root: Node3D) -> void:
 	attr.dof_blur_far_enabled = true
 	attr.dof_blur_far_distance = 7.0
 	attr.dof_blur_far_transition = 9.0
-	attr.dof_blur_amount = 0.06
+	# Milestone 168: a third as strong (the reference's houses across the square are sharp).
+	attr.dof_blur_amount = 0.02
 	cam.attributes = attr
 	cam.fov = cam_src.fov
 	cam.keep_aspect = cam_src.keep_aspect

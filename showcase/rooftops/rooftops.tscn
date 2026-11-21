@@ -179,7 +179,6 @@ process_mode = 2
 background_mode = 2
 sky = SubResource("Sky_mbavt")
 ambient_light_source = 3
-ambient_light_energy = 3.0
 reflected_light_source = 2
 tonemap_mode = 4
 tonemap_exposure = 1.3
@@ -189,24 +188,22 @@ ssao_intensity = 0.6
 ssao_detail = 0.6
 ssil_enabled = true
 ssil_radius = 4.0
-ssil_intensity = 1.2
 sdfgi_enabled = true
 sdfgi_use_occlusion = true
 sdfgi_bounce_feedback = 0.6
 sdfgi_min_cell_size = 0.25
-sdfgi_energy = 2.0
 fog_enabled = true
 fog_light_color = Color(0.85, 0.72, 0.58, 1)
 fog_density = 0.0008
 fog_aerial_perspective = 0.8
 fog_sky_affect = 0.3
 volumetric_fog_enabled = true
-volumetric_fog_density = 0.0016
+volumetric_fog_density = 0.0004
 volumetric_fog_albedo = Color(0.92, 0.93, 0.96, 1)
 volumetric_fog_anisotropy = 0.7
 volumetric_fog_sky_affect = 0.0
 adjustment_enabled = true
-adjustment_saturation = 0.8
+adjustment_saturation = 0.9
 
 [sub_resource type="CameraAttributesPractical" id="CameraAttributesPractical_2ri8b"]
 
@@ -2005,7 +2002,7 @@ height = 0.14
 dof_blur_far_enabled = true
 dof_blur_far_distance = 7.0
 dof_blur_far_transition = 9.0
-dof_blur_amount = 0.06
+dof_blur_amount = 0.02
 
 [node name="Rooftops" type="Node3D" unique_id=774291455]
 physics_interpolation_mode = 2
@@ -2018,7 +2015,7 @@ camera_attributes = SubResource("CameraAttributesPractical_2ri8b")
 [node name="Sun" type="DirectionalLight3D" parent="." unique_id=716608356]
 transform = Transform3D(0.6156615, 0.32051283, -0.71988356, 0, 0.9135454, 0.40673664, 0.7880107, -0.2504121, 0.56243473, 0, 0, 0)
 light_color = Color(1, 0.9, 0.78, 1)
-light_energy = 3.3
+light_energy = 4.0
 light_volumetric_fog_energy = 1.2
 light_angular_distance = 2.5
 shadow_enabled = true
