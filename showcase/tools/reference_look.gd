@@ -6,18 +6,22 @@ extends SceneTree
 ##   godot --path showcase --rendering-driver vulkan --resolution 1280x720 -s res://tools/reference_look.gd -- \
 ##       --out=<dir> --frames=10,45,70,84,93
 ##
-## (--frames: the video's frames, 1-based, at 24 fps.) Writes <dir>/e<frame>.png; with --ref=<dir> (the video's frames
-## as f001.png, f002.png, ...: not in the repository) also <dir>/sheet.png, each frame beside the video's.
+## (--frames: the video's frames, 1-based, at 24 fps; --settle=<n>: frames drawn before each picture, 24.) Writes
+## <dir>/e<frame>.png; with --ref=<dir> (the video's frames as f001.png, f002.png, ...: not in the repository) also
+## <dir>/sheet.png, each frame beside the video's.
 
 func _init() -> void:
 	var out := "user://reference_look"
 	var frames := PackedInt32Array([10, 45, 70, 84, 93])
 	var ref := ""
+	var settle := 24
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			out = a.get_slice("=", 1)
 		elif a.begins_with("--ref="):
 			ref = a.get_slice("=", 1)
+		elif a.begins_with("--settle="):
+			settle = int(a.get_slice("=", 1))
 		elif a.begins_with("--frames="):
 			frames = PackedInt32Array()
 			for v in a.get_slice("=", 1).split(","):
@@ -39,7 +43,7 @@ func _init() -> void:
 	for f in frames:
 		ap.seek((f - 1) / 24.0, true)
 		ap.pause()
-		for k in 24:
+		for k in settle:
 			await process_frame
 		await RenderingServer.frame_post_draw
 		var img := root.get_texture().get_image()
