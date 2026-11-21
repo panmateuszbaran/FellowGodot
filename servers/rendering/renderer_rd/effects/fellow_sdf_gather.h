@@ -79,6 +79,7 @@ public:
 		Projection inv_projection; // NDC (x, y, depth * 2 - 1) to view
 		Transform3D view_to_world;
 		Projection prev_world_to_clip;
+		Projection world_to_clip;
 		float pixel_footprint = 0.001; // a pixel's size at 1 m (metres)
 		RID ambient; // SDFGI's ambient buffer (RGBA16F, storage)
 		Size2i ambient_size;
@@ -95,6 +96,7 @@ public:
 		uint32_t frame = 0;
 		bool history = false;
 		float max_samples = 16.0;
+		bool persistent = true; // a probe keeps its point and history while that point stays in view in its tile
 		// The rays against the ray tracing scene instead (raytracing/gi_screen_gather): the hits lit as DDGI's rays' are
 		// (the sun, its probes for the further bounces, emission); `ambient` is then DDGI's screen pass texture.
 		bool rt = false;
@@ -112,6 +114,7 @@ public:
 		bool sun_shadow = false;
 		float ray_length = 100.0;
 		float energy_keep = 0.95;
+		bool feedback = true; // the hits' further bounces from the previous frame's screen probes where it saw them
 	};
 
 private:
@@ -135,10 +138,11 @@ private:
 		float trace[4];
 	};
 
-	struct UBO { // std140, as Params in fellow_sdf_gather.glsl (400 bytes)
+	struct UBO { // std140, as Params in fellow_sdf_gather.glsl (464 bytes)
 		float inv_projection[16];
 		float view_to_world[16];
 		float prev_world_to_clip[16];
+		float world_to_clip[16];
 		float sky_xform[16];
 		float sky_params[4];
 		float ambient_color[4];

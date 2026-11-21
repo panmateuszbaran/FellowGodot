@@ -593,6 +593,9 @@ inline int raytracing_gi_cascades() {
 inline bool raytracing_gi_screen_gather() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/gi_screen_gather");
 }
+inline bool raytracing_gi_screen_gather_feedback() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/gi_screen_gather_feedback");
+}
 inline bool raytracing_gi_probe_relocation() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/gi_probe_relocation");
 }
@@ -619,6 +622,9 @@ inline bool sdfgi_screen_gather_filter() {
 }
 inline int sdfgi_screen_gather_history() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/sdfgi/screen_gather_history");
+}
+inline bool sdfgi_screen_gather_persistent() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/sdfgi/screen_gather_persistent");
 }
 // raytracing/reflections (decision 0084): where the environment enables SSR, a traced reflection per pixel up to
 // reflections_max_roughness in place of SSR (and of the probes' and the sky's specular light there).

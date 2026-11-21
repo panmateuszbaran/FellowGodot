@@ -5472,6 +5472,7 @@ void RenderForwardClustered::_fellow_screen_gather(RenderDataRD *p_render_data, 
 		params.sun_shadow = lighting.sun_shadow;
 		params.ray_length = Fellow::raytracing_radius();
 		params.energy = Fellow::raytracing_gi_energy();
+		params.feedback = Fellow::raytracing_gi_screen_gather_feedback();
 	} else {
 		params.cascade_count = MIN(int(sdfgi->cascades.size()), int(RendererRD::FellowSDFGather::MAX_CASCADES));
 		for (int i = 0; i < params.cascade_count; i++) {
@@ -5511,6 +5512,7 @@ void RenderForwardClustered::_fellow_screen_gather(RenderDataRD *p_render_data, 
 	params.view_to_world = p_render_data->scene_data->cam_transform;
 	const Projection world_to_clip = projection * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
 	params.prev_world_to_clip = rbd->fellow_sdf_gather_history ? rbd->fellow_sdf_gather_prev_world_to_clip : world_to_clip;
+	params.world_to_clip = world_to_clip;
 	// A pixel's size 1 m from the camera (the vertical field of view over the internal height).
 	params.pixel_footprint = 2.0f / MAX(1.0f, Math::abs(float(p_render_data->scene_data->cam_projection.columns[1][1]))) / float(MAX(1, size.y));
 	if (p_rt) {
@@ -5535,6 +5537,7 @@ void RenderForwardClustered::_fellow_screen_gather(RenderDataRD *p_render_data, 
 	params.frame = rbd->fellow_sdf_gather_frame;
 	params.history = rbd->fellow_sdf_gather_history;
 	params.max_samples = float(MAX(1, Fellow::sdfgi_screen_gather_history()));
+	params.persistent = Fellow::sdfgi_screen_gather_persistent();
 	fellow_sdf_gather->process(params);
 	rbd->fellow_sdf_gather_prev_world_to_clip = world_to_clip;
 	rbd->fellow_sdf_gather_history = true;

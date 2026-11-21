@@ -16,7 +16,10 @@
 // light of the voxel it reaches (SDFGI's direct light from every light, emission and SDFGI's own bounce, by the field's
 // normal), a ray that leaves the last cascade the environment's ambient light. The mean is the irradiance (the
 // "ambient light" the scene shader multiplies by albedo), accumulated over frames where the previous frame's probe at
-// the reprojected point lies on the same surface.
+// the reprojected point lies on the same surface. With frame.z (sdfgi/screen_gather_persistent) a probe keeps its point
+// and its history from frame to frame while that point is still seen in its tile (milestone 168): the probe's pixel
+// sampled again each frame lands on another surface wherever the TAA's jitter moves an edge across it (folds, leaves),
+// and its history was lost there every frame.
 // MODE_TRACE: one workgroup per probe, one invocation per ray. With FELLOW_TRACE_RT (raytracing/gi_screen_gather) the
 // rays are traced against the ray tracing scene instead and their hits lit as DDGI's (the sun with a shadow ray, the
 // probes' irradiance at the hit for the further bounces, emission): the first bounce per screen probe, DDGI's probes
@@ -35,6 +38,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	mat4 inv_projection; // NDC (x, y, depth * 2 - 1) to view
 	mat4 view_to_world;
 	mat4 prev_world_to_clip; // the previous frame's (history reprojection)
+	mat4 world_to_clip; // this frame's (the previous probes' points seen again)
 	mat4 sky_xform; // world directions to the sky's
 	vec4 sky_params; // x 1: ambient light, y 1: from the sky's radiance, z the radiance's factor, w the radiance's level
 	vec4 ambient_color; // rgb the environment's ambient colour and energy, a the sky contribution
@@ -44,7 +48,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	vec4 footprint; // x a pixel's size at 1 m from the camera (metres), y the field's surface bias (cells: a hit that much short of the stored distance)
 	ivec4 screen; // xy the internal size, zw SDFGI's ambient buffer size
 	ivec4 probes; // xy the probe grid, z tile (pixels), w rays per probe
-	ivec4 frame; // x frame, y 1: the history is valid
+	ivec4 frame; // x frame, y 1: the history is valid, z 1: persistent probes, w 1: the ray-traced hits' further bounces from the previous frame's probes
 }
 params;
 
@@ -168,6 +172,8 @@ layout(set = 0, binding = 14) uniform texture2D prev_position;
 layout(set = 0, binding = 15) uniform texture2D prev_normal;
 
 shared vec3 ray_sum[64];
+shared float adopt_score[9];
+shared int adopted; // the previous probe (of the 3 x 3 around this tile's) whose point this probe keeps, -1: none
 
 // As DDGI's: what the environment's ambient light gives in a direction.
 vec3 ambient_in(vec3 p_dir) {
@@ -277,6 +283,60 @@ vec3 ray_origin(vec3 p_pos, vec3 p_normal, vec3 p_dir, float p_distance) {
 	return p_pos + p_normal * (params.light.w * cell) + p_dir * (0.5 * cell);
 }
 #else
+// The light the previous frame's screen probes gathered where a ray's hit was in view (their 2 x 2 around its
+// projection that lie on its surface), and how much of it they cover (0: none, DDGI's probes instead). The further
+// bounces from the screen probes themselves (raytracing/gi_screen_gather_feedback, milestone 168): DDGI's 2 m grid
+// interpolates light its probes see and the hit does not (an enclosed room 1-2 stops too bright with it).
+float screen_feedback(vec3 p_hit, vec3 p_n, vec3 p_dir, out vec3 r_irradiance) {
+	r_irradiance = vec3(0.0);
+	if (params.frame.w == 0 || params.frame.y == 0) {
+		return 0.0;
+	}
+	vec4 clip = params.prev_world_to_clip * vec4(p_hit, 1.0);
+	if (clip.w <= 0.0) {
+		return 0.0;
+	}
+	vec2 ndc = clip.xy / clip.w;
+	if (any(greaterThan(abs(ndc), vec2(1.0)))) {
+		return 0.0;
+	}
+	int tile = params.probes.z;
+	vec2 g = (ndc * 0.5 + 0.5) * vec2(params.screen.xy) / float(tile) - 0.5;
+	ivec2 g0 = ivec2(floor(g));
+	vec2 f = g - vec2(g0);
+	float reach = params.footprint.x * clip.w * float(tile) + 0.02;
+	vec3 sum = vec3(0.0);
+	float wsum = 0.0;
+	for (int i = 0; i < 4; i++) {
+		ivec2 o = ivec2(i & 1, i >> 1);
+		ivec2 p = clamp(g0 + o, ivec2(0), params.probes.xy - 1);
+		vec4 pp = texelFetch(sampler2D(prev_position, linear_sampler), p, 0);
+		if (pp.w == 0.0) {
+			continue;
+		}
+		vec3 pn = texelFetch(sampler2D(prev_normal, linear_sampler), p, 0).xyz;
+		vec3 d = pp.xyz - p_hit;
+		float plane = abs(dot(d, pn)) / reach;
+		// The probe's surface faces where the ray came from (and, with the hit's own normal, agrees with it).
+		float facing = dot(pn, -p_dir);
+#if defined(FELLOW_POSITION_FETCH)
+		facing = min(facing, dot(pn, p_n) - 0.5);
+#endif
+		vec2 b2 = mix(1.0 - f, f, vec2(o));
+		float w = b2.x * b2.y * max(0.0, facing) * exp(-plane * plane * 4.0) * (dot(d, d) < reach * reach * 2.25 ? 1.0 : 0.0);
+		if (w <= 1e-5) {
+			continue;
+		}
+		sum += texelFetch(sampler2D(prev_irradiance, linear_sampler), p, 0).rgb * w;
+		wsum += w;
+	}
+	if (wsum <= 1e-4) {
+		return 0.0;
+	}
+	r_irradiance = sum / wsum;
+	return clamp(wsum * 4.0, 0.0, 1.0);
+}
+
 // The radiance a ray from p_origin (world) brings: its hit in the ray tracing scene lit as DDGI's rays' are, or the
 // ambient light.
 vec3 trace(vec3 p_origin, vec3 p_dir) {
@@ -322,10 +382,15 @@ vec3 trace(vec3 p_origin, vec3 p_dir) {
 			light += rt.sun_color.rgb * ndl * visible;
 		}
 	}
-	// The further bounces: DDGI's probes at the hit.
-	float coverage;
-	vec3 bounce = fellow_ddgi_irradiance_cascades(ddgi_irradiance, ddgi_distance, rt.volume, ddgi_outer_irradiance, ddgi_outer_distance, rt.outer, linear_sampler, hit, n, -p_dir, coverage);
-	light += mix(ambient_in(n) * 0.5, bounce, clamp(coverage, 0.0, 1.0)) * rt.trace.y;
+	// The further bounces: the previous frame's screen probes where the hit was in view, DDGI's probes elsewhere.
+	vec3 further = vec3(0.0);
+	float screen = screen_feedback(hit, n, p_dir, further);
+	if (screen < 1.0) {
+		float coverage;
+		vec3 bounce = fellow_ddgi_irradiance_cascades(ddgi_irradiance, ddgi_distance, rt.volume, ddgi_outer_irradiance, ddgi_outer_distance, rt.outer, linear_sampler, hit, n, -p_dir, coverage);
+		further = mix(mix(ambient_in(n) * 0.5, bounce, clamp(coverage, 0.0, 1.0)), further, screen);
+	}
+	light += further * rt.trace.y;
 	return inst.albedo.rgb * (1.0 - inst.emission.w) * light + inst.emission.rgb;
 }
 
@@ -340,18 +405,87 @@ void main() {
 	uint ray = gl_LocalInvocationIndex;
 	int tile = params.probes.z;
 	int rays = params.probes.w;
-	// The probe's pixel: its tile's centre, or where the sky is there, the first of the centres of its quarters that is
-	// not. The same pixel every frame: a probe jittered over its tile made the resolve's interpolation shimmer (on
+	const bool persistent = params.frame.z != 0;
+	// A new probe's pixel: its tile's centre, or where the sky is there, the first of the centres of its quarters that
+	// is not. The same pixel every frame: a probe jittered over its tile made the resolve's interpolation shimmer (on
 	// lavapipe 3.7 % of GI Lab's pixels changed by more than 2 levels from frame to frame of a still view, 0.5 % without).
 	uint h = hash(uint(probe.x) * 7919u + hash(uint(probe.y) * 104729u + hash(uint(params.frame.x))));
 	ivec2 base = probe * tile;
 	ivec2 pixel = min(base + tile / 2, params.screen.xy - 1);
-	vec3 pos, normal;
-	float distance;
+	vec3 pos = vec3(0.0);
+	vec3 normal = vec3(0.0, 0.0, 1.0);
+	float distance = 1.0;
 	bool valid = surface_at(pixel, pos, normal, distance);
 	for (int q = 0; q < 4 && !valid; q++) {
 		pixel = min(base + ivec2((q & 1) * 2 + 1, (q >> 1) * 2 + 1) * tile / 4, params.screen.xy - 1);
 		valid = surface_at(pixel, pos, normal, distance);
+	}
+	// The geometric normal (the shading normal's bumps change from one TAA-jittered frame to the next: the history's
+	// check and the neighbours' weights take this one).
+	vec3 ng = valid ? geometric_normal(pixel, normal) : vec3(0.0, 0.0, 1.0);
+	const vec3 eye = params.view_to_world[3].xyz;
+
+	// The previous probes around where this tile's point was.
+	ivec2 prev_tile = probe;
+	bool prev_tile_valid = false;
+	if (params.frame.y != 0 && valid) {
+		vec4 clip = params.prev_world_to_clip * vec4(pos, 1.0);
+		if (clip.w > 0.0) {
+			prev_tile = ivec2(floor((clip.xy / clip.w * 0.5 + 0.5) * vec2(params.screen.xy) / float(tile)));
+			prev_tile_valid = true;
+		}
+	} else if (params.frame.y != 0) {
+		prev_tile_valid = true; // the sky at this tile's pixels: the same tile last frame
+	}
+	if (ray < 9u) {
+		// Persistent probes: a previous probe keeps its point (and its history) in the tile that sees it now, the one
+		// nearest its centre if several do; a point is seen where a pixel within one of its projection lies on its plane.
+		float score = 1e30;
+		ivec2 q = prev_tile + ivec2(int(ray % 3u) - 1, int(ray / 3u) - 1);
+		if (persistent && prev_tile_valid && all(greaterThanEqual(q, ivec2(0))) && all(lessThan(q, params.probes.xy))) {
+			vec4 qp = texelFetch(sampler2D(prev_position, linear_sampler), q, 0);
+			vec3 qn = texelFetch(sampler2D(prev_normal, linear_sampler), q, 0).xyz;
+			vec4 c = params.world_to_clip * vec4(qp.xyz, 1.0);
+			if (qp.w != 0.0 && c.w > 0.0 && dot(qn, eye - qp.xyz) > 0.0) {
+				vec2 px = (c.xy / c.w * 0.5 + 0.5) * vec2(params.screen.xy);
+				ivec2 ip = ivec2(floor(px));
+				if (all(greaterThanEqual(ip, base)) && all(lessThan(ip, min(base + tile, params.screen.xy)))) {
+					float tolerance = params.footprint.x * length(qp.xyz - eye) + 0.003;
+					for (int k = 0; k < 9; k++) {
+						ivec2 sp = clamp(ip + ivec2(k % 3 - 1, k / 3 - 1), ivec2(0), params.screen.xy - 1);
+						vec3 spos, snormal;
+						float sdist;
+						if (surface_at(sp, spos, snormal, sdist) && abs(dot(spos - qp.xyz, qn)) < tolerance) {
+							vec2 off = px - (vec2(base) + float(tile) * 0.5);
+							score = dot(off, off);
+							break;
+						}
+					}
+				}
+			}
+		}
+		adopt_score[ray] = score;
+	}
+	barrier();
+	if (ray == 0u) {
+		int best = -1;
+		float best_score = 1e29;
+		for (int i = 0; i < 9; i++) {
+			if (adopt_score[i] < best_score) {
+				best_score = adopt_score[i];
+				best = i;
+			}
+		}
+		adopted = best;
+	}
+	barrier();
+	ivec2 history_probe = ivec2(-1);
+	if (adopted >= 0) {
+		history_probe = prev_tile + ivec2(adopted % 3 - 1, adopted / 3 - 1);
+		pos = texelFetch(sampler2D(prev_position, linear_sampler), history_probe, 0).xyz;
+		ng = texelFetch(sampler2D(prev_normal, linear_sampler), history_probe, 0).xyz;
+		distance = length(pos - eye);
+		valid = true;
 	}
 	if (!valid) {
 		if (ray == 0u) {
@@ -362,17 +496,17 @@ void main() {
 		return; // the whole workgroup (uniform)
 	}
 
-	// The geometric normal (the shading normal's bumps change from one TAA-jittered frame to the next: the history's
-	// check and the neighbours' weights take this one).
-	vec3 ng = geometric_normal(pixel, normal);
+	// The rays' distribution: around the geometric normal for persistent probes (a probe stands for its tile, not its
+	// pixel's bumps, and keeps no shading normal), the shading normal otherwise.
+	vec3 dir_normal = persistent ? ng : normal;
 	vec3 radiance = vec3(0.0);
 	if (int(ray) < rays) {
-		// Stratified (Hammersley) with a random shift per probe and frame, around the shading normal; a direction below
-		// the geometric surface mirrored above it, the origin lifted along the geometric normal (off the voxels of its
-		// own surface for the distance field).
+		// Stratified (Hammersley) with a random shift per probe and frame; a direction below the geometric surface
+		// mirrored above it, the origin lifted along the geometric normal (off the voxels of its own surface for the
+		// distance field).
 		vec2 shift = vec2(float(h & 0xFFFFu), float(hash(h) & 0xFFFFu)) / 65536.0;
 		vec2 u = fract(vec2((float(ray) + 0.5) / float(rays), radical_inverse(ray)) + shift);
-		vec3 dir = cosine_direction(normal, u);
+		vec3 dir = cosine_direction(dir_normal, u);
 		float below = dot(dir, ng);
 		if (below < 0.0) {
 			dir = normalize(dir - 2.0 * below * ng);
@@ -395,25 +529,21 @@ void main() {
 	}
 	// Cosine-weighted directions: the mean radiance is the irradiance over pi (the scene shader's ambient light).
 	vec3 irradiance = ray_sum[0] / float(max(rays, 1)) * params.light.y;
-	float samples = 1.0;
-	if (params.frame.y != 0) {
-		// The previous frame's probe where this point was, if it lay on the same surface.
-		vec4 clip = params.prev_world_to_clip * vec4(pos, 1.0);
-		if (clip.w > 0.0) {
-			vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
-			ivec2 prev_probe = ivec2(floor(uv * vec2(params.screen.xy) / float(tile)));
-			if (all(greaterThanEqual(prev_probe, ivec2(0))) && all(lessThan(prev_probe, params.probes.xy))) {
-				vec4 pp = texelFetch(sampler2D(prev_position, linear_sampler), prev_probe, 0);
-				vec4 pn = texelFetch(sampler2D(prev_normal, linear_sampler), prev_probe, 0);
-				float reach = params.footprint.x * distance * float(tile) * 1.5 + 0.02;
-				vec3 delta = pp.xyz - pos;
-				if (pp.w != 0.0 && dot(pn.xyz, ng) > 0.8 && abs(dot(delta, ng)) < reach * 0.5 && length(delta) < reach) {
-					vec4 prev = texelFetch(sampler2D(prev_irradiance, linear_sampler), prev_probe, 0);
-					samples = min(prev.a + 1.0, params.light.z);
-					irradiance = mix(prev.rgb, irradiance, 1.0 / samples);
-				}
-			}
+	if (history_probe.x < 0 && prev_tile_valid && all(greaterThanEqual(prev_tile, ivec2(0))) && all(lessThan(prev_tile, params.probes.xy))) {
+		// A new probe: the history of the previous frame's probe where this point was, if it lay on the same surface.
+		vec4 pp = texelFetch(sampler2D(prev_position, linear_sampler), prev_tile, 0);
+		vec4 pn = texelFetch(sampler2D(prev_normal, linear_sampler), prev_tile, 0);
+		float reach = params.footprint.x * distance * float(tile) * 1.5 + 0.02;
+		vec3 delta = pp.xyz - pos;
+		if (pp.w != 0.0 && dot(pn.xyz, ng) > 0.8 && abs(dot(delta, ng)) < reach * 0.5 && length(delta) < reach) {
+			history_probe = prev_tile;
 		}
+	}
+	float samples = 1.0;
+	if (history_probe.x >= 0) {
+		vec4 prev = texelFetch(sampler2D(prev_irradiance, linear_sampler), history_probe, 0);
+		samples = min(prev.a + 1.0, params.light.z);
+		irradiance = mix(prev.rgb, irradiance, 1.0 / samples);
 	}
 	imageStore(out_irradiance, probe, vec4(irradiance, samples));
 	imageStore(out_position, probe, vec4(pos, 1.0));

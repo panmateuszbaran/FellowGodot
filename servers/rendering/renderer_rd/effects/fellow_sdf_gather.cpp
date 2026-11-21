@@ -99,6 +99,7 @@ void FellowSDFGather::process(const Params &p_params) {
 	MaterialStorage::store_camera(p_params.inv_projection, u.inv_projection);
 	MaterialStorage::store_transform(p_params.view_to_world, u.view_to_world);
 	MaterialStorage::store_camera(p_params.prev_world_to_clip, u.prev_world_to_clip);
+	MaterialStorage::store_camera(p_params.world_to_clip, u.world_to_clip);
 	_fellow_store_basis4(p_params.sky_xform, u.sky_xform);
 	const bool sky = p_params.use_sky && p_params.radiance.is_valid();
 	u.sky_params[0] = p_params.use_ambient ? 1.0f : 0.0f;
@@ -135,8 +136,8 @@ void FellowSDFGather::process(const Params &p_params) {
 	u.probes[3] = CLAMP(p_params.rays, 1, 64);
 	u.frame[0] = int32_t(p_params.frame);
 	u.frame[1] = p_params.history ? 1 : 0;
-	u.frame[2] = 0;
-	u.frame[3] = 0;
+	u.frame[2] = p_params.persistent ? 1 : 0;
+	u.frame[3] = (p_params.rt && p_params.feedback) ? 1 : 0;
 	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 
 	const int cur = p_params.current & 1;
