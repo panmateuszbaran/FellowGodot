@@ -8,7 +8,7 @@ Code:
 * `benchmarks/project/scenes/gi_arcade.gd` (GI Arcade).
 
 Checks: lavapipe only (the owner needs the laptop: its GPU is not used for this decision): GI Arcade and GI Lab, still
-frames and linear captures against the path tracer; the image regression suite. The RTX's confirmation in Sponza is
+frames and linear captures against the path tracer; the image regression suite (38 scenes identical). The RTX's confirmation in Sponza is
 prepared (job f532), not run.
 
 ## Problem
@@ -87,9 +87,22 @@ bounces), bias / error a pixel in stops:
 | SDF gather, M167 | −0.91 / 0.91 | −0.73 / 0.73 | −0.05 / 0.05 |
 | SDF gather, persistent probes | −0.92 / 0.92 | −0.73 / 0.74 | −0.05 / 0.05 |
 
-@ARCADE@
+| GI Arcade | colonnade | gallery (shade) | shutter (shade) | the tree | mean |
+|---|---:|---:|---:|---:|---:|
+| ray-traced DDGI | +0.03 / 0.05 | +0.32 / 0.36 | +0.45 / 0.50 | +0.03 / 0.04 | +0.21 / 0.23 |
+| ray-traced gather, M167 | +0.01 / 0.03 | +0.04 / 0.16 | +0.04 / 0.12 | +0.01 / 0.03 | +0.02 / 0.08 |
+| … persistent probes | +0.01 / 0.03 | +0.04 / 0.16 | +0.05 / 0.12 | +0.01 / 0.03 | +0.03 / 0.09 |
+| … and further bounces from its probes | +0.01 / 0.03 | +0.03 / 0.16 | +0.03 / 0.11 | +0.01 / 0.03 | +0.02 / 0.08 |
+| SDFGI | −0.14 / 0.15 | −1.96 / 1.96 | −1.74 / 1.75 | −0.09 / 0.11 | −0.98 / 0.99 |
+| SDF gather, M167 | −0.14 / 0.14 | −1.74 / 1.74 | −1.79 / 1.79 | −0.15 / 0.15 | −0.95 / 0.96 |
+| SDF gather, persistent probes | −0.14 / 0.15 | −1.70 / 1.71 | −1.79 / 1.79 | −0.14 / 0.15 | −0.95 / 0.95 |
 
-* Persistent probes do not change the light (within 0.01 stops a pixel).
+On lavapipe, SDFGI and its gather are 1.7-2 stops too dark in the gallery's shade (see below); the ray-traced gather
+is within 0.1 stops a pixel of the path tracer everywhere in GI Arcade, DDGI a third to a half of a stop too bright in
+the shade.
+
+* Persistent probes do not change the light (within 0.01 stops a pixel; their rays around the geometric normal
+  included).
 * The further bounces from the screen probes take a third of the ray-traced gather's remaining excess in GI Lab's room
   (+0.35 to +0.25 stops; the same after 600 frames, +0.34 to +0.24: converged).
 

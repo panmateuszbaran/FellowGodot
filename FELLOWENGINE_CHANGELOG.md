@@ -9,6 +9,24 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 168 — screen probes that keep their place (2026-11-21)
+
+- Decision 0309: `sdfgi/screen_gather_persistent` (on). The screen gathers' probes keep their world point and their
+  history while that point is still seen in their tile, instead of being placed again at their tile's centre pixel
+  every frame. There the TAA's jitter moved an edge across that pixel on folds, leaves and slats, the probe landed on
+  another surface and started over: the ray-traced gather's flicker on Sponza's curtains was white in time (lag-1
+  autocorrelation −0.03 on the RTX, DDGI's +0.39).
+  - GI Arcade on lavapipe: the flicker the gathers add 0.71 → 0.07 % (ray-traced) and 0.73 → 0.17 % (SDF) of a
+    still view's calm pixels, the same as DDGI's (0.04 %) and SDFGI's (0.15 %); the light unchanged (0.01 stops).
+- `raytracing/gi_screen_gather_feedback` (on): the ray-traced gather's hits take their further bounces from the
+  previous frame's screen probes where they saw them, DDGI's probes elsewhere: GI Lab's room +0.35 → +0.25 stops
+  against the path tracer on lavapipe (DDGI +0.86). In GI Arcade the ray-traced gather is 0.08 stops off a pixel.
+- Found: inside GI Lab's room the RTX's real-time GI is 0.9-1.4 stops brighter than lavapipe's (SDFGI, its gather and
+  DDGI alike) while their path tracers agree to 0.00 stops; not the resolution, the autotuner or FellowEngine (stock
+  SDFGI the same on lavapipe). A GPU job is prepared (f533); the RTX was not used this milestone.
+- GI Arcade (`--scene=gi_arcade`): a colonnade with folded double-sided curtains, a tree of 600 leaves and a shutter's
+  slats, for the gathers' stability without Sponza's assets.
+
 ## Milestone 167 — diffuse light gathered per screen probe (2026-11-21)
 
 - Every diffuse GI option measured against a path tracer (`debug/raytracing_gi_reference`) in Sponza, Bistro and the

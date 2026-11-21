@@ -3814,6 +3814,9 @@
 		<member name="rendering/fellow/raytracing/gi_screen_gather" type="bool" setter="" getter="" default="false">
 			With DDGI's screen pass: the first bounce traced per screen probe (against the ray tracing scene, its hits lit by the sun and by DDGI's probes for the further bounces), in place of the probes' interpolated light; the probes per tile, rays, history and filter of sdfgi/screen_gather_*; gi_sky_leak is then not added. Decision 0308.
 		</member>
+		<member name="rendering/fellow/raytracing/gi_screen_gather_feedback" type="bool" setter="" getter="" default="true">
+			With raytracing/gi_screen_gather: a gather ray's hit takes its further bounces from the previous frame's screen probes where they saw that point (on its surface, around its projection), DDGI's probes only where they did not: the screen probes' own light fed back from frame to frame, closer to the truth in enclosed rooms than DDGI's 2 m grid.
+		</member>
 		<member name="rendering/fellow/raytracing/gi_sky_leak" type="float" setter="" getter="" default="0.1">
 			The share of the ambient light kept where the probes are dark.
 		</member>
@@ -3859,7 +3862,10 @@
 		<member name="rendering/fellow/sdfgi/screen_gather_history" type="int" setter="" getter="" default="16">
 			Frames a screen probe's light is averaged over where its surface stays in view: higher, smoother and slower to follow a change.
 		</member>
-		<member name="rendering/fellow/sdfgi/screen_gather_rays" type="int" setter="" getter="" default="32">
+		<member name="rendering/fellow/sdfgi/screen_gather_persistent" type="bool" setter="" getter="" default="true">
+			A screen probe keeps its point (and the light it has averaged there) from frame to frame while that point is still seen in its tile, instead of starting again from its tile's centre pixel each frame: where the TAA's jitter moves an edge across that pixel (folds, leaves, thin slats) the probe no longer lands on another surface and loses its history every frame. Its rays are then distributed around the surface's geometric normal. Applies to raytracing/gi_screen_gather too.
+		</member>
+		<member name="rendering/fellow/sdfgi/screen_gather_rays" type="int" setter="" getter="" default="16">
 			Rays per screen probe and frame.
 		</member>
 		<member name="rendering/fellow/sdfgi/screen_gather_tile" type="int" setter="" getter="" default="16">
