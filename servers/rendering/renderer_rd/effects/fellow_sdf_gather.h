@@ -61,6 +61,7 @@ public:
 		float light_scale = 1.0; // the voxels' light to the scene shader's units
 		float energy = 1.0;
 		float normal_bias = 1.0; // cascade 0 cells
+		float surface_bias = 1.0; // cells: the distance field's values are this much more than the hits' (SDFGI's own rays take 1)
 		// The environment's ambient light (as DDGI's FellowRTLighting).
 		RID radiance; // the sky's radiance octmap; RID(): none
 		bool radiance_array = false;

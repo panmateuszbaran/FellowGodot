@@ -122,7 +122,7 @@ void FellowSDFGather::process(const Params &p_params) {
 	u.light[2] = MAX(1.0f, p_params.max_samples);
 	u.light[3] = p_params.normal_bias;
 	u.footprint[0] = p_params.pixel_footprint;
-	u.footprint[1] = 0.0f;
+	u.footprint[1] = p_params.surface_bias;
 	u.footprint[2] = 0.0f;
 	u.footprint[3] = 0.0f;
 	u.screen[0] = p_params.internal_size.x;

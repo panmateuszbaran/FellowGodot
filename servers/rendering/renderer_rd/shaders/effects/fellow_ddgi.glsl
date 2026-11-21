@@ -30,10 +30,6 @@
 // MODE_REFERENCE (debug/raytracing_gi_reference): in place of MODE_SCREEN, per pixel a path traced from its position
 // (cosine-weighted, the sun sampled at every hit, up to n bounces), accumulated while the camera stands still: the
 // irradiance the probes approximate, for comparisons.
-// MODE_TRACE_SDF (sdfgi/ddgi_probes, docs/decisions/0308-sdf-ddgi.md): MODE_TRACE without ray queries: the rays march
-// through SDFGI's distance field cascades (the finest that holds them, then the coarser ones) and take the light of the
-// voxel they reach (its direct light from every light, its emission and SDFGI's own bounce, by the normal of the field);
-// those that leave the last cascade see the environment's ambient light.
 
 #include "../oct_inc.glsl"
 #include "../fellow_ddgi_inc.glsl"
@@ -58,8 +54,6 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	mat4 view_to_world;
 	ivec4 screen; // xy the screen pass's size, z the reference's bounces
 	FellowDDGIVolume outer; // the coarser cascade around this volume (base_cell.w 0: none), read where this one ends
-	vec4 sdf; // MODE_TRACE_SDF: x SDFGI's cascade size (cells), y its cascades, z its y scale, w steps per cascade
-	vec4 sdf_light; // MODE_TRACE_SDF: x the voxels' light to the scene shader's units
 }
 params;
 
@@ -209,146 +203,6 @@ void main() {
 		radiance = max(radiance, vec3(1e-4)); // marks it as a lit back face (not a single-sided one; a half float keeps 1e-4)
 	}
 	imageStore(ray_data, ivec2(ray, probe), vec4(radiance, stored_t));
-}
-
-#elif defined(MODE_TRACE_SDF)
-
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
-
-#define FELLOW_SDF_MAX_CASCADES 8 // as SDFGI's
-
-layout(set = 0, binding = 2) uniform texture3D sdf_cascades[FELLOW_SDF_MAX_CASCADES];
-layout(set = 0, binding = 3) uniform texture3D light_cascades[FELLOW_SDF_MAX_CASCADES];
-layout(set = 0, binding = 4) uniform texture3D aniso0_cascades[FELLOW_SDF_MAX_CASCADES];
-layout(set = 0, binding = 5) uniform texture3D aniso1_cascades[FELLOW_SDF_MAX_CASCADES];
-layout(set = 0, binding = 6) uniform sampler linear_sampler;
-#if defined(FELLOW_RADIANCE_ARRAY)
-layout(set = 0, binding = 7) uniform texture2DArray radiance_octmap;
-#else
-layout(set = 0, binding = 7) uniform texture2D radiance_octmap;
-#endif
-layout(set = 0, binding = 8) uniform texture2D distance_atlas;
-
-struct FellowSDFCascade { // as SDFGI's CascadeData
-	vec3 offset; // the cell (0, 0, 0) in SDFGI's space (y scaled)
-	float to_cell;
-	ivec3 probe_world_offset;
-	uint pad;
-	vec4 pad2;
-};
-
-layout(set = 0, binding = 9, std140) uniform SDFCascades {
-	FellowSDFCascade data[FELLOW_SDF_MAX_CASCADES];
-}
-sdf_cascades_data;
-
-// As MODE_TRACE's.
-vec3 fellow_ddgi_ambient(vec3 p_dir) {
-	if (params.sky_params.x == 0.0) {
-		return vec3(0.0);
-	}
-	vec3 ambient = params.ambient_color.rgb;
-	if (params.sky_params.y != 0.0) {
-		vec3 d = mat3(params.sky_xform) * p_dir;
-		vec2 uv = vec3_to_oct_with_border(d, params.radiance_border.xy);
-#if defined(FELLOW_RADIANCE_ARRAY)
-		vec3 sky = textureLod(sampler2DArray(radiance_octmap, linear_sampler), vec3(uv, params.sky_params.w), 0.0).rgb;
-#else
-		vec3 sky = textureLod(sampler2D(radiance_octmap, linear_sampler), uv, params.sky_params.w).rgb;
-#endif
-		ambient = mix(ambient, sky * params.sky_params.z, params.ambient_color.w);
-	}
-	return ambient;
-}
-
-void main() {
-	int ray = int(gl_GlobalInvocationID.x);
-	int probe = fellow_ddgi_updated_probe(int(gl_GlobalInvocationID.y));
-	int rays = params.volume.counts.w;
-	ivec3 counts = params.volume.counts.xyz;
-	if (ray >= rays || probe >= counts.x * counts.y * counts.z) {
-		return;
-	}
-	ivec3 slot = fellow_ddgi_slot_of_index(probe);
-	vec3 origin = vec3(fellow_ddgi_cell_of_slot(slot)) * params.volume.spacing.x + fellow_ddgi_probe_offset(distance_atlas, linear_sampler, slot, counts);
-	vec3 dir = fellow_ddgi_ray_direction(ray, rays);
-
-	// SDFGI's space: the world with y scaled, in each cascade's cells (as its probes' rays, sdfgi_integrate.glsl).
-	const float y_mult = params.sdf.z;
-	const vec3 grid = vec3(params.sdf.x);
-	const vec3 pos_to_uvw = 1.0 / grid;
-	const int cascade_count = int(params.sdf.y);
-	const int max_steps = int(params.sdf.w);
-	vec3 ray_pos = vec3(origin.x, origin.y * y_mult, origin.z);
-	vec3 ray_dir = normalize(vec3(dir.x, dir.y * y_mult, dir.z));
-	vec3 inv_dir = 1.0 / max(abs(ray_dir), vec3(1e-6)) * mix(vec3(-1.0), vec3(1.0), greaterThanEqual(ray_dir, vec3(0.0)));
-	bool hit = false;
-	bool started = false;
-	int hit_cascade = 0;
-	vec3 uvw = vec3(0.0);
-	vec3 hit_pos = ray_pos;
-	for (int j = 0; j < cascade_count; j++) {
-		vec3 pos = (ray_pos - sdf_cascades_data.data[j].offset) * sdf_cascades_data.data[j].to_cell;
-		if (any(lessThan(pos, vec3(0.0))) || any(greaterThanEqual(pos, grid))) {
-			continue; // not in this cascade (or already past it)
-		}
-		vec3 t0 = -pos * inv_dir;
-		vec3 t1 = (grid - pos) * inv_dir;
-		vec3 tmax = max(t0, t1);
-		float max_advance = min(tmax.x, min(tmax.y, tmax.z));
-		float advance = 0.0;
-		for (int s = 0; s < max_steps && advance < max_advance; s++) {
-			uvw = (pos + ray_dir * advance) * pos_to_uvw;
-			float d = texture(sampler3D(sdf_cascades[j], linear_sampler), uvw).r * 255.0 - 1.0;
-			if (d < 0.05) {
-				if (!started && advance < 2.0) {
-					// The probe stands within a cell of a surface (the field cannot tell its sides): its first two cells
-					// are crossed, so that the rays away from the surface go on and those into it hit it close by
-					// (relocation then moves the probe off it).
-					advance += 1.0;
-					continue;
-				}
-				hit = true;
-				break;
-			}
-			advance += d;
-		}
-		started = true;
-		advance = min(advance, max_advance);
-		if (hit) {
-			hit_cascade = j;
-			hit_pos = (pos + ray_dir * advance) / sdf_cascades_data.data[j].to_cell + sdf_cascades_data.data[j].offset;
-			break;
-		}
-		// On from where it got to (the cascade's bounds, or its steps' end), in the next, coarser cascade.
-		pos += ray_dir * advance;
-		ray_pos = pos / sdf_cascades_data.data[j].to_cell + sdf_cascades_data.data[j].offset;
-	}
-	if (!hit) {
-		imageStore(ray_data, ivec2(ray, probe), vec4(fellow_ddgi_ambient(dir), 1e4));
-		return;
-	}
-	vec3 light = vec3(0.0);
-	for (int j = 0; j < cascade_count; j++) {
-		if (j == hit_cascade) { // the same texture for every invocation that reads one (as SDFGI's)
-			const float e = 0.001;
-			vec3 g = vec3(
-					texture(sampler3D(sdf_cascades[j], linear_sampler), uvw + vec3(e, 0.0, 0.0)).r - texture(sampler3D(sdf_cascades[j], linear_sampler), uvw - vec3(e, 0.0, 0.0)).r,
-					texture(sampler3D(sdf_cascades[j], linear_sampler), uvw + vec3(0.0, e, 0.0)).r - texture(sampler3D(sdf_cascades[j], linear_sampler), uvw - vec3(0.0, e, 0.0)).r,
-					texture(sampler3D(sdf_cascades[j], linear_sampler), uvw + vec3(0.0, 0.0, e)).r - texture(sampler3D(sdf_cascades[j], linear_sampler), uvw - vec3(0.0, 0.0, e)).r);
-			vec3 n = dot(g, g) > 1e-12 ? normalize(g) : -ray_dir;
-			vec3 voxel = texture(sampler3D(light_cascades[j], linear_sampler), uvw).rgb;
-			vec4 a0 = texture(sampler3D(aniso0_cascades[j], linear_sampler), uvw);
-			vec3 a1 = vec3(a0.a, texture(sampler3D(aniso1_cascades[j], linear_sampler), uvw).rg);
-			light = voxel * (dot(max(vec3(0.0), n * a0.rgb), vec3(1.0)) + dot(max(vec3(0.0), -n * a1), vec3(1.0)));
-		}
-	}
-	vec3 radiance = light * params.sdf_light.x;
-	if (any(isnan(radiance)) || any(isinf(radiance))) {
-		radiance = vec3(0.0); // never into the probes
-	}
-	float t = length(vec3(hit_pos.x, hit_pos.y / y_mult, hit_pos.z) - origin);
-	imageStore(ray_data, ivec2(ray, probe), vec4(radiance, max(t, 1e-3)));
 }
 
 #elif defined(MODE_DISTANCE)

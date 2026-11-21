@@ -576,9 +576,6 @@ inline int raytracing_gi_dump_every() {
 inline int raytracing_gi_reference() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/debug/raytracing_gi_reference");
 }
-inline float raytracing_gi_hidden_coverage() {
-	return GLOBAL_GET_CACHED(float, "rendering/fellow/debug/raytracing_gi_hidden_coverage");
-}
 inline bool raytracing_gi_in_shader() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/raytracing_gi_in_shader");
 }
@@ -599,18 +596,15 @@ inline bool raytracing_gi_screen_gather() {
 inline bool raytracing_gi_probe_relocation() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/gi_probe_relocation");
 }
-// sdfgi/ddgi_probes (decision 0308): where the environment enables SDFGI and ray-traced DDGI does not run, DDGI's
-// probe volumes (raytracing/gi_* settings) trace their rays through SDFGI's distance field cascades and take the light of
-// its voxels; the colour passes read them in place of SDFGI's diffuse light (its reflections stay).
-inline bool sdfgi_ddgi() {
-	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/sdfgi/ddgi_probes");
-}
 inline int sdfgi_trace_max_steps() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/sdfgi/trace_max_steps");
 }
 // sdfgi/screen_gather (decision 0308): where the environment enables SDFGI, a probe every screen_gather_tile pixels
 // traces screen_gather_rays rays from its surface through SDFGI's distance field cascades; the probes' light, averaged
 // over frames, replaces SDFGI's diffuse light (its reflections stay).
+inline float sdfgi_trace_surface_bias() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/sdfgi/trace_surface_bias");
+}
 inline bool sdfgi_screen_gather() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/sdfgi/screen_gather");
 }

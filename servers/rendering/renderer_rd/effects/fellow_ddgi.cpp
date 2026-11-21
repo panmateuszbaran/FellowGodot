@@ -50,8 +50,6 @@ FellowDDGI::FellowDDGI() {
 	modes.push_back("\n#define MODE_REFERENCE\n#define FELLOW_POSITION_FETCH\n");
 	modes.push_back("\n#define MODE_REFERENCE\n#define FELLOW_RADIANCE_ARRAY\n");
 	modes.push_back("\n#define MODE_REFERENCE\n#define FELLOW_POSITION_FETCH\n#define FELLOW_RADIANCE_ARRAY\n");
-	modes.push_back("\n#define MODE_TRACE_SDF\n");
-	modes.push_back("\n#define MODE_TRACE_SDF\n#define FELLOW_RADIANCE_ARRAY\n");
 	shader.initialize(modes);
 	position_fetch = RD::get_singleton()->fellow_ray_position_fetch_supported();
 	if (!position_fetch) {
@@ -142,14 +140,6 @@ void FellowDDGI::process(const Params &p_params) {
 	u.screen[2] = p_params.reference_bounces;
 	u.screen[3] = 0;
 	u.outer = p_params.outer;
-	u.sdf[0] = p_params.sdf_cascade_size;
-	u.sdf[1] = float(MIN(p_params.sdf_cascade_count, int(Params::SDF_MAX_CASCADES)));
-	u.sdf[2] = p_params.sdf_y_mult;
-	u.sdf[3] = float(MAX(8, p_params.sdf_max_steps));
-	u.sdf_light[0] = p_params.sdf_light_scale;
-	u.sdf_light[1] = 0.0f;
-	u.sdf_light[2] = 0.0f;
-	u.sdf_light[3] = 0.0f;
 	const bool outer = p_params.outer.base_cell[3] != 0 && p_params.outer_irradiance.is_valid() && p_params.outer_distance.is_valid();
 	if (!outer) {
 		u.outer.base_cell[3] = 0;
@@ -163,34 +153,7 @@ void FellowDDGI::process(const Params &p_params) {
 	RD::Uniform u_rays(RD::UNIFORM_TYPE_IMAGE, 1, p_params.ray_data);
 
 	RD::get_singleton()->draw_command_begin_label("FellowEngine DDGI");
-	if (p_params.sdf_cascade_count > 0) {
-		// The rays through SDFGI's distance field cascades (decision 0308).
-		const Mode mode = (p_params.radiance_array && sky) ? MODE_TRACE_SDF_ARRAY : MODE_TRACE_SDF;
-		TextureStorage *ts = TextureStorage::get_singleton();
-		RID radiance = sky ? p_params.radiance : ts->texture_rd_get_default(mode == MODE_TRACE_SDF_ARRAY ? TextureStorage::DEFAULT_RD_TEXTURE_2D_ARRAY_BLACK : TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
-		RID unused = ts->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_3D_WHITE);
-		RD::Uniform u_sdf(RD::UNIFORM_TYPE_TEXTURE, 2, Vector<RID>());
-		RD::Uniform u_light(RD::UNIFORM_TYPE_TEXTURE, 3, Vector<RID>());
-		RD::Uniform u_aniso0(RD::UNIFORM_TYPE_TEXTURE, 4, Vector<RID>());
-		RD::Uniform u_aniso1(RD::UNIFORM_TYPE_TEXTURE, 5, Vector<RID>());
-		for (int i = 0; i < Params::SDF_MAX_CASCADES; i++) {
-			const bool used = i < p_params.sdf_cascade_count;
-			u_sdf.append_id(used ? p_params.sdf_distance[i] : unused);
-			u_light.append_id(used ? p_params.sdf_light[i] : unused);
-			u_aniso0.append_id(used ? p_params.sdf_aniso0[i] : unused);
-			u_aniso1.append_id(used ? p_params.sdf_aniso1[i] : unused);
-		}
-		RD::Uniform u_sampler(RD::UNIFORM_TYPE_SAMPLER, 6, linear);
-		RD::Uniform u_rad(RD::UNIFORM_TYPE_TEXTURE, 7, radiance);
-		RD::Uniform u_dist(RD::UNIFORM_TYPE_TEXTURE, 8, p_params.distance);
-		RD::Uniform u_cascades(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 9, p_params.sdf_cascades_ubo);
-		RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
-		RID shader_rd = shader.version_get_shader(shader_version, mode);
-		RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[mode]);
-		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_rays, u_sdf, u_light, u_aniso0, u_aniso1, u_sampler, u_rad, u_dist, u_cascades), 0);
-		RD::get_singleton()->compute_list_dispatch_threads(list, rays, updated, 1);
-		RD::get_singleton()->compute_list_end();
-	} else {
+	{
 		Mode mode = MODE_TRACE;
 		if (p_params.radiance_array && sky) {
 			mode = position_fetch ? MODE_TRACE_FETCH_ARRAY : MODE_TRACE_ARRAY;

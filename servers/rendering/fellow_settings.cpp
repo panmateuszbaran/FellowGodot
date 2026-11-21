@@ -125,8 +125,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/gi_update_interval", PROPERTY_HINT_RANGE, "1,8,1"), 4); // frames between a probe's updates (a share of the probes traced per frame)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/gi_cascades", PROPERTY_HINT_RANGE, "1,2,1"), 2); // 2: a coarser volume (4 x the spacing, half the update rate) around the fine one, read where it ends
 	GLOBAL_DEF("rendering/fellow/raytracing/gi_probe_relocation", true); // probes moved out of geometry and away from surfaces (within their cell)
-	GLOBAL_DEF("rendering/fellow/sdfgi/ddgi_probes", false); // decision 0308: where the environment enables SDFGI and no ray-traced DDGI runs, DDGI's probes (raytracing/gi_* settings) traced through SDFGI's distance fields, read in place of SDFGI's diffuse light
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/trace_max_steps", PROPERTY_HINT_RANGE, "8,256,1"), 64); // sdfgi/ddgi_probes and sdfgi/screen_gather: a ray's steps through each cascade
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/trace_max_steps", PROPERTY_HINT_RANGE, "8,256,1"), 64); // sdfgi/screen_gather: a ray's steps through each of SDFGI's cascades
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/sdfgi/trace_surface_bias", PROPERTY_HINT_RANGE, "0,2,0.05"), 1.0); // sdfgi/screen_gather: a ray hits a surface this many cells short of the field's distance (SDFGI's own rays: 1)
 	GLOBAL_DEF("rendering/fellow/sdfgi/screen_gather", false); // decision 0308: where the environment enables SDFGI, its diffuse light gathered per screen probe (rays through its distance fields) in place of its world probes'
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_tile", PROPERTY_HINT_RANGE, "4,64,1,suffix:px"), 16); // a screen probe per tile of this many pixels
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_rays", PROPERTY_HINT_RANGE, "8,64,1"), 32); // rays per screen probe and frame
@@ -139,7 +139,6 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/debug/raytracing_decode_positions", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/raytracing_gi_dump_every", PROPERTY_HINT_RANGE, "0,10000,1"), 0); // DDGI probes written to user://fellow_ddgi_dump.bin every n updates (diagnostics; stalls the GPU)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/raytracing_gi_reference", PROPERTY_HINT_RANGE, "0,16,1"), 0); // n > 0: a path traced per pixel (n bounces, accumulated while the camera stands still) in place of the probes' irradiance: a reference for DDGI
-	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/debug/raytracing_gi_hidden_coverage", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.2); // decision 0308: where the probes around a point are hidden from it (DDGI's visibility), its coverage falls by their weight against this share (the rest from the ambient light, or SDFGI's); 0: hidden probes cover
 	GLOBAL_DEF("rendering/fellow/debug/raytracing_gi_in_shader", false); // DDGI looked up by the opaque passes themselves (no screen pass): for comparisons
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/raytracing_view", PROPERTY_HINT_ENUM, "Off,Hit Distance,Depth Match"), 0); // compressed positions decoded even where the device builds from them
 	GLOBAL_DEF("rendering/fellow/animation/elide_modifier_backup", true); // decision 0076 (exact; on from fellow168)

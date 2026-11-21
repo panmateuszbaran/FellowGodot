@@ -3205,9 +3205,6 @@
 		<member name="rendering/fellow/debug/raytracing_gi_dump_every" type="int" setter="" getter="" default="0">
 			Diagnostics: the DDGI probes written to [code]user://fellow_ddgi_dump.bin[/code] every n updates (stalls the GPU; 0: never).
 		</member>
-		<member name="rendering/fellow/debug/raytracing_gi_hidden_coverage" type="float" setter="" getter="" default="0.2">
-			Diagnostics: where DDGI's probes around a point are hidden from it, the point's coverage falls by their weight against this share and the rest of its light comes from the ambient light (or SDFGI's); 0: hidden probes still cover. Decision 0308.
-		</member>
 		<member name="rendering/fellow/debug/raytracing_gi_in_shader" type="bool" setter="" getter="" default="false">
 			Diagnostics: DDGI looked up by the opaque passes themselves instead of a screen pass.
 		</member>
@@ -3853,9 +3850,6 @@
 		<member name="rendering/fellow/raytracing/sun_shadows_interleaved" type="bool" setter="" getter="" default="true">
 			A quarter of the pixels traced per frame, the others from the history clamped to their traced neighbours.
 		</member>
-		<member name="rendering/fellow/sdfgi/ddgi_probes" type="bool" setter="" getter="" default="false">
-			Where the environment enables SDFGI and no ray-traced DDGI runs, DDGI's probe volumes (the raytracing/gi_* settings) trace their rays through SDFGI's distance fields and take the light of its voxels (every light, emission, SDFGI's bounce); the colour passes read them in place of SDFGI's diffuse light, SDFGI's reflections stay. Needs no ray tracing hardware. Decision 0308.
-		</member>
 		<member name="rendering/fellow/sdfgi/screen_gather" type="bool" setter="" getter="" default="false">
 			Where the environment enables SDFGI, its diffuse light gathered per screen probe in place of its world probes' interpolated light: a probe every screen_gather_tile pixels traces rays from its surface through SDFGI's distance fields (the voxels' light at the hits, the ambient light beyond), averaged over frames where its surface stays in view. SDFGI's reflections stay. Needs no ray tracing hardware. Decision 0308.
 		</member>
@@ -3872,7 +3866,10 @@
 			A screen probe per square of this many pixels (of the internal resolution).
 		</member>
 		<member name="rendering/fellow/sdfgi/trace_max_steps" type="int" setter="" getter="" default="64">
-			A ray's steps through each of SDFGI's cascades (sdfgi/ddgi_probes, sdfgi/screen_gather) before it goes on in the next, coarser one.
+			A screen gather ray's steps through each of SDFGI's cascades before it goes on in the next, coarser one.
+		</member>
+		<member name="rendering/fellow/sdfgi/trace_surface_bias" type="float" setter="" getter="" default="1.0">
+			The screen gather's rays hit a surface this many cells short of the distance SDFGI's field stores (SDFGI's own rays: 1 cell, which thickens every surface by a cell of its cascade; 0.5 puts the hits on the voxels' faces).
 		</member>
 		<member name="rendering/fellow/shading/absent_features_specialized" type="int" setter="" getter="" default="63">
 			The colour passes compiled without the decal, probe, directional, omni, spot and positional shadow code the frame cannot run (bits per feature; 63: all): GPU 5-9 % faster. Exact: the same image or results as stock Godot. Decision 0057.

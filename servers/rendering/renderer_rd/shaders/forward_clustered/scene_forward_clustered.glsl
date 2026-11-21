@@ -2494,10 +2494,8 @@ void fragment_shader(in SceneData scene_data) {
 	// (blended with it where the volume ends).
 	if (sc_fellow_ddgi() && sc_fellow_ddgi_screen()) {
 		vec4 fellow_gi = texelFetch(sampler2D(fellow_ddgi_screen, SAMPLER_NEAREST_CLAMP), ivec2(gl_FragCoord.xy), 0);
-		// Plus the sky leak: a share of the environment's ambient light everywhere (no interior entirely black). With
-		// SDFGI underneath (decision 0308) its diffuse light, not the ambient light, fills in where the probes do not cover
-		// the point (the GI buffers below).
-		ambient_light = mix(ambient_light, fellow_gi.rgb + ambient_light * fellow_ddgi.volume.shading.x, fellow_ddgi.volume.shading.z != 0.0 ? 1.0 : fellow_gi.a);
+		// Plus the sky leak: a share of the environment's ambient light everywhere (no interior entirely black).
+		ambient_light = mix(ambient_light, fellow_gi.rgb + ambient_light * fellow_ddgi.volume.shading.x, fellow_gi.a);
 	} else if (sc_fellow_ddgi()) {
 		mat4 fellow_inv_view = transpose(mat4(scene_data.inv_view_matrix[0], scene_data.inv_view_matrix[1], scene_data.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
 		vec3 fellow_wpos = (fellow_inv_view * vec4(vertex, 1.0)).xyz;
@@ -2688,9 +2686,7 @@ void fragment_shader(in SceneData scene_data) {
 				}
 			}
 
-			if (!sc_fellow_ddgi()) { // FellowEngine 0308: DDGI's probes (traced through SDFGI's fields) keep the diffuse light
-				ambient_light = diffuse;
-			}
+			ambient_light = diffuse;
 			if (use_specular) {
 				indirect_specular_light = specular;
 			}
@@ -2773,13 +2769,7 @@ void fragment_shader(in SceneData scene_data) {
 		vec4 buffer_reflection = textureLod(sampler2D(reflection_buffer, SAMPLER_LINEAR_CLAMP), coord, 0.0);
 #endif // USE_MULTIVIEW
 
-		// FellowEngine 0308: with DDGI's probes the diffuse light stays theirs where they cover the point, SDFGI's where
-		// they do not (the screen pass's coverage); SDFGI's reflections are kept.
-		float fellow_gi_buffer_weight = buffer_ambient.a;
-		if (sc_fellow_ddgi()) {
-			fellow_gi_buffer_weight *= (sc_fellow_ddgi_screen() && fellow_ddgi.volume.shading.z != 0.0) ? 1.0 - texelFetch(sampler2D(fellow_ddgi_screen, SAMPLER_NEAREST_CLAMP), ivec2(gl_FragCoord.xy), 0).a : 0.0;
-		}
-		ambient_light = mix(ambient_light, buffer_ambient.rgb, fellow_gi_buffer_weight);
+		ambient_light = mix(ambient_light, buffer_ambient.rgb, buffer_ambient.a);
 		indirect_specular_light = mix(indirect_specular_light, buffer_reflection.rgb, buffer_reflection.a);
 	}
 #endif // !USE_LIGHTMAP

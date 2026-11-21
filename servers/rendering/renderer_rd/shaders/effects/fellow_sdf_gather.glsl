@@ -42,7 +42,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	vec4 radiance_border; // x border, y 1 - 2 border
 	vec4 sdf; // x SDFGI's cascade size (cells), y its cascades, z its y scale, w steps per cascade
 	vec4 light; // x the voxels' light to the scene shader's units, y energy, z the history's largest sample count, w normal bias (cascade 0 cells)
-	vec4 footprint; // x a pixel's size at 1 m from the camera (metres)
+	vec4 footprint; // x a pixel's size at 1 m from the camera (metres), y the field's surface bias (cells: a hit that much short of the stored distance)
 	ivec4 screen; // xy the internal size, zw SDFGI's ambient buffer size
 	ivec4 probes; // xy the probe grid, z tile (pixels), w rays per probe
 	ivec4 frame; // x frame, y 1: the history is valid
@@ -212,7 +212,7 @@ vec3 trace(vec3 p_origin, vec3 p_dir) {
 		float advance = 0.0;
 		for (int s = 0; s < max_steps && advance < max_advance; s++) {
 			uvw = (pos + ray_dir * advance) * pos_to_uvw;
-			float d = texture(sampler3D(sdf_cascades[j], linear_sampler), uvw).r * 255.0 - 1.0;
+			float d = texture(sampler3D(sdf_cascades[j], linear_sampler), uvw).r * 255.0 - params.footprint.y;
 			if (d < 0.05) {
 				hit = true;
 				break;
