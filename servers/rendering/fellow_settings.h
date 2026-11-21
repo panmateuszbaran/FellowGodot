@@ -615,6 +615,9 @@ inline int sdfgi_screen_gather_tile() {
 inline int sdfgi_screen_gather_rays() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/sdfgi/screen_gather_rays");
 }
+inline bool sdfgi_screen_gather_filter() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/sdfgi/screen_gather_filter");
+}
 inline int sdfgi_screen_gather_history() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/sdfgi/screen_gather_history");
 }

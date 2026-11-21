@@ -43,6 +43,7 @@ FellowSDFGather::FellowSDFGather() {
 	modes.push_back("\n#define MODE_TRACE\n");
 	modes.push_back("\n#define MODE_TRACE\n#define FELLOW_RADIANCE_ARRAY\n");
 	modes.push_back("\n#define MODE_RESOLVE\n");
+	modes.push_back("\n#define MODE_FILTER\n");
 	shader.initialize(modes);
 	shader_version = shader.version_create();
 	for (int i = 0; i < MODE_MAX; i++) {
@@ -157,8 +158,21 @@ void FellowSDFGather::process(const Params &p_params) {
 		RD::get_singleton()->compute_list_dispatch(list, p_params.grid.x, p_params.grid.y, 1);
 		RD::get_singleton()->compute_list_end();
 	}
-	{
+	const bool filter = p_params.filter && p_params.filtered.is_valid();
+	if (filter) {
 		RD::Uniform u_irr(RD::UNIFORM_TYPE_TEXTURE, 13, p_params.irradiance[cur]);
+		RD::Uniform u_pos(RD::UNIFORM_TYPE_TEXTURE, 14, p_params.position[cur]);
+		RD::Uniform u_nrm(RD::UNIFORM_TYPE_TEXTURE, 15, p_params.normal[cur]);
+		RD::Uniform u_out(RD::UNIFORM_TYPE_IMAGE, 17, p_params.filtered);
+		RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
+		RID shader_rd = shader.version_get_shader(shader_version, MODE_FILTER);
+		RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[MODE_FILTER]);
+		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_nr, u_sampler, u_irr, u_pos, u_nrm, u_out), 0);
+		RD::get_singleton()->compute_list_dispatch_threads(list, p_params.grid.x, p_params.grid.y, 1);
+		RD::get_singleton()->compute_list_end();
+	}
+	{
+		RD::Uniform u_irr(RD::UNIFORM_TYPE_TEXTURE, 13, filter ? p_params.filtered : p_params.irradiance[cur]);
 		RD::Uniform u_pos(RD::UNIFORM_TYPE_TEXTURE, 14, p_params.position[cur]);
 		RD::Uniform u_nrm(RD::UNIFORM_TYPE_TEXTURE, 15, p_params.normal[cur]);
 		RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 16, p_params.ambient);

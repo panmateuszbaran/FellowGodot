@@ -5438,6 +5438,7 @@ void RenderForwardClustered::_fellow_sdf_screen_gather(RenderDataRD *p_render_da
 			rb->create_texture(scope, names[1][i], RD::DATA_FORMAT_R32G32B32A32_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, grid);
 			rb->create_texture(scope, names[2][i], RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, grid);
 		}
+		rb->create_texture(scope, SNAME("filtered"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, grid);
 		rbd->fellow_sdf_gather_grid = grid;
 		rbd->fellow_sdf_gather_history = false;
 	}
@@ -5493,6 +5494,8 @@ void RenderForwardClustered::_fellow_sdf_screen_gather(RenderDataRD *p_render_da
 		params.position[i] = rb->get_texture(scope, names[1][i]);
 		params.normal[i] = rb->get_texture(scope, names[2][i]);
 	}
+	params.filtered = rb->get_texture(scope, SNAME("filtered"));
+	params.filter = Fellow::sdfgi_screen_gather_filter();
 	params.current = int(rbd->fellow_sdf_gather_frame & 1);
 	params.grid = grid;
 	params.tile = tile;

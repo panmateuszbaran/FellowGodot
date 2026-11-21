@@ -84,6 +84,8 @@ public:
 		RID irradiance[2];
 		RID position[2];
 		RID normal[2];
+		RID filtered; // the irradiance filtered over the probes on the same surface, for the resolve
+		bool filter = true;
 		int current = 0;
 		Size2i grid;
 		int tile = 16;
@@ -98,6 +100,7 @@ private:
 		MODE_TRACE,
 		MODE_TRACE_ARRAY,
 		MODE_RESOLVE,
+		MODE_FILTER,
 		MODE_MAX,
 	};
 

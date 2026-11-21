@@ -108,6 +108,7 @@ D = {
     "sdfgi/screen_gather": "Where the environment enables SDFGI, its diffuse light gathered per screen probe in place of its world probes' interpolated light: a probe every screen_gather_tile pixels traces rays from its surface through SDFGI's distance fields (the voxels' light at the hits, the ambient light beyond), averaged over frames where its surface stays in view. SDFGI's reflections stay. Needs no ray tracing hardware. Decision 0308.",
     "sdfgi/screen_gather_tile": "A screen probe per square of this many pixels (of the internal resolution).",
     "sdfgi/screen_gather_rays": "Rays per screen probe and frame.",
+    "sdfgi/screen_gather_filter": "The screen probes' light averaged over their neighbours on the same surface (5 x 5 probes, by their distance from its plane and their normals) before the pixels read it; the frames' average keeps the unfiltered light.",
     "sdfgi/screen_gather_history": "Frames a screen probe's light is averaged over where its surface stays in view: higher, smoother and slower to follow a change.",
     "raytracing/reflections": "Reflections traced against the ray tracing scene in place of SSR where the environment enables SSR: off-screen and hidden objects reflected. Decision 0084.",
     "raytracing/reflections_max_roughness": "Surfaces up to this roughness get traced reflections.",

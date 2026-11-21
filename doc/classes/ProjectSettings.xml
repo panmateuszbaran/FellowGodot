@@ -3856,6 +3856,9 @@
 		<member name="rendering/fellow/sdfgi/screen_gather" type="bool" setter="" getter="" default="false">
 			Where the environment enables SDFGI, its diffuse light gathered per screen probe in place of its world probes' interpolated light: a probe every screen_gather_tile pixels traces rays from its surface through SDFGI's distance fields (the voxels' light at the hits, the ambient light beyond), averaged over frames where its surface stays in view. SDFGI's reflections stay. Needs no ray tracing hardware. Decision 0308.
 		</member>
+		<member name="rendering/fellow/sdfgi/screen_gather_filter" type="bool" setter="" getter="" default="true">
+			The screen probes' light averaged over their neighbours on the same surface (5 x 5 probes, by their distance from its plane and their normals) before the pixels read it; the frames' average keeps the unfiltered light.
+		</member>
 		<member name="rendering/fellow/sdfgi/screen_gather_history" type="int" setter="" getter="" default="16">
 			Frames a screen probe's light is averaged over where its surface stays in view: higher, smoother and slower to follow a change.
 		</member>

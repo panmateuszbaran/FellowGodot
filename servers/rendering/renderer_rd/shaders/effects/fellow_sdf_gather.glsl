@@ -12,6 +12,8 @@
 // "ambient light" the scene shader multiplies by albedo), accumulated over frames where the previous frame's probe at
 // the reprojected point lies on the same surface.
 // MODE_TRACE: one workgroup per probe, one invocation per ray.
+// MODE_FILTER: per probe, the probes of the 5 x 5 tiles around it on its surface (their distance from its plane, their
+// normal) averaged, for the resolve (the history keeps the unfiltered light).
 // MODE_RESOLVE: per pixel of SDFGI's ambient buffer, the probes of the 2 x 2 tiles around it weighed by their distance
 // from its plane and their normal; written in place of SDFGI's diffuse light (its reflections stay).
 
@@ -282,6 +284,52 @@ void main() {
 	imageStore(out_irradiance, probe, vec4(irradiance, samples));
 	imageStore(out_position, probe, vec4(pos, 1.0));
 	imageStore(out_normal, probe, vec4(normal, distance));
+}
+
+#elif defined(MODE_FILTER)
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 13) uniform texture2D probe_irradiance;
+layout(set = 0, binding = 14) uniform texture2D probe_position;
+layout(set = 0, binding = 15) uniform texture2D probe_normal;
+layout(rgba16f, set = 0, binding = 17) uniform restrict writeonly image2D filtered_irradiance;
+
+void main() {
+	ivec2 probe = ivec2(gl_GlobalInvocationID.xy);
+	if (any(greaterThanEqual(probe, params.probes.xy))) {
+		return;
+	}
+	vec4 pp = texelFetch(sampler2D(probe_position, linear_sampler), probe, 0);
+	vec4 center = texelFetch(sampler2D(probe_irradiance, linear_sampler), probe, 0);
+	if (pp.w == 0.0) {
+		imageStore(filtered_irradiance, probe, center);
+		return;
+	}
+	vec4 pn = texelFetch(sampler2D(probe_normal, linear_sampler), probe, 0);
+	float reach = params.footprint.x * pn.w * float(params.probes.z) + 0.02;
+	vec3 sum = vec3(0.0);
+	float wsum = 0.0;
+	for (int y = -2; y <= 2; y++) {
+		for (int x = -2; x <= 2; x++) {
+			ivec2 q = probe + ivec2(x, y);
+			if (any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, params.probes.xy))) {
+				continue;
+			}
+			vec4 qp = texelFetch(sampler2D(probe_position, linear_sampler), q, 0);
+			if (qp.w == 0.0) {
+				continue;
+			}
+			vec3 qn = texelFetch(sampler2D(probe_normal, linear_sampler), q, 0).xyz;
+			float plane = abs(dot(qp.xyz - pp.xyz, pn.xyz)) / reach;
+			float w = max(0.0, dot(qn, pn.xyz) - 0.5) * exp(-plane * plane * 4.0) * exp(-float(x * x + y * y) / 4.5);
+			vec4 qi = texelFetch(sampler2D(probe_irradiance, linear_sampler), q, 0);
+			w *= qi.a; // probes with more frames behind them weigh more
+			sum += qi.rgb * w;
+			wsum += w;
+		}
+	}
+	imageStore(filtered_irradiance, probe, vec4(wsum > 0.0 ? sum / wsum : center.rgb, center.a));
 }
 
 #elif defined(MODE_RESOLVE)
