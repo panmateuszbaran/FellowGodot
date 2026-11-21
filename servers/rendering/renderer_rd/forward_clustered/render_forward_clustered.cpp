@@ -5555,6 +5555,9 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 		// The environment's SDFGI energy as SDFGI's own lookups apply it.
 		params.volume.spacing[3] *= environment_get_sdfgi_energy(p_render_data->environment);
 		volume.spacing[3] = params.volume.spacing[3];
+		// Where the probes do not cover a point, the opaque passes take SDFGI's diffuse light (not the ambient light).
+		params.volume.shading[2] = 1.0f;
+		volume.shading[2] = 1.0f;
 	}
 	if (p_normal_roughness.is_valid()) {
 		// The screen pass: the irradiance per pixel of the depth pre-pass, for the opaque colour passes.
