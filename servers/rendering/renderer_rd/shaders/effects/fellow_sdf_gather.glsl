@@ -162,7 +162,7 @@ sdf_cascades_data;
 
 layout(rgba16f, set = 0, binding = 10) uniform restrict writeonly image2D out_irradiance; // rgb irradiance, a samples
 layout(rgba32f, set = 0, binding = 11) uniform restrict writeonly image2D out_position; // xyz world, w 1: valid
-layout(rgba16f, set = 0, binding = 12) uniform restrict writeonly image2D out_normal; // xyz world normal, w distance from the camera
+layout(rgba16f, set = 0, binding = 12) uniform restrict writeonly image2D out_normal; // xyz world geometric normal, w distance from the camera
 layout(set = 0, binding = 13) uniform texture2D prev_irradiance;
 layout(set = 0, binding = 14) uniform texture2D prev_position;
 layout(set = 0, binding = 15) uniform texture2D prev_normal;
@@ -362,6 +362,9 @@ void main() {
 		return; // the whole workgroup (uniform)
 	}
 
+	// The geometric normal (the shading normal's bumps change from one TAA-jittered frame to the next: the history's
+	// check and the neighbours' weights take this one).
+	vec3 ng = geometric_normal(pixel, normal);
 	vec3 radiance = vec3(0.0);
 	if (int(ray) < rays) {
 		// Stratified (Hammersley) with a random shift per probe and frame, around the shading normal; a direction below
@@ -369,7 +372,6 @@ void main() {
 		// own surface for the distance field).
 		vec2 shift = vec2(float(h & 0xFFFFu), float(hash(h) & 0xFFFFu)) / 65536.0;
 		vec2 u = fract(vec2((float(ray) + 0.5) / float(rays), radical_inverse(ray)) + shift);
-		vec3 ng = geometric_normal(pixel, normal);
 		vec3 dir = cosine_direction(normal, u);
 		float below = dot(dir, ng);
 		if (below < 0.0) {
@@ -405,7 +407,7 @@ void main() {
 				vec4 pn = texelFetch(sampler2D(prev_normal, linear_sampler), prev_probe, 0);
 				float reach = params.footprint.x * distance * float(tile) * 1.5 + 0.02;
 				vec3 delta = pp.xyz - pos;
-				if (pp.w != 0.0 && dot(pn.xyz, normal) > 0.8 && abs(dot(delta, normal)) < reach * 0.5 && length(delta) < reach) {
+				if (pp.w != 0.0 && dot(pn.xyz, ng) > 0.8 && abs(dot(delta, ng)) < reach * 0.5 && length(delta) < reach) {
 					vec4 prev = texelFetch(sampler2D(prev_irradiance, linear_sampler), prev_probe, 0);
 					samples = min(prev.a + 1.0, params.light.z);
 					irradiance = mix(prev.rgb, irradiance, 1.0 / samples);
@@ -415,7 +417,7 @@ void main() {
 	}
 	imageStore(out_irradiance, probe, vec4(irradiance, samples));
 	imageStore(out_position, probe, vec4(pos, 1.0));
-	imageStore(out_normal, probe, vec4(normal, distance));
+	imageStore(out_normal, probe, vec4(ng, distance));
 }
 
 #elif defined(MODE_FILTER)
