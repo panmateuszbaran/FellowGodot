@@ -102,7 +102,7 @@ D = {
     "raytracing/gi_sky_leak": "The share of the ambient light kept where the probes are dark.",
     "raytracing/gi_update_interval": "Frames between a probe's updates (a share of the probes traced per frame).",
     "raytracing/gi_cascades": "2: a coarser volume (4 times the spacing, updated half as often) around the fine one, read where the fine one ends.",
-    "raytracing/gi_screen_gather": "With DDGI's screen pass: the first bounce traced per screen probe (against the ray tracing scene, its hits lit by the sun and by DDGI's probes for the further bounces), in place of the probes' interpolated light; the probes per tile, rays, history and filter of sdfgi/screen_gather_*. Decision 0308.",
+    "raytracing/gi_screen_gather": "With DDGI's screen pass: the first bounce traced per screen probe (against the ray tracing scene, its hits lit by the sun and by DDGI's probes for the further bounces), in place of the probes' interpolated light; the probes per tile, rays, history and filter of sdfgi/screen_gather_*; gi_sky_leak is then not added. Decision 0308.",
     "raytracing/gi_probe_relocation": "Probes moved out of geometry and away from surfaces, within their cell.",
     "sdfgi/trace_max_steps": "A screen gather ray's steps through each of SDFGI's cascades before it goes on in the next, coarser one.",
     "sdfgi/trace_surface_bias": "The screen gather's rays hit a surface this many cells short of the distance SDFGI's field stores (SDFGI's own rays: 1 cell, which thickens every surface by a cell of its cascade; 0.5 puts the hits on the voxels' faces).",

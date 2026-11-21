@@ -107,6 +107,10 @@ func build(p_args: Dictionary) -> void:
 		[24.0, Vector3(-3.0, 2.2, 7.5), Vector3(-9.0, 1.2, 0.0), 60.0],
 		[30.0, Vector3(3.3, 1.7, 2.5), Vector3(-2.5, 1.0, -1.6), 70.0],
 	])
+	temporal_seqs = {
+		"gi_room_pan": {"start": 0.0, "frames": 90, "purpose": "a slow pan across the room: indirect light on surfaces coming into view",
+			"path": CameraPath.from_array([[0.0, Vector3(3.3, 1.7, 2.5), Vector3(-2.5, 1.0, -1.6), 70.0], [1.5, Vector3(3.0, 1.7, 2.2), Vector3(-3.2, 1.3, 1.8), 70.0]])},
+	}
 	info = {"sun": {"elevation_deg": 35.0, "azimuth_deg": 20.0, "energy": sun.light_energy}}
 
 

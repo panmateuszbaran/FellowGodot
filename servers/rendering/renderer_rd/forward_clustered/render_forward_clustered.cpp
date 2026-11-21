@@ -5763,6 +5763,11 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 		}
 	}
 
+	if (p_normal_roughness.is_valid() && Fellow::raytracing_gi_screen_gather()) {
+		// FellowEngine 0308: the screen gather's traced first bounce reaches what the probes miss; the sky leak (light
+		// for interiors the probes leave too dark) would only add to it (against the path tracer: +0.25 → +0.63 stops).
+		volume.shading[0] = 0.0f;
+	}
 	RD::get_singleton()->buffer_update(rbd->fellow_ddgi_ubo, 0, sizeof(RendererRD::FellowDDGI::Volume), &volume);
 	fellow_ddgi_irradiance = params.irradiance;
 	fellow_ddgi_distance = params.distance;
