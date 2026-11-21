@@ -41,6 +41,7 @@ fellow/post/clouds/enabled=true
 fellow/post/light_shafts/intensity=0.6
 fellow/post/contact_shadows/enabled=true
 fellow/post/bloom/enabled=true
+fellow/sdfgi/screen_gather=true
 
 [shader_globals]
 
