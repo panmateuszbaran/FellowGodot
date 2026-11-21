@@ -129,7 +129,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/sdfgi/trace_surface_bias", PROPERTY_HINT_RANGE, "0,2,0.05"), 1.0); // sdfgi/screen_gather: a ray hits a surface this many cells short of the field's distance (SDFGI's own rays: 1)
 	GLOBAL_DEF("rendering/fellow/sdfgi/screen_gather", false); // decision 0308: where the environment enables SDFGI, its diffuse light gathered per screen probe (rays through its distance fields) in place of its world probes'
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_tile", PROPERTY_HINT_RANGE, "4,64,1,suffix:px"), 16); // a screen probe per tile of this many pixels
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_rays", PROPERTY_HINT_RANGE, "8,64,1"), 32); // rays per screen probe and frame
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_rays", PROPERTY_HINT_RANGE, "8,64,1"), 16); // rays per screen probe and frame
 	GLOBAL_DEF("rendering/fellow/sdfgi/screen_gather_filter", true); // the probes' light averaged over their neighbours on the same surface before the pixels read it
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_history", PROPERTY_HINT_RANGE, "1,64,1"), 16); // frames a probe's light is averaged over (where its surface stays in view)
 	GLOBAL_DEF("rendering/fellow/raytracing/gi_screen_gather", false); // decision 0308: with DDGI's screen pass, the first bounce traced per screen probe (sdfgi/screen_gather_* tile, rays, history, filter), DDGI's probes for the further bounces; no sky leak then

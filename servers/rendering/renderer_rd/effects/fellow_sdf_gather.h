@@ -91,7 +91,7 @@ public:
 		int current = 0;
 		Size2i grid;
 		int tile = 16;
-		int rays = 32;
+		int rays = 16;
 		uint32_t frame = 0;
 		bool history = false;
 		float max_samples = 16.0;

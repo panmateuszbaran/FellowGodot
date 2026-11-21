@@ -12,8 +12,7 @@
 #endif
 
 // FellowEngine SDF screen gather (docs/decisions/0308-sdf-screen-gather.md): SDFGI's diffuse light gathered per screen
-// probe instead of interpolated from its world probes. A probe every `tile` pixels (one pixel of its tile, jittered per
-// frame) traces `rays` cosine-distributed rays from its surface through SDFGI's distance field cascades; a hit takes the
+// probe instead of interpolated from its world probes. A probe every `tile` pixels (at its tile's centre) traces `rays` cosine-distributed rays from its surface through SDFGI's distance field cascades; a hit takes the
 // light of the voxel it reaches (SDFGI's direct light from every light, emission and SDFGI's own bounce, by the field's
 // normal), a ray that leaves the last cascade the environment's ambient light. The mean is the irradiance (the
 // "ambient light" the scene shader multiplies by albedo), accumulated over frames where the previous frame's probe at
@@ -317,16 +316,17 @@ void main() {
 	uint ray = gl_LocalInvocationIndex;
 	int tile = params.probes.z;
 	int rays = params.probes.w;
-	// The probe's pixel: one of its tile's, jittered per frame (over frames the tile is covered).
+	// The probe's pixel: its tile's centre, or where the sky is there, the first of the centres of its quarters that is
+	// not. The same pixel every frame: a probe jittered over its tile made the resolve's interpolation shimmer (on
+	// lavapipe 3.7 % of GI Lab's pixels changed by more than 2 levels from frame to frame of a still view, 0.5 % without).
 	uint h = hash(uint(probe.x) * 7919u + hash(uint(probe.y) * 104729u + hash(uint(params.frame.x))));
 	ivec2 base = probe * tile;
-	ivec2 pixel = min(base + ivec2(int(h % uint(tile)), int((h >> 8) % uint(tile))), params.screen.xy - 1);
+	ivec2 pixel = min(base + tile / 2, params.screen.xy - 1);
 	vec3 pos, normal;
 	float distance;
 	bool valid = surface_at(pixel, pos, normal, distance);
-	if (!valid) {
-		// The tile's centre, if the jittered pixel saw the sky.
-		pixel = min(base + tile / 2, params.screen.xy - 1);
+	for (int q = 0; q < 4 && !valid; q++) {
+		pixel = min(base + ivec2((q & 1) * 2 + 1, (q >> 1) * 2 + 1) * tile / 4, params.screen.xy - 1);
 		valid = surface_at(pixel, pos, normal, distance);
 	}
 	if (!valid) {
