@@ -331,7 +331,7 @@ vec3 trace(vec3 p_origin, vec3 p_dir) {
 
 // Where the rays start: off the surface, by its distance from the camera (as DDGI's reference).
 vec3 ray_origin(vec3 p_pos, vec3 p_normal, vec3 p_dir, float p_distance) {
-	return p_pos + p_normal * (0.02 + 0.004 * p_distance);
+	return p_pos + p_normal * (0.003 + 0.0015 * p_distance);
 }
 #endif
 
