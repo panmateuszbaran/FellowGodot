@@ -5413,6 +5413,99 @@ void RenderForwardClustered::_fellow_rt_lighting(const RenderDataRD *p_render_da
 	r_lighting.radiance_level = float(MAX(0, sky.roughness_layers - 1));
 }
 
+// FellowEngine SDF screen gather (docs/decisions/0308-sdf-screen-gather.md).
+void RenderForwardClustered::_fellow_sdf_screen_gather(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness) {
+	RENDER_TIMESTAMP("FellowEngine SDF Screen Gather");
+	const Ref<RenderSceneBuffersRD> &rb = p_render_buffers;
+	RenderBufferDataForwardClustered *rbd = const_cast<RenderBufferDataForwardClustered *>(p_rb_data.ptr());
+	if (!rb->has_texture(RB_SCOPE_GI, RB_TEX_AMBIENT)) {
+		return;
+	}
+	Ref<RendererRD::GI::SDFGI> sdfgi = rb->get_custom_data(RB_SCOPE_SDFGI);
+	if (sdfgi.is_null() || sdfgi->cascades.is_empty()) {
+		return;
+	}
+	const int tile = CLAMP(Fellow::sdfgi_screen_gather_tile(), 4, 64);
+	const Size2i size = rb->get_internal_size();
+	const Size2i grid((size.x + tile - 1) / tile, (size.y + tile - 1) / tile);
+	const StringName scope = SNAME("fellow_sdf_gather");
+	static const StringName names[3][2] = { { SNAME("irradiance0"), SNAME("irradiance1") }, { SNAME("position0"), SNAME("position1") }, { SNAME("normal0"), SNAME("normal1") } };
+	if (rbd->fellow_sdf_gather_grid != grid || !rb->has_texture(scope, names[0][0])) {
+		rb->clear_context(scope);
+		const uint32_t usage = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
+		for (int i = 0; i < 2; i++) {
+			rb->create_texture(scope, names[0][i], RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, grid);
+			rb->create_texture(scope, names[1][i], RD::DATA_FORMAT_R32G32B32A32_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, grid);
+			rb->create_texture(scope, names[2][i], RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, grid);
+		}
+		rbd->fellow_sdf_gather_grid = grid;
+		rbd->fellow_sdf_gather_history = false;
+	}
+	if (!fellow_sdf_gather) {
+		fellow_sdf_gather = memnew(RendererRD::FellowSDFGather);
+	}
+	RendererRD::FellowSDFGather::Params params;
+	params.cascade_count = MIN(int(sdfgi->cascades.size()), int(RendererRD::FellowSDFGather::MAX_CASCADES));
+	for (int i = 0; i < params.cascade_count; i++) {
+		params.sdf_distance[i] = sdfgi->cascades[i].sdf_tex;
+		params.sdf_light[i] = sdfgi->cascades[i].light_tex;
+		params.sdf_aniso0[i] = sdfgi->cascades[i].light_aniso_0_tex;
+		params.sdf_aniso1[i] = sdfgi->cascades[i].light_aniso_1_tex;
+	}
+	params.sdf_cascades_ubo = sdfgi->cascades_ubo;
+	params.cascade_size = float(sdfgi->cascade_size);
+	params.y_mult = sdfgi->y_mult;
+	params.max_steps = Fellow::sdfgi_trace_max_steps();
+	// SDFGI's voxel light is the scene shader's diffuse light for the stock light units, pi times it with physical light
+	// units (as for DDGI's probes traced through it).
+	params.light_scale = is_using_physical_light_units() ? float(1.0 / Math::PI) : 1.0f;
+	params.energy = environment_get_sdfgi_energy(p_render_data->environment);
+	params.normal_bias = environment_get_sdfgi_normal_bias(p_render_data->environment);
+	FellowRTLighting lighting;
+	_fellow_rt_lighting(p_render_data, rb, p_radiance_texture, lighting);
+	params.radiance = lighting.radiance;
+	params.radiance_array = lighting.radiance_array;
+	params.radiance_border[0] = lighting.radiance_border[0];
+	params.radiance_border[1] = lighting.radiance_border[1];
+	params.radiance_level = lighting.radiance_level;
+	params.ambient_color = lighting.ambient_color;
+	params.use_ambient = lighting.use_ambient;
+	params.use_sky = lighting.use_sky;
+	params.sky_factor = lighting.sky_factor;
+	params.sky_xform = lighting.sky_xform;
+	params.depth = rb->get_depth_texture();
+	params.normal_roughness = p_normal_roughness;
+	params.internal_size = size;
+	Projection correction;
+	correction.set_depth_correction(true, true, false);
+	const Projection projection = correction * _fellow_jittered_projection(p_render_data);
+	params.inv_projection = projection.inverse();
+	params.view_to_world = p_render_data->scene_data->cam_transform;
+	const Projection world_to_clip = projection * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
+	params.prev_world_to_clip = rbd->fellow_sdf_gather_history ? rbd->fellow_sdf_gather_prev_world_to_clip : world_to_clip;
+	// A pixel's size 1 m from the camera (the vertical field of view over the internal height).
+	params.pixel_footprint = 2.0f / MAX(1.0f, Math::abs(float(p_render_data->scene_data->cam_projection.columns[1][1]))) / float(MAX(1, size.y));
+	params.ambient = rb->get_texture(RB_SCOPE_GI, RB_TEX_AMBIENT);
+	const RD::TextureFormat ambient_format = rb->get_texture_format(RB_SCOPE_GI, RB_TEX_AMBIENT); // half the size with gi/use_half_resolution
+	params.ambient_size = Size2i(ambient_format.width, ambient_format.height);
+	for (int i = 0; i < 2; i++) {
+		params.irradiance[i] = rb->get_texture(scope, names[0][i]);
+		params.position[i] = rb->get_texture(scope, names[1][i]);
+		params.normal[i] = rb->get_texture(scope, names[2][i]);
+	}
+	params.current = int(rbd->fellow_sdf_gather_frame & 1);
+	params.grid = grid;
+	params.tile = tile;
+	params.rays = CLAMP(Fellow::sdfgi_screen_gather_rays(), 1, 64);
+	params.frame = rbd->fellow_sdf_gather_frame;
+	params.history = rbd->fellow_sdf_gather_history;
+	params.max_samples = float(MAX(1, Fellow::sdfgi_screen_gather_history()));
+	fellow_sdf_gather->process(params);
+	rbd->fellow_sdf_gather_prev_world_to_clip = world_to_clip;
+	rbd->fellow_sdf_gather_history = true;
+	rbd->fellow_sdf_gather_frame++;
+}
+
 // FellowEngine DDGI (docs/decisions/0083-ddgi.md): the probe volume around the camera, traced and blended.
 void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness, bool p_sdf) {
 	RENDER_TIMESTAMP("FellowEngine DDGI");
@@ -5551,7 +5644,7 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 		params.sdf_cascades_ubo = sdfgi->cascades_ubo;
 		params.sdf_cascade_size = float(sdfgi->cascade_size);
 		params.sdf_y_mult = sdfgi->y_mult;
-		params.sdf_max_steps = Fellow::sdfgi_ddgi_max_steps();
+		params.sdf_max_steps = Fellow::sdfgi_trace_max_steps();
 		params.sdf_light_scale = is_using_physical_light_units() ? float(1.0 / Math::PI) : 1.0f;
 		// The environment's SDFGI energy as SDFGI's own lookups apply it.
 		params.volume.spacing[3] *= environment_get_sdfgi_energy(p_render_data->environment);
@@ -7062,6 +7155,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	fellow_rt_reflection_texture = RID();
 	fellow_rt_reflections_on = using_ssr && fellow_rt_tlas.is_valid() && fellow_rt_instance_buffer.is_valid() && Fellow::raytracing_reflections() && rb_data.is_valid() && rb_data->has_normal_roughness();
 	_pre_opaque_render(p_render_data, using_ssao, using_ssil, using_ssr && !fellow_rt_reflections_on, using_sdfgi || using_voxelgi, normal_roughness_views, rb_data.is_valid() && rb_data->has_voxelgi() ? rb_data->get_voxelgi() : RID());
+	// FellowEngine SDF screen gather (decision 0308): SDFGI's diffuse light, just gathered, replaced by its screen probes'.
+	if (using_sdfgi && Fellow::sdfgi_screen_gather() && rb_data.is_valid() && !is_reflection_probe && rb->get_view_count() == 1 && rb->has_custom_data(RB_SCOPE_SDFGI) && normal_roughness_views[0].is_valid()) {
+		_fellow_sdf_screen_gather(p_render_data, rb, rb_data, radiance_texture, normal_roughness_views[0]);
+	}
 	if (fellow_rt_reflections_on) {
 		fellow_rt_reflection_texture = _fellow_process_rt_reflections(p_render_data, rb, rb_data, normal_roughness_views[0], radiance_texture);
 	}
@@ -11473,6 +11570,10 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (fellow_ddgi) {
 		memdelete(fellow_ddgi);
 		fellow_ddgi = nullptr;
+	}
+	if (fellow_sdf_gather) {
+		memdelete(fellow_sdf_gather);
+		fellow_sdf_gather = nullptr;
 	}
 	if (fellow_rt_reflections) {
 		memdelete(fellow_rt_reflections);

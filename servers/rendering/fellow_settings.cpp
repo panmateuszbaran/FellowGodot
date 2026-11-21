@@ -126,7 +126,11 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/gi_cascades", PROPERTY_HINT_RANGE, "1,2,1"), 2); // 2: a coarser volume (4 x the spacing, half the update rate) around the fine one, read where it ends
 	GLOBAL_DEF("rendering/fellow/raytracing/gi_probe_relocation", true); // probes moved out of geometry and away from surfaces (within their cell)
 	GLOBAL_DEF("rendering/fellow/sdfgi/ddgi_probes", false); // decision 0308: where the environment enables SDFGI and no ray-traced DDGI runs, DDGI's probes (raytracing/gi_* settings) traced through SDFGI's distance fields, read in place of SDFGI's diffuse light
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/ddgi_max_steps", PROPERTY_HINT_RANGE, "8,256,1"), 64); // a ray's steps through each cascade
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/trace_max_steps", PROPERTY_HINT_RANGE, "8,256,1"), 64); // sdfgi/ddgi_probes and sdfgi/screen_gather: a ray's steps through each cascade
+	GLOBAL_DEF("rendering/fellow/sdfgi/screen_gather", false); // decision 0308: where the environment enables SDFGI, its diffuse light gathered per screen probe (rays through its distance fields) in place of its world probes'
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_tile", PROPERTY_HINT_RANGE, "4,64,1,suffix:px"), 16); // a screen probe per tile of this many pixels
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_rays", PROPERTY_HINT_RANGE, "8,64,1"), 32); // rays per screen probe and frame
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_history", PROPERTY_HINT_RANGE, "1,64,1"), 16); // frames a probe's light is averaged over (where its surface stays in view)
 	GLOBAL_DEF("rendering/fellow/raytracing/reflections", false); // decision 0084: traced reflections in place of SSR
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/reflections_max_roughness", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.7); // SSR's range (it fades out from 0.6 to 0.7)
 	GLOBAL_DEF("rendering/fellow/raytracing/reflections_interleaved", true); // surfaces rougher than 0.3 traced a quarter of the pixels per frame

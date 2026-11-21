@@ -600,8 +600,23 @@ inline bool raytracing_gi_probe_relocation() {
 inline bool sdfgi_ddgi() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/sdfgi/ddgi_probes");
 }
-inline int sdfgi_ddgi_max_steps() {
-	return GLOBAL_GET_CACHED(int, "rendering/fellow/sdfgi/ddgi_max_steps");
+inline int sdfgi_trace_max_steps() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/sdfgi/trace_max_steps");
+}
+// sdfgi/screen_gather (decision 0308): where the environment enables SDFGI, a probe every screen_gather_tile pixels
+// traces screen_gather_rays rays from its surface through SDFGI's distance field cascades; the probes' light, averaged
+// over frames, replaces SDFGI's diffuse light (its reflections stay).
+inline bool sdfgi_screen_gather() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/sdfgi/screen_gather");
+}
+inline int sdfgi_screen_gather_tile() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/sdfgi/screen_gather_tile");
+}
+inline int sdfgi_screen_gather_rays() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/sdfgi/screen_gather_rays");
+}
+inline int sdfgi_screen_gather_history() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/sdfgi/screen_gather_history");
 }
 // raytracing/reflections (decision 0084): where the environment enables SSR, a traced reflection per pixel up to
 // reflections_max_roughness in place of SSR (and of the probes' and the sky's specular light there).

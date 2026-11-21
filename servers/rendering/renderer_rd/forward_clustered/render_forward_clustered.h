@@ -37,6 +37,7 @@
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fellow_shadow_cache.h"
 #include "servers/rendering/renderer_rd/effects/fellow_ddgi.h"
+#include "servers/rendering/renderer_rd/effects/fellow_sdf_gather.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rt_albedo.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rt_reflections.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rt_shadow.h"
@@ -142,6 +143,12 @@ public:
 		Projection fellow_ddgi_reference_projection;
 		Transform3D fellow_ddgi_reference_transform;
 		int fellow_ddgi_reference_bounces = 0;
+		// The SDF screen gather (decision 0308): its probes' grid, the previous frame's world-to-clip (the history's
+		// reprojection), whether the previous frame's probes hold data (textures in the "fellow_sdf_gather" scope).
+		Size2i fellow_sdf_gather_grid;
+		Projection fellow_sdf_gather_prev_world_to_clip;
+		bool fellow_sdf_gather_history = false;
+		uint32_t fellow_sdf_gather_frame = 0;
 		// Ray-traced reflections (decision 0084).
 		uint32_t fellow_rt_reflection_frame = 0;
 		bool fellow_rt_reflection_history = false;
@@ -1522,6 +1529,7 @@ private:
 	bool _fellow_begin_gas(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, RID p_radiance_texture);
 	void _fellow_gas_shadow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers);
 	RendererRD::FellowDDGI *fellow_ddgi = nullptr;
+	RendererRD::FellowSDFGather *fellow_sdf_gather = nullptr; // decision 0308
 	RendererRD::FellowRTReflections *fellow_rt_reflections = nullptr;
 	RID fellow_weather_default_ubo; // decision 0124: bound while no FellowRain3D is active
 	RendererRD::FellowRTAlbedo *fellow_rt_albedo = nullptr;
@@ -1589,6 +1597,7 @@ private:
 	static Projection _fellow_jittered_projection(const RenderDataRD *p_render_data);
 	RID _fellow_first_directional_light(const RenderDataRD *p_render_data);
 	void _fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness, bool p_sdf = false);
+	void _fellow_sdf_screen_gather(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness);
 	RID fellow_rt_shadow_mask; // this render's traced sun shadow (RID(): the shadow map), read by the opaque colour passes
 	RID fellow_rt_tlas; // the frame's ray tracing scene (RID() when no ray-traced effect runs)
 	LocalVector<RD::AccelerationStructureInstance> fellow_rt_build;
