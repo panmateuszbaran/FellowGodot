@@ -81,6 +81,30 @@ bool surface_at(ivec2 p_pixel, out vec3 r_pos, out vec3 r_normal, out float r_di
 	return true;
 }
 
+// The surface's geometric normal at an internal pixel (world), from the depth buffer's neighbours (as DDGI's path-traced
+// reference): the shading normal can lean under the surface (normal maps), and rays sent below it hit the surface itself.
+vec3 geometric_normal(ivec2 p_pixel, vec3 p_fallback) {
+	float depth = texelFetch(depth_buffer, p_pixel, 0).r;
+	vec3 vp = view_position(p_pixel, depth);
+	ivec2 lo = max(p_pixel - 1, ivec2(0));
+	ivec2 hi = min(p_pixel + 1, params.screen.xy - 1);
+	vec3 pl = view_position(ivec2(lo.x, p_pixel.y), texelFetch(depth_buffer, ivec2(lo.x, p_pixel.y), 0).r);
+	vec3 pr = view_position(ivec2(hi.x, p_pixel.y), texelFetch(depth_buffer, ivec2(hi.x, p_pixel.y), 0).r);
+	vec3 pd = view_position(ivec2(p_pixel.x, lo.y), texelFetch(depth_buffer, ivec2(p_pixel.x, lo.y), 0).r);
+	vec3 pu = view_position(ivec2(p_pixel.x, hi.y), texelFetch(depth_buffer, ivec2(p_pixel.x, hi.y), 0).r);
+	vec3 dx = abs(pr.z - vp.z) < abs(vp.z - pl.z) ? pr - vp : vp - pl;
+	vec3 dy = abs(pu.z - vp.z) < abs(vp.z - pd.z) ? pu - vp : vp - pd;
+	vec3 gvn = cross(dy, dx);
+	if (dot(gvn, gvn) <= 1e-12) {
+		return p_fallback;
+	}
+	gvn = normalize(gvn);
+	if (dot(gvn, vp) > 0.0) {
+		gvn = -gvn;
+	}
+	return normalize(mat3(params.view_to_world) * gvn);
+}
+
 #if defined(MODE_TRACE)
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
@@ -340,12 +364,18 @@ void main() {
 
 	vec3 radiance = vec3(0.0);
 	if (int(ray) < rays) {
-		// Stratified (Hammersley) with a random shift per probe and frame; the origin lifted along the normal off the
-		// voxels of its own surface.
+		// Stratified (Hammersley) with a random shift per probe and frame, around the shading normal; a direction below
+		// the geometric surface mirrored above it, the origin lifted along the geometric normal (off the voxels of its
+		// own surface for the distance field).
 		vec2 shift = vec2(float(h & 0xFFFFu), float(hash(h) & 0xFFFFu)) / 65536.0;
 		vec2 u = fract(vec2((float(ray) + 0.5) / float(rays), radical_inverse(ray)) + shift);
+		vec3 ng = geometric_normal(pixel, normal);
 		vec3 dir = cosine_direction(normal, u);
-		radiance = trace(ray_origin(pos, normal, dir, distance), dir);
+		float below = dot(dir, ng);
+		if (below < 0.0) {
+			dir = normalize(dir - 2.0 * below * ng);
+		}
+		radiance = trace(ray_origin(pos, ng, dir, distance), dir);
 		if (any(isnan(radiance)) || any(isinf(radiance))) {
 			radiance = vec3(0.0);
 		}
