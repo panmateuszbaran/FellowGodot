@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 170 — characters push rigid bodies and weigh on them (2026-11-22)
+
+- Decision 0312: `CharacterBody3D.rigid_push_force` and `rigid_standing_mass` (0 by default: stock bit for bit). A
+  kinematic character stopped at a crate or ball as at a wall and stood on a seesaw weighing nothing. With a push force,
+  each rigid body a slide was stopped by gets the impulse that brings it to the velocity asked for — along the ground,
+  at its centre of mass's height, its mass and inertia at that point — at most the force; with a standing mass, the
+  rigid body stood on gets the character's weight.
+  - The push course (new, `run_course.py --course push`, both engines; 500 N, 80 kg): 5 and 20 kg crates pushed at
+    walking pace (1.47-1.50 m/s), 80 kg at 0.47-0.50 m/s against its 470 N of friction, 300 kg not at all, none
+    tipped; a ball run into kicked ahead at 4.9-5.0 m/s (stock: stepped over, or shot to 8.9 m/s); a seesaw walked
+    over tips ±12-14° (stock: level).
+  - A step up (decision 0311) never lands on a rigid body while pushing: it is pushed instead.
+
 ## Milestone 169 — characters up and down steps (2026-11-22)
 
 - Decision 0311: `CharacterBody3D.floor_step_height` (0 by default: stock bit for bit). Stock's capsule climbs only

@@ -849,6 +849,16 @@ body is on the floor and not moving up, `move_and_slide()`:
 Typical: 0.3-0.4 m for a person-sized capsule; the editor's mantling character preset sets 0.35 m. The character
 course (`benchmarks/tools/character_course/run_course.py`) measures it on both physics engines.
 
+## Characters push rigid bodies and weigh on them (milestone 170)
+
+`CharacterBody3D.rigid_push_force` (N) and `rigid_standing_mass` (kg), 0 by default (stock's behaviour bit for bit;
+decision 0312). With a push force, after `move_and_slide()` each rigid body a slide was stopped by gets the impulse
+that brings it to the velocity the body asked for — along the ground, at its centre of mass's height (crates slide
+rather than tip), its mass and inertia at that point taken into account — at most the force for the tick: light crates
+move at the character's pace, heavy ones slowly or not at all against their friction; a step up never lands on a rigid
+body then, it is pushed. With a standing mass, the rigid body stood on gets that weight at the floor's contact (seesaws,
+boats, planks). Typical: 300-600 N, the character's mass. `run_course.py --course push` measures it.
+
 ## Traversal: mantling and vaulting (milestone 72)
 
 Module `fellow_animation`; nothing changes without the nodes (decision 0180). `FellowTraversal3D`, a child of the

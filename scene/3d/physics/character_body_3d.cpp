@@ -54,6 +54,7 @@ bool CharacterBody3D::move_and_slide() {
 
 	Transform3D gt = get_global_transform();
 	previous_position = gt.origin;
+	const Vector3 fellow_wanted = velocity; // FellowEngine (decision 0312): the velocity asked for, before the slides
 
 	Vector3 current_platform_velocity = platform_velocity;
 
@@ -123,6 +124,11 @@ bool CharacterBody3D::move_and_slide() {
 		_move_and_slide_grounded(delta, was_on_floor);
 	} else {
 		_move_and_slide_floating(delta);
+	}
+
+	// FellowEngine (decision 0312): the rigid bodies the moves were stopped by pushed, the one stood on weighed down.
+	if (rigid_push_force > 0.0 || rigid_standing_mass > 0.0) {
+		_fellow_push_rigid_bodies(delta, fellow_wanted);
 	}
 
 	// Compute real velocity.
@@ -577,6 +583,8 @@ void CharacterBody3D::_set_collision_direction(const PhysicsServer3D::MotionResu
 					_set_platform_data(collision);
 					fellow_floor_height = collision.position.dot(up_direction); // FellowEngine (decision 0311)
 					fellow_floor_valid = true;
+					fellow_floor_point = collision.position;
+					fellow_floor_body = collision.collider;
 				}
 				continue;
 			}
@@ -677,6 +685,9 @@ real_t CharacterBody3D::_fellow_snap_length() const {
 bool CharacterBody3D::_fellow_edge_is_floor(const PhysicsServer3D::MotionCollision &p_collision) const {
 	if (p_collision.normal.dot(up_direction) <= 0.01 || !is_inside_tree()) {
 		return false; // not under the body
+	}
+	if (rigid_push_force > 0.0 && _fellow_is_rigid(p_collision.collider)) {
+		return false; // a rigid body's edge is pushed, not stood on (decision 0312)
 	}
 	if (fellow_floor_valid && p_collision.position.dot(up_direction) - fellow_floor_height > floor_step_height + margin) {
 		return false; // higher above the floor the body is on than a step
@@ -783,6 +794,9 @@ bool CharacterBody3D::_fellow_step_up(const Vector3 &p_along, Vector3 &r_motion_
 	}
 	real_t top = -INFINITY;
 	for (int i = 0; i < down.collision_count; i++) {
+		if (rigid_push_force > 0.0 && _fellow_is_rigid(down.collisions[i].collider)) {
+			return false; // a rigid body in the way is pushed, not stepped onto (decision 0312)
+		}
 		if (_fellow_is_floor(down.collisions[i])) {
 			top = MAX(top, down.collisions[i].position.dot(up_direction));
 		}
@@ -802,6 +816,115 @@ bool CharacterBody3D::_fellow_step_up(const Vector3 &p_along, Vector3 &r_motion_
 	fellow_step_failed_at = Vector3(Math::INF, Math::INF, Math::INF);
 	r_motion_left = forward.remainder.slide(up_direction);
 	return true;
+}
+
+// FellowEngine (decision 0312): rigid bodies pushed and stood on.
+
+bool CharacterBody3D::_fellow_is_rigid(RID p_body) const {
+	if (!p_body.is_valid()) {
+		return false;
+	}
+	const PhysicsServer3D::BodyMode mode = PhysicsServer3D::get_singleton()->body_get_mode(p_body);
+	return mode == PhysicsServer3D::BODY_MODE_RIGID || mode == PhysicsServer3D::BODY_MODE_RIGID_LINEAR;
+}
+
+// After the move: each rigid body a slide was stopped by (a contact steeper than floor, the velocity asked for going
+// into it) gets the impulse that brings the contact point, at its centre of mass's height, to that velocity along the
+// contact's normal (its mass and inertia at that point taken into account), at most rigid_push_force for the tick; the
+// strongest of its contacts. The rigid body stood on gets the body's weight (rigid_standing_mass under its gravity) at
+// the floor's contact.
+void CharacterBody3D::_fellow_push_rigid_bodies(double p_delta, const Vector3 &p_wanted) {
+	PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+	if (rigid_push_force > 0.0) {
+		struct Push {
+			RID body;
+			Vector3 impulse;
+			Vector3 at;
+		};
+		LocalVector<Push> pushes;
+		const real_t most = rigid_push_force * p_delta;
+		for (const PhysicsServer3D::MotionResult &result : motion_results) {
+			for (int i = 0; i < result.collision_count; i++) {
+				const PhysicsServer3D::MotionCollision &c = result.collisions[i];
+				if (c.get_angle(up_direction) <= floor_max_angle + FLOOR_ANGLE_THRESHOLD || !_fellow_is_rigid(c.collider)) {
+					continue;
+				}
+				// Along the ground: a push down into a light body pressed it into the floor under it (on GodotPhysics3D a ball
+				// shot back off it at 28 m/s).
+				Vector3 into = -c.normal.slide(up_direction);
+				if (into.length_squared() < CMP_EPSILON2) {
+					continue;
+				}
+				into.normalize();
+				const real_t wanted = p_wanted.dot(into);
+				if (wanted <= 0.0) {
+					continue;
+				}
+				PhysicsDirectBodyState3D *bs = ps->body_get_direct_state(c.collider);
+				if (bs == nullptr) {
+					continue;
+				}
+				// At the contact, lowered or raised to the centre of mass's height: a crate slides rather than tips over
+				// (where along the body's height a capsule touches it says little of where a person would push it).
+				Vector3 at = c.position - bs->get_transform().origin;
+				at -= up_direction * (at - bs->get_center_of_mass()).dot(up_direction);
+				const real_t has = bs->get_velocity_at_local_position(at).dot(into);
+				if (has >= wanted) {
+					continue;
+				}
+				// The mass the push meets at that point: 1 / (1 / m + (r x n) . I^-1 (r x n)), r from the centre of mass.
+				const Vector3 r = at - bs->get_center_of_mass();
+				const Vector3 rn = r.cross(into);
+				const real_t inverse = bs->get_inverse_mass() + rn.dot(bs->get_inverse_inertia_tensor().xform(rn));
+				if (inverse <= CMP_EPSILON) {
+					continue;
+				}
+				const real_t amount = MIN((wanted - has) / inverse, most);
+				bool found = false;
+				for (Push &p : pushes) {
+					if (p.body == c.collider) {
+						found = true;
+						if (amount > p.impulse.length()) {
+							p.impulse = into * amount;
+							p.at = at;
+						}
+						break;
+					}
+				}
+				if (!found) {
+					pushes.push_back({ c.collider, into * amount, at });
+				}
+			}
+		}
+		for (const Push &p : pushes) {
+			ps->body_apply_impulse(p.body, p.impulse, p.at);
+		}
+	}
+	// The floor's own body (the platform may be a wall's: a ball pushed beside the floor took the weight and flew off).
+	if (rigid_standing_mass > 0.0 && collision_state.floor && _fellow_is_rigid(fellow_floor_body)) {
+		PhysicsDirectBodyState3D *bs = ps->body_get_direct_state(fellow_floor_body);
+		if (bs != nullptr) {
+			ps->body_apply_impulse(fellow_floor_body, get_gravity() * (rigid_standing_mass * p_delta), fellow_floor_point - bs->get_transform().origin);
+		}
+	}
+}
+
+real_t CharacterBody3D::get_rigid_push_force() const {
+	return rigid_push_force;
+}
+
+void CharacterBody3D::set_rigid_push_force(real_t p_force) {
+	ERR_FAIL_COND(p_force < 0);
+	rigid_push_force = p_force;
+}
+
+real_t CharacterBody3D::get_rigid_standing_mass() const {
+	return rigid_standing_mass;
+}
+
+void CharacterBody3D::set_rigid_standing_mass(real_t p_mass) {
+	ERR_FAIL_COND(p_mass < 0);
+	rigid_standing_mass = p_mass;
 }
 
 real_t CharacterBody3D::get_floor_step_height() const {
@@ -1079,6 +1202,10 @@ void CharacterBody3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_floor_step_height"), &CharacterBody3D::get_floor_step_height); // FellowEngine (decision 0311)
 	ClassDB::bind_method(D_METHOD("set_floor_step_height", "height"), &CharacterBody3D::set_floor_step_height);
 	ClassDB::bind_method(D_METHOD("get_last_step"), &CharacterBody3D::get_last_step);
+	ClassDB::bind_method(D_METHOD("get_rigid_push_force"), &CharacterBody3D::get_rigid_push_force); // FellowEngine (decision 0312)
+	ClassDB::bind_method(D_METHOD("set_rigid_push_force", "force"), &CharacterBody3D::set_rigid_push_force);
+	ClassDB::bind_method(D_METHOD("get_rigid_standing_mass"), &CharacterBody3D::get_rigid_standing_mass);
+	ClassDB::bind_method(D_METHOD("set_rigid_standing_mass", "mass"), &CharacterBody3D::set_rigid_standing_mass);
 	ClassDB::bind_method(D_METHOD("get_wall_min_slide_angle"), &CharacterBody3D::get_wall_min_slide_angle);
 	ClassDB::bind_method(D_METHOD("set_wall_min_slide_angle", "radians"), &CharacterBody3D::set_wall_min_slide_angle);
 	ClassDB::bind_method(D_METHOD("get_up_direction"), &CharacterBody3D::get_up_direction);
@@ -1121,6 +1248,9 @@ void CharacterBody3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "floor_snap_length", PROPERTY_HINT_RANGE, "0,1,0.01,or_greater,suffix:m"), "set_floor_snap_length", "get_floor_snap_length");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "floor_step_height", PROPERTY_HINT_RANGE, "0,1,0.01,or_greater,suffix:m"), "set_floor_step_height", "get_floor_step_height"); // FellowEngine (decision 0311)
 
+	ADD_GROUP("Rigid Bodies", "rigid_"); // FellowEngine (decision 0312)
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rigid_push_force", PROPERTY_HINT_RANGE, "0,2000,1,or_greater,suffix:N"), "set_rigid_push_force", "get_rigid_push_force");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rigid_standing_mass", PROPERTY_HINT_RANGE, "0,500,0.1,or_greater,suffix:kg"), "set_rigid_standing_mass", "get_rigid_standing_mass");
 	ADD_GROUP("Moving Platform", "platform_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "platform_on_leave", PROPERTY_HINT_ENUM, "Add Velocity,Add Upward Velocity,Do Nothing", PROPERTY_USAGE_DEFAULT), "set_platform_on_leave", "get_platform_on_leave");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "platform_floor_layers", PROPERTY_HINT_LAYERS_3D_PHYSICS), "set_platform_floor_layers", "get_platform_floor_layers");

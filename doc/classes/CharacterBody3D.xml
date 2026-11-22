@@ -187,6 +187,12 @@
 		<member name="platform_wall_layers" type="int" setter="set_platform_wall_layers" getter="get_platform_wall_layers" default="0">
 			Collision layers that will be included for detecting wall bodies that will act as moving platforms to be followed by the [CharacterBody3D]. By default, all wall bodies are ignored.
 		</member>
+		<member name="rigid_push_force" type="float" setter="set_rigid_push_force" getter="get_rigid_push_force" default="0.0">
+			The most force, in newtons, with which the body pushes the rigid bodies ([constant PhysicsServer3D.BODY_MODE_RIGID] or [constant PhysicsServer3D.BODY_MODE_RIGID_LINEAR]) that [method move_and_slide] is stopped by (FellowEngine). [code]0.0[/code] (the default): none, as in stock Godot, where a character stops against a crate or a ball as against a wall. Above [code]0.0[/code], after the move each such body gets the impulse that brings it to the velocity the body asked for (into it, along the ground, at its centre of mass's height: a crate slides rather than tips over), its mass and inertia at that point taken into account, at most this force for the physics tick: a light crate moves along at the body's speed, a heavy one slowly or not at all against its friction. A step up ([member floor_step_height]) then never lands on a rigid body, nor does an edge of one count as floor: they are pushed instead. About [code]300.0[/code] to [code]600.0[/code] for a person.
+		</member>
+		<member name="rigid_standing_mass" type="float" setter="set_rigid_standing_mass" getter="get_rigid_standing_mass" default="0.0">
+			The body's mass, in kilograms, as it weighs on a rigid body it stands on (FellowEngine): each [method move_and_slide] on the floor of a rigid body ([constant PhysicsServer3D.BODY_MODE_RIGID] or [constant PhysicsServer3D.BODY_MODE_RIGID_LINEAR]) gives it the impulse of this mass under the body's gravity ([method PhysicsBody3D.get_gravity]) at the floor's contact: a seesaw or a boat tips under the character. [code]0.0[/code] (the default): none, as in stock Godot.
+		</member>
 		<member name="safe_margin" type="float" setter="set_safe_margin" getter="get_safe_margin" default="0.001">
 			Extra margin used for collision recovery when calling [method move_and_slide].
 			If the body is at least this close to another body, it will consider them to be colliding and will be pushed away before performing the actual motion.

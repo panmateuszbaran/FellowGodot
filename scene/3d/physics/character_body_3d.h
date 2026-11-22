@@ -101,6 +101,12 @@ public:
 	void set_floor_step_height(real_t p_height);
 	real_t get_last_step() const;
 
+	// FellowEngine (decision 0312): rigid bodies pushed and stood on.
+	real_t get_rigid_push_force() const;
+	void set_rigid_push_force(real_t p_force);
+	real_t get_rigid_standing_mass() const;
+	void set_rigid_standing_mass(real_t p_mass);
+
 	real_t get_wall_min_slide_angle() const;
 	void set_wall_min_slide_angle(real_t p_radians);
 
@@ -156,6 +162,10 @@ private:
 	real_t fellow_last_step = 0.0; // the height the last move_and_slide() stepped up (+) or down (-)
 	real_t fellow_floor_height = 0.0; // the floor's contact along up_direction, while on it (fellow_floor_valid)
 	bool fellow_floor_valid = false;
+	Vector3 fellow_floor_point; // the floor's contact and its body, while on it
+	RID fellow_floor_body;
+	real_t rigid_push_force = 0.0; // FellowEngine (decision 0312): 0, stock's behaviour
+	real_t rigid_standing_mass = 0.0;
 	Vector3 fellow_step_failed_at = Vector3(Math::INF, Math::INF, Math::INF); // where and which way the last step up failed:
 	Vector3 fellow_step_failed_dir; // not tried there that way again, no further (a longer move may land on the step)
 	real_t fellow_step_failed_length = 0.0;
@@ -193,6 +203,8 @@ private:
 	bool _fellow_is_floor(const PhysicsServer3D::MotionCollision &p_collision) const;
 	bool _fellow_step_ahead(const PhysicsServer3D::MotionResult &p_result, const Vector3 &p_along) const;
 	bool _fellow_step_up(const Vector3 &p_along, Vector3 &r_motion_left);
+	bool _fellow_is_rigid(RID p_body) const;
+	void _fellow_push_rigid_bodies(double p_delta, const Vector3 &p_wanted);
 
 protected:
 	void _notification(int p_what);
