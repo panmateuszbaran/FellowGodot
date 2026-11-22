@@ -36,7 +36,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	vec4 shape; // shape scale (1 / km), detail scale (1 / km), wind x, wind z (km / s)
 	vec4 misc; // max distance (km), fade distance (km), history blend, frame
 	ivec4 sizes; // trace w, h; screen w, h
-	ivec4 flags; // x: 1 the atmosphere's tables are bound (the sun through the atmosphere, the sky's light); y: 1 interleaved
+	ivec4 flags; // x: 1 the atmosphere's tables are bound (the sun through the atmosphere, the sky's light); y: 1 interleaved; w: 1 the detail (decision 0310)
 	// (each frame one pixel of every 2 x 2 block traced, decision 0115); z: this frame's pixel in the block (0-3)
 	vec4 flash; // a lightning flash (decision 0131): its position relative to the camera (m), the radius it lights (m)
 	vec4 flash_color; // its light (colour * energy); w: 1 when there is one
@@ -237,10 +237,19 @@ float cloud_density(vec3 p, bool p_detail) {
 	}
 	if (p_detail) {
 		// The edges eroded by the detail noise (wispy at the bottoms, billowy at the tops).
-		vec3 dn = textureLod(detail_noise, q * params.shape.y, 0.0).rgb;
+		// Decision 0310: with the detail, the noise's features 150-600 m (a 2.5 km period): at 60-250 m they were a pixel
+		// or less on clouds 5 to 15 km away.
+		vec3 dn = textureLod(detail_noise, q * params.shape.y * (params.flags.w != 0 ? 0.4 : 1.0), 0.0).rgb;
 		float dfbm = dn.r * 0.625 + dn.g * 0.25 + dn.b * 0.125;
+		float depth = 0.3;
+		if (params.flags.w != 0) {
+			// Decision 0310: the octaves' sum stretched to about [0, 1] (its mean 0.48 and deviation 0.12: unstretched it
+			// varied the erosion by a tenth, every edge eroded alike, smooth), and eroded deeper.
+			dfbm = clamp((dfbm - 0.48) * (1.0 / (0.117 * 3.46)) + 0.5, 0.0, 1.0);
+			depth = 0.45;
+		}
 		float erosion = mix(dfbm, 1.0 - dfbm, clamp(h * 4.0, 0.0, 1.0));
-		c = remap(c, erosion * 0.3, 1.0, 0.0, 1.0);
+		c = remap(c, erosion * depth, 1.0, 0.0, 1.0);
 	}
 	return max(c, 0.0) * params.layer.w;
 }
@@ -296,6 +305,55 @@ void main() {
 float hg(float g, float cos_theta) {
 	float g2 = g * g;
 	return (1.0 - g2) / (4.0 * 3.14159265 * pow(max(1.0 + g2 - 2.0 * g * cos_theta, 1e-4), 1.5));
+}
+
+// The light a sample at p (its density, a step dt long) scatters towards the camera, added to L under the transmittance
+// T. p_powder (decision 0310): the single scattering darkened where the cloud is thin (Schneider's powder term), the
+// more the further from the sun one looks: the billows' sunlit edges dark, their middles bright; towards the sun the
+// silver lining kept.
+void integrate_sample(vec3 p, float p_density, float dt, vec3 sun, float cos_theta, bool atmosphere, vec3 sky_top, float r_bottom, bool p_powder, inout vec3 L, inout float T) {
+	float sigma = p_density * EXTINCTION;
+	// Light march towards the sun: six samples over about 2 km (the shape alone; with p_powder, the detail decision 0310,
+	// its first three within 300 m with the eroded edges too: the billows shade one another).
+	float od = 0.0;
+	float ls = 0.05;
+	vec3 lp = p;
+	for (int j = 0; j < 6; j++) {
+		lp += sun * ls;
+		od += cloud_density(lp, p_powder && j < 3) * EXTINCTION * ls;
+		ls *= 1.8;
+	}
+	// Multiple scattering (Wrenninge: four octaves, each with less extinction and a flatter phase; the light of the
+	// later ones reaches deep into the clouds, their undersides grey rather than black).
+	vec3 sun_at_p = params.sun_color.rgb;
+	if (atmosphere) {
+		float rp = length(p);
+		sun_at_p *= textureLod(atmosphere_transmittance, transmittance_uv(rp, dot(p / rp, sun)), 0.0).rgb;
+	}
+	vec3 sun_light = vec3(0.0);
+	float a = 1.0;
+	float b = 1.0;
+	float c = 1.0;
+	float powder = 1.0;
+	if (p_powder) {
+		powder = mix(1.0, 1.0 - exp(-sigma * 0.12), 0.5 - 0.5 * cos_theta);
+	}
+	for (int k = 0; k < 4; k++) {
+		float phase = mix(hg(0.8 * c, cos_theta), hg(-0.3 * c, cos_theta), 0.5);
+		sun_light += a * phase * exp(-od * b) * sun_at_p * (k == 0 ? powder : 1.0);
+		a *= 0.6;
+		b *= 0.3;
+		c *= 0.5;
+	}
+	// The sky's light from above (less at the bottoms) and the sunlit ground's from below (ambient_color.w: the
+	// ground's albedo), scattered isotropically.
+	float hf = clamp((length(p) - r_bottom) / params.layer.y, 0.0, 1.0);
+	vec3 ground = sun_at_p * (params.ambient_color.w * max(sun.y, 0.0));
+	vec3 ambient = (sky_top * mix(0.5, 1.0, hf) + ground * (1.0 - hf)) * (1.0 / (4.0 * 3.14159265));
+	vec3 S = (sun_light + ambient) * sigma;
+	float step_t = exp(-sigma * dt);
+	L += T * (S - S * step_t) / max(sigma, 1e-5);
+	T *= step_t;
 }
 
 ivec2 interleave_offset() {
@@ -406,61 +464,73 @@ void main() {
 		return;
 	}
 	t1 = min(t1, params.misc.x);
-	const int STEPS = 64;
-	float dt = (t1 - t0) / float(STEPS);
 	vec3 L = vec3(0.0);
 	float T = 1.0;
 	float first_hit = -1.0;
-	for (int i = 0; i < STEPS; i++) {
-		float t = t0 + (float(i) + jitter) * dt;
-		vec3 p = o + d * t;
-		float density = cloud_density(p, true);
-		if (density <= 0.0) {
-			continue;
+	if (params.flags.w != 0) {
+		// Decision 0310: coarse steps (the shape alone) through the clear air; on meeting a cloud, back a coarse step and
+		// on in fine steps with the detail (25 m near the camera, longer with the distance); coarse again after eight
+		// empty fine samples (not back again until the shape has been clear). At most 160 samples.
+		float dt_coarse = max((t1 - t0) / 48.0, 0.05);
+		float t = t0 + jitter * dt_coarse;
+		bool fine = false;
+		bool can_back = true;
+		int empty = 0;
+		for (int i = 0; i < 160 && t < t1; i++) {
+			vec3 p = o + d * t;
+			if (!fine) {
+				if (cloud_density(p, false) > 0.0) {
+					fine = true;
+					empty = 0;
+					if (can_back) {
+						t = max(t - dt_coarse * (1.0 - jitter * 0.5), t0);
+					}
+					can_back = false;
+					continue;
+				}
+				can_back = true;
+				t += dt_coarse;
+				continue;
+			}
+			float dt = min(0.025 + t * 0.004, dt_coarse);
+			float density = cloud_density(p, true);
+			if (density <= 0.0) {
+				empty++;
+				if (empty > 8) {
+					fine = false;
+				}
+				t += dt;
+				continue;
+			}
+			empty = 0;
+			if (first_hit < 0.0) {
+				first_hit = t;
+			}
+			integrate_sample(p, density, dt, sun, cos_theta, atmosphere, sky_top, r_bottom, true, L, T);
+			if (T < 0.01) {
+				T = 0.0;
+				break;
+			}
+			t += dt;
 		}
-		if (first_hit < 0.0) {
-			first_hit = t;
-		}
-		float sigma = density * EXTINCTION;
-		// Light march towards the sun: six samples over about 2 km (the shape alone).
-		float od = 0.0;
-		float ls = 0.05;
-		vec3 lp = p;
-		for (int j = 0; j < 6; j++) {
-			lp += sun * ls;
-			od += cloud_density(lp, false) * EXTINCTION * ls;
-			ls *= 1.8;
-		}
-		// Multiple scattering (Wrenninge: four octaves, each with less extinction and a flatter phase; the light of the
-		// later ones reaches deep into the clouds, their undersides grey rather than black).
-		vec3 sun_at_p = params.sun_color.rgb;
-		if (atmosphere) {
-			float rp = length(p);
-			sun_at_p *= textureLod(atmosphere_transmittance, transmittance_uv(rp, dot(p / rp, sun)), 0.0).rgb;
-		}
-		vec3 sun_light = vec3(0.0);
-		float a = 1.0;
-		float b = 1.0;
-		float c = 1.0;
-		for (int k = 0; k < 4; k++) {
-			float phase = mix(hg(0.8 * c, cos_theta), hg(-0.3 * c, cos_theta), 0.5);
-			sun_light += a * phase * exp(-od * b) * sun_at_p;
-			a *= 0.6;
-			b *= 0.3;
-			c *= 0.5;
-		}
-		// The sky's light from above (less at the bottoms) and the sunlit ground's from below (ambient_color.w: the
-		// ground's albedo), scattered isotropically.
-		float hf = clamp((length(p) - r_bottom) / params.layer.y, 0.0, 1.0);
-		vec3 ground = sun_at_p * (params.ambient_color.w * max(sun.y, 0.0));
-		vec3 ambient = (sky_top * mix(0.5, 1.0, hf) + ground * (1.0 - hf)) * (1.0 / (4.0 * 3.14159265));
-		vec3 S = (sun_light + ambient) * sigma;
-		float step_t = exp(-sigma * dt);
-		L += T * (S - S * step_t) / max(sigma, 1e-5);
-		T *= step_t;
-		if (T < 0.01) {
-			T = 0.0;
-			break;
+	} else {
+		const int STEPS = 64;
+		float dt = (t1 - t0) / float(STEPS);
+		for (int i = 0; i < STEPS; i++) {
+			float t = t0 + (float(i) + jitter) * dt;
+			vec3 p = o + d * t;
+			float density = cloud_density(p, true);
+			if (density <= 0.0) {
+				continue;
+			}
+			if (first_hit < 0.0) {
+				first_hit = t;
+			}
+			integrate_sample(p, density, dt, sun, cos_theta, atmosphere, sky_top, r_bottom, false, L, T);
+			if (T < 0.01) {
+				T = 0.0;
+				break;
+			}
 		}
 	}
 	// Distant clouds fade into the sky (a stand-in for the aerial perspective over tens of kilometres).

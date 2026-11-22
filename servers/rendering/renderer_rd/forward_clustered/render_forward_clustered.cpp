@@ -4908,6 +4908,7 @@ void RenderForwardClustered::_fellow_process_clouds(RenderDataRD *p_render_data,
 	}
 	params.frame = fellow_clouds_frame++;
 	params.interleaved = Fellow::clouds_interleaved();
+	params.detail = Fellow::clouds_detail();
 	params.history_valid = fellow_clouds_history;
 	// A lightning flash in the clouds (decision 0131), exposed as the scene's lights are.
 	if (RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists()) {
@@ -4991,6 +4992,7 @@ void RenderForwardClustered::_fellow_process_cloud_shadow(RenderDataRD *p_render
 			sp.thickness = Fellow::clouds_thickness();
 			const float wind = Fellow::clouds_wind();
 			sp.wind = Vector2(wind, wind * 0.3f);
+			sp.detail = Fellow::clouds_detail();
 			RENDER_TIMESTAMP("FellowEngine Cloud Shadows");
 			cs.texture = fellow_clouds->process_shadow(sp);
 			cs.origin = fellow_clouds->get_shadow_origin();

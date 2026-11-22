@@ -191,6 +191,7 @@ void FellowClouds::process(const Params &p_params) {
 	const bool interleaved = p_params.interleaved && history_valid && interleave_primed;
 	u.flags[1] = interleaved ? 1 : 0;
 	u.flags[2] = int32_t(p_params.frame & 3);
+	u.flags[3] = p_params.detail ? 1 : 0;
 	if (p_params.flash) {
 		u.flash[0] = p_params.flash_position.x - p_params.camera_position.x;
 		u.flash[1] = p_params.flash_position.y - p_params.camera_position.y;
@@ -295,6 +296,7 @@ RID FellowClouds::process_shadow(const ShadowParams &p_params) {
 	u.shape[1] = p_params.detail_scale;
 	u.shape[2] = p_params.wind.x;
 	u.shape[3] = p_params.wind.y;
+	u.flags[3] = p_params.detail ? 1 : 0;
 	u.sizes[0] = SHADOW_SIZE;
 	u.sizes[1] = SHADOW_SIZE;
 	u.shadow[0] = shadow_origin.x;
@@ -354,6 +356,7 @@ void FellowClouds::process_probe(const ShadowParams &p_params) {
 	u.shape[1] = p_params.detail_scale;
 	u.shape[2] = p_params.wind.x;
 	u.shape[3] = p_params.wind.y;
+	u.flags[3] = p_params.detail ? 1 : 0;
 	u.shadow[0] = p_params.camera_position.x;
 	u.shadow[1] = p_params.camera_position.z;
 	u.field[0] = p_params.camera_position.x * 0.001;

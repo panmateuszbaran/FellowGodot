@@ -85,6 +85,10 @@ inline float atmosphere_ground_albedo() {
 inline bool clouds_interleaved() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/post/clouds/interleaved");
 }
+// Decision 0310: fine steps inside the clouds, deeper erosion, the powder term.
+inline bool clouds_detail() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/post/clouds/detail");
+}
 // post/clouds/* (decision 0109): volumetric clouds over the sky (a visual feature, off by default).
 inline bool clouds_enabled() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/post/clouds/enabled");

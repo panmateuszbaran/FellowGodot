@@ -51,6 +51,7 @@ D = {
     "post/clouds/thickness": "The cloud layer's thickness, in kilometres.",
     "post/clouds/wind": "How fast the clouds drift, in kilometres per second.",
     "post/clouds/interleaved": "A quarter of the clouds' pixels traced per frame, the rest from the history: about a quarter of the cost. Decision 0115.",
+    "post/clouds/detail": "The clouds' detail (decision 0310): the ray marches in coarse steps through the clear air and in fine ones (from 25 m near the camera) once inside a cloud, where the detail noise erodes the edges more deeply, and the sunlit side's thin edges are darkened (the powder term) as cumulus' are: billows and wisps instead of smooth blobs. Off: decision 0109's 64 even steps.",
     "post/clouds/shadows": "The clouds' shadows on the scene's surfaces (a map of the sun through the layer, 16 km around the camera). 0: none. Decision 0133.",
     "post/clouds/sky_light": "The sky's ambient light and reflections greyed where the clouds cover it (0: not). Decision 0133.",
     "post/atmosphere/enabled": "A physically based sky atmosphere (Hillaire 2020): tables for a sky shader (global shader parameters [code]fellow_atmosphere_*[/code]), aerial perspective on the opaque surfaces, the sun's colour through the air. Decision 0108.",
