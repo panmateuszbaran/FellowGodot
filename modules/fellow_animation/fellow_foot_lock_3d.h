@@ -57,6 +57,8 @@ class FellowFootLock3D : public SkeletonModifier3D {
 		Vector3 offset_velocity;
 		bool has_last = false;
 		Vector3 last_shown;
+		Vector3 last_ankle; // milestone 173: the animated ankle the last pass saw (whether the pose changed)
+		float since_pose = 0.0f; // milestone 173: seconds since it last changed
 		double slide = 0.0; // metres the shown foot moved while down (get_slide())
 	};
 

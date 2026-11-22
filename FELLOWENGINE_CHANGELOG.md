@@ -9,6 +9,24 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 173 — the foot lock lets go without jumps (2026-11-22)
+
+- Decision 0315, `FellowFootLock3D` (behaviour; no new settings):
+  - A held point out of the leg's reach is let go from where the foot is shown (it was let go from the point and
+    pulled within reach towards the animated foot: up to 17 cm in a frame).
+  - Brought within 99 % of the leg's reach straight towards the hip where that is more than 2 cm shorter than towards
+    the animated foot.
+  - The knee's pole from the foot's forward where the animated leg is nearly straight (its side flipped: a bone turned
+    85° in a frame).
+  - The held offset's velocity measured over the time since the pose changed (zero when a script advances the player
+    before the skeleton's own process).
+- The transitions course, the inertializer with a foot lock: sliding everywhere 0.329 → 0.309 m/s (in transitions the
+  same 0.785), the legs' acceleration's 95th percentile 40 778 → 38 268, every bone's 50 398 → 45 073, the largest
+  turn in a frame 85° → 52°, planted feet no faster than 5.1 m/s (were 17). The showcase's 38 animation gates
+  unchanged.
+- Measured and rejected (decision 0315): dragging held feet along, easing the reach in after letting go, not holding
+  a foot again until it lifts, slowing a foot coming down, a quintic return.
+
 ## Milestone 172 — feet held through transitions; decision 0313 corrected (2026-11-22)
 
 - Decision 0313 corrected: the transitions course measured each character at each of its skeleton's updates, and a

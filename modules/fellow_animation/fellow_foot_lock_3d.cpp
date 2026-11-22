@@ -106,6 +106,7 @@ void FellowFootLock3D::_find_bones() {
 		f.offset = Vector3();
 		f.offset_velocity = Vector3();
 		f.has_last = false;
+		f.since_pose = 0.0f;
 	}
 }
 
@@ -192,6 +193,14 @@ void FellowFootLock3D::_process_modification(double p_delta) {
 		const bool contact = MIN(heel_h, ball_h) < contact_height;
 		const bool on_ball = f.toe >= 0 && ball_h < heel_h - 0.005f; // the heel up: rolling on the ball
 		const Vector3 point = on_ball ? ball : heel; // the animated point that is down
+		f.since_pose += dt;
+		const bool pose_changed = !f.has_last || !ankle.is_equal_approx(f.last_ankle);
+		const float pose_dt = pose_changed ? f.since_pose : 0.0f;
+		if (pose_changed) {
+			f.since_pose = 0.0f;
+		}
+		const Vector3 prev_ankle = f.last_ankle;
+		f.last_ankle = ankle;
 		if (contact && !f.locked) {
 			f.locked = true;
 			f.on_ball = on_ball;
@@ -203,6 +212,7 @@ void FellowFootLock3D::_process_modification(double p_delta) {
 		}
 		Vector3 lock_flat = f.lock;
 		lock_flat.y = point.y;
+		const bool was_locked = f.locked;
 		if (f.locked && (!contact || lock_flat.distance_to(point) > unlock_radius)) {
 			f.locked = false; // back to the animation over blend_halflife
 		}
@@ -220,14 +230,34 @@ void FellowFootLock3D::_process_modification(double p_delta) {
 		}
 		if (f.locked) {
 			// Held: only across the ground (its height is the animation's: the heel and the ball roll as they would).
-			const Vector3 new_offset = Vector3(f.lock.x - point.x, 0.0f, f.lock.z - point.z);
-			// Milestone 172 (decision 0314): a pass with no time passed (a skeleton processing its modifiers twice in a
-			// frame) keeps the velocity: zeroed there, a foot let go in that frame started back from standing still.
-			if (dt > 0.0f) {
-				f.offset_velocity = (new_offset - f.offset) / dt;
+			// Milestone 173: a height left from letting go (below) eased out as it would have been, not dropped at once.
+			Vector3 lift(0.0f, f.offset.y, 0.0f);
+			Vector3 lift_velocity(0.0f, f.offset_velocity.y, 0.0f);
+			decay(lift, lift_velocity, blend_halflife, dt);
+			const Vector3 new_offset(f.lock.x - point.x, lift.y, f.lock.z - point.z);
+			// Milestone 173: the held offset's velocity over the time since the pose last changed. A skeleton may process
+			// its modifiers twice in a frame, the time passing in one and the pose changing in the other (an AnimationPlayer
+			// advanced by a script before the skeleton's own process): measured in the pass with the time, the velocity was
+			// always zero, and a foot let go started back from standing still.
+			if (pose_changed) {
+				if (pose_dt > 0.0f) {
+					const Vector3 v = (new_offset - f.offset) / pose_dt;
+					f.offset_velocity.x = v.x;
+					f.offset_velocity.z = v.z;
+				}
+			} else if (f.since_pose > 0.1f) {
+				f.offset_velocity.x = 0.0f; // the pose still for a while: not moving
+				f.offset_velocity.z = 0.0f;
 			}
+			f.offset_velocity.y = lift_velocity.y;
 			f.offset = new_offset;
 		} else {
+			if (was_locked && f.has_last && f.last_shown.distance_to(prev_ankle + f.offset) > 0.005f) {
+				// Milestone 173: a held point out of the leg's reach is shown where the leg reaches (higher and nearer): let go
+				// from there, not from the point (the foot jumped back within reach, below, up to 20 cm in a frame). Across the
+				// ground from where it was shown; its height the animation's and what the leg's reach lifted it by.
+				f.offset = Vector3(f.last_shown.x - ankle.x, f.last_shown.y - prev_ankle.y, f.last_shown.z - ankle.z);
+			}
 			if (f.offset.length() > unlock_radius * 3.0f) {
 				f.offset = Vector3(); // a jump of the body (placed elsewhere): no blend from where it was
 				f.offset_velocity = Vector3();
@@ -246,16 +276,50 @@ void FellowFootLock3D::_process_modification(double p_delta) {
 			const Vector3 a_vec = to_skeleton.xform(ankle) - hip;
 			const float reach = MAX((hip.distance_to(knee) + knee.distance_to(foot_now)) * REACH_SHARE, a_vec.length());
 			const Vector3 o_vec = to_skeleton.basis.xform(f.offset);
-			if (!f.locked && (a_vec + o_vec).length() > reach) {
+			const Vector3 p_vec = a_vec + o_vec;
+			const float p_len = p_vec.length();
+			if (!f.locked && p_len > reach) {
+				// Towards the animated foot until within reach. Milestone 173: unless that moves it more than 2 cm further
+				// than straight towards the hip (a foot let go off to the side: towards the animated foot it took up to 17 cm
+				// in a frame) — then straight towards the hip, the least move, its velocity away from the hip dropped.
 				const float oo = o_vec.length_squared();
 				const float ao = a_vec.dot(o_vec);
 				const float disc = ao * ao - oo * (a_vec.length_squared() - reach * reach);
 				const float k = (oo > 1e-10f && disc >= 0.0f) ? CLAMP((-ao + Math::sqrt(disc)) / oo, 0.0f, 1.0f) : 0.0f;
-				f.offset *= k;
-				f.offset_velocity *= k;
+				const float toward_animated = o_vec.length() * (1.0f - k);
+				const float toward_hip = p_len - reach;
+				if (toward_animated <= toward_hip + 0.02f) {
+					f.offset *= k;
+					f.offset_velocity *= k;
+				} else {
+					const Vector3 dir = xform.basis.xform(p_vec / p_len).normalized();
+					f.offset = xform.basis.xform(p_vec * (reach / p_len) - a_vec);
+					const float away = f.offset_velocity.dot(dir);
+					if (away > 0.0f) {
+						f.offset_velocity -= dir * away;
+					}
+				}
 			}
 			const Vector3 target = to_skeleton.xform(ankle + f.offset);
-			const Vector3 pole = knee + (knee - (hip + foot_now) * 0.5f) * 4.0f;
+			Vector3 pole = knee + (knee - (hip + foot_now) * 0.5f) * 4.0f;
+			{
+				// Milestone 173: the knee's bend from the animation's where its leg is bent, from the foot's forward where it is
+				// nearly straight (the animated knee then lies on the line from the hip to the animated foot, and against a held
+				// foot elsewhere its side flips: the knee swung round the leg in a frame).
+				const float leg_len = hip.distance_to(knee) + knee.distance_to(foot_now);
+				const Vector3 line = (foot_now - hip).normalized();
+				Vector3 knee_off = (knee - hip) - line * (knee - hip).dot(line);
+				const float w = CLAMP(knee_off.length() / (0.05f * leg_len), 0.0f, 1.0f);
+				Vector3 fwd = f.toe >= 0 ? sk->get_bone_global_pose(f.toe).origin - foot_now : Vector3();
+				fwd -= line * fwd.dot(line);
+				Vector3 bend_dir = knee_off.length() > 1e-6f ? knee_off.normalized() * w : Vector3();
+				if (fwd.length() > 1e-6f) {
+					bend_dir += fwd.normalized() * (1.0f - w);
+				}
+				if (bend_dir.length() > 1e-6f) {
+					pole = knee + bend_dir.normalized() * leg_len;
+				}
+			}
 			_two_bone(sk, f.upper, f.lower, f.foot, target, pole);
 			shown = xform.xform(sk->get_bone_global_pose(f.foot).origin);
 		}
@@ -309,6 +373,7 @@ void FellowFootLock3D::reset() {
 		f.offset = Vector3();
 		f.offset_velocity = Vector3();
 		f.has_last = false;
+		f.since_pose = 0.0f;
 		f.slide = 0.0;
 	}
 }

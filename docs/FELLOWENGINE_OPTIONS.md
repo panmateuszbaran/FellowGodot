@@ -980,7 +980,9 @@ a target passes its line), `max_joint_speed` (0 °/s: off; while the node poses 
 from its last pose); `FellowTraversal3D`, a mantle with a clip's root motion: held at the wall until the clip's root is
 over the top, then let go over 18 % of the mantle; `FellowFootLock3D`: a foot let go is never eased back from further
 from the hip than the leg reaches; `release_extension` (milestone 172; 1.0: off): let go when holding the foot needs more
-than this share of the leg's length.
+than this share of the leg's length. Let go without jumps (milestone 173, decision 0315): a held point out of
+the leg's reach is let go from where the foot is shown and brought within reach the shorter way (towards the animated
+foot, or straight towards the hip); the knee bends towards the foot's forward where the animated leg is straight.
 Bench `bench/climb_check.gd` (`hold_climb`, `side_reach`, `narrow_holds`, `eave_roof`, `eave_deep`, `beside_reach`,
 `stacked_holds`, `parapet`, `leap_style`;
 `--only=<lanes> --times=<s,...>` for a picture strip of some lanes at given times).
