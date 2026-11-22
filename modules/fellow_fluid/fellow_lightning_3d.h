@@ -30,7 +30,10 @@
 
 #pragma once
 
+#include "fellow_weather_sound.h"
+
 #include "core/math/random_pcg.h"
+#include "core/object/worker_thread_pool.h"
 #include "scene/3d/light_3d.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/node_3d.h"
@@ -89,6 +92,33 @@ class FellowLightning3D : public Node3D {
 	Ref<ShaderMaterial> glow_material;
 	Ref<Shader> bolt_shader;
 
+	// Milestone 178 (decision 0320): the thunder.
+	bool sound_enabled = true;
+	float sound_volume_db = 0.0f;
+	StringName sound_bus = SNAME("Master");
+	FellowAmbientVoice thunder_voice;
+	LocalVector<FellowThunderSynth::Segment> bolt_segments; // the last strike's channel
+	struct ThunderJob {
+		WorkerThreadPool::TaskID task = WorkerThreadPool::INVALID_TASK_ID;
+		LocalVector<FellowThunderSynth::Segment> segments;
+		Vector3 listener;
+		float stroke_time[4] = {};
+		float stroke_amplitude[4] = {};
+		int strokes = 0;
+		float rate = 48000.0f;
+		double struck_at = 0.0;
+		float pan = 0.0f;
+		PackedFloat32Array dry;
+		float first_arrival = 0.0f;
+	};
+	LocalVector<ThunderJob *> thunder_jobs;
+	double thunder_heard = 0.0;
+	uint64_t thunders_built = 0;
+	static void _thunder_job(void *p_job);
+	void _thunder_begin();
+	void _thunder_update();
+	void _thunder_wait();
+
 	void _build_children();
 	void _begin(uint64_t p_seed, float p_distance, float p_azimuth);
 	void _build_bolt(RandomPCG &p_rng, const Vector3 &p_camera);
@@ -108,6 +138,15 @@ public:
 	// Strikes now (distance < 0: at random within distance_range; azimuth < -360: at random), returns its position.
 	Vector3 strike(float p_distance = -1.0f, float p_azimuth_degrees = -1000.0f);
 	bool is_striking() const { return current.active; }
+
+	void set_sound_enabled(bool p_enabled) { sound_enabled = p_enabled; }
+	bool is_sound_enabled() const { return sound_enabled; }
+	void set_sound_volume_db(float p_db);
+	float get_sound_volume_db() const { return sound_volume_db; }
+	void set_sound_bus(const StringName &p_bus);
+	StringName get_sound_bus() const { return sound_bus; }
+	Dictionary get_sound_stats() const;
+	PackedFloat32Array debug_render_thunder(float p_distance, float p_azimuth_degrees, float p_seconds, float p_rate = 48000.0f, int64_t p_seed = 1) const;
 	float get_flash() const;
 
 	void set_strikes_per_minute(float p_rate) { strikes_per_minute = MAX(0.0f, p_rate); }

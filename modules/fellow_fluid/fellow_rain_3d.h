@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include "fellow_weather_sound.h"
+
 #include "scene/3d/gpu_particles_3d.h"
 #include "scene/3d/gpu_particles_collision_3d.h"
 #include "scene/3d/node_3d.h"
@@ -215,6 +217,19 @@ private:
 
 	static constexpr float SNOW_LIFETIME = 8.0f; // s: a flake's life in the box around the camera
 
+	// Milestone 178 (decision 0320): the rain's sound, and what the listener has around it (probed every 0.2 s:
+	// rays up for a cover, down around it for water).
+	bool sound_enabled = true;
+	float sound_volume_db = 0.0f;
+	StringName sound_bus = SNAME("Master");
+	FellowAmbientVoice rain_voice;
+	double sound_probe_time = -1.0;
+	double sound_silent_since = -1.0;
+	float sound_shelter = 0.0f;
+	float sound_roof = 3.0f;
+	float sound_water = 0.0f;
+	void _sound_update(float p_falling, double p_dt);
+
 	bool _is_snow() const { return precipitation == PRECIPITATION_SNOW; }
 	void _build_children();
 	void _update_children();
@@ -237,6 +252,15 @@ public:
 	PackedStringArray get_configuration_warnings() const override;
 
 	static FellowRain3D *get_active() { return active; }
+
+	void set_sound_enabled(bool p_enabled) { sound_enabled = p_enabled; }
+	bool is_sound_enabled() const { return sound_enabled; }
+	void set_sound_volume_db(float p_db);
+	float get_sound_volume_db() const { return sound_volume_db; }
+	void set_sound_bus(const StringName &p_bus);
+	StringName get_sound_bus() const { return sound_bus; }
+	Dictionary get_sound_stats();
+	PackedFloat32Array debug_render_sound(const Array &p_events, float p_seconds, float p_rate = 48000.0f) const;
 
 	void set_precipitation(Precipitation p_precipitation);
 	Precipitation get_precipitation() const { return precipitation; }

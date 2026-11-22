@@ -9,12 +9,16 @@ extends SceneTree
 ##   VK_ICD_FILENAMES=.../lvp_icd.json xvfb-run -a godot --path benchmarks/tools/buoyancy -s interaction_demo.gd \
 ##       --rendering-driver vulkan --resolution 960x540 --fixed-fps 30 -- --out=<dir> [--before]
 ##   ... --fixed-fps 30 --write-movie <dir>/m.png -s interaction_demo.gd                    (with the sound)
+##   ... -s interaction_demo.gd -- --timing   (the viewport's GPU and CPU render times from 2 s, printed: "TIMING ...")
 
 var _out := ""
 var _from := 0.0
 var _to := 9.0
 var _every := 1
 var _before := false
+var _timing := false
+var _gpu_ms := []
+var _cpu_ms := []
 var _frame := 0
 var _cam: Camera3D
 var _raft: RigidBody3D
@@ -39,6 +43,8 @@ func _initialize() -> void:
 			_every = int(v)
 		elif a == "--before":
 			_before = true
+		elif a == "--timing":
+			_timing = true
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_SKY
@@ -189,7 +195,26 @@ func _process(_d: float) -> bool:
 	if _out != "" and t >= _from and t <= _to and _frame % _every == 0:
 		var img := root.get_texture().get_image()
 		img.save_png(_out.path_join("frame_%04d.png" % _frame))
+	if _timing:
+		_measure(t)
 	return t > _to
+
+
+func _measure(p_t: float) -> void:
+	var vp := root.get_viewport_rid()
+	if _frame == 1:
+		RenderingServer.viewport_set_measure_render_time(vp, true)
+	elif p_t >= 2.0:
+		_gpu_ms.append(RenderingServer.viewport_get_measured_render_time_gpu(vp))
+		_cpu_ms.append(RenderingServer.viewport_get_measured_render_time_cpu(vp))
+	if p_t > _to:
+		var g := 0.0
+		var c := 0.0
+		for v in _gpu_ms:
+			g += v
+		for v in _cpu_ms:
+			c += v
+		print("TIMING frames %d gpu_ms_mean %.3f cpu_ms_mean %.3f %s" % [_gpu_ms.size(), g / maxf(1.0, _gpu_ms.size()), c / maxf(1.0, _cpu_ms.size()), "before" if _before else "now"])
 
 
 func _on_entered(p_speed: float, p_what: String) -> void:

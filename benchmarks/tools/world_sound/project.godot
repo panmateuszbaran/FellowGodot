@@ -1,0 +1,13 @@
+; FellowEngine's world sounds (milestone 178): the weather's sound synthesised — rain, wind, thunder — rendered offline
+; (weather_sound.gd, headless) and measured (weather_sound.py); a storm with Movie Maker (storm_demo.gd, a Vulkan
+; device: lavapipe will do).
+
+config_version=5
+
+[application]
+
+config/name="World sound"
+
+[physics]
+
+3d/physics_engine="Jolt Physics"

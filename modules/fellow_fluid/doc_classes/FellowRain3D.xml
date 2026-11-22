@@ -13,6 +13,15 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="debug_render_sound" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<param index="0" name="events" type="Array" />
+			<param index="1" name="seconds" type="float" />
+			<param index="2" name="rate" type="float" default="48000.0" />
+			<description>
+				The rain's sound synthesised offline, interleaved stereo at [param rate] for [param seconds]: [param events] (by time) are dictionaries [code]{time, rain, water, shelter[, roof]}[/code] (what is falling, the share of water around the listener, the share of the sky above it covered, the cover's height in metres). For tests and tuning ([code]benchmarks/tools/world_sound/weather_sound.gd[/code]).
+			</description>
+		</method>
 		<method name="get_drops" qualifiers="const">
 			<return type="GPUParticles3D" />
 			<description>
@@ -35,6 +44,12 @@
 			<return type="Texture2DRD" />
 			<description>
 				The rain's ripples on standing water: a tiling texture of [member ripple_tile] (slopes in red and green, height in blue, the puddles' tiling noise in alpha; with mipmaps), computed every frame while the node is active.
+			</description>
+		</method>
+		<method name="get_sound_stats">
+			<return type="Dictionary" />
+			<description>
+				The rain's sound: [code]playing[/code], what is around the listener ([code]shelter[/code], [code]roof[/code] in metres, [code]water[/code]), the drops synthesised ([code]drops[/code], [code]roof_drops[/code], [code]bubbles[/code]), [code]mixed_seconds[/code] and [code]mix_usec_per_second[/code] (the audio thread's time a second of sound).
 			</description>
 		</method>
 		<method name="stamp">
@@ -153,6 +168,15 @@
 		</member>
 		<member name="snowing_time" type="float" setter="set_snowing_time" getter="get_snowing_time" default="900.0">
 			With [member snow_follows_precipitation], the seconds full snowfall takes to cover the ground.
+		</member>
+		<member name="sound_bus" type="StringName" setter="set_sound_bus" getter="get_sound_bus" default="&amp;&quot;Master&quot;">
+			The audio bus the rain plays on.
+		</member>
+		<member name="sound_enabled" type="bool" setter="set_sound_enabled" getter="is_sound_enabled" default="true">
+			If [code]true[/code], the rain is heard where the listener (the viewport's [AudioListener3D], else its camera) is, synthesised (no samples, on the audio thread, milestone 178): the drops farther off as filtered noise; the near ones each its own — on water a tick and, for drops of 0.8-1.1 mm, the small bubble they entrain ringing at 13-21 kHz (larger drops lower bubbles), on the ground a click; under a cover the drops knocking on it and the rain outside muffled. What is around the listener is probed every 0.2 s: five rays up for a cover, eight down four metres round it for a [FellowWater3D]'s surface. Not while it snows, nor in the editor.
+		</member>
+		<member name="sound_volume_db" type="float" setter="set_sound_volume_db" getter="get_sound_volume_db" default="0.0">
+			The rain's volume.
 		</member>
 		<member name="splashes" type="bool" setter="set_splashes" getter="get_splashes" default="true">
 			If [code]true[/code], drops splash where they land (two small droplets each, a sub-emitter at collision, fading over 0.3 s).

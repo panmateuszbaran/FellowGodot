@@ -32,8 +32,11 @@
 
 #include "fellow_editor_still.h"
 
+#include "core/config/engine.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "scene/3d/node_3d.h"
+#include "servers/audio/audio_server.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/effects/fellow_weather.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -172,6 +175,92 @@ PackedStringArray FellowWind3D::get_configuration_warnings() const {
 	return warnings;
 }
 
+// Milestone 178 (decision 0320): the wind as heard where the listener is (its gust there).
+void FellowWind3D::_sound_update() {
+	const bool want = sound_enabled && active == this && is_visible_in_tree() && !Engine::get_singleton()->is_editor_hint() && AudioServer::get_singleton();
+	Node3D *listener = want ? fellow_sound_listener(this) : nullptr;
+	const float v = listener ? float(get_velocity_at(listener->get_global_position()).length()) : 0.0f;
+	if (v < 0.3f) {
+		if (wind_voice.is_playing()) {
+			if (FellowWindSynth *synth = (FellowWindSynth *)wind_voice.get_source()) {
+				FellowWindSynth::Params pr;
+				synth->post(pr);
+			}
+			if (sound_silent_since < 0.0) {
+				sound_silent_since = time;
+			} else if (time - sound_silent_since > 1.0 || time < sound_silent_since) {
+				wind_voice.stop();
+				sound_silent_since = -1.0;
+			}
+		}
+		return;
+	}
+	sound_silent_since = -1.0;
+	FellowWindSynth *synth = (FellowWindSynth *)wind_voice.start(this, &FellowWindSynth::make, sound_bus, sound_volume_db);
+	if (synth) {
+		FellowWindSynth::Params pr;
+		pr.speed = v;
+		pr.whistle = sound_whistle;
+		pr.leaves = sound_leaves;
+		synth->post(pr);
+	}
+}
+
+void FellowWind3D::set_sound_volume_db(float p_db) {
+	sound_volume_db = p_db;
+	wind_voice.set_volume_db(p_db);
+}
+
+void FellowWind3D::set_sound_bus(const StringName &p_bus) {
+	sound_bus = p_bus;
+	wind_voice.set_bus(p_bus);
+}
+
+Dictionary FellowWind3D::get_sound_stats() const {
+	Dictionary d;
+	uint64_t frames = 0, usec = 0;
+	wind_voice.get_mix_stats(frames, usec);
+	const float rate = AudioServer::get_singleton() ? AudioServer::get_singleton()->get_mix_rate() : 48000.0f;
+	d["playing"] = wind_voice.is_playing();
+	d["mixed_seconds"] = double(frames) / rate;
+	d["mix_usec_per_second"] = frames > 0 ? double(usec) / (double(frames) / rate) : 0.0;
+	return d;
+}
+
+// The wind's sound offline (for tests): events by time, {time, speed} (m/s at the listener) — interleaved stereo,
+// with this node's sound_whistle and sound_leaves.
+PackedFloat32Array FellowWind3D::debug_render_sound(const Array &p_events, float p_seconds, float p_rate) const {
+	PackedFloat32Array out;
+	const int total = int(MAX(0.0f, p_seconds) * p_rate);
+	out.resize(total * 2);
+	FellowWindSynth synth;
+	synth.set_rate(p_rate);
+	LocalVector<float> l, r;
+	float *w = out.ptrw();
+	int pos = 0;
+	FellowWindSynth::Params pr;
+	pr.whistle = sound_whistle;
+	pr.leaves = sound_leaves;
+	for (int e = 0; e <= p_events.size() && pos < total; e++) {
+		const Dictionary ev = e < p_events.size() ? Dictionary(p_events[e]) : Dictionary();
+		const int at = e < p_events.size() ? CLAMP(int(float(ev.get("time", 0.0)) * p_rate), pos, total) : total;
+		while (pos < at) {
+			const int n = MIN(1024, at - pos);
+			l.resize(n);
+			r.resize(n);
+			synth.render(l.ptr(), r.ptr(), n);
+			for (int i = 0; i < n; i++) {
+				w[(pos + i) * 2] = l[i];
+				w[(pos + i) * 2 + 1] = r[i];
+			}
+			pos += n;
+		}
+		pr.speed = ev.get("speed", pr.speed);
+		synth.post(pr);
+	}
+	return out;
+}
+
 void FellowWind3D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
@@ -198,8 +287,10 @@ void FellowWind3D::_notification(int p_what) {
 			if (active == this) {
 				_push_state(is_visible_in_tree() && Fellow::fluid_enabled());
 			}
+			_sound_update();
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
+			wind_voice.stop();
 			if (active == this) {
 				active = nullptr;
 				_push_state(false);
@@ -225,6 +316,18 @@ void FellowWind3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_direction"), &FellowWind3D::get_direction);
 	ClassDB::bind_method(D_METHOD("get_velocity"), &FellowWind3D::get_velocity);
 	ClassDB::bind_method(D_METHOD("get_velocity_at", "position"), &FellowWind3D::get_velocity_at);
+	ClassDB::bind_method(D_METHOD("set_sound_enabled", "enabled"), &FellowWind3D::set_sound_enabled);
+	ClassDB::bind_method(D_METHOD("is_sound_enabled"), &FellowWind3D::is_sound_enabled);
+	ClassDB::bind_method(D_METHOD("set_sound_volume_db", "db"), &FellowWind3D::set_sound_volume_db);
+	ClassDB::bind_method(D_METHOD("get_sound_volume_db"), &FellowWind3D::get_sound_volume_db);
+	ClassDB::bind_method(D_METHOD("set_sound_bus", "bus"), &FellowWind3D::set_sound_bus);
+	ClassDB::bind_method(D_METHOD("get_sound_bus"), &FellowWind3D::get_sound_bus);
+	ClassDB::bind_method(D_METHOD("set_sound_whistle", "amount"), &FellowWind3D::set_sound_whistle);
+	ClassDB::bind_method(D_METHOD("get_sound_whistle"), &FellowWind3D::get_sound_whistle);
+	ClassDB::bind_method(D_METHOD("set_sound_leaves", "amount"), &FellowWind3D::set_sound_leaves);
+	ClassDB::bind_method(D_METHOD("get_sound_leaves"), &FellowWind3D::get_sound_leaves);
+	ClassDB::bind_method(D_METHOD("get_sound_stats"), &FellowWind3D::get_sound_stats);
+	ClassDB::bind_method(D_METHOD("debug_render_sound", "events", "seconds", "rate"), &FellowWind3D::debug_render_sound, DEFVAL(48000.0f));
 	ClassDB::bind_method(D_METHOD("get_gust_texture"), &FellowWind3D::get_gust_texture);
 
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "speed", PROPERTY_HINT_RANGE, "0,60,0.01,or_greater,suffix:m/s"), "set_speed", "get_speed");
@@ -233,6 +336,13 @@ void FellowWind3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flutter", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_flutter", "get_flutter");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "time", PROPERTY_HINT_NONE, "suffix:s", PROPERTY_USAGE_NONE), "set_time", "get_time");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "time_auto"), "set_time_auto", "is_time_auto");
+	ADD_GROUP("Sound", "sound_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sound_enabled"), "set_sound_enabled", "is_sound_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_volume_db", PROPERTY_HINT_RANGE, "-60,24,0.1,suffix:dB"), "set_sound_volume_db", "get_sound_volume_db");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "sound_bus"), "set_sound_bus", "get_sound_bus");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_whistle", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_sound_whistle", "get_sound_whistle");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_leaves", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_sound_leaves", "get_sound_leaves");
+	ADD_GROUP("", "");
 }
 
 FellowWind3D::FellowWind3D() {

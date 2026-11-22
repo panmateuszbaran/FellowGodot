@@ -9,6 +9,27 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 178 — the weather's sound: rain, wind, thunder (2026-11-23)
+
+- `FellowRain3D`, `FellowWind3D` and `FellowLightning3D` are heard (decision 0320), synthesised on the audio thread with
+  no samples (`modules/fellow_fluid/fellow_weather_sound.*`: a stereo synthesis behind an internal `AudioStream`):
+  `sound_enabled` (on), `sound_volume_db`, `sound_bus`, `get_sound_stats()`; `FellowWind3D.sound_whistle`,
+  `sound_leaves`.
+- Rain: distant drops as a filtered bed, near drops each its own (sized by Marshall and Palmer) — on water a tick and
+  the small bubble of 0.8-1.1 mm drops (13-21 kHz), on the ground a click; under a cover the drops knock on it and the
+  rain outside is muffled; rays probe the cover over the listener and the water round it every 0.2 s.
+- Wind: the speed with the gust where the listener is — a rumble and a rush rising with it, edges whistling at the
+  Strouhal frequency (0.2 v / d) from 5 m/s, leaves rustling.
+- Thunder: the bolt's channel and its run through the cloud heard from the listener at the strike — each segment's
+  N-wave arriving after its distance / 343 s (broadside claps, a near strike's crackle, the highs lost over distance),
+  every stroke, an outdoor reverberation; built on a worker thread, heard from its first arrival.
+- Measured (`benchmarks/tools/world_sound/`, new: `weather_sound.gd` + `weather_sound.py` offline, `storm_demo.gd` with
+  Movie Maker): on water half the rain's sound is the bubbles' band above 9 kHz, under a roof its centroid falls from
+  5.2 to 1.1 kHz; wind −45 → −19 dBFS from 3 to 20 m/s, its whistles within 10 % of 0.2 v / d; thunder heard 23 ms after
+  distance / 343, rolling 3.5-6.4 s, −11 dBFS at 300 m to −20 at 3 km. 1.6-4 ms of the audio thread a second of sound
+  each. The bolt's channels made by one function for the picture and the thunder (the lightning scene's golden
+  unchanged).
+
 ## Milestone 177 — water's sound synthesised from its bubbles (2026-11-23)
 
 - Water sounds as it is struck, with no samples (decision 0319): what strikes it entrains air bubbles, each ringing at

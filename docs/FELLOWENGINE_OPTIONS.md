@@ -280,6 +280,26 @@ Methods: `FellowWater3D.play_splash(position, speed, size)`, `add_wake_sound(pos
 `benchmarks/tools/buoyancy/water_sound.gd` + `water_sound.py` (the synthesis offline; `showreel.wav` to listen to) and
 `sound_timing.gd` (Movie Maker; `water_sound.py --timing`).
 
+### The weather's sound (milestone 178)
+
+Decision 0320: rain, wind and thunder synthesised where the listener (the viewport's `AudioListener3D`, else its camera)
+is, on the audio thread, no samples; not in the editor.
+
+| node | property | default | meaning |
+|---|---|---|---|
+| `FellowRain3D` / `FellowWind3D` / `FellowLightning3D` | `sound_enabled` | true | the rain (not snow), the active wind, each strike's thunder heard |
+| the same | `sound_volume_db` | 0 dB | its volume |
+| the same | `sound_bus` | Master | its bus |
+| `FellowWind3D` | `sound_whistle` | 1.0 | the edges' whistling (Aeolian tones at 0.2 × speed / width, from 5 m/s) |
+| `FellowWind3D` | `sound_leaves` | 0.5 | the leaves' rustle (0 where there are no trees) |
+
+The rain probes the listener's surroundings every 0.2 s (five rays up: a cover and its height; eight rays down four
+metres round: water). The thunder is built on a worker thread at the strike from the bolt's channel (and 3-6 km of it
+through the cloud) and heard from its first arrival (distance / 343 s). Methods: `get_sound_stats()`;
+`FellowRain3D.debug_render_sound(events, seconds[, rate])`, `FellowWind3D.debug_render_sound(...)`,
+`FellowLightning3D.debug_render_thunder(distance, azimuth_degrees, seconds[, rate, seed])`. Measured with
+`benchmarks/tools/world_sound/weather_sound.gd` + `weather_sound.py`; a storm with `storm_demo.gd` (Movie Maker).
+
 ## Rain and wet surfaces (milestone 25)
 
 A `FellowRain3D` node (module `fellow_fluid`; one active at a time) makes it rain around the camera and wets the

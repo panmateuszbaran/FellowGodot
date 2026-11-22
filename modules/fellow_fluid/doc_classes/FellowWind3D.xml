@@ -12,6 +12,15 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="debug_render_sound" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<param index="0" name="events" type="Array" />
+			<param index="1" name="seconds" type="float" />
+			<param index="2" name="rate" type="float" default="48000.0" />
+			<description>
+				The wind's sound synthesised offline, interleaved stereo at [param rate] for [param seconds]: [param events] (by time) are dictionaries [code]{time, speed}[/code] (m/s at the listener), with this node's [member sound_whistle] and [member sound_leaves]. For tests and tuning.
+			</description>
+		</method>
 		<method name="get_direction" qualifiers="const">
 			<return type="Vector3" />
 			<description>
@@ -22,6 +31,12 @@
 			<return type="ImageTexture" />
 			<description>
 				The gusts' tiling noise (red channel; 8 gust cells a side).
+			</description>
+		</method>
+		<method name="get_sound_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The wind's sound: [code]playing[/code], [code]mixed_seconds[/code], [code]mix_usec_per_second[/code] (the audio thread's time a second of sound).
 			</description>
 		</method>
 		<method name="get_velocity" qualifiers="const">
@@ -47,6 +62,21 @@
 		</member>
 		<member name="gustiness" type="float" setter="set_gustiness" getter="get_gustiness" default="0.5">
 			How much the gusts change the wind's speed: between [code]1 - gustiness[/code] and [code]1 + gustiness[/code] times [member speed].
+		</member>
+		<member name="sound_bus" type="StringName" setter="set_sound_bus" getter="get_sound_bus" default="&amp;&quot;Master&quot;">
+			The audio bus the wind plays on.
+		</member>
+		<member name="sound_enabled" type="bool" setter="set_sound_enabled" getter="is_sound_enabled" default="true">
+			If [code]true[/code], the active wind is heard as it blows where the listener is ([method get_velocity_at] there: its gusts rise and fall in it), synthesised (no samples, on the audio thread, milestone 178): a low rumble and a rush whose pitch rises with the speed, edges whistling over 5 m/s (Aeolian tones at 0.2 × speed / width for edges of 3, 7 and 15 mm, [member sound_whistle]), leaves rustling ([member sound_leaves]). Not in the editor.
+		</member>
+		<member name="sound_leaves" type="float" setter="set_sound_leaves" getter="get_sound_leaves" default="0.5">
+			How much rustling of leaves the wind's sound has (grains of high noise, more the stronger the wind); [code]0.0[/code] where there are no trees.
+		</member>
+		<member name="sound_volume_db" type="float" setter="set_sound_volume_db" getter="get_sound_volume_db" default="0.0">
+			The wind's volume.
+		</member>
+		<member name="sound_whistle" type="float" setter="set_sound_whistle" getter="get_sound_whistle" default="1.0">
+			How loud the edges' whistling is (from 5 m/s, fully at 14 m/s); [code]0.0[/code]: none.
 		</member>
 		<member name="speed" type="float" setter="set_speed" getter="get_speed" default="6.0">
 			The mean wind's speed in metres per second (a breeze 3, a fresh wind 10, a gale 20).

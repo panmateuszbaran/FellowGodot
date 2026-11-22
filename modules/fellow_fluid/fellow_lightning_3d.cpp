@@ -33,11 +33,13 @@
 #include "fellow_editor_still.h"
 #include "fellow_shared_shaders.h"
 
+#include "core/config/engine.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/main/viewport.h"
 #include "scene/resources/3d/primitive_meshes.h"
+#include "servers/audio/audio_server.h"
 #include "servers/rendering/renderer_rd/effects/fellow_weather.h"
 #include "servers/rendering/rendering_server.h"
 
@@ -166,13 +168,17 @@ float FellowLightning3D::get_flash() const {
 	return current.active ? _envelope(time - current.start) : 0.0f;
 }
 
-void FellowLightning3D::_build_bolt(RandomPCG &p_rng, const Vector3 &p_camera) {
-	struct Channel {
-		LocalVector<Vector3> points;
-		float width = 1.0f;
-		float brightness = 1.0f;
-	};
-	LocalVector<Channel> channels;
+struct FellowBoltChannel {
+	LocalVector<Vector3> points;
+	float width = 1.0f;
+	float brightness = 1.0f;
+};
+
+// The bolt's channels: the main one by midpoint displacement from the cloud to the ground, branches from its upper two
+// thirds and a few of their own (the same random draws whether the bolt is drawn or only heard).
+static void fellow_bolt_channels(RandomPCG &p_rng, const Vector3 &p_top, const Vector3 &p_bottom, LocalVector<FellowBoltChannel> &r_channels) {
+	LocalVector<FellowBoltChannel> &channels = r_channels;
+	channels.clear();
 
 	// Midpoint displacement: each segment's middle moved across it by up to a third of its length.
 	auto displace = [&](const Vector3 &p_from, const Vector3 &p_to, int p_levels, float p_rough) {
@@ -195,8 +201,8 @@ void FellowLightning3D::_build_bolt(RandomPCG &p_rng, const Vector3 &p_camera) {
 		return pts;
 	};
 
-	Channel main_channel;
-	main_channel.points = displace(current.top, current.bottom, 7, 0.55f);
+	FellowBoltChannel main_channel;
+	main_channel.points = displace(p_top, p_bottom, 7, 0.55f);
 	channels.push_back(main_channel);
 	// Branches from the upper two thirds of the channel, downwards and outwards, and a few of their own.
 	for (int depth = 0; depth < 2; depth++) {
@@ -216,7 +222,7 @@ void FellowLightning3D::_build_bolt(RandomPCG &p_rng, const Vector3 &p_camera) {
 				}
 				Vector3 from = chp[i];
 				Vector3 along = (chp[MIN(i + 1, n - 1)] - from).normalized();
-				float h = from.y - current.bottom.y;
+				float h = from.y - p_bottom.y;
 				float az = p_rng.randf() * Math::TAU;
 				Vector3 out = Vector3(Math::cos(az), 0.0f, Math::sin(az));
 				Vector3 dir = (along + out * (0.5f + p_rng.randf())).normalized();
@@ -225,12 +231,28 @@ void FellowLightning3D::_build_bolt(RandomPCG &p_rng, const Vector3 &p_camera) {
 					dir.normalize();
 				}
 				float len = h * (0.15f + 0.3f * p_rng.randf());
-				Channel br;
+				FellowBoltChannel br;
 				br.points = displace(from, from + dir * len, 5, 0.6f);
 				br.width = ch_width * 0.5f;
 				br.brightness = ch_brightness * (0.35f + 0.25f * p_rng.randf());
 				channels.push_back(br);
 			}
+		}
+	}
+}
+
+void FellowLightning3D::_build_bolt(RandomPCG &p_rng, const Vector3 &p_camera) {
+	LocalVector<FellowBoltChannel> channels;
+	fellow_bolt_channels(p_rng, current.top, current.bottom, channels);
+	// Milestone 178: the channel kept for the thunder.
+	bolt_segments.clear();
+	for (const FellowBoltChannel &ch : channels) {
+		for (uint32_t i = 0; i + 1 < ch.points.size(); i++) {
+			FellowThunderSynth::Segment seg;
+			seg.a = ch.points[i];
+			seg.b = ch.points[i + 1];
+			seg.weight = ch.width;
+			bolt_segments.push_back(seg);
 		}
 	}
 
@@ -239,7 +261,7 @@ void FellowLightning3D::_build_bolt(RandomPCG &p_rng, const Vector3 &p_camera) {
 	float far_plane = cam ? cam->get_far() : 4000.0f;
 	// Beyond the camera's far plane the bolt is drawn nearer, scaled to look the same (still behind the scene).
 	float max_d = 1.0f;
-	for (const Channel &ch : channels) {
+	for (const FellowBoltChannel &ch : channels) {
 		for (const Vector3 &p : ch.points) {
 			max_d = MAX(max_d, p.distance_to(p_camera));
 		}
@@ -248,7 +270,7 @@ void FellowLightning3D::_build_bolt(RandomPCG &p_rng, const Vector3 &p_camera) {
 	PackedVector3Array verts;
 	PackedVector2Array uvs;
 	PackedColorArray cols;
-	for (const Channel &ch : channels) {
+	for (const FellowBoltChannel &ch : channels) {
 		for (uint32_t i = 0; i + 1 < ch.points.size(); i++) {
 			Vector3 a = p_camera + (ch.points[i] - p_camera) * k;
 			Vector3 b = p_camera + (ch.points[i + 1] - p_camera) * k;
@@ -321,7 +343,160 @@ void FellowLightning3D::_begin(uint64_t p_seed, float p_distance, float p_azimut
 		dir.normalize();
 	}
 	flash->set_global_transform(Transform3D(Basis::looking_at(dir, Vector3(0, 1, 0)), Vector3()));
+	_thunder_begin();
 	emit_signal(SNAME("struck"), current.bottom, d);
+}
+
+// Milestone 178 (decision 0320): the thunder of the strike just begun, built on a worker from its channel as the
+// listener is placed now, played after its first arrival.
+void FellowLightning3D::_thunder_job(void *p_job) {
+	ThunderJob *job = (ThunderJob *)p_job;
+	job->dry = FellowThunderSynth::build(job->segments, job->listener, job->stroke_time, job->stroke_amplitude, job->strokes, job->rate, job->first_arrival);
+}
+
+void FellowLightning3D::_thunder_begin() {
+	if (!sound_enabled || Engine::get_singleton()->is_editor_hint() || !AudioServer::get_singleton() || bolt_segments.is_empty()) {
+		return;
+	}
+	Node3D *listener = fellow_sound_listener(this);
+	if (!listener || thunder_jobs.size() >= 4) {
+		return;
+	}
+	ThunderJob *job = memnew(ThunderJob);
+	job->segments = bolt_segments;
+	const Transform3D lx = listener->get_global_transform();
+	job->listener = lx.origin;
+	job->strokes = current.strokes;
+	for (int i = 0; i < 4; i++) {
+		job->stroke_time[i] = current.stroke_time[i];
+		job->stroke_amplitude[i] = current.stroke_amplitude[i];
+	}
+	job->rate = AudioServer::get_singleton()->get_mix_rate();
+	job->struck_at = time;
+	// From the listener's right (+) or left (-), half the way: thunder is heard from all around too.
+	const Vector3 to = (current.bottom - lx.origin).normalized();
+	job->pan = CLAMP(to.dot(lx.basis.get_column(0).normalized()), -1.0f, 1.0f) * 0.5f;
+	job->task = WorkerThreadPool::get_singleton()->add_native_task(&FellowLightning3D::_thunder_job, job, false, SNAME("FellowLightning3D thunder"));
+	thunder_jobs.push_back(job);
+}
+
+void FellowLightning3D::_thunder_update() {
+	for (uint32_t i = 0; i < thunder_jobs.size();) {
+		ThunderJob *job = thunder_jobs[i];
+		if (!WorkerThreadPool::get_singleton()->is_task_completed(job->task)) {
+			i++;
+			continue;
+		}
+		WorkerThreadPool::get_singleton()->wait_for_task_completion(job->task);
+		thunders_built++;
+		if (sound_enabled && !job->dry.is_empty()) {
+			FellowThunderSynth *synth = (FellowThunderSynth *)thunder_voice.start(this, &FellowThunderSynth::make, sound_bus, sound_volume_db);
+			if (synth) {
+				FellowThunderSynth::Clap clap;
+				clap.dry = job->dry;
+				const double waited = time - job->struck_at;
+				clap.delay = int(MAX(0.0, double(job->first_arrival) - waited) * job->rate);
+				const float ang = (job->pan + 1.0f) * float(Math::PI) * 0.25f;
+				clap.gl = Math::cos(ang) * 1.2f;
+				clap.gr = Math::sin(ang) * 1.2f;
+				synth->post(clap);
+				thunder_heard = time;
+			}
+		}
+		memdelete(job);
+		thunder_jobs.remove_at(i);
+	}
+	// Quiet for a minute: the voice stops.
+	if (thunder_voice.is_playing() && thunder_jobs.is_empty() && time - thunder_heard > 60.0) {
+		thunder_voice.stop();
+	}
+}
+
+void FellowLightning3D::_thunder_wait() {
+	for (ThunderJob *job : thunder_jobs) {
+		WorkerThreadPool::get_singleton()->wait_for_task_completion(job->task);
+		memdelete(job);
+	}
+	thunder_jobs.clear();
+}
+
+void FellowLightning3D::set_sound_volume_db(float p_db) {
+	sound_volume_db = p_db;
+	thunder_voice.set_volume_db(p_db);
+}
+
+void FellowLightning3D::set_sound_bus(const StringName &p_bus) {
+	sound_bus = p_bus;
+	thunder_voice.set_bus(p_bus);
+}
+
+Dictionary FellowLightning3D::get_sound_stats() const {
+	Dictionary d;
+	uint64_t frames = 0, usec = 0;
+	thunder_voice.get_mix_stats(frames, usec);
+	const float rate = AudioServer::get_singleton() ? AudioServer::get_singleton()->get_mix_rate() : 48000.0f;
+	d["thunders"] = (int64_t)thunders_built;
+	d["playing"] = thunder_voice.is_playing();
+	d["mixed_seconds"] = double(frames) / rate;
+	d["mix_usec_per_second"] = frames > 0 ? double(usec) / (double(frames) / rate) : 0.0;
+	return d;
+}
+
+// A strike's thunder offline (for tests): a strike at p_distance on p_azimuth_degrees (0: the listener's right) from a
+// listener 1.7 m over the node's ground facing -z, its channel drawn as a strike's is (p_seed), heard from the strike's
+// start: interleaved stereo.
+PackedFloat32Array FellowLightning3D::debug_render_thunder(float p_distance, float p_azimuth_degrees, float p_seconds, float p_rate, int64_t p_seed) const {
+	PackedFloat32Array out;
+	RandomPCG rng = RandomPCG(uint64_t(p_seed));
+	const float az = Math::deg_to_rad(p_azimuth_degrees);
+	const Vector3 listener(0.0f, 1.7f, 0.0f);
+	const Vector3 bottom(Math::cos(az) * p_distance, 0.0f, Math::sin(az) * p_distance);
+	const Vector3 top = bottom + Vector3((rng.randf() - 0.5f) * 0.5f * cloud_height, cloud_height, (rng.randf() - 0.5f) * 0.5f * cloud_height);
+	int strokes = 2 + int(rng.rand() % 3);
+	float st[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float sa[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+	for (int i = 1; i < strokes; i++) {
+		st[i] = st[i - 1] + 0.04f + 0.08f * rng.randf();
+		sa[i] = 0.5f + 0.5f * rng.randf();
+	}
+	LocalVector<FellowBoltChannel> channels;
+	fellow_bolt_channels(rng, top, bottom, channels);
+	LocalVector<FellowThunderSynth::Segment> segments;
+	for (const FellowBoltChannel &ch : channels) {
+		for (uint32_t i = 0; i + 1 < ch.points.size(); i++) {
+			FellowThunderSynth::Segment seg;
+			seg.a = ch.points[i];
+			seg.b = ch.points[i + 1];
+			seg.weight = ch.width;
+			segments.push_back(seg);
+		}
+	}
+	float first = 0.0f;
+	FellowThunderSynth synth;
+	synth.set_rate(p_rate);
+	FellowThunderSynth::Clap clap;
+	clap.dry = FellowThunderSynth::build(segments, listener, st, sa, strokes, p_rate, first);
+	clap.delay = int(first * p_rate);
+	const float pan = CLAMP(Math::cos(az), -1.0f, 1.0f) * 0.5f;
+	const float ang = (pan + 1.0f) * float(Math::PI) * 0.25f;
+	clap.gl = Math::cos(ang) * 1.2f;
+	clap.gr = Math::sin(ang) * 1.2f;
+	synth.post(clap);
+	const int total = int(MAX(0.0f, p_seconds) * p_rate);
+	out.resize(total * 2);
+	LocalVector<float> l, r;
+	l.resize(1024);
+	r.resize(1024);
+	float *w = out.ptrw();
+	for (int pos = 0; pos < total; pos += 1024) {
+		const int n = MIN(1024, total - pos);
+		synth.render(l.ptr(), r.ptr(), n);
+		for (int i = 0; i < n; i++) {
+			w[(pos + i) * 2] = l[i];
+			w[(pos + i) * 2 + 1] = r[i];
+		}
+	}
+	return out;
 }
 
 Vector3 FellowLightning3D::strike(float p_distance, float p_azimuth_degrees) {
@@ -403,6 +578,9 @@ void FellowLightning3D::_notification(int p_what) {
 				}
 			}
 			last_time = time;
+			if (!thunder_jobs.is_empty() || thunder_voice.is_playing()) {
+				_thunder_update();
+			}
 			float env = 0.0f;
 			if (current.active) {
 				double t = time - current.start;
@@ -444,6 +622,8 @@ void FellowLightning3D::_notification(int p_what) {
 			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
+			_thunder_wait();
+			thunder_voice.stop();
 			last_time = -1.0;
 			current.active = false;
 			_push_cloud_flash(false, 0.0f);
@@ -453,6 +633,14 @@ void FellowLightning3D::_notification(int p_what) {
 
 void FellowLightning3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("strike", "distance", "azimuth_degrees"), &FellowLightning3D::strike, DEFVAL(-1.0f), DEFVAL(-1000.0f));
+	ClassDB::bind_method(D_METHOD("set_sound_enabled", "enabled"), &FellowLightning3D::set_sound_enabled);
+	ClassDB::bind_method(D_METHOD("is_sound_enabled"), &FellowLightning3D::is_sound_enabled);
+	ClassDB::bind_method(D_METHOD("set_sound_volume_db", "db"), &FellowLightning3D::set_sound_volume_db);
+	ClassDB::bind_method(D_METHOD("get_sound_volume_db"), &FellowLightning3D::get_sound_volume_db);
+	ClassDB::bind_method(D_METHOD("set_sound_bus", "bus"), &FellowLightning3D::set_sound_bus);
+	ClassDB::bind_method(D_METHOD("get_sound_bus"), &FellowLightning3D::get_sound_bus);
+	ClassDB::bind_method(D_METHOD("get_sound_stats"), &FellowLightning3D::get_sound_stats);
+	ClassDB::bind_method(D_METHOD("debug_render_thunder", "distance", "azimuth_degrees", "seconds", "rate", "seed"), &FellowLightning3D::debug_render_thunder, DEFVAL(48000.0f), DEFVAL(1));
 	ClassDB::bind_method(D_METHOD("is_striking"), &FellowLightning3D::is_striking);
 	ClassDB::bind_method(D_METHOD("get_flash"), &FellowLightning3D::get_flash);
 	ClassDB::bind_method(D_METHOD("get_flash_light"), &FellowLightning3D::get_flash_light);
@@ -496,6 +684,10 @@ void FellowLightning3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "bolt_width", PROPERTY_HINT_RANGE, "0.0001,0.05,0.0001,suffix:rad"), "set_bolt_width", "get_bolt_width");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cloud_glow", PROPERTY_HINT_RANGE, "0,10,0.01"), "set_cloud_glow", "get_cloud_glow");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "shadows"), "set_shadows", "get_shadows");
+	ADD_GROUP("Sound", "sound_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sound_enabled"), "set_sound_enabled", "is_sound_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_volume_db", PROPERTY_HINT_RANGE, "-60,24,0.1,suffix:dB"), "set_sound_volume_db", "get_sound_volume_db");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "sound_bus"), "set_sound_bus", "get_sound_bus");
 	ADD_GROUP("", "");
 
 	ADD_SIGNAL(MethodInfo("struck", PropertyInfo(Variant::VECTOR3, "position"), PropertyInfo(Variant::FLOAT, "distance")));

@@ -36,15 +36,20 @@
 #include "fellow_shared_shaders.h"
 #include "fellow_snow_tracker_3d.h"
 #include "fellow_snow_tracks.glsl.gen.h"
+#include "fellow_water_3d.h"
 #include "fellow_wind_3d.h"
 
+#include "core/config/engine.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/main/viewport.h"
 #include "scene/resources/3d/primitive_meshes.h"
+#include "scene/resources/3d/world_3d.h"
 #include "scene/resources/particle_process_material.h"
+#include "servers/audio/audio_server.h"
+#include "servers/physics_3d/physics_server_3d.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/effects/fellow_weather.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
@@ -608,6 +613,139 @@ PackedStringArray FellowRain3D::get_configuration_warnings() const {
 	return warnings;
 }
 
+// Milestone 178 (decision 0320): the rain's sound. What is around the listener, probed every 0.2 s: five rays up
+// (from it and a metre round it) for a cover over it — the share covered and the cover's mean height; eight rays down
+// four metres round it for water — the share of them falling on a FellowWater3D's surface before the ground.
+void FellowRain3D::_sound_update(float p_falling, double p_dt) {
+	const bool want = sound_enabled && is_visible_in_tree() && !_is_snow() && !Engine::get_singleton()->is_editor_hint() && AudioServer::get_singleton();
+	const float level = want ? CLAMP(p_falling, 0.0f, 1.0f) : 0.0f;
+	if (level <= 0.0f) {
+		// Quiet: the voice stops a second after the rain eased out.
+		if (rain_voice.is_playing()) {
+			if (FellowRainSynth *synth = (FellowRainSynth *)rain_voice.get_source()) {
+				FellowRainSynth::Params pr;
+				synth->post(pr);
+			}
+			if (sound_silent_since < 0.0) {
+				sound_silent_since = time;
+			} else if (time - sound_silent_since > 1.0) {
+				rain_voice.stop();
+			}
+		}
+		return;
+	}
+	sound_silent_since = -1.0;
+	Node3D *listener = fellow_sound_listener(this);
+	if (listener && (sound_probe_time < 0.0 || time - sound_probe_time >= 0.2 || time < sound_probe_time)) {
+		sound_probe_time = time;
+		PhysicsDirectSpaceState3D *space = get_world_3d().is_valid() ? get_world_3d()->get_direct_space_state() : nullptr;
+		const Vector3 at = listener->get_global_position();
+		if (space) {
+			PhysicsDirectSpaceState3D::RayParameters rp;
+			PhysicsDirectSpaceState3D::RayResult rr;
+			static const Vector2 UP[5] = { Vector2(0, 0), Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1) };
+			int covered = 0;
+			float height = 0.0f;
+			for (const Vector2 &o : UP) {
+				rp.from = at + Vector3(o.x, 0.2f, o.y);
+				rp.to = rp.from + Vector3(0.0f, 40.0f, 0.0f);
+				if (space->intersect_ray(rp, rr)) {
+					covered++;
+					height += float(rr.position.y - at.y);
+				}
+			}
+			sound_shelter = float(covered) / 5.0f;
+			sound_roof = covered > 0 ? height / float(covered) : 3.0f;
+			int wet = 0;
+			for (int k = 0; k < 8; k++) {
+				const float a = float(k) * float(Math::TAU) / 8.0f;
+				const Vector3 p = at + Vector3(Math::cos(a), 0.0f, Math::sin(a)) * 4.0f;
+				rp.from = Vector3(p.x, at.y + 2.0f, p.z);
+				rp.to = Vector3(p.x, at.y - 60.0f, p.z);
+				const float ground = space->intersect_ray(rp, rr) ? float(rr.position.y) : -1e30f;
+				FellowWater3D *water = FellowWater3D::find_water(p);
+				if (water && float(water->get_global_position().y) > ground + 0.02f && float(water->get_global_position().y) < at.y + 2.0f) {
+					wet++;
+				}
+			}
+			sound_water = float(wet) / 8.0f;
+		}
+	}
+	FellowRainSynth *synth = (FellowRainSynth *)rain_voice.start(this, &FellowRainSynth::make, sound_bus, sound_volume_db);
+	if (synth) {
+		FellowRainSynth::Params pr;
+		pr.rain = level;
+		pr.water = sound_water;
+		pr.shelter = sound_shelter;
+		pr.roof = sound_roof;
+		synth->post(pr);
+	}
+}
+
+void FellowRain3D::set_sound_volume_db(float p_db) {
+	sound_volume_db = p_db;
+	rain_voice.set_volume_db(p_db);
+}
+
+void FellowRain3D::set_sound_bus(const StringName &p_bus) {
+	sound_bus = p_bus;
+	rain_voice.set_bus(p_bus);
+}
+
+Dictionary FellowRain3D::get_sound_stats() {
+	Dictionary d;
+	uint64_t frames = 0, usec = 0;
+	rain_voice.get_mix_stats(frames, usec);
+	const float rate = AudioServer::get_singleton() ? AudioServer::get_singleton()->get_mix_rate() : 48000.0f;
+	d["playing"] = rain_voice.is_playing();
+	d["shelter"] = sound_shelter;
+	d["roof"] = sound_roof;
+	d["water"] = sound_water;
+	if (FellowRainSynth *synth = (FellowRainSynth *)rain_voice.get_source()) {
+		const FellowRainSynth::Stats st = synth->get_stats();
+		d["drops"] = (int64_t)st.drops;
+		d["roof_drops"] = (int64_t)st.roof_drops;
+		d["bubbles"] = (int64_t)st.bubbles;
+	}
+	d["mixed_seconds"] = double(frames) / rate;
+	d["mix_usec_per_second"] = frames > 0 ? double(usec) / (double(frames) / rate) : 0.0;
+	return d;
+}
+
+// The rain's sound offline (for tests): events by time, {time, rain, water, shelter[, roof]} — interleaved stereo.
+PackedFloat32Array FellowRain3D::debug_render_sound(const Array &p_events, float p_seconds, float p_rate) const {
+	PackedFloat32Array out;
+	const int total = int(MAX(0.0f, p_seconds) * p_rate);
+	out.resize(total * 2);
+	FellowRainSynth synth;
+	synth.set_rate(p_rate);
+	LocalVector<float> l, r;
+	float *w = out.ptrw();
+	int pos = 0;
+	FellowRainSynth::Params pr;
+	for (int e = 0; e <= p_events.size() && pos < total; e++) {
+		const Dictionary ev = e < p_events.size() ? Dictionary(p_events[e]) : Dictionary();
+		const int at = e < p_events.size() ? CLAMP(int(float(ev.get("time", 0.0)) * p_rate), pos, total) : total;
+		while (pos < at) {
+			const int n = MIN(1024, at - pos);
+			l.resize(n);
+			r.resize(n);
+			synth.render(l.ptr(), r.ptr(), n);
+			for (int i = 0; i < n; i++) {
+				w[(pos + i) * 2] = l[i];
+				w[(pos + i) * 2 + 1] = r[i];
+			}
+			pos += n;
+		}
+		pr.rain = ev.get("rain", pr.rain);
+		pr.water = ev.get("water", pr.water);
+		pr.shelter = ev.get("shelter", pr.shelter);
+		pr.roof = ev.get("roof", pr.roof);
+		synth.post(pr);
+	}
+	return out;
+}
+
 void FellowRain3D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
@@ -655,6 +793,7 @@ void FellowRain3D::_notification(int p_what) {
 				rain_here += (target - rain_here) * float(1.0 - Math::exp(-step / double(SHOWER_TIME)));
 			}
 			const float falling = rain * rain_here;
+			_sound_update(falling, dt);
 			if (wetness_follows_rain) {
 				if (get_ripple_rain() > 0.0f) {
 					wetness = MIN(1.0f, wetness + float(step) * falling / MAX(wetting_time, 0.01f));
@@ -733,6 +872,7 @@ void FellowRain3D::_notification(int p_what) {
 			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
+			rain_voice.stop();
 			if (active == this) {
 				active = nullptr;
 				RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowRain3D::_rt_disable));
@@ -1132,6 +1272,14 @@ RAIN_CHILD_SETTER(set_flake_wind_influence, float, flake_wind_influence, MAX(0.0
 RAIN_CHILD_SETTER(set_flake_color, const Color &, flake_color, p_value)
 
 void FellowRain3D::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_sound_enabled", "enabled"), &FellowRain3D::set_sound_enabled);
+	ClassDB::bind_method(D_METHOD("is_sound_enabled"), &FellowRain3D::is_sound_enabled);
+	ClassDB::bind_method(D_METHOD("set_sound_volume_db", "db"), &FellowRain3D::set_sound_volume_db);
+	ClassDB::bind_method(D_METHOD("get_sound_volume_db"), &FellowRain3D::get_sound_volume_db);
+	ClassDB::bind_method(D_METHOD("set_sound_bus", "bus"), &FellowRain3D::set_sound_bus);
+	ClassDB::bind_method(D_METHOD("get_sound_bus"), &FellowRain3D::get_sound_bus);
+	ClassDB::bind_method(D_METHOD("get_sound_stats"), &FellowRain3D::get_sound_stats);
+	ClassDB::bind_method(D_METHOD("debug_render_sound", "events", "seconds", "rate"), &FellowRain3D::debug_render_sound, DEFVAL(48000.0f));
 	ClassDB::bind_method(D_METHOD("set_precipitation", "precipitation"), &FellowRain3D::set_precipitation);
 	ClassDB::bind_method(D_METHOD("get_precipitation"), &FellowRain3D::get_precipitation);
 	ClassDB::bind_method(D_METHOD("set_snow", "snow"), &FellowRain3D::set_snow);
@@ -1284,6 +1432,10 @@ void FellowRain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flake_flutter", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:m"), "set_flake_flutter", "get_flake_flutter");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flake_wind_influence", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:1/s"), "set_flake_wind_influence", "get_flake_wind_influence");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "flake_color"), "set_flake_color", "get_flake_color");
+	ADD_GROUP("Sound", "sound_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sound_enabled"), "set_sound_enabled", "is_sound_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_volume_db", PROPERTY_HINT_RANGE, "-60,24,0.1,suffix:dB"), "set_sound_volume_db", "get_sound_volume_db");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "sound_bus"), "set_sound_bus", "get_sound_bus");
 	ADD_GROUP("Shelter", "occlusion_");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "occlusion_size", PROPERTY_HINT_RANGE, "1,1000,0.1,suffix:m"), "set_occlusion_size", "get_occlusion_size");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "occlusion_height", PROPERTY_HINT_RANGE, "1,1000,0.1,suffix:m"), "set_occlusion_height", "get_occlusion_height");

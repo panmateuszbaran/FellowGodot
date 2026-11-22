@@ -11,6 +11,17 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="debug_render_thunder" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<param index="0" name="distance" type="float" />
+			<param index="1" name="azimuth_degrees" type="float" />
+			<param index="2" name="seconds" type="float" />
+			<param index="3" name="rate" type="float" default="48000.0" />
+			<param index="4" name="seed" type="int" default="1" />
+			<description>
+				A strike's thunder synthesised offline, interleaved stereo at [param rate] for [param seconds] from the moment of the strike: the strike [param distance] metres away on [param azimuth_degrees] (0: to the listener's right, -90: ahead), its channel drawn as a strike's is from [param seed], heard by a listener 1.7 m over the node's ground facing -z. For tests and tuning.
+			</description>
+		</method>
 		<method name="get_flash" qualifiers="const">
 			<return type="float" />
 			<description>
@@ -21,6 +32,12 @@
 			<return type="DirectionalLight3D" />
 			<description>
 				The internal light of the flashes (visible only while one lasts).
+			</description>
+		</method>
+		<method name="get_sound_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The thunder: [code]thunders[/code] (built), [code]playing[/code], [code]mixed_seconds[/code], [code]mix_usec_per_second[/code] (the audio thread's time a second of sound).
 			</description>
 		</method>
 		<method name="is_striking" qualifiers="const">
@@ -65,6 +82,15 @@
 		</member>
 		<member name="shadows" type="bool" setter="set_shadows" getter="get_shadows" default="true">
 			If [code]true[/code], the flash casts shadows.
+		</member>
+		<member name="sound_bus" type="StringName" setter="set_sound_bus" getter="get_sound_bus" default="&amp;&quot;Master&quot;">
+			The audio bus the thunder plays on.
+		</member>
+		<member name="sound_enabled" type="bool" setter="set_sound_enabled" getter="is_sound_enabled" default="true">
+			If [code]true[/code], each strike is followed by its thunder, synthesised (no samples, milestone 178): the bolt's channel and its unseen run through the cloud (3-6 km) heard from where the listener is at the strike — every segment's pressure pulse (an N-wave) arriving after its distance / 343 s, broadside ones at once (claps), the rest drawn out, a near strike's small kinks crackling, the highs lost to the air over the distance — with the echoes of the land and clouds; from the strike's side. Built on a worker thread at the strike, heard from its first arrival (a strike 1 km away after 2.9 s). Not in the editor.
+		</member>
+		<member name="sound_volume_db" type="float" setter="set_sound_volume_db" getter="get_sound_volume_db" default="0.0">
+			The thunder's volume.
 		</member>
 		<member name="strikes_per_minute" type="float" setter="set_strikes_per_minute" getter="get_strikes_per_minute" default="4.0">
 			How often it strikes at random (0: only when [method strike] is called).
