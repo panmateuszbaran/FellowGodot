@@ -6,7 +6,7 @@
 	<description>
 		A [SkeletonModifier3D] for animation transitions. Instead of a cross-fade, which evaluates both animations for its whole length and mixes their poses (feet sliding, a jolt in the bones' speed at its start), switch the animation at once — [method AnimationPlayer.play] with [code]custom_blend[/code] [code]0.0[/code], an [AnimationTree]'s transitions with no cross-fade — and let this node, a child of the [Skeleton3D], blend over [member blend_time] from the last pose drawn, carried on by the velocity it had and slowing ([member extrapolation_halflife]), to the new animation's pose. Only the new animation is evaluated meanwhile (Holden's "dead blending", 2023, an inertialization).
 		A blend starts when [method blend] is called, when the [AnimationMixer] at [member animation_mixer_path] emits [signal AnimationMixer.animation_started], or, with [member detect_jumps], when a bone turns further in a frame than its velocity carries it.
-		Over 120 random switches between 128 CMU mocap clips (FellowEngine's [code]benchmarks/tools/animation_transitions[/code]), against [AnimationPlayer]'s cross-fade of the same 0.25 s: the feet planted in the new animation slide 18 % less (0.79 m/s against 0.97), the largest bone turn in a frame is half (22.8° against 43.6°), the bones' angular acceleration's 95th percentile 21 % lower, and the player evaluates one animation instead of two (its time 5.8 µs against 8.8, the modifier 2.7 µs; 31 bones).
+		Over 120 random switches between 128 CMU mocap clips (FellowEngine's [code]benchmarks/tools/animation_transitions[/code]), against [AnimationPlayer]'s cross-fade of the same 0.25 s: the bones' angular acceleration's median is 41 % lower and its 95th percentile 17 %, the feet planted in the new animation slide 10 % less (0.95 m/s against 1.06; 26 % less with a [FellowFootLock3D] after this node), and the player evaluates one animation instead of two (its time 6.2 µs against 9.2, the modifier 2.8 µs; 31 bones).
 	</description>
 	<tutorials>
 	</tutorials>
@@ -48,7 +48,7 @@
 			If [code]true[/code], a blend also starts when a bone of the new pose has turned more than [member jump_angle] further than its last velocity would have turned it in the frame: switches no signal announces (a script setting bone poses, a state machine's instant transitions) are hidden too. A fast motion may start blends of its own.
 		</member>
 		<member name="extrapolation_halflife" type="float" setter="set_extrapolation_halflife" getter="get_extrapolation_halflife" default="0.05">
-			While blending, the old pose carries on with the velocities it had, which halve every this many seconds. Small values hold the old pose still as it fades (measured: slightly less foot sliding); larger ones carry its motion on further.
+			While blending, the old pose carries on with the velocities it had, which halve every this many seconds. Small values hold the old pose still as it fades (measured: slightly less foot sliding, larger single jumps); larger ones carry its motion on further.
 		</member>
 		<member name="jump_angle" type="float" setter="set_jump_angle" getter="get_jump_angle" default="20.0">
 			See [member detect_jumps], in degrees.

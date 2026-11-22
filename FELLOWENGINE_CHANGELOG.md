@@ -9,6 +9,24 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 172 — feet held through transitions; decision 0313 corrected (2026-11-22)
+
+- Decision 0313 corrected: the transitions course measured each character at each of its skeleton's updates, and a
+  skeleton with modifiers updates twice a frame (the second time unchanged): the inertialized character's frames were
+  half measured as standing still. Measured once a frame, against the cross-fade at 0.25 s: the bones' acceleration's
+  median −41 % and 95th percentile −17 %, the feet sliding −10 % (not −18 %), the largest turn in a frame not better.
+- Decision 0314: `FellowFootLock3D` on mocap rigs and after the inertializer.
+  - The ground at rest is the feet's lowest joint when they rest more than 0.1 m below the origin (CMU's BVH rig rests
+    on its hips: the lock had held nothing, 2 foot-frames in 4 800; now 3 857).
+  - A held foot's velocity is kept through modifier passes with no time (zeroed, a foot let go then started back
+    from standing still).
+  - `release_extension` (1.0: as before): let go before the leg straightens to hold the foot.
+  - The inertializer with a foot lock after it: 26 % less sliding in transitions than the cross-fade (0.78 against
+    1.06 m/s), the held legs' acceleration's 95th percentile 4.2 times the inertializer's (1.7 times with
+    `release_extension` 0.98, the feet held half as long).
+- The transitions course: a game rig's root bone made from the mocap's hips (root motion across the ground and about
+  the vertical only), the characters moved by it, every frame measured once from the pose drawn, the legs apart.
+
 ## Milestone 171 — inertialized animation transitions (2026-11-22)
 
 - Decision 0313: `FellowInertializer3D`, a skeleton modifier. Godot cross-fades animation transitions: both animations
@@ -18,10 +36,10 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   start on `blend()`, an AnimationPlayer's or AnimationTree's `animation_started` (`animation_mixer_path`), or a
   detected jump in the pose.
   - The transitions course (new, `benchmarks/tools/animation_transitions/`): 120 random switches between 128 CMU
-    locomotion clips, root motion applied. At 0.25 s against AnimationPlayer's cross-fade: the feet planted in the new
-    animation slide 0.79 m/s instead of 0.97 (−18 %), the largest bone turn in a frame 22.8° instead of 43.6°, the
-    angular acceleration's 95th percentile −21 %; the player's time 5.8 µs instead of 8.8, the modifier 2.7 µs. At
-    0.4 s: −21 %, −41 %, −29 %.
+    locomotion clips, root motion applied. Corrected in milestone 172 (the first numbers measured the inertialized
+    character's frames half as standing still): at 0.25 s against AnimationPlayer's cross-fade, the bones' angular
+    acceleration's median −41 % and 95th percentile −17 %, the planted feet slide 0.95 m/s instead of 1.06 (−10 %); the
+    player's time 6.2 µs instead of 9.2, the modifier 2.8 µs.
 
 ## Milestone 170 — characters push rigid bodies and weigh on them (2026-11-22)
 

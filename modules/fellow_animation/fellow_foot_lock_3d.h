@@ -65,6 +65,7 @@ class FellowFootLock3D : public SkeletonModifier3D {
 	float contact_height = 0.03f;
 	float heel_offset = 0.05f;
 	float unlock_radius = 0.3f;
+	float release_extension = 1.0f; // milestone 172: let go when holding needs more of the leg's length (1: never)
 	float blend_halflife = 0.06f;
 	Foot feet[2];
 	bool bones_valid = false;
@@ -90,6 +91,8 @@ public:
 	void set_heel_offset(float p_offset);
 	float get_heel_offset() const { return heel_offset; }
 	float get_contact_height() const { return contact_height; }
+	void set_release_extension(float p_share) { release_extension = CLAMP(p_share, 0.5f, 1.0f); }
+	float get_release_extension() const { return release_extension; }
 	void set_unlock_radius(float p_radius) { unlock_radius = MAX(0.01f, p_radius); }
 	float get_unlock_radius() const { return unlock_radius; }
 	void set_blend_halflife(float p_halflife) { blend_halflife = MAX(0.0f, p_halflife); }

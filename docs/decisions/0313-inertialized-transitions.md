@@ -4,7 +4,7 @@ Status: **KEEP**, a new node (nothing changes without it) · Branch `fellow/geom
 (`modules/fellow_animation/fellow_inertializer_3d.*`, a `SkeletonModifier3D`) · Measured with
 `benchmarks/tools/animation_transitions/` (new).
 
-Checks: the cloud's CPU, headless, 128 CMU locomotion clips; no GPU.
+Checks: the cloud's CPU, headless, 128 CMU locomotion clips; no GPU. Measurements corrected in milestone 172.
 
 ## Problem
 
@@ -30,34 +30,43 @@ zero velocities there and carried nothing on).
 
 ## Measurements
 
-The transitions course (new): CMU's locomotion (subjects 16, 35, 69: 128 clips), a clip switched every second to a
-random one at a random time, 120 switches; the same sequence on characters side by side, root motion applied:
-`ref` switches at once (which feet the new animation has planted: slower than 0.15 m/s), `xfade` cross-fades
-(AnimationPlayer), `dead` switches at once under a FellowInertializer3D. Over each transition (the switch and the blend
-after it): the planted feet's speed (sliding), the largest bone turn in a frame, the bones' largest angular
-acceleration in a frame, and the CPU time of `AnimationPlayer.advance()` and of the modifier.
+Corrected in milestone 172 (below: what was wrong). The transitions course (new): CMU's locomotion (subjects 16, 35,
+69: 128 clips), a clip switched every second to a random one at a random time, 120 switches; the same sequence on
+characters side by side, moved by their root motion — a game rig's root bone made from the mocap's hips (on the ground
+under them, turned with their heading), the hips' height, sway and tilt left to them. `ref` switches at once (which
+feet the new animation has planted: slower than 0.15 m/s), `xfade` cross-fades (AnimationPlayer), `dead` switches at
+once under a FellowInertializer3D. Over each transition (the switch and the blend after it), once a frame from the pose
+drawn: the planted feet's speed (sliding), the largest bone turn in a frame, the bones' largest angular acceleration in
+a frame, and the CPU time of `AnimationPlayer.advance()` and of the modifier.
 
 | blend 0.25 s | sliding (m/s) | turn in a frame p95 / max | angular acceleration p50 / p95 (deg/s²) | player + modifier (µs a frame) |
 |---|---:|---:|---:|---:|
-| switch at once (`ref`) | 0.08 | 27.9° / 180° | 14 935 / 150 606 | 8.2 |
-| cross-fade | 0.97 | 9.2° / 43.6° | 12 006 / 38 356 | 8.8 |
-| **FellowInertializer3D** | **0.79** | **6.8° / 22.8°** | 13 239 / **30 268** | 5.8 + 2.7 |
+| switch at once (`ref`) | 0.08 | 27.9° / 180° | 14 935 / 150 606 | 9.2 |
+| cross-fade | 1.06 | 9.2° / 43.6° | 12 006 / 38 356 | 9.2 |
+| **FellowInertializer3D** | **0.95** | **8.7°** / 50.3° | **7 034 / 31 771** | 6.2 + 2.8 |
 
 | blend 0.4 s | sliding | turn p95 / max | acceleration p50 / p95 |
 |---|---:|---:|---:|
-| cross-fade | 0.86 | 8.0° / 57.8° | 11 694 / 36 543 |
-| FellowInertializer3D | 0.68 | 5.2° / 33.9° | 10 178 / 25 940 |
+| cross-fade | 0.82 | 8.0° / 57.8° | 11 694 / 36 543 |
+| FellowInertializer3D | 0.73 | 7.3° / 57.3° | 6 263 / 29 865 |
 
-* Against the cross-fade: the feet slide 18-21 % less, the largest turn in a frame halves, the acceleration's 95th
-  percentile is 21-29 % lower; the player evaluates one animation instead of two (−34 %), the modifier adds back
-  2.7-3.8 µs for 31 bones: the same total here, less where animations have more tracks than the skeleton has bones.
+* Against the cross-fade: the bones' acceleration's median is 41-46 % lower and its 95th percentile 17-18 % (the
+  smoothness), the feet slide 10-11 % less, the turn in a frame's 95th percentile 6-9 % less; the largest single turn
+  is no better (50° against 44° at 0.25 s). The player evaluates one animation instead of two (−33 to −45 %), the
+  modifier adds back 2.8-3.6 µs for 31 bones: about the same total here, less where animations have more tracks than
+  the skeleton has bones.
 * Blends started by the player's `animation_started` (`animation_mixer_path`) give the same results as by hand.
-* The extrapolation's half-life: 0.05 s slides 0.79 m/s, 0.1 s 0.83, 0.2 s 0.86; holding the old pose still (0.001 s)
-  0.74, the acceleration's 95th percentile the same (30 037). 0.05 s kept (the old motion not stopped dead at the
-  switch; Holden's value), smaller values for less sliding.
-* At 0.15 s both slide alike (1.23 m/s): too short for either to hide the change of feet.
+* The extrapolation's half-life at 0.25 s: 0.05 s slides 0.95 m/s, 0.1 s 0.99; holding the old pose still (0.001 s)
+  0.90, the acceleration alike, its largest turn 78°. 0.05 s kept (the old motion not stopped dead at the switch;
+  Holden's value).
 * Every blend slides: the old pose's feet are where the old animation had them, the character moves on with the new
-  one's root motion. Foot locking (`FellowFootLock3D`, decision 0295) is the usual remedy, with either (not measured here).
+  one's root motion. With a foot lock after it (decision 0314) the feet slide 26 % less than with the cross-fade alone.
+
+**What was wrong at first (milestone 171).** The course measured a character's motion at each of its skeleton's
+updates, and a skeleton with modifiers updates twice in a frame (the second time with nothing changed): the
+inertialized character's frames were half measured as standing still. Its sliding (0.79 m/s), its turns (6.8° / 22.8°)
+and the advantages drawn from them (−18 % sliding, the largest turn halved) were too good. The course now keeps the
+last pose drawn and measures once a frame; the cross-fade's and the reference's numbers did not change.
 
 ## Decision
 

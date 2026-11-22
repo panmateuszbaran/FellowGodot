@@ -1,7 +1,16 @@
 # FellowEngine — milestone 171 report (inertialized animation transitions)
 
-Status: **FINAL** (2026-11-22). Branch `fellow/geometry`. The cloud's CPU only, headless (no GPU, by the owner's
-decision).
+Status: **FINAL** (2026-11-22), **its numbers corrected in milestone 172**. Branch `fellow/geometry`. The cloud's CPU
+only, headless (no GPU, by the owner's decision).
+
+> **Correction (milestone 172).** The course measured each character's motion at each of its skeleton's updates; a
+> skeleton with modifiers updates twice a frame (the second time with nothing changed), so the inertialized
+> character's frames were half measured as standing still and its numbers below were too good. Measured once a frame
+> (and with a game rig's root bone under the mocap's hips), at 0.25 s against the cross-fade: sliding 0.95 m/s against
+> 1.06 (−10 %, not −18 %), the turn in a frame's 95th percentile 8.7° against 9.2° and its largest 50.3° against 43.6°
+> (not halved), the bones' acceleration's median −41 % and 95th percentile −17 %, the player 6.2 µs against 9.2 plus
+> the modifier's 2.8. The node stays (smoother motion, less sliding, one animation evaluated); decision 0313 has the
+> corrected tables.
 
 ## 0. Result
 

@@ -867,8 +867,17 @@ cross-fade) and the node blends over `blend_time` (0.25 s) from the last pose dr
 (halving every `extrapolation_halflife`, 0.05 s), to the new animation's. Blends start on `blend(seconds)`, on the
 `animation_started` of the mixer at `animation_mixer_path`, or with `detect_jumps` (off) when a bone turns more than
 `jump_angle` (20°) further in a frame than its velocity carries it. `is_blending()`, `get_blend_progress()`,
-`get_stats()`. Against a cross-fade of the same length (CMU clips): 18-21 % less foot sliding, half the largest bone
-turn in a frame, one animation evaluated instead of two.
+`get_stats()`. Against a cross-fade of the same length (CMU clips): the bones' acceleration's median 41-46 % lower,
+10-11 % less foot sliding, one animation evaluated instead of two (corrected in milestone 172).
+
+Feet held through transitions (milestone 172, decision 0314): a `FellowFootLock3D` after the inertializer (both under
+the `Skeleton3D`, the lock second) holds the feet the new animation plants while the old pose fades: 26 % less sliding
+in transitions than a cross-fade, the held legs' acceleration's 95th percentile 4.2 times the inertializer's alone.
+`FellowFootLock3D.release_extension` (1.0: off) lets a held foot go when holding it needs more than this share of the
+leg's length from the hip (0.98: the legs' acceleration 1.7 times, the feet held half as long). On a rig whose feet
+rest more than 0.1 m below the skeleton's origin (mocap resting on its hips) the lock takes the feet's lowest joint at
+rest as the ground. The course: `benchmarks/tools/animation_transitions/transitions.gd` (`--contact`, `--unlock`,
+`--lock_halflife`, `--release`).
 
 ## Traversal: mantling and vaulting (milestone 72)
 
@@ -970,7 +979,8 @@ time), `pole_follow` (0: a limb's bend follows the clip's own by this weight aga
 a target passes its line), `max_joint_speed` (0 °/s: off; while the node poses the body, no bone turns faster than this
 from its last pose); `FellowTraversal3D`, a mantle with a clip's root motion: held at the wall until the clip's root is
 over the top, then let go over 18 % of the mantle; `FellowFootLock3D`: a foot let go is never eased back from further
-from the hip than the leg reaches.
+from the hip than the leg reaches; `release_extension` (milestone 172; 1.0: off): let go when holding the foot needs more
+than this share of the leg's length.
 Bench `bench/climb_check.gd` (`hold_climb`, `side_reach`, `narrow_holds`, `eave_roof`, `eave_deep`, `beside_reach`,
 `stacked_holds`, `parapet`, `leap_style`;
 `--only=<lanes> --times=<s,...>` for a picture strip of some lanes at given times).

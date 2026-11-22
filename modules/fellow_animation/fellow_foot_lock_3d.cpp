@@ -66,6 +66,22 @@ void FellowFootLock3D::_find_bones() {
 		return;
 	}
 	bones_valid = true;
+	// Milestone 172 (decision 0314): the ground at rest is the skeleton's origin, unless the feet's joints are well
+	// below it (a mocap rig resting on its hips, as CMU's BVH: its feet 0.9 m down) — then their lowest joint.
+	float rest_ground = 0.0f;
+	for (int s = 0; s < 2; s++) {
+		const int fb = sk->find_bone(foot_bones[s]);
+		const int tb = toe_bones[s] == StringName() ? -1 : sk->find_bone(toe_bones[s]);
+		if (fb >= 0) {
+			rest_ground = MIN(rest_ground, (float)sk->get_bone_global_rest(fb).origin.y);
+		}
+		if (tb >= 0) {
+			rest_ground = MIN(rest_ground, (float)sk->get_bone_global_rest(tb).origin.y);
+		}
+	}
+	if (rest_ground > -0.1f) {
+		rest_ground = 0.0f;
+	}
 	for (int s = 0; s < 2; s++) {
 		Foot &f = feet[s];
 		f.foot = sk->find_bone(foot_bones[s]);
@@ -83,9 +99,9 @@ void FellowFootLock3D::_find_bones() {
 		const Vector3 toe = f.toe >= 0 ? sk->get_bone_global_rest(f.toe).origin : ankle;
 		Vector3 forward = Vector3(toe.x - ankle.x, 0.0f, toe.z - ankle.z);
 		forward = forward.length() > 1e-4f ? forward.normalized() : Vector3();
-		const Vector3 heel = Vector3(ankle.x, 0.0f, ankle.z) - forward * heel_offset;
+		const Vector3 heel = Vector3(ankle.x, rest_ground, ankle.z) - forward * heel_offset;
 		f.heel_local = foot_rest.affine_inverse().xform(heel);
-		f.ball_local = foot_rest.affine_inverse().xform(Vector3(toe.x, 0.0f, toe.z));
+		f.ball_local = foot_rest.affine_inverse().xform(Vector3(toe.x, rest_ground, toe.z));
 		f.locked = false;
 		f.offset = Vector3();
 		f.offset_velocity = Vector3();
@@ -190,10 +206,26 @@ void FellowFootLock3D::_process_modification(double p_delta) {
 		if (f.locked && (!contact || lock_flat.distance_to(point) > unlock_radius)) {
 			f.locked = false; // back to the animation over blend_halflife
 		}
+		if (f.locked && release_extension < 1.0f) {
+			// Milestone 172 (decision 0314): let go before the leg straightens to hold it — near full length the knee's angle
+			// swings with every millimetre the hip moves (a body carried away from a held foot: the legs' acceleration 4
+			// times the animation's).
+			const Vector3 hip_now = xform.xform(sk->get_bone_global_pose(f.upper).origin);
+			const Vector3 knee_now = xform.xform(sk->get_bone_global_pose(f.lower).origin);
+			const float leg = hip_now.distance_to(knee_now) + knee_now.distance_to(ankle);
+			const Vector3 held = ankle + Vector3(f.lock.x - point.x, 0.0f, f.lock.z - point.z);
+			if (hip_now.distance_to(held) > leg * release_extension) {
+				f.locked = false;
+			}
+		}
 		if (f.locked) {
 			// Held: only across the ground (its height is the animation's: the heel and the ball roll as they would).
 			const Vector3 new_offset = Vector3(f.lock.x - point.x, 0.0f, f.lock.z - point.z);
-			f.offset_velocity = dt > 0.0f ? (new_offset - f.offset) / dt : Vector3();
+			// Milestone 172 (decision 0314): a pass with no time passed (a skeleton processing its modifiers twice in a
+			// frame) keeps the velocity: zeroed there, a foot let go in that frame started back from standing still.
+			if (dt > 0.0f) {
+				f.offset_velocity = (new_offset - f.offset) / dt;
+			}
 			f.offset = new_offset;
 		} else {
 			if (f.offset.length() > unlock_radius * 3.0f) {
@@ -310,6 +342,8 @@ void FellowFootLock3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_contact_height"), &FellowFootLock3D::get_contact_height);
 	ClassDB::bind_method(D_METHOD("set_heel_offset", "offset"), &FellowFootLock3D::set_heel_offset);
 	ClassDB::bind_method(D_METHOD("get_heel_offset"), &FellowFootLock3D::get_heel_offset);
+	ClassDB::bind_method(D_METHOD("set_release_extension", "share"), &FellowFootLock3D::set_release_extension);
+	ClassDB::bind_method(D_METHOD("get_release_extension"), &FellowFootLock3D::get_release_extension);
 	ClassDB::bind_method(D_METHOD("set_unlock_radius", "radius"), &FellowFootLock3D::set_unlock_radius);
 	ClassDB::bind_method(D_METHOD("get_unlock_radius"), &FellowFootLock3D::get_unlock_radius);
 	ClassDB::bind_method(D_METHOD("set_blend_halflife", "halflife"), &FellowFootLock3D::set_blend_halflife);
@@ -325,5 +359,6 @@ void FellowFootLock3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "contact_height", PROPERTY_HINT_RANGE, "0,0.2,0.001,suffix:m"), "set_contact_height", "get_contact_height");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "heel_offset", PROPERTY_HINT_RANGE, "0,0.2,0.001,suffix:m"), "set_heel_offset", "get_heel_offset");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "unlock_radius", PROPERTY_HINT_RANGE, "0.01,1,0.01,suffix:m"), "set_unlock_radius", "get_unlock_radius");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "release_extension", PROPERTY_HINT_RANGE, "0.5,1,0.001"), "set_release_extension", "get_release_extension");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "blend_halflife", PROPERTY_HINT_RANGE, "0,0.5,0.001,suffix:s"), "set_blend_halflife", "get_blend_halflife");
 }
