@@ -135,6 +135,7 @@ private:
 	float density = 600.0f; // kg/m³
 	float burst_speed = 1.5f; // m/s, the pieces thrown out from the impact
 	float debris_lifetime = 10.0f; // s (0: forever)
+	bool debris_floats = true; // milestone 176: a FellowBuoyancy3D on each piece while the scene has water
 	bool prefracture = false;
 	bool free_after_break = true;
 	// Milestone 80 (decision 0188): a static object broken where it is struck; the rest stands while it is supported.
@@ -272,6 +273,7 @@ private:
 	void _prefracture();
 	static void _debris_tick();
 	static void _add_debris(Node3D *p_body, float p_lifetime);
+	void _spawn_debris(RigidBody3D *p_body);
 
 protected:
 	void _notification(int p_what);
@@ -320,6 +322,8 @@ public:
 	float get_burst_speed() const { return burst_speed; }
 	void set_debris_lifetime(float p_seconds) { debris_lifetime = MAX(0.0f, p_seconds); }
 	float get_debris_lifetime() const { return debris_lifetime; }
+	void set_debris_floats(bool p_enabled) { debris_floats = p_enabled; }
+	bool is_debris_floats() const { return debris_floats; }
 	void set_prefracture(bool p_enabled);
 	bool is_prefracture() const { return prefracture; }
 	void set_free_after_break(bool p_enabled) { free_after_break = p_enabled; }

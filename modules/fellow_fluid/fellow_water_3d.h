@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/object/worker_thread_pool.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/node_3d.h"
 #include "scene/resources/image_texture.h"
@@ -171,9 +172,41 @@ private:
 	int cpu_max_omega_index = 0;
 	LocalVector<float> cpu_phase;
 	float cpu_velocity_scale = 0.0f; // 1 / the time since the previous update (0: none)
+	double cpu_repeat_period = 200.0; // repeat_period when built (read by the worker)
+	float cpu_height_sigma = 0.0f; // m: the CPU's height field's rms (before wave_scale)
+	// Milestone 176 (decision 0318): the update for a frame's time made on a worker thread after the frame's process,
+	// while something asked for the surface in the last frames; the physics ticks of the next frame find it done.
+	WorkerThreadPool::TaskID cpu_task = WorkerThreadPool::INVALID_TASK_ID;
+	double cpu_task_time = 0.0;
+	int64_t cpu_wanted_frame = -10; // the process frame a point was last asked for
+	uint64_t cpu_main_usec = 0; // the main thread's time in updates and waits
+	uint64_t cpu_build_usec = 0; // the main thread's time building the modes (a new spectrum)
+	uint64_t cpu_builds = 0;
+	uint64_t cpu_threaded_updates = 0;
 	void _cpu_waves_build();
 	void _cpu_waves_update(double p_time);
+	void _cpu_waves_task(void *p_unused);
+	void _cpu_waves_wait();
+	void _cpu_waves_ready(double p_time);
 	void _cpu_waves_sample(float p_x, float p_z, float r_out[6]) const;
+
+	// Milestone 176 (decision 0318): foam made by what floats (FellowBuoyancy3D) and add_foam(), kept on a grid of
+	// BODY_FOAM_CELLS² cells over body_foam_size around the camera (each cell the world's cell modulo the grid: the
+	// window moves without copying), fading by body_foam_decay, drawn by the surface's foam.
+	static constexpr int BODY_FOAM_CELLS = 256;
+	float body_foam_size = 64.0f; // m (0: none)
+	float body_foam_decay = 0.3f; // 1/s
+	LocalVector<float> body_foam;
+	Vector2i body_foam_centre;
+	bool body_foam_active = false;
+	Rect2i body_foam_rect; // world cells: where foam was added since there was none
+	Vector<uint8_t> body_foam_bytes;
+	Ref<Image> body_foam_image;
+	Ref<ImageTexture> body_foam_texture;
+	Vector4 last_body_foam_map;
+	uint64_t body_foam_usec = 0;
+	uint64_t body_foam_frames = 0;
+	void _body_foam_update(double p_dt);
 
 	// Main-thread state.
 	MeshInstance3D *mesh_instance = nullptr;
@@ -342,8 +375,20 @@ public:
 	bool fellow_sample_surface(const Vector3 &p_position, float &r_height, Vector3 &r_velocity);
 	// The water whose extent holds a point (world), of those in the scene (the first one), for what floats on it.
 	static FellowWater3D *find_water(const Vector3 &p_position);
+	static bool has_instances() { return !instances.is_empty(); }
 	float get_surface_height(const Vector3 &p_position);
 	Vector3 get_surface_velocity(const Vector3 &p_position);
+	// Milestone 176: a height the waves on the CPU stay under (six times their rms over the level): a body above it is
+	// out of the water without asking for the waves.
+	float get_surface_ceiling();
+
+	void set_body_foam_size(float p_size);
+	float get_body_foam_size() const { return body_foam_size; }
+	void set_body_foam_decay(float p_decay) { body_foam_decay = MAX(0.0f, p_decay); }
+	float get_body_foam_decay() const { return body_foam_decay; }
+	void add_foam(const Vector3 &p_position, float p_radius, float p_amount);
+	float get_foam(const Vector3 &p_position) const;
+	Dictionary get_body_foam_stats() const;
 	Dictionary get_cpu_wave_stats() const;
 	Dictionary debug_compare_cpu_waves(int p_cascade);
 

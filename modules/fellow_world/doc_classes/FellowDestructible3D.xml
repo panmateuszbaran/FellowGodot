@@ -27,16 +27,16 @@
 				Breaks the object now (or, without [member prefracture], as soon as its fracture is computed on a worker thread): its pieces gathered around [param position] (global; the mesh's centre if zero) and pushed by [param impulse] (N·s, shared by the pieces near the position). Does nothing once broken.
 			</description>
 		</method>
-		<method name="clear_loads">
-			<return type="void" />
-			<description>
-				Removes the loads of [method add_load].
-			</description>
-		</method>
 		<method name="clear_cache" qualifiers="static">
 			<return type="void" />
 			<description>
 				Forgets the shared prefractured patterns (each is kept while a destructible uses it).
+			</description>
+		</method>
+		<method name="clear_loads">
+			<return type="void" />
+			<description>
+				Removes the loads of [method add_load].
 			</description>
 		</method>
 		<method name="damage">
@@ -156,6 +156,9 @@
 		</member>
 		<member name="burst_speed" type="float" setter="set_burst_speed" getter="get_burst_speed" default="1.5">
 			The speed, in m/s, at which the pieces nearest the impact are thrown out from it (less farther away).
+		</member>
+		<member name="debris_floats" type="bool" setter="set_debris_floats" getter="is_debris_floats" default="true">
+			If [code]true[/code] and the scene has a [FellowWater3D], each piece gets a [FellowBuoyancy3D] (its points a third of the piece apart, at most 16): pieces lighter than water float at their density's draft (the default [member density], wood's, floats 60 % under), heavier ones sink slowed by the water, and they splash. Outside a water's extent and above its waves the buoyancy costs 0.2 µs a piece a tick. Milestone 176 (decision 0318).
 		</member>
 		<member name="debris_lifetime" type="float" setter="set_debris_lifetime" getter="get_debris_lifetime" default="10.0">
 			Seconds a piece lives once asleep (twice this at most): then it shrinks away. 0: until the debris budget ([method get_max_debris]) takes it.

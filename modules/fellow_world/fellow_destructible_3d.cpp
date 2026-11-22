@@ -46,6 +46,9 @@
 #include "scene/scene_string_names.h"
 #include "servers/physics_3d/physics_server_3d.h"
 
+#include "modules/fellow_fluid/fellow_buoyancy_3d.h"
+#include "modules/fellow_fluid/fellow_water_3d.h"
+
 FellowDestructible3D::GlobalStats FellowDestructible3D::global_stats;
 LocalVector<FellowDestructible3D::Debris> FellowDestructible3D::debris;
 int FellowDestructible3D::max_debris = 256;
@@ -459,7 +462,7 @@ void FellowDestructible3D::_spawn(const Ref<FellowFractureResult> &p_result, con
 		}
 		rb->set_linear_velocity(v);
 		rb->set_angular_velocity(w);
-		_add_debris(rb, debris_lifetime);
+		_spawn_debris(rb);
 		spawned.push_back(rb);
 	}
 	broken = true;
@@ -1241,7 +1244,7 @@ void FellowDestructible3D::_settle(Array &r_spawned) {
 		}
 		RigidBody3D *rb = _make_body(part, struct_mxf);
 		if (rb) {
-			_add_debris(rb, debris_lifetime);
+			_spawn_debris(rb);
 			r_spawned.push_back(rb);
 			_track_chunk(rb, part); // milestone 123
 		}
@@ -1386,7 +1389,7 @@ void FellowDestructible3D::_break_chunk(const Chunk &p_chunk, RigidBody3D *p_bod
 		const Vector3 r = p_new->get_global_transform().origin - com;
 		p_new->set_linear_velocity(v + w.cross(r));
 		p_new->set_angular_velocity(w);
-		_add_debris(p_new, debris_lifetime);
+		_spawn_debris(p_new);
 		r_spawned.push_back(p_new);
 	};
 	for (int k : hit) {
@@ -1602,7 +1605,7 @@ void FellowDestructible3D::_strike(const Vector3 &p_position, const Vector3 &p_i
 		const float dist = out.length();
 		out = dist > 1e-4f ? out / dist : Vector3(0, 1, 0);
 		rb->set_linear_velocity(out * burst_speed + p_impulse / MAX(hit_mass, 1e-3f));
-		_add_debris(rb, debris_lifetime);
+		_spawn_debris(rb);
 		spawned.push_back(rb);
 	}
 	// Support (milestone 122: and stress), and the parts that lost it falling.
@@ -1728,6 +1731,38 @@ void FellowDestructible3D::_check_impacts() {
 			}
 		}
 	}
+}
+
+// A piece thrown out: debris (its lifetime, the budget); floating while the scene has water (milestone 176, decision
+// 0318): a FellowBuoyancy3D, its points as fine as a third of the piece (at most 16).
+void FellowDestructible3D::_spawn_debris(RigidBody3D *p_body) {
+	_add_debris(p_body, debris_lifetime);
+	if (!debris_floats || !FellowWater3D::has_instances()) {
+		return;
+	}
+	AABB box;
+	bool first = true;
+	for (int i = 0; i < p_body->get_child_count(); i++) {
+		const CollisionShape3D *cs = Object::cast_to<CollisionShape3D>(p_body->get_child(i));
+		const Ref<ConvexPolygonShape3D> shape = cs ? Ref<ConvexPolygonShape3D>(cs->get_shape()) : Ref<ConvexPolygonShape3D>();
+		if (shape.is_null()) {
+			continue;
+		}
+		const Transform3D xf = cs->get_transform();
+		for (const Vector3 &p : shape->get_points()) {
+			if (first) {
+				box = AABB(xf.xform(p), Vector3());
+				first = false;
+			} else {
+				box.expand_to(xf.xform(p));
+			}
+		}
+	}
+	FellowBuoyancy3D *buoyancy = memnew(FellowBuoyancy3D);
+	buoyancy->set_name("Buoyancy");
+	buoyancy->set_point_spacing(CLAMP(box.get_longest_axis_size() / 3.0f, 0.04f, 0.25f));
+	buoyancy->set_max_points(16);
+	p_body->add_child(buoyancy);
 }
 
 void FellowDestructible3D::_add_debris(Node3D *p_body, float p_lifetime) {
@@ -2037,6 +2072,8 @@ void FellowDestructible3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_burst_speed"), &FellowDestructible3D::get_burst_speed);
 	ClassDB::bind_method(D_METHOD("set_debris_lifetime", "seconds"), &FellowDestructible3D::set_debris_lifetime);
 	ClassDB::bind_method(D_METHOD("get_debris_lifetime"), &FellowDestructible3D::get_debris_lifetime);
+	ClassDB::bind_method(D_METHOD("set_debris_floats", "enabled"), &FellowDestructible3D::set_debris_floats);
+	ClassDB::bind_method(D_METHOD("is_debris_floats"), &FellowDestructible3D::is_debris_floats);
 	ClassDB::bind_method(D_METHOD("set_prefracture", "enabled"), &FellowDestructible3D::set_prefracture);
 	ClassDB::bind_method(D_METHOD("is_prefracture"), &FellowDestructible3D::is_prefracture);
 	ClassDB::bind_method(D_METHOD("set_structural", "enabled"), &FellowDestructible3D::set_structural);
@@ -2085,6 +2122,7 @@ void FellowDestructible3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "density", PROPERTY_HINT_RANGE, "1,10000,1,or_greater,suffix:kg/m³"), "set_density", "get_density");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "burst_speed", PROPERTY_HINT_RANGE, "0,20,0.01,or_greater,suffix:m/s"), "set_burst_speed", "get_burst_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "debris_lifetime", PROPERTY_HINT_RANGE, "0,600,0.1,or_greater,suffix:s"), "set_debris_lifetime", "get_debris_lifetime");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debris_floats"), "set_debris_floats", "is_debris_floats");
 
 	ADD_SIGNAL(MethodInfo("broken", PropertyInfo(Variant::ARRAY, "pieces")));
 

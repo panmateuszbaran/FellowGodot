@@ -39,10 +39,12 @@
 #include "fellow_water_waves.glsl.gen.h"
 #include "fellow_wind_3d.h"
 
+#include "core/config/engine.h"
 #include "core/math/projection.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
+#include "scene/3d/camera_3d.h"
 #include "scene/3d/light_3d.h"
 #include "scene/main/scene_tree.h"
 #include "scene/main/viewport.h"
@@ -297,13 +299,15 @@ static void water_ifft_2d(const WaterFFTPlan &p_plan, float *p_data, float *r_sc
 }
 
 void FellowWater3D::_cpu_waves_build() {
+	const uint64_t t_build = OS::get_singleton()->get_ticks_usec();
 	cpu_cascades.clear();
 	cpu_spectrum_version = spectrum_version;
 	cpu_waves_time = -1e30;
+	cpu_repeat_period = repeat_period;
 	const int cascades = _cascade_count();
 	const int full = wave_resolution;
 	WaterSpectrum spectrum(wind_speed, fetch * 1000.0, Math::deg_to_rad(double(wind_direction)));
-	const double w0 = 2.0 * Math::PI / repeat_period;
+	const double w0 = 2.0 * Math::PI / cpu_repeat_period;
 	double var_all = 0.0;
 	double var_kept = 0.0;
 	int used = 0;
@@ -381,12 +385,14 @@ void FellowWater3D::_cpu_waves_build() {
 		cc.previous.resize(uint32_t(msz) * msz * 2);
 	}
 	cpu_variance_share = var_all > 0.0 ? var_kept / var_all : 1.0;
+	cpu_height_sigma = float(Math::sqrt(var_kept));
+	cpu_builds++;
+	cpu_build_usec += OS::get_singleton()->get_ticks_usec() - t_build;
 }
 
+// The waves at a time from the modes built (by the caller, on the main thread: a worker reads nothing else of the
+// node's).
 void FellowWater3D::_cpu_waves_update(double p_time) {
-	if (cpu_spectrum_version != spectrum_version) {
-		_cpu_waves_build();
-	}
 	if (p_time == cpu_waves_time) {
 		return;
 	}
@@ -395,8 +401,8 @@ void FellowWater3D::_cpu_waves_update(double p_time) {
 	const bool has_previous = dt > 0.0 && dt < 0.25;
 	cpu_velocity_scale = has_previous ? float(1.0 / dt) : 0.0f;
 	cpu_waves_time = p_time;
-	const double w0 = 2.0 * Math::PI / repeat_period;
-	double tf = Math::fmod(p_time, double(repeat_period)) / repeat_period;
+	const double w0 = 2.0 * Math::PI / cpu_repeat_period;
+	double tf = Math::fmod(p_time, cpu_repeat_period) / cpu_repeat_period;
 	if (tf < 0.0) {
 		tf += 1.0;
 	}
@@ -463,6 +469,36 @@ void FellowWater3D::_cpu_waves_update(double p_time) {
 	cpu_wave_usec += OS::get_singleton()->get_ticks_usec() - t0;
 }
 
+void FellowWater3D::_cpu_waves_task(void *p_unused) {
+	_cpu_waves_update(cpu_task_time);
+	cpu_threaded_updates++;
+}
+
+void FellowWater3D::_cpu_waves_wait() {
+	if (cpu_task != WorkerThreadPool::INVALID_TASK_ID) {
+		WorkerThreadPool::get_singleton()->wait_for_task_completion(cpu_task);
+		cpu_task = WorkerThreadPool::INVALID_TASK_ID;
+	}
+}
+
+// The waves at a time, for a point asked for on the main thread: the worker's update waited for if it runs; computed
+// here if the time is another (the first frame, a clock set by hand).
+void FellowWater3D::_cpu_waves_ready(double p_time) {
+	cpu_wanted_frame = int64_t(Engine::get_singleton()->get_process_frames());
+	if (cpu_task == WorkerThreadPool::INVALID_TASK_ID && p_time == cpu_waves_time && cpu_spectrum_version == spectrum_version) {
+		return;
+	}
+	uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	_cpu_waves_wait();
+	if (cpu_spectrum_version != spectrum_version) {
+		cpu_main_usec += OS::get_singleton()->get_ticks_usec() - t0;
+		_cpu_waves_build();
+		t0 = OS::get_singleton()->get_ticks_usec();
+	}
+	_cpu_waves_update(p_time);
+	cpu_main_usec += OS::get_singleton()->get_ticks_usec() - t0;
+}
+
 // The six fields summed over the cascades at a point (world x, z) of the undisplaced surface: dx, dz, h, dh/dt,
 // d(dx)/dt, d(dz)/dt (before the choppiness and the wave scale). Sampled where the GPU's textures put them: a texel's
 // value at its centre, half a texel of the GPU's grid on.
@@ -509,7 +545,7 @@ bool FellowWater3D::fellow_sample_surface(const Vector3 &p_position, float &r_he
 	if (wave_scale <= 0.0f) {
 		return true;
 	}
-	_cpu_waves_update(time);
+	_cpu_waves_ready(time);
 	// The surface over (x, z) is displaced across the ground: find the undisplaced point that lands there (a few fixed
 	// point steps; the displacement is small against the waves' length).
 	float f[6];
@@ -554,10 +590,28 @@ Vector3 FellowWater3D::get_surface_velocity(const Vector3 &p_position) {
 	return fellow_sample_surface(p_position, h, v) ? v : Vector3();
 }
 
+float FellowWater3D::get_surface_ceiling() {
+	const float level = is_inside_tree() ? float(get_global_position().y) : float(get_position().y);
+	if (wave_scale <= 0.0f) {
+		return level;
+	}
+	if (cpu_spectrum_version != spectrum_version) {
+		_cpu_waves_wait();
+		_cpu_waves_build();
+	}
+	return level + 6.0f * cpu_height_sigma * wave_scale;
+}
+
 Dictionary FellowWater3D::get_cpu_wave_stats() const {
+	const_cast<FellowWater3D *>(this)->_cpu_waves_wait();
 	Dictionary d;
 	d["updates"] = (int64_t)cpu_wave_updates;
 	d["usec_per_update"] = cpu_wave_updates > 0 ? double(cpu_wave_usec) / double(cpu_wave_updates) : 0.0;
+	d["threaded_updates"] = (int64_t)cpu_threaded_updates;
+	d["main_usec_per_update"] = cpu_wave_updates > 0 ? double(cpu_main_usec) / double(cpu_wave_updates) : 0.0;
+	d["height_rms"] = cpu_height_sigma;
+	d["builds"] = (int64_t)cpu_builds;
+	d["usec_per_build"] = cpu_builds > 0 ? double(cpu_build_usec) / double(cpu_builds) : 0.0;
 	d["variance_share"] = cpu_variance_share;
 	d["grid"] = cpu_cascades.is_empty() ? 0 : cpu_cascades[0].size;
 	return d;
@@ -565,11 +619,186 @@ Dictionary FellowWater3D::get_cpu_wave_stats() const {
 
 // The CPU's cascade against the GPU's displacement texture at the texels the CPU's grid has (the GPU's waves at the
 // time of its last dispatch).
+// Milestone 176 (decision 0318): foam made by what floats.
+void FellowWater3D::set_body_foam_size(float p_size) {
+	body_foam_size = MAX(0.0f, p_size);
+	body_foam.clear();
+	body_foam_active = false;
+}
+
+static Vector2i fellow_foam_cell(const Vector3 &p_position, float p_cell) {
+	return Vector2i(int(Math::floor(p_position.x / p_cell)), int(Math::floor(p_position.z / p_cell)));
+}
+
+// Foam added around a point (world), most at the centre, none at p_radius; a cell holds at most 1 (covered).
+void FellowWater3D::add_foam(const Vector3 &p_position, float p_radius, float p_amount) {
+	if (body_foam_size <= 0.0f || p_amount <= 0.0f || p_radius <= 0.0f || !p_position.is_finite()) {
+		return;
+	}
+	const int n = BODY_FOAM_CELLS;
+	const int half = n / 2;
+	const float cell = body_foam_size / n;
+	if (body_foam.is_empty()) {
+		body_foam.resize(n * n);
+		memset(body_foam.ptr(), 0, sizeof(float) * n * n);
+	}
+	if (!body_foam_active) {
+		// Empty: the window placed where it is wanted (around the camera, else around the foam).
+		const Viewport *vp = is_inside_tree() ? get_viewport() : nullptr;
+		const Camera3D *cam = vp ? vp->get_camera_3d() : nullptr;
+		body_foam_centre = fellow_foam_cell(cam ? cam->get_global_position() : p_position, cell);
+	}
+	const float r = MAX(p_radius, cell * 0.75f);
+	const Vector2i c = fellow_foam_cell(p_position, cell);
+	const int reach = int(Math::ceil(r / cell));
+	const Rect2i splat(c - Vector2i(reach, reach), Vector2i(reach * 2 + 1, reach * 2 + 1));
+	body_foam_rect = body_foam_active ? body_foam_rect.merge(splat) : splat;
+	const float inv_r2 = 1.0f / (r * r);
+	bool added = false;
+	for (int j = c.y - reach; j <= c.y + reach; j++) {
+		if (j < body_foam_centre.y - half || j >= body_foam_centre.y + half) {
+			continue;
+		}
+		const float dz = (float(j) + 0.5f) * cell - float(p_position.z);
+		for (int i = c.x - reach; i <= c.x + reach; i++) {
+			if (i < body_foam_centre.x - half || i >= body_foam_centre.x + half) {
+				continue;
+			}
+			const float dx = (float(i) + 0.5f) * cell - float(p_position.x);
+			const float t = 1.0f - (dx * dx + dz * dz) * inv_r2;
+			if (t <= 0.0f) {
+				continue;
+			}
+			float &v = body_foam[int(Math::posmod(j, n)) * n + int(Math::posmod(i, n))];
+			v = MIN(1.0f, v + p_amount * t * t);
+			added = true;
+		}
+	}
+	body_foam_active = body_foam_active || added;
+}
+
+// Once a frame: the window follows the camera (the cells it leaves cleared), the foam fades (body_foam_decay), and the
+// grid goes to the GPU; nothing while there is none.
+void FellowWater3D::_body_foam_update(double p_dt) {
+	const int n = BODY_FOAM_CELLS;
+	const int half = n / 2;
+	if (body_foam_bytes.size() != n * n) {
+		body_foam_bytes.resize(n * n);
+		memset(body_foam_bytes.ptrw(), 0, n * n);
+	}
+	if (!body_foam_active || body_foam_size <= 0.0f || body_foam.is_empty()) {
+		if (last_body_foam_map.w != 0.0f) {
+			last_body_foam_map.w = 0.0f;
+			material->set_shader_parameter("body_foam_map", last_body_foam_map);
+		}
+		body_foam_active = false;
+		return;
+	}
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	const float cell = body_foam_size / n;
+	const Viewport *vp = get_viewport();
+	const Camera3D *cam = vp ? vp->get_camera_3d() : nullptr;
+	if (cam) {
+		const Vector2i nc = fellow_foam_cell(cam->get_global_position(), cell);
+		const Vector2i d = nc - body_foam_centre;
+		uint8_t *bytes = body_foam_bytes.ptrw();
+		if (Math::abs(d.x) >= n || Math::abs(d.y) >= n) {
+			memset(body_foam.ptr(), 0, sizeof(float) * n * n);
+			memset(bytes, 0, n * n);
+		} else {
+			// The columns and rows of the old window outside the new one: the cells the new one brings in.
+			for (int i = body_foam_centre.x - half; i < body_foam_centre.x + half; i++) {
+				if (i < nc.x - half || i >= nc.x + half) {
+					const int col = Math::posmod(i, n);
+					for (int j = 0; j < n; j++) {
+						body_foam[j * n + col] = 0.0f;
+						bytes[j * n + col] = 0;
+					}
+				}
+			}
+			for (int j = body_foam_centre.y - half; j < body_foam_centre.y + half; j++) {
+				if (j < nc.y - half || j >= nc.y + half) {
+					memset(body_foam.ptr() + Math::posmod(j, n) * n, 0, sizeof(float) * n);
+					memset(bytes + Math::posmod(j, n) * n, 0, n);
+				}
+			}
+		}
+		body_foam_centre = nc;
+	}
+	// The foam fades where there is any (the cells foam was added to since there was none, in the window).
+	const float keep = float(Math::exp(-double(body_foam_decay) * p_dt));
+	const Rect2i rect = body_foam_rect.intersection(Rect2i(body_foam_centre - Vector2i(half, half), Vector2i(n, n)));
+	uint8_t *bytes = body_foam_bytes.ptrw();
+	float *v = body_foam.ptr();
+	bool any = false;
+	const int col0 = int(Math::posmod(rect.position.x, n));
+	for (int j = rect.position.y; j < rect.position.y + rect.size.y; j++) {
+		const int row = int(Math::posmod(j, n)) * n;
+		int col = col0;
+		for (int i = 0; i < rect.size.x; i++, col = col + 1 == n ? 0 : col + 1) {
+			const int k = row + col;
+			float f = v[k] * keep;
+			f = f < 0.002f ? 0.0f : f;
+			v[k] = f;
+			bytes[k] = uint8_t(f * 255.0f + 0.5f);
+			any = any || f > 0.0f;
+		}
+	}
+	body_foam_active = any;
+	if (body_foam_image.is_null()) {
+		body_foam_image = Image::create_from_data(n, n, false, Image::FORMAT_R8, body_foam_bytes);
+		body_foam_texture = ImageTexture::create_from_image(body_foam_image);
+		material->set_shader_parameter("body_foam", body_foam_texture);
+	} else {
+		body_foam_image->set_data(n, n, false, Image::FORMAT_R8, body_foam_bytes);
+		body_foam_texture->update(body_foam_image);
+	}
+	const Vector4 map((float(body_foam_centre.x) + 0.5f) * cell, (float(body_foam_centre.y) + 0.5f) * cell, 1.0f / body_foam_size, any ? body_foam_size * 0.5f : 0.0f);
+	if (map != last_body_foam_map) {
+		material->set_shader_parameter("body_foam_map", map);
+		last_body_foam_map = map;
+	}
+	body_foam_frames++;
+	body_foam_usec += OS::get_singleton()->get_ticks_usec() - t0;
+}
+
+// The foam added there (its cell's amount): 0 outside the grid's window.
+float FellowWater3D::get_foam(const Vector3 &p_position) const {
+	const int n = BODY_FOAM_CELLS;
+	const int half = n / 2;
+	if (!body_foam_active || body_foam.is_empty() || body_foam_size <= 0.0f) {
+		return 0.0f;
+	}
+	const Vector2i c = fellow_foam_cell(p_position, body_foam_size / n);
+	if (c.x < body_foam_centre.x - half || c.x >= body_foam_centre.x + half || c.y < body_foam_centre.y - half || c.y >= body_foam_centre.y + half) {
+		return 0.0f;
+	}
+	return body_foam[int(Math::posmod(c.y, n)) * n + int(Math::posmod(c.x, n))];
+}
+
+Dictionary FellowWater3D::get_body_foam_stats() const {
+	Dictionary d;
+	double total = 0.0;
+	int cells = 0;
+	for (const float f : body_foam) {
+		total += f;
+		cells += f > 0.0f ? 1 : 0;
+	}
+	d["active"] = body_foam_active;
+	d["cells"] = cells;
+	d["total"] = total;
+	d["cell_size"] = body_foam_size / BODY_FOAM_CELLS;
+	d["centre"] = Vector2((float(body_foam_centre.x) + 0.5f), (float(body_foam_centre.y) + 0.5f)) * (body_foam_size / BODY_FOAM_CELLS);
+	d["frames"] = (int64_t)body_foam_frames;
+	d["usec_per_frame"] = body_foam_frames > 0 ? double(body_foam_usec) / double(body_foam_frames) : 0.0;
+	return d;
+}
+
 Dictionary FellowWater3D::debug_compare_cpu_waves(int p_cascade) {
 	Dictionary d;
 	Ref<Image> img = debug_get_displacement_image(p_cascade);
 	ERR_FAIL_COND_V(img.is_null(), d);
-	_cpu_waves_update(last_dispatch_time);
+	_cpu_waves_ready(last_dispatch_time);
 	ERR_FAIL_INDEX_V(p_cascade, (int)cpu_cascades.size(), d);
 	const CPUWaveCascade &cc = cpu_cascades[p_cascade];
 	const int msz = cc.size;
@@ -887,12 +1116,22 @@ void FellowWater3D::_notification(int p_what) {
 			if (time_auto && !still) {
 				time += dt;
 			}
+			// Milestone 176 (decision 0318): the next physics ticks' waves made on a worker thread while the frame
+			// is drawn, if something asked for the surface in this frame or the last.
+			if (wave_scale > 0.0f && cpu_task == WorkerThreadPool::INVALID_TASK_ID && time != cpu_waves_time && cpu_wanted_frame + 1 >= int64_t(Engine::get_singleton()->get_process_frames())) {
+				if (cpu_spectrum_version != spectrum_version) {
+					_cpu_waves_build();
+				}
+				cpu_task_time = time;
+				cpu_task = WorkerThreadPool::get_singleton()->add_template_task(this, &FellowWater3D::_cpu_waves_task, (void *)nullptr, true, SNAME("FellowWater3D waves"));
+			}
 			if (mesh_dirty) {
 				_update_mesh();
 			}
 			if (material.is_null()) {
 				return;
 			}
+			_body_foam_update(dt);
 			const float water_time = float(Math::fmod(time, 3600.0));
 			if (water_time != last_water_time) {
 				material->set_shader_parameter("water_time", water_time);
@@ -1005,6 +1244,7 @@ void FellowWater3D::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
 			instances.erase(this);
+			_cpu_waves_wait();
 			if (gpu_ready) {
 				RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowWater3D::_rt_free));
 			}
@@ -1442,7 +1682,15 @@ void FellowWater3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_debug_view"), &FellowWater3D::get_debug_view);
 	ClassDB::bind_method(D_METHOD("get_surface_height", "position"), &FellowWater3D::get_surface_height);
 	ClassDB::bind_method(D_METHOD("get_surface_velocity", "position"), &FellowWater3D::get_surface_velocity);
+	ClassDB::bind_method(D_METHOD("get_surface_ceiling"), &FellowWater3D::get_surface_ceiling);
 	ClassDB::bind_method(D_METHOD("get_cpu_wave_stats"), &FellowWater3D::get_cpu_wave_stats);
+	ClassDB::bind_method(D_METHOD("set_body_foam_size", "size"), &FellowWater3D::set_body_foam_size);
+	ClassDB::bind_method(D_METHOD("get_body_foam_size"), &FellowWater3D::get_body_foam_size);
+	ClassDB::bind_method(D_METHOD("set_body_foam_decay", "decay"), &FellowWater3D::set_body_foam_decay);
+	ClassDB::bind_method(D_METHOD("get_body_foam_decay"), &FellowWater3D::get_body_foam_decay);
+	ClassDB::bind_method(D_METHOD("add_foam", "position", "radius", "amount"), &FellowWater3D::add_foam);
+	ClassDB::bind_method(D_METHOD("get_foam", "position"), &FellowWater3D::get_foam);
+	ClassDB::bind_method(D_METHOD("get_body_foam_stats"), &FellowWater3D::get_body_foam_stats);
 	ClassDB::bind_method(D_METHOD("debug_compare_cpu_waves", "cascade"), &FellowWater3D::debug_compare_cpu_waves);
 	ClassDB::bind_method(D_METHOD("set_time", "seconds"), &FellowWater3D::set_time);
 	ClassDB::bind_method(D_METHOD("get_time"), &FellowWater3D::get_time);
@@ -1471,6 +1719,8 @@ void FellowWater3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "whitecap_threshold", PROPERTY_HINT_RANGE, "-1,1,0.01"), "set_whitecap_threshold", "get_whitecap_threshold");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "foam_decay", PROPERTY_HINT_RANGE, "0,10,0.01"), "set_foam_decay", "get_foam_decay");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "foam_gain", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_foam_gain", "get_foam_gain");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "body_foam_size", PROPERTY_HINT_RANGE, "0,1024,1,suffix:m"), "set_body_foam_size", "get_body_foam_size");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "body_foam_decay", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:1/s"), "set_body_foam_decay", "get_body_foam_decay");
 	ADD_GROUP("Surface", "");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "extent", PROPERTY_HINT_NONE, "suffix:m"), "set_extent", "get_extent");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "absorption", PROPERTY_HINT_NONE, "suffix:1/m"), "set_absorption", "get_absorption");
@@ -1530,6 +1780,7 @@ void FellowWater3D::_rt_destroy() {
 }
 
 FellowWater3D::~FellowWater3D() {
+	_cpu_waves_wait();
 	if (RS::get_singleton() && rd) {
 		// FellowEngine: the RenderingDevice's resources are freed on the render thread. With a separate one
 		// (--render-thread separate) this waits for it: the calls queued before for this node run first, and none of them

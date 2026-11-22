@@ -83,6 +83,10 @@ uniform float rain_tile = 1.5;
 uniform sampler2D wind_gusts : filter_linear, repeat_enable;
 uniform vec4 wind_gust_map = vec4(1.0, 0.0, 0.0, 0.005);
 uniform float wind_gust_strength = 0.0;
+// Foam made by what floats (decision 0318): a grid of cells around the camera, each the world's cell modulo the grid;
+// x, y: the window's centre, z: 1 / its size, w: half its size (0: none).
+uniform sampler2D body_foam : hint_default_black, filter_linear, repeat_enable;
+uniform vec4 body_foam_map = vec4(0.0);
 uniform int debug_view = 0;
 
 // xyz: the point before the waves (world), w: the simulation's weight there; one interpolant (decision 0150: Godot's
@@ -256,8 +260,8 @@ void fragment() {
 	float fresnel = 0.02 + 0.98 * pow(1.0 - nv, 5.0);
 
 )"
-		// MSVC: one string literal holds at most 16380 characters (C2026).
-		R"(	// Reflections traced against the opaque scene's depth; the sky's IBL where nothing is hit.
+											  // MSVC: one string literal holds at most 16380 characters (C2026).
+											  R"(	// Reflections traced against the opaque scene's depth; the sky's IBL where nothing is hit.
 	float ssr_weight = 0.0;
 	vec3 ssr_color = vec3(0.0);
 	float ssr_cost = 0.0; // the share of the steps taken (debug view 7)
@@ -438,6 +442,16 @@ void fragment() {
 	float shore = 1.0 - smoothstep(0.0, shore_foam_depth, down0);
 	shore *= shore;
 	float foam_amount = clamp(whitecap * smoothstep(0.0, 0.1, amp) + shore * 0.4 + sims.a * v_base_sim.w, 0.0, 1.0);
+	if (body_foam_map.w > 0.0) {
+		vec2 off = abs(wpos.xz - body_foam_map.xy) / body_foam_map.w;
+		float window = 1.0 - smoothstep(0.8, 1.0, max(off.x, off.y));
+		// The amount as the noise shows it: from a few bubbles (0.42 covers 2 %) to lace (0.78 covers 75 %), never
+		// a solid sheet.
+		float bf = texture(body_foam, wpos.xz * body_foam_map.z).r;
+		if (bf > 0.004) {
+			foam_amount = max(foam_amount, (0.42 + 0.36 * sqrt(bf)) * window);
+		}
+	}
 	vec2 fuv = xz * 0.31;
 	float noise = texture(foam_noise, fuv - o0 * 0.31 * float(flowing) + vec2(water_time * 0.011, 0.0)).r * 0.65 + texture(foam_noise, fuv * 2.3 + vec2(0.0, water_time * 0.017)).r * 0.35;
 	float foam = smoothstep(1.0 - foam_amount, 1.0 - foam_amount + 0.22, noise) * step(0.001, foam_amount);

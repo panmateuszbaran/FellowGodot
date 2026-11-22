@@ -48,6 +48,7 @@ class FellowBuoyancy3D : public Node3D {
 		Vector3 local; // in the body's space
 		float volume = 0.0f; // m^3
 		float half_height = 0.0f; // m: half the point's cell, for its share under the surface
+		float half_width = 0.0f; // m: half the point's cell across (its foam's reach)
 	};
 
 	NodePath water_path;
@@ -57,8 +58,15 @@ class FellowBuoyancy3D : public Node3D {
 	float linear_drag = 3.0f; // 1/s, at full submersion
 	float angular_drag = 3.0f; // 1/s, at full submersion
 	bool follow_waves = true;
+	float foam = 1.0f;
 
 	LocalVector<Point> points;
+	LocalVector<uint8_t> under; // each point under the surface at the last tick (1 until known)
+	bool under_cleared = false;
+	float bound_radius = 0.0f; // m: the points' cells all within it of the body's origin
+	bool in_water = false;
+	uint32_t splash_seed = 0;
+	uint64_t skipped_ticks = 0;
 	float total_volume = 0.0f;
 	bool points_dirty = true;
 	bool approximate_shapes = false;
@@ -70,6 +78,7 @@ class FellowBuoyancy3D : public Node3D {
 	FellowWater3D *_water(const Vector3 &p_at) const;
 	void _rebuild_points();
 	void _physics_tick();
+	float _splash_random();
 
 protected:
 	static void _bind_methods();
@@ -90,6 +99,9 @@ public:
 	float get_angular_drag() const { return angular_drag; }
 	void set_follow_waves(bool p_follow) { follow_waves = p_follow; }
 	bool is_follow_waves() const { return follow_waves; }
+	void set_foam(float p_foam) { foam = MAX(0.0f, p_foam); }
+	float get_foam() const { return foam; }
+	bool is_in_water() const { return in_water; }
 
 	void rebuild_points() { points_dirty = true; }
 	int get_point_count();

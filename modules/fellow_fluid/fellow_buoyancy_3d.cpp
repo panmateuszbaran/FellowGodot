@@ -189,6 +189,7 @@ void FellowBuoyancy3D::_rebuild_points() {
 							Point pt;
 							pt.local = si.xform.xform(p);
 							pt.half_height = cell.y * 0.5f;
+							pt.half_width = MAX(cell.x, cell.z) * 0.5f;
 							points.push_back(pt);
 						}
 					}
@@ -198,6 +199,7 @@ void FellowBuoyancy3D::_rebuild_points() {
 				Point pt;
 				pt.local = si.xform.xform(box.get_center());
 				pt.half_height = box.size.y * 0.5f;
+				pt.half_width = MAX(box.size.x, box.size.z) * 0.5f;
 				points.push_back(pt);
 			}
 			const float share = volume / float(points.size() - first);
@@ -211,6 +213,29 @@ void FellowBuoyancy3D::_rebuild_points() {
 		}
 		spacing *= 1.25f;
 	}
+	bound_radius = 0.0f;
+	for (const Point &pt : points) {
+		bound_radius = MAX(bound_radius, pt.local.length() + Vector3(pt.half_width, pt.half_height, pt.half_width).length());
+	}
+	// Not known yet: as if under, so that a body found under the surface (made or set there) does not splash; one that
+	// comes from above it is seen out of the water first.
+	under.resize(points.size());
+	for (uint8_t &u : under) {
+		u = 1;
+	}
+	under_cleared = false;
+}
+
+// Foam (decision 0318): a point at the waterline moving through the water faster than FOAM_SPEED leaves foam, more the
+// faster; a point striking the water faster than SPLASH_SPEED splashes it round.
+static const float FOAM_SPEED = 0.4f; // m/s
+static const float FOAM_RATE = 1.0f; // coverage a second per m/s over FOAM_SPEED
+static const float SPLASH_SPEED = 1.0f; // m/s
+static const float SPLASH_GAIN = 0.2f; // coverage per m/s
+
+float FellowBuoyancy3D::_splash_random() {
+	splash_seed = splash_seed * 1664525u + 1013904223u;
+	return float(splash_seed >> 8) / float(1u << 24);
 }
 
 void FellowBuoyancy3D::_physics_tick() {
@@ -232,8 +257,22 @@ void FellowBuoyancy3D::_physics_tick() {
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	const Transform3D xf = body->get_global_transform();
 	FellowWater3D *water = _water(xf.origin);
-	if (!water) {
+	// Out of the water: none under it, or the body above where its waves reach (decision 0318: no waves asked for).
+	if (!water || xf.origin.y - bound_radius * xf.basis.get_scale().length() * 0.57735f > water->get_surface_ceiling()) {
 		submerged_share = 0.0f;
+		if (!under_cleared) {
+			for (uint8_t &u : under) {
+				u = 0;
+			}
+			under_cleared = true;
+		}
+		if (in_water) {
+			in_water = false;
+			emit_signal(SNAME("water_exited"));
+		}
+		ticks++;
+		skipped_ticks++;
+		usec += OS::get_singleton()->get_ticks_usec() - t0;
 		return;
 	}
 	const Vector3 com = xf.origin + state->get_center_of_mass();
@@ -241,30 +280,57 @@ void FellowBuoyancy3D::_physics_tick() {
 	const Vector3 w = state->get_angular_velocity();
 	const float mass = body->get_mass();
 	const float g = float(GLOBAL_GET("physics/3d/default_gravity"));
+	const float dt = float(get_physics_process_delta_time());
 	Vector3 force;
 	Vector3 torque;
 	float submerged = 0.0f;
-	for (const Point &pt : points) {
+	float entry_speed = 0.0f;
+	for (uint32_t i = 0; i < points.size(); i++) {
+		const Point &pt = points[i];
 		const Vector3 wp = xf.xform(pt.local);
 		float h;
 		Vector3 u;
 		if (!water->fellow_sample_surface(wp, h, u)) {
+			under[i] = 0;
 			continue;
 		}
 		const float hh = MAX(pt.half_height, 1e-3f);
 		const float f = CLAMP((h - wp.y + hh) / (2.0f * hh), 0.0f, 1.0f);
 		if (f <= 0.0f) {
+			under[i] = 0;
 			continue;
 		}
 		// Archimedes: the weight of the water the point displaces, up; and a drag towards the water's motion, as the
 		// point's share of the body's mass.
 		const Vector3 r = wp - com;
-		const Vector3 rel = v + w.cross(r) - (follow_waves ? u : Vector3());
+		const Vector3 vp = v + w.cross(r);
+		const Vector3 rel = vp - (follow_waves ? u : Vector3());
 		const Vector3 fp = Vector3(0.0f, water_density * g * pt.volume * f, 0.0f) - rel * (linear_drag * mass * (pt.volume / total_volume) * f);
 		force += fp;
 		torque += r.cross(fp);
 		submerged += pt.volume * f;
+		const Vector3 against = vp - u; // through the water
+		if (!under[i]) {
+			entry_speed = MAX(entry_speed, against.length());
+		}
+		if (foam > 0.0f) {
+			const Vector3 at(wp.x, h, wp.z);
+			if (!under[i] && -against.y > SPLASH_SPEED) {
+				// Each point's splash a little off and of its own size: an irregular patch, not a disc.
+				const float s = -against.y;
+				const float r = pt.half_width * 2.0f + 0.06f * s;
+				const float j[3] = { _splash_random(), _splash_random(), _splash_random() };
+				water->add_foam(at + Vector3(j[0] - 0.5f, 0.0f, j[1] - 0.5f) * r, r * (0.6f + 0.8f * j[2]), foam * MIN(1.0f, SPLASH_GAIN * s));
+			} else if (f < 1.0f) {
+				const float s = Vector2(against.x, against.z).length() - FOAM_SPEED;
+				if (s > 0.0f) {
+					water->add_foam(at, pt.half_width * 2.0f + 0.15f * s, foam * FOAM_RATE * s * dt); // spreading with the speed
+				}
+			}
+		}
+		under[i] = 1;
 	}
+	under_cleared = false;
 	submerged_share = submerged / total_volume;
 	if (submerged_share > 0.0f) {
 		// The turning slowed as much as the water around the body.
@@ -276,14 +342,24 @@ void FellowBuoyancy3D::_physics_tick() {
 			body->set_sleeping(false); // the waves move it
 		}
 	}
+	const bool now_in = submerged_share > 0.0f;
 	ticks++;
 	usec += OS::get_singleton()->get_ticks_usec() - t0;
+	if (now_in != in_water) {
+		in_water = now_in;
+		if (now_in) {
+			emit_signal(SNAME("water_entered"), entry_speed);
+		} else {
+			emit_signal(SNAME("water_exited"));
+		}
+	}
 }
 
 void FellowBuoyancy3D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
 			points_dirty = true;
+			splash_seed = uint32_t(uint64_t(get_instance_id()));
 			set_physics_process_internal(true);
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
@@ -318,6 +394,8 @@ Dictionary FellowBuoyancy3D::get_stats() const {
 	d["ticks"] = (int64_t)ticks;
 	d["usec_per_tick"] = ticks > 0 ? double(usec) / double(ticks) : 0.0;
 	d["submerged_share"] = submerged_share;
+	d["skipped_ticks"] = (int64_t)skipped_ticks;
+	d["bound_radius"] = bound_radius;
 	return d;
 }
 
@@ -360,6 +438,9 @@ void FellowBuoyancy3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_angular_drag"), &FellowBuoyancy3D::get_angular_drag);
 	ClassDB::bind_method(D_METHOD("set_follow_waves", "follow"), &FellowBuoyancy3D::set_follow_waves);
 	ClassDB::bind_method(D_METHOD("is_follow_waves"), &FellowBuoyancy3D::is_follow_waves);
+	ClassDB::bind_method(D_METHOD("set_foam", "foam"), &FellowBuoyancy3D::set_foam);
+	ClassDB::bind_method(D_METHOD("get_foam"), &FellowBuoyancy3D::get_foam);
+	ClassDB::bind_method(D_METHOD("is_in_water"), &FellowBuoyancy3D::is_in_water);
 	ClassDB::bind_method(D_METHOD("rebuild_points"), &FellowBuoyancy3D::rebuild_points);
 	ClassDB::bind_method(D_METHOD("get_point_count"), &FellowBuoyancy3D::get_point_count);
 	ClassDB::bind_method(D_METHOD("get_volume"), &FellowBuoyancy3D::get_volume);
@@ -373,4 +454,8 @@ void FellowBuoyancy3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "linear_drag", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:1/s"), "set_linear_drag", "get_linear_drag");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "angular_drag", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:1/s"), "set_angular_drag", "get_angular_drag");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "follow_waves"), "set_follow_waves", "is_follow_waves");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "foam", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_foam", "get_foam");
+
+	ADD_SIGNAL(MethodInfo("water_entered", PropertyInfo(Variant::FLOAT, "speed")));
+	ADD_SIGNAL(MethodInfo("water_exited"));
 }

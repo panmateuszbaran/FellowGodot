@@ -9,6 +9,25 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 176 — water interaction: debris floats, splashes and wakes (2026-11-22)
+
+- `FellowDestructible3D.debris_floats` (decision 0318, on by default): while the scene has a `FellowWater3D`, each
+  piece thrown out gets a `FellowBuoyancy3D` (its points a third of the piece apart, at most 16). The interaction
+  course (`benchmarks/tools/buoyancy/interaction.gd`, new): a wooden crate broken over still water — 24 of 24 pieces
+  afloat, the pile displacing its weight of water within 0.01 %; stone sinks, reaching the bottom at 3.4 m/s at most
+  (14.4 m/s through the water as before).
+- Foam made by what floats: `FellowWater3D.add_foam(position, radius, amount)` and `get_foam(position)` on a 256²
+  grid within `body_foam_size` (64 m) of the camera, fading by `body_foam_decay` (0.3/s), drawn through the foam's
+  noise (lace, not sheets); 15-38 µs of the main thread a frame while there is any, nothing otherwise.
+  `FellowBuoyancy3D.foam`: splashes where its points strike the water (faster than 1 m/s), wakes where they cross the
+  waterline moving (faster than 0.4 m/s); `water_entered(speed)`, `water_exited`, `is_in_water()`. A body found under
+  the surface does not splash.
+- The CPU's waves made on a worker thread after the frame's process while something floats: the main thread's time
+  0.33 ms → 2-10 µs an update (4 ms of other work in the frame). `FellowWater3D.get_surface_ceiling()`: bodies above
+  the waves' reach skipped (0.2 µs a tick). `get_cpu_wave_stats()` adds the worker's and the main thread's times.
+- Pictures (`interaction_demo.gd`, lavapipe): crates broken over a sea, their pieces splashing in and floating, a
+  barrel ringed with foam, a raft's wake. The buoyancy course and the water and rain goldens unchanged.
+
 ## Milestone 175 — buoyancy: bodies floating on the waves (2026-11-22)
 
 - `FellowWater3D`'s waves on the CPU (decision 0317): the cascades of 10 m and longer evaluated from the GPU's own modes

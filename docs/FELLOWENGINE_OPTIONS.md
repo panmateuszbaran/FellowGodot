@@ -241,6 +241,24 @@ Methods: `get_submerged_share()`, `get_volume()`, `get_point_count()`, `get_stat
 `benchmarks/tools/buoyancy/buoyancy.gd` (`--set=linear_drag:2,...`); `gpu_match.gd` and `demo.gd` need a Vulkan device
 (lavapipe).
 
+### Water interaction (milestone 176)
+
+Decision 0318. The CPU's waves are made on a worker thread after each frame's process while something asked for the
+surface (the main thread waits only if the next physics tick comes first); `get_surface_ceiling()`: the level plus six
+times their rms height — `FellowBuoyancy3D` skips a body above it.
+
+| node | property | default | meaning |
+|---|---|---|---|
+| `FellowWater3D` | `body_foam_size` | 64 m | the square around the camera where foam added by `add_foam()` (splashes, wakes) is kept and drawn: 256 × 256 cells; 0: none |
+| `FellowWater3D` | `body_foam_decay` | 0.3 1/s | how fast that foam fades (half in 2.3 s) |
+| `FellowBuoyancy3D` | `foam` | 1.0 | the foam the body makes: splashes where its points strike the water faster than 1 m/s, a wake where they cross the waterline moving faster than 0.4 m/s; 0: none |
+| `FellowDestructible3D` | `debris_floats` | true | while the scene has a `FellowWater3D`, each piece gets a `FellowBuoyancy3D` (points a third of the piece apart, at most 16) |
+
+Methods and signals: `FellowWater3D.add_foam(position, radius, amount)`, `get_foam(position)`,
+`get_body_foam_stats()`; `FellowBuoyancy3D.is_in_water()`, `water_entered(speed)`, `water_exited`. Measured with
+`benchmarks/tools/buoyancy/interaction.gd` (`--frame_work_ms=4`: other work on the main thread after the nodes'
+process); pictures with `interaction_demo.gd` (a Vulkan device; `--before`: as milestone 175).
+
 ## Rain and wet surfaces (milestone 25)
 
 A `FellowRain3D` node (module `fellow_fluid`; one active at a time) makes it rain around the camera and wets the
