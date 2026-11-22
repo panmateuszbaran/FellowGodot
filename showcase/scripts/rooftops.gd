@@ -1,11 +1,44 @@
 extends Node3D
-## The rooftops scene: a Renaissance square at the golden hour (built by tools/build_rooftops.gd). Its sky's settings
-## (few clouds, high and thin, so that the low sun reaches the square); its photographic materials (Poly Haven's,
+## The rooftops scene: a Renaissance square at the golden hour (built by tools/build_rooftops.gd). Its sky (milestone
+## 168, beside the owner's reference: a layer of stratocumulus, the owner's choice, thin and dense enough for crisp
+## edges, seen as streaks towards the horizon; the air clearer; the clouds' shadows off, so that the low sun reaches the
+## square and the climb's walls; a sky lit by a sun 10 degrees up over the square lit from higher, brighter than the
+## sun alone would make it, the square's light through the same air); its photographic materials (Poly Haven's,
 ## tools/fetch_textures.py) put in place of the procedural ones when their textures have been fetched and imported; and
 ## the mouse: captured for looking round, Esc frees it, a click takes it again.
 
-@export var cloud_coverage := 0.15
-@export var cloud_density := 0.7
+@export var cloud_coverage := 0.6
+@export var cloud_density := 2.5
+@export var cloud_altitude := 2.5 # km
+@export var cloud_thickness := 0.6 # km
+@export var cloud_shadows := 0.0
+@export var atmosphere_mie := 0.5 # the haze's aerosols: half the default's, the sky bluer, the horizon clearer
+## Milestone 168: the sky's and the clouds' own sun (SkySun, made here: a light that only the sky sees), this many
+## degrees up in the Sun's direction when the Sun is higher: the reference's golden-hour sky, its clouds lit from the
+## side, over a square lit from higher (with the Sun itself at 10 degrees the climb's wall falls into its neighbours'
+## shade). 0: the Sun lights the sky too.
+@export var sky_sun_elevation := 10.0
+## Milestone 168: the sky seen and its clouds this much brighter than the Sun's energy makes them (the SkySun's energy),
+## the sky's light on the scene (its radiance map: the ambient light, the reflections), the sun's disk and the light
+## shafts as they were. Beside the reference our sky had been a dim grey under bright walls, its clouds hardly brighter
+## than it (the clouds' multiple scattering approximated by four octaves: their sides lit by a low sun darker than a
+## white wall's).
+@export var sky_brightness := 4.0
+## Milestone 168: the Sun's light coloured as the SkySun's is, by the air a sun sky_sun_elevation degrees up shines
+## through (Rayleigh's, the haze's and ozone's optical depths over the two suns' air masses; the light's luminance
+## kept): the reference's golden light with the sky's. 1: all of it; 0: the Sun's own colour. Beside the reference our
+## sunlit stone under the clearer air had been paler still (red / green 1.09-1.12, 1.13-1.17 with this, against its
+## 1.23-1.27).
+@export var sun_air := 1.0
+
+const SHAFTS := "rendering/fellow/post/light_shafts/"
+
+var _sun: DirectionalLight3D
+var _sky_sun: DirectionalLight3D
+var _sun_basis := Basis()
+var _sun_energy := 0.0
+var _sun_color := Color(1.0, 1.0, 1.0) # the Sun's own (sRGB), before sun_air
+var _shafts := Vector2(-1.0, -1.0) # the light shafts' threshold and intensity before this scene changed them
 
 
 func _enter_tree() -> void:
@@ -16,14 +49,83 @@ func _enter_tree() -> void:
 
 func _exit_tree() -> void:
 	get_tree().physics_interpolation = ProjectSettings.get_setting("physics/common/physics_interpolation", false)
+	if _shafts.x >= 0.0:
+		ProjectSettings.set_setting(SHAFTS + "threshold", _shafts.x)
+		ProjectSettings.set_setting(SHAFTS + "intensity", _shafts.y)
 
 
 func _ready() -> void:
 	ProjectSettings.set_setting("rendering/fellow/post/clouds/coverage", cloud_coverage)
 	ProjectSettings.set_setting("rendering/fellow/post/clouds/density", cloud_density)
+	ProjectSettings.set_setting("rendering/fellow/post/clouds/altitude", cloud_altitude)
+	ProjectSettings.set_setting("rendering/fellow/post/clouds/thickness", cloud_thickness)
+	ProjectSettings.set_setting("rendering/fellow/post/clouds/shadows", cloud_shadows)
+	ProjectSettings.set_setting("rendering/fellow/post/atmosphere/mie_scale", atmosphere_mie)
 	_photo_materials()
+	_sun = get_node_or_null("Sun") as DirectionalLight3D
+	if _sun and sky_sun_elevation > 0.0:
+		_sky_sun = DirectionalLight3D.new()
+		_sky_sun.name = "SkySun"
+		_sky_sun.sky_mode = DirectionalLight3D.SKY_MODE_SKY_ONLY
+		add_child(_sky_sun)
+		_sun.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
+		_sun_color = _sun.light_color
+		var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
+		if we and we.environment and we.environment.sky and we.environment.sky.sky_material is ShaderMaterial:
+			var sky_mat := we.environment.sky.sky_material as ShaderMaterial
+			sky_mat.set_shader_parameter("radiance_scale", 1.0 / sky_brightness)
+			sky_mat.set_shader_parameter("sun_disk_energy", 1.0 / sky_brightness)
+		# The light shafts (decision 0116: the sky's pixels brighter than a threshold, blurred towards the sun) as before
+		# with the brighter sky: its excess over a threshold that much higher, that much weaker.
+		_shafts = Vector2(ProjectSettings.get_setting(SHAFTS + "threshold", 0.5), ProjectSettings.get_setting(SHAFTS + "intensity", 0.0))
+		ProjectSettings.set_setting(SHAFTS + "threshold", _shafts.x * sky_brightness)
+		ProjectSettings.set_setting(SHAFTS + "intensity", _shafts.y / sky_brightness)
+		_follow_sun()
 	if not OS.get_cmdline_user_args().has("--demo") and DisplayServer.get_name() != "headless":
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _process(_delta: float) -> void:
+	if _sky_sun and (_sun.global_basis != _sun_basis or _sun.light_energy != _sun_energy):
+		_follow_sun()
+
+
+## The SkySun in the Sun's direction (seen from above), at most sky_sun_elevation degrees up; its colour the Sun's own,
+## its energy the Sun's times sky_brightness (the sky's and the clouds' light scale with it). The Sun's colour through
+## the SkySun's air (sun_air).
+func _follow_sun() -> void:
+	_sun_basis = _sun.global_basis
+	_sun_energy = _sun.light_energy
+	var to_sun := _sun_basis.z.normalized()
+	var flat := Vector2(to_sun.x, to_sun.z)
+	flat = flat.normalized() if flat.length() > 1e-4 else Vector2(0.0, 1.0)
+	var sun_up := rad_to_deg(asin(clampf(to_sun.y, -1.0, 1.0)))
+	var sky_up := minf(sun_up, sky_sun_elevation)
+	var e := deg_to_rad(sky_up)
+	var d := Vector3(flat.x * cos(e), sin(e), flat.y * cos(e))
+	_sky_sun.global_basis = Basis.looking_at(-d, Vector3.UP)
+	_sky_sun.light_color = _sun_color
+	_sky_sun.light_energy = _sun.light_energy * sky_brightness
+	_sky_sun.light_angular_distance = _sun.light_angular_distance
+	_sun.light_color = _sun_color
+	if sun_air > 0.0 and sky_up < sun_up and sky_up > 0.0:
+		# Zenith optical depths (FellowEngine's atmosphere, decision 0108: Rayleigh's sRGB coefficients over its 8 km
+		# scale height, the haze's extinction over 1.2 km, ozone's absorption over its 30 km tent's 15) and Kasten and
+		# Young's air mass.
+		var rayleigh: float = ProjectSettings.get_setting("rendering/fellow/post/atmosphere/rayleigh_scale", 1.0)
+		var mie: float = ProjectSettings.get_setting("rendering/fellow/post/atmosphere/mie_scale", 1.0)
+		var tau := Vector3(7.190e-3, 13.763e-3, 32.519e-3) * 8.0 * rayleigh + Vector3.ONE * 4.44e-3 * 1.2 * mie + Vector3(0.650e-3, 1.881e-3, 0.085e-3) * 15.0
+		var extra := _air_mass(sky_up) - _air_mass(sun_up)
+		var t := Vector3.ONE.lerp(Vector3(exp(-tau.x * extra), exp(-tau.y * extra), exp(-tau.z * extra)), sun_air)
+		var c := _sun_color.srgb_to_linear()
+		var lit := Vector3(c.r * t.x, c.g * t.y, c.b * t.z)
+		const LUMA := Vector3(0.2126, 0.7152, 0.0722)
+		lit *= Vector3(c.r, c.g, c.b).dot(LUMA) / maxf(lit.dot(LUMA), 1e-4)
+		_sun.light_color = Color(lit.x, lit.y, lit.z).linear_to_srgb()
+
+
+func _air_mass(p_degrees: float) -> float:
+	return 1.0 / (sin(deg_to_rad(p_degrees)) + 0.50572 * pow(p_degrees + 6.07995, -1.6364))
 
 
 func _unhandled_input(event: InputEvent) -> void:

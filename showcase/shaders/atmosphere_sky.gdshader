@@ -20,6 +20,13 @@ uniform float sun_disk_scale = 1.0;
 uniform float energy_scale = 3.14159265;
 // Stars where the sky is dark (a hash of the direction on a fine grid of the sphere).
 uniform float star_brightness = 0.6;
+// The sky's light in its radiance map (the scene's ambient light and reflections) scaled by this, the sky seen not: the
+// rooftops scene brightens the sky seen and its clouds by its sky sun's energy (scripts/rooftops.gd, sky_brightness)
+// and keeps the scene's ambient light with 1 / that.
+uniform float radiance_scale = 1.0;
+// The sun's disk scaled by this (the rooftops scene: 1 / its sky_brightness, the disk as bright as the sun's own energy
+// makes it; four times as bright, its bloom had veiled the square looking towards it).
+uniform float sun_disk_energy = 1.0;
 
 float star_hash(vec3 p) {
 	p = fract(p * 0.3183099 + 0.1);
@@ -84,12 +91,12 @@ void sky() {
 			float solid_angle = 2.0 * PI * (1.0 - cos(half_angle));
 			float x = clamp(acos(clamp(cos_sun, -1.0, 1.0)) / half_angle, 0.0, 1.0);
 			float limb = 1.0 - 0.6 * (1.0 - sqrt(max(0.0, 1.0 - x * x)));
-			col += sun * t * (limb / (solid_angle * 0.8));
+			col += sun * t * (limb / (solid_angle * 0.8)) * sun_disk_energy;
 		}
 	}
 	if (d.y > 0.0 && star_brightness > 0.0 && !AT_CUBEMAP_PASS) {
 		float sky_luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
 		col += stars(d) * star_brightness * smoothstep(0.02, 0.0, sky_luma) * smoothstep(0.0, 0.08, d.y);
 	}
-	COLOR = col * intensity;
+	COLOR = col * intensity * (AT_CUBEMAP_PASS ? radiance_scale : 1.0);
 }

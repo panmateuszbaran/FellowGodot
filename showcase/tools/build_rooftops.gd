@@ -647,7 +647,8 @@ func _environment(p_root: Node3D) -> void:
 	env.fog_density = 0.0008
 	env.fog_aerial_perspective = 0.8
 	env.fog_light_color = Color(0.85, 0.72, 0.58)
-	env.fog_sky_affect = 0.3
+	# Milestone 168: the depth fog no longer over the sky (the atmosphere draws its haze; the fog's beige had greyed it).
+	env.fog_sky_affect = 0.0
 	env.volumetric_fog_enabled = true
 	# Milestone 168: a quarter as dense — beside the reference the square's far side had been lost in a bright haze (with
 	# the camera's depth of field, three quarters of the reference shot's run veiled); the dust's shafts kept faintly.
