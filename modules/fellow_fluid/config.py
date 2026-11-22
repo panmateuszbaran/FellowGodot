@@ -11,6 +11,7 @@ def get_doc_classes():
     return [
         "FellowShallowWater3D",
         "FellowWater3D",
+        "FellowBuoyancy3D",
         "FellowRain3D",
         "FellowWind3D",
         "FellowGasVolume3D",

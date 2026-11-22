@@ -42,6 +42,7 @@
 #include "core/math/projection.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "core/os/os.h"
 #include "scene/3d/light_3d.h"
 #include "scene/main/scene_tree.h"
 #include "scene/main/viewport.h"
@@ -106,6 +107,31 @@ struct WaterSpectrum {
 	}
 };
 
+// h0 of one mode (cascade c, row m, column n of the N x N grid): a complex Gaussian with E|z|^2 = 1 scaled by the
+// spectrum's amplitude there (the GPU's and the CPU's waves both from this).
+static void water_h0_mode(const WaterSpectrum &p_spectrum, int p_c, int p_size, int p_m, int p_n, double p_dk, double p_k_low, double p_k_high, double &r_re, double &r_im) {
+	double kx = (p_n - p_size / 2) * p_dk;
+	double kz = (p_m - p_size / 2) * p_dk;
+	double k = Math::sqrt(kx * kx + kz * kz);
+	double amp = 0.0;
+	// The Nyquist row and column have no mirror wave number on the grid: left empty, every field stays Hermitian
+	// (real), which the packing of two fields per complex transform relies on.
+	if (p_n > 0 && p_m > 0 && k > 1e-9 && k >= p_k_low && k < p_k_high) {
+		double omega = Math::sqrt(WATER_GRAVITY * k);
+		double domega_dk = WATER_GRAVITY / (2.0 * omega);
+		double s = p_spectrum.jonswap(omega) * p_spectrum.spreading(omega, Math::atan2(kz, kx)) * domega_dk / k;
+		s *= Math::exp(-k * k * 0.004 * 0.004); // capillary damping
+		amp = Math::sqrt(s * p_dk * p_dk * 0.5);
+	}
+	uint32_t key = (uint32_t(p_c * p_size + p_m) * uint32_t(p_size) + uint32_t(p_n)) * 2u;
+	double u1 = water_uniform(key);
+	double u2 = water_uniform(key + 1u);
+	double r = Math::sqrt(-2.0 * Math::log(u1));
+	double a = 2.0 * Math::PI * u2;
+	r_re = r * Math::cos(a) * Math::SQRT12 * amp;
+	r_im = r * Math::sin(a) * Math::SQRT12 * amp;
+}
+
 int FellowWater3D::_cascade_count() const {
 	int n = 0;
 	for (int i = 0; i < MAX_CASCADES; i++) {
@@ -134,28 +160,8 @@ Vector<uint8_t> FellowWater3D::_build_spectrum(int p_size, int p_cascades) const
 		double k_high = c + 1 < p_cascades ? 12.0 * Math::PI / double(cascade_lengths[c + 1]) : 1e30;
 		for (int m = 0; m < p_size; m++) {
 			for (int n = 0; n < p_size; n++) {
-				double kx = (n - p_size / 2) * dk;
-				double kz = (m - p_size / 2) * dk;
-				double k = Math::sqrt(kx * kx + kz * kz);
-				double amp = 0.0;
-				// The Nyquist row and column have no mirror wave number on the grid: left empty, every field stays
-				// Hermitian (real), which the packing of two fields per complex transform relies on.
-				if (n > 0 && m > 0 && k > 1e-9 && k >= k_low && k < k_high) {
-					double omega = Math::sqrt(WATER_GRAVITY * k);
-					double domega_dk = WATER_GRAVITY / (2.0 * omega);
-					double s = spectrum.jonswap(omega) * spectrum.spreading(omega, Math::atan2(kz, kx)) * domega_dk / k;
-					s *= Math::exp(-k * k * 0.004 * 0.004); // capillary damping
-					amp = Math::sqrt(s * dk * dk * 0.5);
-				}
-				uint32_t key = (uint32_t(c * p_size + m) * uint32_t(p_size) + uint32_t(n)) * 2u;
-				double u1 = water_uniform(key);
-				double u2 = water_uniform(key + 1u);
-				double r = Math::sqrt(-2.0 * Math::log(u1));
-				double a = 2.0 * Math::PI * u2;
-				// Complex Gaussian with E|z|^2 = 1.
 				uint32_t i = (uint32_t(m) * p_size + n) * 2;
-				h0[i] = r * Math::cos(a) * Math::SQRT12 * amp;
-				h0[i + 1] = r * Math::sin(a) * Math::SQRT12 * amp;
+				water_h0_mode(spectrum, c, p_size, m, n, dk, k_low, k_high, h0[i], h0[i + 1]);
 			}
 		}
 		for (int m = 0; m < p_size; m++) {
@@ -200,6 +206,397 @@ Ref<Image> FellowWater3D::debug_get_spectrum_image(int p_cascade) const {
 Ref<Image> FellowWater3D::debug_get_displacement_image(int p_cascade) {
 	ERR_FAIL_COND_V(displacement_texture.is_null() || !displacement_texture->get_texture_rd_rid().is_valid(), Ref<Image>());
 	return displacement_texture->get_layer_data(p_cascade);
+}
+
+// ------------------------------------------------------------------ the waves on the CPU (milestone 175)
+
+// The longest side of a cascade's grid on the CPU (its band up to 32 fundamentals: 2 pi 32 / L, 1.3 rad/m for 160 m,
+// 7.4 for 27 m); each cascade's grid the smallest of 16, 32 and 64 holding 99.5 % of its waves' variance. Cascades of
+// waves shorter than CPU_WAVE_MIN_LENGTH are left out (ripples: they do not move a floating body).
+static const int CPU_WAVE_SIZE = 64;
+static const float CPU_WAVE_MIN_LENGTH = 10.0f;
+
+// An inverse FFT (e^{+i}, unnormalized: a sum of the modes, as the GPU's) of p_n complex values (interleaved) in
+// p_data (contiguous), with the bit reversal and the twiddles of its size precomputed.
+struct WaterFFTPlan {
+	int n = 0;
+	LocalVector<int> reverse;
+	LocalVector<float> twiddle; // e^{+2 pi i j / n}, j < n / 2
+
+	void make(int p_n) {
+		if (n == p_n) {
+			return;
+		}
+		n = p_n;
+		reverse.resize(n);
+		int bits = 0;
+		while ((1 << bits) < n) {
+			bits++;
+		}
+		for (int i = 0; i < n; i++) {
+			int r = 0;
+			for (int b = 0; b < bits; b++) {
+				r |= ((i >> b) & 1) << (bits - 1 - b);
+			}
+			reverse[i] = r;
+		}
+		twiddle.resize(n);
+		for (int j = 0; j < n / 2; j++) {
+			const double a = 2.0 * Math::PI * j / n;
+			twiddle[j * 2] = float(Math::cos(a));
+			twiddle[j * 2 + 1] = float(Math::sin(a));
+		}
+	}
+
+	void run(float *p_data) const {
+		for (int i = 0; i < n; i++) {
+			const int j = reverse[i];
+			if (i < j) {
+				SWAP(p_data[i * 2], p_data[j * 2]);
+				SWAP(p_data[i * 2 + 1], p_data[j * 2 + 1]);
+			}
+		}
+		for (int len = 2; len <= n; len <<= 1) {
+			const int half = len >> 1;
+			const int step = n / len;
+			for (int i = 0; i < n; i += len) {
+				float *u = p_data + i * 2;
+				float *v = p_data + (i + half) * 2;
+				for (int j = 0; j < half; j++) {
+					const float cr = twiddle[j * step * 2];
+					const float ci = twiddle[j * step * 2 + 1];
+					const float vr = v[j * 2] * cr - v[j * 2 + 1] * ci;
+					const float vi = v[j * 2] * ci + v[j * 2 + 1] * cr;
+					v[j * 2] = u[j * 2] - vr;
+					v[j * 2 + 1] = u[j * 2 + 1] - vi;
+					u[j * 2] += vr;
+					u[j * 2 + 1] += vi;
+				}
+			}
+		}
+	}
+};
+
+// The 2D transform of an n x n grid of complex values (rows, then the columns through a scratch line).
+static void water_ifft_2d(const WaterFFTPlan &p_plan, float *p_data, float *r_scratch) {
+	const int n = p_plan.n;
+	for (int row = 0; row < n; row++) {
+		p_plan.run(p_data + row * n * 2);
+	}
+	for (int col = 0; col < n; col++) {
+		for (int i = 0; i < n; i++) {
+			r_scratch[i * 2] = p_data[(i * n + col) * 2];
+			r_scratch[i * 2 + 1] = p_data[(i * n + col) * 2 + 1];
+		}
+		p_plan.run(r_scratch);
+		for (int i = 0; i < n; i++) {
+			p_data[(i * n + col) * 2] = r_scratch[i * 2];
+			p_data[(i * n + col) * 2 + 1] = r_scratch[i * 2 + 1];
+		}
+	}
+}
+
+void FellowWater3D::_cpu_waves_build() {
+	cpu_cascades.clear();
+	cpu_spectrum_version = spectrum_version;
+	cpu_waves_time = -1e30;
+	const int cascades = _cascade_count();
+	const int full = wave_resolution;
+	WaterSpectrum spectrum(wind_speed, fetch * 1000.0, Math::deg_to_rad(double(wind_direction)));
+	const double w0 = 2.0 * Math::PI / repeat_period;
+	double var_all = 0.0;
+	double var_kept = 0.0;
+	int used = 0;
+	for (int c = 0; c < cascades; c++) {
+		used += cascade_lengths[c] >= CPU_WAVE_MIN_LENGTH ? 1 : 0;
+	}
+	cpu_cascades.resize(used);
+	cpu_max_omega_index = 0;
+	int ci = 0;
+	for (int c = 0; c < cascades; c++) {
+		const double len = cascade_lengths[c];
+		const double dk = 2.0 * Math::PI / len;
+		const double k_low = c == 0 ? 0.0 : 12.0 * Math::PI / len;
+		const double k_high = c + 1 < cascades ? 12.0 * Math::PI / double(cascade_lengths[c + 1]) : 1e30;
+		// The cascade's variance by the grid that holds it (each mode 2 |h0|^2).
+		double by_size[4] = {}; // 16, 32, 64, the GPU's
+		for (int m = 0; m < full; m++) {
+			for (int n = 0; n < full; n++) {
+				double re, im;
+				water_h0_mode(spectrum, c, full, m, n, dk, k_low, k_high, re, im);
+				const double v = 2.0 * (re * re + im * im);
+				const int r = MAX(Math::abs(m - full / 2), Math::abs(n - full / 2));
+				for (int q = 0; q < 3; q++) {
+					if (r < (16 << q) / 2) {
+						by_size[q] += v;
+					}
+				}
+				by_size[3] += v;
+			}
+		}
+		var_all += by_size[3];
+		if (len < CPU_WAVE_MIN_LENGTH) {
+			continue;
+		}
+		CPUWaveCascade &cc = cpu_cascades[ci++];
+		cc.length = float(len);
+		cc.size = MIN(CPU_WAVE_SIZE, full);
+		for (int q = 0; q < 3 && (16 << q) <= cc.size; q++) {
+			if (by_size[q] >= 0.995 * by_size[3]) {
+				cc.size = 16 << q;
+				break;
+			}
+		}
+		var_kept += by_size[MIN(3, (int)Math::log2(double(cc.size / 16)))];
+		// The grid's modes, those with waves: the GPU's (the same rows and columns about the centre), the grid's own
+		// Nyquist row and column left out.
+		const int msz = cc.size;
+		cc.modes.clear();
+		for (int m = 1; m < msz; m++) {
+			for (int n = 1; n < msz; n++) {
+				const int jm = m - msz / 2;
+				const int jn = n - msz / 2;
+				const int fm = jm + full / 2;
+				const int fn = jn + full / 2;
+				double re, im, mre, mim;
+				water_h0_mode(spectrum, c, full, fm, fn, dk, k_low, k_high, re, im);
+				water_h0_mode(spectrum, c, full, (full - fm) % full, (full - fn) % full, dk, k_low, k_high, mre, mim);
+				const double kx = jn * dk;
+				const double kz = jm * dk;
+				const double k = Math::sqrt(kx * kx + kz * kz);
+				if (k < 1e-6 || (re == 0.0 && im == 0.0 && mre == 0.0 && mim == 0.0)) {
+					continue;
+				}
+				const int windex = int(Math::floor(Math::sqrt(WATER_GRAVITY * k) / w0)); // as the GPU's: a multiple of w0
+				cpu_max_omega_index = MAX(cpu_max_omega_index, windex);
+				const float o[8] = { float(re), float(im), float(mre), float(-mim), float(kx / k), float(kz / k), float(windex), float(m * msz + n) };
+				for (int q = 0; q < 8; q++) {
+					cc.modes.push_back(o[q]);
+				}
+			}
+		}
+		for (int f = 0; f < 2; f++) {
+			cc.fields[f].resize(uint32_t(msz) * msz * 2);
+		}
+		cc.previous.resize(uint32_t(msz) * msz * 2);
+	}
+	cpu_variance_share = var_all > 0.0 ? var_kept / var_all : 1.0;
+}
+
+void FellowWater3D::_cpu_waves_update(double p_time) {
+	if (cpu_spectrum_version != spectrum_version) {
+		_cpu_waves_build();
+	}
+	if (p_time == cpu_waves_time) {
+		return;
+	}
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	const double dt = p_time - cpu_waves_time;
+	const bool has_previous = dt > 0.0 && dt < 0.25;
+	cpu_velocity_scale = has_previous ? float(1.0 / dt) : 0.0f;
+	cpu_waves_time = p_time;
+	const double w0 = 2.0 * Math::PI / repeat_period;
+	double tf = Math::fmod(p_time, double(repeat_period)) / repeat_period;
+	if (tf < 0.0) {
+		tf += 1.0;
+	}
+	// e^{i 2 pi n tf} for every quantized frequency n (in double: the GPU's phase is 2 pi fract(n tf)).
+	cpu_phase.resize(uint32_t(cpu_max_omega_index + 1) * 2);
+	for (int n = 0; n <= cpu_max_omega_index; n++) {
+		const double ph = 2.0 * Math::PI * (n * tf - Math::floor(n * tf));
+		cpu_phase[n * 2] = float(Math::cos(ph));
+		cpu_phase[n * 2 + 1] = float(Math::sin(ph));
+	}
+	LocalVector<float> scratch;
+	for (CPUWaveCascade &cc : cpu_cascades) {
+		const int msz = cc.size;
+		scratch.resize(uint32_t(msz) * 2);
+		// The horizontal displacement kept: its change is the water's horizontal velocity.
+		memcpy(cc.previous.ptr(), cc.fields[0].ptr(), sizeof(float) * cc.previous.size());
+		float *fa = cc.fields[0].ptr();
+		float *fb = cc.fields[1].ptr();
+		memset(fa, 0, sizeof(float) * cc.fields[0].size());
+		memset(fb, 0, sizeof(float) * cc.fields[1].size());
+		const uint32_t count = cc.modes.size() / 8;
+		for (uint32_t q = 0; q < count; q++) {
+			const float *o = cc.modes.ptr() + q * 8;
+			const int wi = int(o[6]);
+			const int i = int(o[7]);
+			const float er = cpu_phase[wi * 2];
+			const float ei = cpu_phase[wi * 2 + 1];
+			const float omega = float(wi * w0);
+			// h(k, t) = h0(k) e^{i w t} + conj(h0(-k)) e^{-i w t}; its time derivative i w (h0(k) e^{i w t} - ...).
+			const float ar = o[0] * er - o[1] * ei;
+			const float ai = o[0] * ei + o[1] * er;
+			const float br = o[2] * er + o[3] * ei;
+			const float bi = -o[2] * ei + o[3] * er;
+			const float hr = ar + br;
+			const float hi = ai + bi;
+			const float dr = -omega * (ai - bi);
+			const float di = omega * (ar - br);
+			// i h (k / |k|): the horizontal displacement. Two real fields a transform: a + i b.
+			const float dxr = -hi * o[4], dxi = hr * o[4];
+			const float dzr = -hi * o[5], dzi = hr * o[5];
+			fa[i * 2] = dxr - dzi;
+			fa[i * 2 + 1] = dxi + dzr;
+			fb[i * 2] = hr - di;
+			fb[i * 2 + 1] = hi + dr;
+		}
+		WaterFFTPlan plan;
+		plan.make(msz);
+		for (int f = 0; f < 2; f++) {
+			float *d = cc.fields[f].ptr();
+			water_ifft_2d(plan, d, scratch.ptr());
+			// The centred wave numbers: (-1)^(x + y).
+			for (int y = 0; y < msz; y++) {
+				for (int x = (y + 1) & 1; x < msz; x += 2) {
+					d[(y * msz + x) * 2] = -d[(y * msz + x) * 2];
+					d[(y * msz + x) * 2 + 1] = -d[(y * msz + x) * 2 + 1];
+				}
+			}
+		}
+		if (!has_previous) {
+			memcpy(cc.previous.ptr(), cc.fields[0].ptr(), sizeof(float) * cc.previous.size());
+		}
+	}
+	cpu_wave_updates++;
+	cpu_wave_usec += OS::get_singleton()->get_ticks_usec() - t0;
+}
+
+// The six fields summed over the cascades at a point (world x, z) of the undisplaced surface: dx, dz, h, dh/dt,
+// d(dx)/dt, d(dz)/dt (before the choppiness and the wave scale). Sampled where the GPU's textures put them: a texel's
+// value at its centre, half a texel of the GPU's grid on.
+void FellowWater3D::_cpu_waves_sample(float p_x, float p_z, float r_out[6]) const {
+	for (int q = 0; q < 6; q++) {
+		r_out[q] = 0.0f;
+	}
+	for (const CPUWaveCascade &cc : cpu_cascades) {
+		const int msz = cc.size;
+		const float shift = 0.5f * cc.length / float(wave_resolution);
+		const float u = (p_x - shift) / cc.length * msz;
+		const float v = (p_z - shift) / cc.length * msz;
+		const float fu = Math::floor(u);
+		const float fv = Math::floor(v);
+		const float tu = u - fu;
+		const float tv = v - fv;
+		const int x0 = int(Math::fposmod(fu, float(msz)));
+		const int z0 = int(Math::fposmod(fv, float(msz)));
+		const int x1 = (x0 + 1) % msz;
+		const int z1 = (z0 + 1) % msz;
+		const float w[4] = { (1.0f - tu) * (1.0f - tv), tu * (1.0f - tv), (1.0f - tu) * tv, tu * tv };
+		const int idx[4] = { z0 * msz + x0, z0 * msz + x1, z1 * msz + x0, z1 * msz + x1 };
+		for (int q = 0; q < 4; q++) {
+			const float *a = cc.fields[0].ptr() + idx[q] * 2;
+			const float *b = cc.fields[1].ptr() + idx[q] * 2;
+			const float *p = cc.previous.ptr() + idx[q] * 2;
+			r_out[0] += a[0] * w[q];
+			r_out[1] += a[1] * w[q];
+			r_out[2] += b[0] * w[q];
+			r_out[3] += b[1] * w[q];
+			r_out[4] += (a[0] - p[0]) * cpu_velocity_scale * w[q];
+			r_out[5] += (a[1] - p[1]) * cpu_velocity_scale * w[q];
+		}
+	}
+}
+
+bool FellowWater3D::fellow_sample_surface(const Vector3 &p_position, float &r_height, Vector3 &r_velocity) {
+	const Vector3 o = is_inside_tree() ? get_global_position() : get_position();
+	if (extent.x > 0.0f && extent.y > 0.0f && (Math::abs(p_position.x - o.x) > extent.x * 0.5f || Math::abs(p_position.z - o.z) > extent.y * 0.5f)) {
+		return false;
+	}
+	r_height = o.y;
+	r_velocity = Vector3();
+	if (wave_scale <= 0.0f) {
+		return true;
+	}
+	_cpu_waves_update(time);
+	// The surface over (x, z) is displaced across the ground: find the undisplaced point that lands there (a few fixed
+	// point steps; the displacement is small against the waves' length).
+	float f[6];
+	float px = p_position.x;
+	float pz = p_position.z;
+	const float lx = choppiness * wave_scale;
+	for (int it = 0; it < 4; it++) {
+		_cpu_waves_sample(px, pz, f);
+		px = p_position.x - f[0] * lx;
+		pz = p_position.z - f[1] * lx;
+	}
+	_cpu_waves_sample(px, pz, f);
+	r_height = o.y + f[2] * wave_scale;
+	r_velocity = Vector3(f[4] * lx, f[3] * wave_scale, f[5] * lx);
+	return true;
+}
+
+LocalVector<FellowWater3D *> FellowWater3D::instances;
+
+FellowWater3D *FellowWater3D::find_water(const Vector3 &p_position) {
+	for (FellowWater3D *w : instances) {
+		if (!w->is_visible_in_tree()) {
+			continue;
+		}
+		const Vector3 o = w->get_global_position();
+		if (w->extent.x <= 0.0f || w->extent.y <= 0.0f || (Math::abs(p_position.x - o.x) <= w->extent.x * 0.5f && Math::abs(p_position.z - o.z) <= w->extent.y * 0.5f)) {
+			return w;
+		}
+	}
+	return nullptr;
+}
+
+float FellowWater3D::get_surface_height(const Vector3 &p_position) {
+	float h;
+	Vector3 v;
+	return fellow_sample_surface(p_position, h, v) ? h : -Math::INF;
+}
+
+Vector3 FellowWater3D::get_surface_velocity(const Vector3 &p_position) {
+	float h;
+	Vector3 v;
+	return fellow_sample_surface(p_position, h, v) ? v : Vector3();
+}
+
+Dictionary FellowWater3D::get_cpu_wave_stats() const {
+	Dictionary d;
+	d["updates"] = (int64_t)cpu_wave_updates;
+	d["usec_per_update"] = cpu_wave_updates > 0 ? double(cpu_wave_usec) / double(cpu_wave_updates) : 0.0;
+	d["variance_share"] = cpu_variance_share;
+	d["grid"] = cpu_cascades.is_empty() ? 0 : cpu_cascades[0].size;
+	return d;
+}
+
+// The CPU's cascade against the GPU's displacement texture at the texels the CPU's grid has (the GPU's waves at the
+// time of its last dispatch).
+Dictionary FellowWater3D::debug_compare_cpu_waves(int p_cascade) {
+	Dictionary d;
+	Ref<Image> img = debug_get_displacement_image(p_cascade);
+	ERR_FAIL_COND_V(img.is_null(), d);
+	_cpu_waves_update(last_dispatch_time);
+	ERR_FAIL_INDEX_V(p_cascade, (int)cpu_cascades.size(), d);
+	const CPUWaveCascade &cc = cpu_cascades[p_cascade];
+	const int msz = cc.size;
+	const int step = wave_resolution / msz;
+	double err2 = 0.0, ref2 = 0.0, errx2 = 0.0, refx2 = 0.0, max_err = 0.0;
+	for (int y = 0; y < msz; y++) {
+		for (int x = 0; x < msz; x++) {
+			const Color g = img->get_pixel(x * step, y * step);
+			const float *a = cc.fields[0].ptr() + (y * msz + x) * 2;
+			const float *b = cc.fields[1].ptr() + (y * msz + x) * 2;
+			const double eh = double(b[0]) - g.g;
+			const double ex = double(a[0]) * choppiness - g.r;
+			err2 += eh * eh;
+			ref2 += double(g.g) * g.g;
+			errx2 += ex * ex;
+			refx2 += double(g.r) * g.r;
+			max_err = MAX(max_err, Math::abs(eh));
+		}
+	}
+	const double n = double(msz) * msz;
+	d["height_rms"] = Math::sqrt(ref2 / n);
+	d["height_error_rms"] = Math::sqrt(err2 / n);
+	d["height_error_max"] = max_err;
+	d["dx_rms"] = Math::sqrt(refx2 / n);
+	d["dx_error_rms"] = Math::sqrt(errx2 / n);
+	d["time"] = last_dispatch_time;
+	return d;
 }
 
 // ------------------------------------------------------------------ main thread
@@ -469,6 +866,9 @@ Vector3 FellowWater3D::_sun_direction() {
 
 void FellowWater3D::_notification(int p_what) {
 	switch (p_what) {
+		case NOTIFICATION_ENTER_TREE: {
+			instances.push_back(this);
+		} break;
 		case NOTIFICATION_READY: {
 			_update_mesh();
 			_update_simulation_link();
@@ -529,6 +929,7 @@ void FellowWater3D::_notification(int p_what) {
 					wind_speed = ws;
 					wind_direction = wa;
 					spectrum_dirty = true;
+					spectrum_version++;
 				}
 				gust_strength = wind_node->get_gustiness() * gust_ripples;
 				const Vector4 gust_map = wind_node->get_gust_mapping();
@@ -603,12 +1004,14 @@ void FellowWater3D::_notification(int p_what) {
 			RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowWater3D::_rt_dispatch).bind(bytes));
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
+			instances.erase(this);
 			if (gpu_ready) {
 				RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowWater3D::_rt_free));
 			}
 			last_dispatch_time = -1.0;
 			last_dispatch.clear();
 			spectrum_dirty = true;
+			spectrum_version++;
 		} break;
 	}
 }
@@ -835,16 +1238,19 @@ void FellowWater3D::_rt_dispatch(PackedByteArray p_push) {
 void FellowWater3D::set_wind_speed(float p_speed) {
 	wind_speed = MAX(0.1f, p_speed);
 	spectrum_dirty = true;
+	spectrum_version++;
 }
 
 void FellowWater3D::set_wind_direction(float p_degrees) {
 	wind_direction = p_degrees;
 	spectrum_dirty = true;
+	spectrum_version++;
 }
 
 void FellowWater3D::set_fetch(float p_km) {
 	fetch = MAX(0.01f, p_km);
 	spectrum_dirty = true;
+	spectrum_version++;
 }
 
 void FellowWater3D::set_wave_scale(float p_scale) {
@@ -862,6 +1268,7 @@ void FellowWater3D::set_cascade_lengths(const Vector4 &p_lengths) {
 	ERR_FAIL_COND_MSG(p_lengths.x <= 0.0f, "The first cascade needs a length.");
 	cascade_lengths = p_lengths;
 	spectrum_dirty = true;
+	spectrum_version++;
 	if (material.is_valid()) {
 		_update_material();
 	}
@@ -871,6 +1278,7 @@ void FellowWater3D::set_wave_resolution(int p_resolution) {
 	ERR_FAIL_COND_MSG(p_resolution != 64 && p_resolution != 128 && p_resolution != 256 && p_resolution != 512, "Wave resolution must be 64, 128, 256 or 512.");
 	wave_resolution = p_resolution;
 	spectrum_dirty = true;
+	spectrum_version++;
 	if (material.is_valid()) {
 		_update_material();
 	}
@@ -1032,6 +1440,10 @@ void FellowWater3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_sun_path"), &FellowWater3D::get_sun_path);
 	ClassDB::bind_method(D_METHOD("set_debug_view", "view"), &FellowWater3D::set_debug_view);
 	ClassDB::bind_method(D_METHOD("get_debug_view"), &FellowWater3D::get_debug_view);
+	ClassDB::bind_method(D_METHOD("get_surface_height", "position"), &FellowWater3D::get_surface_height);
+	ClassDB::bind_method(D_METHOD("get_surface_velocity", "position"), &FellowWater3D::get_surface_velocity);
+	ClassDB::bind_method(D_METHOD("get_cpu_wave_stats"), &FellowWater3D::get_cpu_wave_stats);
+	ClassDB::bind_method(D_METHOD("debug_compare_cpu_waves", "cascade"), &FellowWater3D::debug_compare_cpu_waves);
 	ClassDB::bind_method(D_METHOD("set_time", "seconds"), &FellowWater3D::set_time);
 	ClassDB::bind_method(D_METHOD("get_time"), &FellowWater3D::get_time);
 	ClassDB::bind_method(D_METHOD("set_time_auto", "enabled"), &FellowWater3D::set_time_auto);
@@ -1119,9 +1531,9 @@ void FellowWater3D::_rt_destroy() {
 
 FellowWater3D::~FellowWater3D() {
 	if (RS::get_singleton() && rd) {
-	// FellowEngine: the RenderingDevice's resources are freed on the render thread. With a separate one
-	// (--render-thread separate) this waits for it: the calls queued before for this node run first, and none of them
-	// runs on a node half destroyed.
+		// FellowEngine: the RenderingDevice's resources are freed on the render thread. With a separate one
+		// (--render-thread separate) this waits for it: the calls queued before for this node run first, and none of them
+		// runs on a node half destroyed.
 		RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowWater3D::_rt_destroy));
 		if (!RS::get_singleton()->is_on_render_thread()) {
 			RS::get_singleton()->sync();

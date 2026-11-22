@@ -219,6 +219,28 @@ waves' compute 0.10 ms, the caustics 0.03 ms. The surface is a polar grid around
 `grid_near`, `grid_far`). The node's rotation and scale are not used. `rendering/fellow/fluid/enabled` off stops the waves. Decision record 0123; bench Water Lab
 (`--scene=water`, `--water=full|basic|none`).
 
+### Floating on the waves (milestone 175)
+
+`FellowWater3D.get_surface_height(position)` and `get_surface_velocity(position)` (decision 0317): the surface drawn
+over a point and the water's motion there, from the waves on the CPU (the cascades of 10 m and longer, from the GPU's
+own modes on a 16-64 grid; recomputed when asked at a new time, about 0.3 ms); `-INF` outside `extent`.
+`get_cpu_wave_stats()`, `debug_compare_cpu_waves(cascade)` (against the GPU's texture).
+
+`FellowBuoyancy3D` (module `fellow_fluid`), a child of a `RigidBody3D`: its collision shapes filled with points, each
+pushed up by the water it displaces and dragged towards the water's motion.
+
+| property | default | meaning |
+|---|---|---|
+| `water_path` | empty | the `FellowWater3D` (empty: the one whose extent holds the body) |
+| `water_density` | 1000 kg/m³ | the water's density (sea water 1025): the body floats if its mass over its volume is less |
+| `point_spacing`, `max_points` | 0.25 m, 64 | the points filling the shapes (the spacing made coarser until they fit) |
+| `linear_drag`, `angular_drag` | 3, 3 1/s | the water's resistance at full submersion (in proportion to the share under water) |
+| `follow_waves` | true | the drag against the motion relative to the water's (the waves' orbital velocity) |
+
+Methods: `get_submerged_share()`, `get_volume()`, `get_point_count()`, `get_stats()`, `rebuild_points()`. Measured with
+`benchmarks/tools/buoyancy/buoyancy.gd` (`--set=linear_drag:2,...`); `gpu_match.gd` and `demo.gd` need a Vulkan device
+(lavapipe).
+
 ## Rain and wet surfaces (milestone 25)
 
 A `FellowRain3D` node (module `fellow_fluid`; one active at a time) makes it rain around the camera and wets the

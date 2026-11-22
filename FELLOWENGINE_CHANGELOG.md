@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 175 — buoyancy: bodies floating on the waves (2026-11-22)
+
+- `FellowWater3D`'s waves on the CPU (decision 0317): the cascades of 10 m and longer evaluated from the GPU's own modes
+  (the spectrum's per-mode code now shared with the GPU's upload), two inverse FFTs a cascade on a 16-64 grid, when a
+  point is asked for at a new time: `get_surface_height(position)` (the choppy displacement inverted, the GPU's
+  half-texel shift included), `get_surface_velocity(position)`, `get_cpu_wave_stats()`, `debug_compare_cpu_waves()`.
+  Against the GPU's displacement on lavapipe: 1.3 cm rms off in a sea of 2.3 m significant height.
+- `FellowBuoyancy3D`, a child of a RigidBody3D: its shapes filled with points (boxes, spheres, capsules, cylinders,
+  convex hulls exactly), each pushed up by the water it displaces and dragged towards the water's motion. The buoyancy
+  course (`benchmarks/tools/buoyancy/`, new): displaced volume at rest within 0.01 % of Archimedes'; a raft rights
+  itself, a post lies down, a cube of half the water's density floats edge up; a buoy follows the surface in a 2.3 m
+  sea (correlation 0.997); 4 µs a body a tick, the waves 0.3 ms an update.
+
 ## Milestone 174 — foot placement: the feet on the ground under them (2026-11-22)
 
 - `FellowFootPlacement3D` (decision 0316), a skeleton modifier for characters animated on flat ground walking on

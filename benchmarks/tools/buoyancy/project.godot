@@ -1,0 +1,12 @@
+; FellowEngine's buoyancy (milestone 175): bodies floating on FellowWater3D's waves, measured headless (buoyancy.gd);
+; the waves on the CPU against the GPU's (gpu_match.gd, on a Vulkan device: lavapipe will do).
+
+config_version=5
+
+[application]
+
+config/name="Buoyancy"
+
+[physics]
+
+3d/physics_engine="Jolt Physics"

@@ -150,6 +150,31 @@ private:
 	double time = 0.0;
 	bool time_auto = true;
 
+	// Milestone 175 (decision 0317): the waves on the CPU, for what floats on them — each cascade's longer waves (the
+	// GPU's own modes, random phases and quantized frequencies, its band up to CPU_WAVE_SIZE / 2 fundamentals)
+	// transformed on a small grid when a point is asked for at a new time.
+	struct CPUWaveCascade {
+		int size = 0; // the grid's side (a power of two)
+		float length = 0.0f; // m
+		LocalVector<float> modes; // per mode: h0(k) re, im; conj(h0(-k)) re, im; kx / k, kz / k; omega index; cell
+		LocalVector<float> fields[2]; // the transforms: dx + i dz, h + i dh/dt (2 floats a cell)
+		LocalVector<float> previous; // dx + i dz at the previous update
+	};
+	LocalVector<CPUWaveCascade> cpu_cascades;
+	static LocalVector<FellowWater3D *> instances;
+	uint32_t spectrum_version = 0;
+	uint32_t cpu_spectrum_version = UINT32_MAX;
+	double cpu_waves_time = -1e30;
+	uint64_t cpu_wave_updates = 0;
+	uint64_t cpu_wave_usec = 0;
+	double cpu_variance_share = 0.0;
+	int cpu_max_omega_index = 0;
+	LocalVector<float> cpu_phase;
+	float cpu_velocity_scale = 0.0f; // 1 / the time since the previous update (0: none)
+	void _cpu_waves_build();
+	void _cpu_waves_update(double p_time);
+	void _cpu_waves_sample(float p_x, float p_z, float r_out[6]) const;
+
 	// Main-thread state.
 	MeshInstance3D *mesh_instance = nullptr;
 	Ref<ShaderMaterial> material;
@@ -311,6 +336,16 @@ public:
 	MeshInstance3D *get_surface_mesh_instance() const { return mesh_instance; }
 	Ref<Image> debug_get_spectrum_image(int p_cascade) const;
 	Ref<Image> debug_get_displacement_image(int p_cascade);
+
+	// Milestone 175 (decision 0317): the surface over a point (world): its height and its velocity, from the waves on
+	// the CPU (what the GPU draws, its shortest waves left out). False outside the water's extent.
+	bool fellow_sample_surface(const Vector3 &p_position, float &r_height, Vector3 &r_velocity);
+	// The water whose extent holds a point (world), of those in the scene (the first one), for what floats on it.
+	static FellowWater3D *find_water(const Vector3 &p_position);
+	float get_surface_height(const Vector3 &p_position);
+	Vector3 get_surface_velocity(const Vector3 &p_position);
+	Dictionary get_cpu_wave_stats() const;
+	Dictionary debug_compare_cpu_waves(int p_cascade);
 
 	FellowWater3D();
 	~FellowWater3D();

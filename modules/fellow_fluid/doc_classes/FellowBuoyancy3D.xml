@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowBuoyancy3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a RigidBody3D floating on FellowWater3D's waves — Archimedes' buoyancy on points filling its shapes, drag towards the water's motion.
+	</brief_description>
+	<description>
+		A child of a [RigidBody3D] that floats it on a [FellowWater3D]'s waves. The body's [CollisionShape3D] children are filled with points on a grid of [member point_spacing] (coarser until there are no more than [member max_points]), each the share of its shape's volume (boxes, spheres, capsules, cylinders and convex shapes exactly; other shapes as their bounding boxes). Every physics tick each point under the surface — the waves as drawn, from [method FellowWater3D.get_surface_height] — is pushed up by the weight of the water it displaces ([member water_density] x gravity x its volume under the surface) and dragged towards the water's own motion ([member linear_drag], the waves' orbital velocity with [member follow_waves]), at its place on the body; the body's turning is slowed by [member angular_drag] in the share of it under water. The body floats at its density's draft, rights itself or capsizes as its shape makes it, and rides the waves.
+		Without a [member water_path], the [FellowWater3D] whose extent holds the body. On FellowEngine's buoyancy course (Jolt, 60 Hz): at rest in still water the displaced volume is the body's mass over the water's density within 0.01 % (boxes, a sphere, a barrel, a capsule, a convex wedge); a tilted raft rights itself, a post lies down and a cube of half the water's density floats edge up (45°), as the theory of floating bodies has them; in a 2.3 m sea a buoy's height follows the surface's under it (correlation 0.997) and twenty crates stay on it. 4 µs a body a tick (16-64 points).
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_point_count">
+			<return type="int" />
+			<description>
+				The points the body's shapes are filled with.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				[code]points[/code], [code]volume[/code] (m³), [code]ticks[/code], [code]usec_per_tick[/code] (the mean CPU time a physics tick), [code]submerged_share[/code].
+			</description>
+		</method>
+		<method name="get_submerged_share" qualifiers="const">
+			<return type="float" />
+			<description>
+				The share of the body's volume under the surface at the last physics tick ([code]0.0[/code] to [code]1.0[/code]).
+			</description>
+		</method>
+		<method name="get_volume">
+			<return type="float" />
+			<description>
+				The body's volume (its shapes'), in cubic metres.
+			</description>
+		</method>
+		<method name="rebuild_points">
+			<return type="void" />
+			<description>
+				Fills the body's shapes with points again at the next physics tick (after its shapes changed).
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="angular_drag" type="float" setter="set_angular_drag" getter="get_angular_drag" default="3.0">
+			How fast the water slows the body's turning, in 1/s when it is all under water (in proportion to the share of it that is).
+		</member>
+		<member name="follow_waves" type="bool" setter="set_follow_waves" getter="is_follow_waves" default="true">
+			If [code]true[/code], the drag is against the body's motion relative to the water's (the waves' orbital velocity); if [code]false[/code], relative to still water.
+		</member>
+		<member name="linear_drag" type="float" setter="set_linear_drag" getter="get_linear_drag" default="3.0">
+			How fast the water slows the body's points towards its own motion, in 1/s when they are under water (each as its share of the body's mass). Measured: a box dropped in settles in 5-7 s with 3.0 (in 13-17 s with 1.0).
+		</member>
+		<member name="max_points" type="int" setter="set_max_points" getter="get_max_points" default="64">
+			The most points the shapes are filled with ([member point_spacing] made coarser until they fit).
+		</member>
+		<member name="point_spacing" type="float" setter="set_point_spacing" getter="get_point_spacing" default="0.25">
+			The spacing of the points filling the shapes, in metres.
+		</member>
+		<member name="water_density" type="float" setter="set_water_density" getter="get_water_density" default="1000.0">
+			The water's density, in kg/m³ (sea water: 1025). The body floats if its mass over its volume is less.
+		</member>
+		<member name="water_path" type="NodePath" setter="set_water_path" getter="get_water_path" default="NodePath(&quot;&quot;)">
+			The [FellowWater3D] to float on. Empty: the one whose extent holds the body.
+		</member>
+	</members>
+</class>

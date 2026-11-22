@@ -12,6 +12,13 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="debug_compare_cpu_waves">
+			<return type="Dictionary" />
+			<param index="0" name="cascade" type="int" />
+			<description>
+				The waves on the CPU (see [method get_surface_height]) against the GPU's displacement texture for a cascade, at the texels the CPU's grid has, at the time of the last GPU update: [code]height_rms[/code], [code]height_error_rms[/code], [code]height_error_max[/code], [code]dx_rms[/code], [code]dx_error_rms[/code] (metres), [code skip-lint]time[/code] (of the GPU's update). Synchronous: for tests.
+			</description>
+		</method>
 		<method name="debug_get_displacement_image">
 			<return type="Image" />
 			<param index="0" name="cascade" type="int" />
@@ -26,6 +33,12 @@
 				The initial spectrum of a cascade as uploaded (h0(k), conj(h0(-k))): for tests against a reference.
 			</description>
 		</method>
+		<method name="get_cpu_wave_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The waves on the CPU: [code]updates[/code], [code]usec_per_update[/code] (their mean CPU time), [code]variance_share[/code] (the share of the waves' variance they hold), [code]grid[/code] (the first cascade's grid side).
+			</description>
+		</method>
 		<method name="get_displacement_texture" qualifiers="const">
 			<return type="Texture2DArrayRD" />
 			<description>
@@ -36,6 +49,20 @@
 			<return type="float" />
 			<description>
 				The significant wave height (four times the standard deviation of the surface) of the configured spectrum, in metres.
+			</description>
+		</method>
+		<method name="get_surface_height">
+			<return type="float" />
+			<param index="0" name="position" type="Vector3" />
+			<description>
+				The height (world) of the surface over a point (world), as drawn: the longer waves (cascades of 10 m and more, each up to 32 of its fundamentals; in a sea of 2.3 m significant wave height 1.3 cm rms off the GPU's surface) evaluated on the CPU from the GPU's own modes, the horizontal displacement inverted. [code]-INF[/code] outside [member extent]. The CPU's waves are transformed when a point is asked for at a new time (about 0.3 ms). [FellowBuoyancy3D] floats bodies on it. The surface blended with a [FellowShallowWater3D] is not included.
+			</description>
+		</method>
+		<method name="get_surface_velocity">
+			<return type="Vector3" />
+			<param index="0" name="position" type="Vector3" />
+			<description>
+				The water's velocity at the surface over a point (world): the waves' orbital motion (the height's rate of change, the horizontal displacement's change since the CPU's last update).
 			</description>
 		</method>
 		<method name="get_slope_texture" qualifiers="const">
