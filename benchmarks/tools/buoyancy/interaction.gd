@@ -311,6 +311,13 @@ func _finish() -> void:
 			lines.append("%.1f s: %d cells, %.1f" % [tt, row[1], row[2]])
 	print("  foam (cells of 0.25 m covered, their sum): " + "; ".join(lines))
 	print("  the foam grid: %.0f µs a frame while there is foam (%d frames)" % [float(fs.usec_per_frame), int(fs.frames)])
+	# The sound (milestone 177): what the synthesis made and its time on the audio thread.
+	for w: Node in [_still, _sea, _pond]:
+		var ss: Dictionary = w.call("get_sound_stats")
+		_rows["sound_" + str(w.position.x)] = ss
+		print("sound at x=%.0f: %d splashes (%d merged, %d stolen, %d dropped), %d bubbles (peak %d at once), %.1f s mixed, %.0f µs a second of sound" % [
+				w.position.x, int(ss.splashes), int(ss.merged), int(ss.stolen), int(ss.dropped), int(ss.bubbles), int(ss.peak_bubbles),
+				float(ss.mixed_seconds), float(ss.mix_usec_per_second)])
 	if _out != "":
 		var f := FileAccess.open(_out, FileAccess.WRITE)
 		f.store_string(JSON.stringify(_rows, "\t"))

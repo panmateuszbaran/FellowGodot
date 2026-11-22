@@ -9,6 +9,25 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 177 — water's sound synthesised from its bubbles (2026-11-23)
+
+- Water sounds as it is struck, with no samples (decision 0319): what strikes it entrains air bubbles, each ringing at
+  its Minnaert frequency (3.26 m/s over its radius), decaying by its losses and rising in pitch (van den Doel 2005); a
+  splash is a slap, a cloud of up to 300 bubbles sized by what struck and how fast, a large body's cavity closing;
+  floating bodies lap where waves close over them; a wake rushes and bubbles. `modules/fellow_fluid/fellow_water_sound.*`
+  (an internal `AudioStream`, its synthesis on the audio thread).
+- `FellowWater3D`: `sound_enabled`, `sound_volume_db`, `sound_voices` (8 3D voices, made at the first sound; splashes
+  within 2.5 m share one, the quietest is taken by a louder one), `sound_max_distance` (60 m), `sound_unit_size`,
+  `sound_bus`; `play_splash(position, speed, size)`, `add_wake_sound(position, level)`, `get_sound_stats()`,
+  `debug_render_sound(events, seconds)`. `FellowBuoyancy3D.sound` (its splashes, laps and wake;
+  `FellowDestructible3D`'s debris too).
+- Measured (`benchmarks/tools/buoyancy/water_sound.gd` + `water_sound.py`, `sound_timing.gd`, new): single bubbles
+  within 0.01 % of Minnaert's frequency and 0.2 % of the model's damping; splashes 29 dB louder from 1.5 to 11 m/s and
+  deeper with size; 0.1-0.9 ms of the audio thread a second of sound a splash, 4 ms for a crate's twenty pieces; heard
+  2-9 ms into the frame a strike is drawn in. `interaction_demo.gd` records its sound with Movie Maker.
+- `AudioServer::finish` frees the playbacks still listed at exit (stopped players waiting for a mix that no longer
+  comes were reported as leaked).
+
 ## Milestone 176 — water interaction: debris floats, splashes and wakes (2026-11-22)
 
 - `FellowDestructible3D.debris_floats` (decision 0318, on by default): while the scene has a `FellowWater3D`, each

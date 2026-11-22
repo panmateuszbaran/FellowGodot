@@ -2,10 +2,13 @@ extends SceneTree
 ## FellowEngine's water interaction in pictures (milestone 176, decision 0318): wooden crates (FellowDestructible3D)
 ## dropped and broken in the air over a FellowWater3D sea, their pieces splashing in and floating; a barrel dropped in; a raft
 ## pushed through the water, its wake's foam. Frames written as PNGs (--out=<dir>, every --every-th frame from --from to
-## --to seconds); --before: as milestone 175 (debris_floats off, no foam made by what floats).
+## --to seconds); --before: as milestone 175 (debris_floats off, no foam or sound made by what floats). Milestone 177:
+## the sound synthesised from the bubbles (decision 0319) — with Movie Maker the frames and the sound together
+## (--write-movie <dir>/m.png writes m.wav beside them); the times things strike the water printed ("entered").
 ##
 ##   VK_ICD_FILENAMES=.../lvp_icd.json xvfb-run -a godot --path benchmarks/tools/buoyancy -s interaction_demo.gd \
 ##       --rendering-driver vulkan --resolution 960x540 --fixed-fps 30 -- --out=<dir> [--before]
+##   ... --fixed-fps 30 --write-movie <dir>/m.png -s interaction_demo.gd                    (with the sound)
 
 var _out := ""
 var _from := 0.0
@@ -17,6 +20,7 @@ var _cam: Camera3D
 var _raft: RigidBody3D
 var _crates := []
 var _crates_made := 0
+var _entered := {}
 var _barrel: RigidBody3D
 var _wood: StandardMaterial3D
 var _inside: StandardMaterial3D
@@ -59,6 +63,7 @@ func _initialize() -> void:
 	water.set("wind_direction", 30.0)
 	if _before:
 		water.set("body_foam_size", 0.0)
+		water.set("sound_enabled", false)
 	root.add_child(water)
 	water.set("sun_path", water.get_path_to(sun))
 	_wood = StandardMaterial3D.new()
@@ -111,6 +116,7 @@ func _body(p_shape: Shape3D, p_mesh: Mesh, p_material: Material, p_density: floa
 	if _before:
 		buoy.set("foam", 0.0)
 	body.add_child(buoy)
+	buoy.connect("water_entered", _on_entered.bind(p_mesh.get_class()))
 	var aabb := p_mesh.get_aabb()
 	var vol := aabb.size.x * aabb.size.y * aabb.size.z
 	if p_shape is CylinderShape3D:
@@ -142,8 +148,14 @@ func _crate(p_at: Vector3) -> Node3D:
 	d.set("debris_floats", not _before)
 	d.set("prefracture", true) # broken the frame it is told
 	d.set("seed", _crates_made)
+	var tag := "crate %d" % _crates_made
 	_crates_made += 1
 	body.add_child(d)
+	d.connect("broken", func(p_pieces: Array) -> void:
+		for rb: Node in p_pieces:
+			var b: Node = rb.get_node_or_null("Buoyancy")
+			if b:
+				b.connect("water_entered", _on_entered.bind(tag)))
 	var buoy: Node3D = ClassDB.instantiate("FellowBuoyancy3D") # the crate whole floats too
 	if _before:
 		buoy.set("foam", 0.0)
@@ -178,3 +190,9 @@ func _process(_d: float) -> bool:
 		var img := root.get_texture().get_image()
 		img.save_png(_out.path_join("frame_%04d.png" % _frame))
 	return t > _to
+
+
+func _on_entered(p_speed: float, p_what: String) -> void:
+	if p_speed > 1.0 and not _entered.has(p_what):
+		_entered[p_what] = true
+		print("entered %s t=%.3f speed %.2f" % [p_what, float(_frame) / 30.0, p_speed])

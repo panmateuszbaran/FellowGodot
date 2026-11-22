@@ -1655,6 +1655,13 @@ void AudioServer::finish() {
 		AudioDriverManager::get_driver(i)->finish();
 	}
 
+	// FellowEngine (milestone 177, decision 0319): the playbacks still listed at exit — their players stopped as the
+	// scene was freed, waiting for a mix that no longer comes — freed instead of leaked.
+	for (AudioStreamPlaybackListNode *playback : playback_list) {
+		_delete_stream_playback_list_node(playback);
+	}
+	playback_list.maybe_cleanup();
+
 	for (int i = 0; i < buses.size(); i++) {
 		memdelete(buses[i]);
 	}

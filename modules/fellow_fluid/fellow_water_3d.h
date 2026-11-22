@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include "fellow_water_sound.h"
+
 #include "core/object/worker_thread_pool.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/node_3d.h"
@@ -40,6 +42,7 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_device_binds.h"
 
+class AudioStreamPlayer3D;
 class DirectionalLight3D;
 class FellowShallowWater3D;
 
@@ -207,6 +210,39 @@ private:
 	uint64_t body_foam_usec = 0;
 	uint64_t body_foam_frames = 0;
 	void _body_foam_update(double p_dt);
+
+	// Milestone 177 (decision 0319): the water's sound, synthesised (fellow_water_sound.h) in a pool of 3D voices made
+	// at the first sound: a splash goes to a voice sounding within SOUND_MERGE of it, else a free one, else the
+	// quietest is taken if the splash is louder; the wakes near each other share a voice.
+	struct SoundVoice {
+		AudioStreamPlayer3D *player = nullptr;
+		Ref<FellowWaterSoundPlayback> playback;
+		Vector3 position;
+		double busy_until = -1.0; // the sound clock: its splashes ringing
+		float loudness = 0.0f; // the last splash's, fading
+		float wake_sum = 0.0f; // this frame's wake (summed over bodies and ticks)
+		Vector3 wake_position;
+		float wake_weight = 0.0f;
+		float wake = 0.0f; // the last frame's
+	};
+	bool sound_enabled = true;
+	float sound_volume_db = 0.0f;
+	int sound_voices = 8;
+	float sound_max_distance = 60.0f; // m
+	float sound_unit_size = 6.0f; // m
+	StringName sound_bus = SNAME("Master");
+	LocalVector<SoundVoice> voices;
+	double sound_clock = 0.0;
+	double sound_heard = 0.0; // the sound clock when a voice last sounded
+	uint64_t sound_last_physics_frame = 0;
+	uint64_t sound_splashes = 0;
+	uint64_t sound_dropped = 0;
+	uint64_t sound_stolen = 0;
+	uint64_t sound_merged = 0;
+	bool _sound_listener(const Vector3 &p_at, float &r_distance) const;
+	void _sound_make_voices();
+	void _sound_start(SoundVoice &p_voice);
+	void _sound_update(double p_dt);
 
 	// Main-thread state.
 	MeshInstance3D *mesh_instance = nullptr;
@@ -387,6 +423,25 @@ public:
 	void set_body_foam_decay(float p_decay) { body_foam_decay = MAX(0.0f, p_decay); }
 	float get_body_foam_decay() const { return body_foam_decay; }
 	void add_foam(const Vector3 &p_position, float p_radius, float p_amount);
+
+	// Milestone 177: sounds (from FellowBuoyancy3D, or a game's).
+	void play_splash(const Vector3 &p_position, float p_speed, float p_size);
+	void fellow_splash(const Vector3 &p_position, float p_speed, float p_size, float p_gain);
+	void add_wake_sound(const Vector3 &p_position, float p_level);
+	void set_sound_enabled(bool p_enabled);
+	bool is_sound_enabled() const { return sound_enabled; }
+	void set_sound_volume_db(float p_db);
+	float get_sound_volume_db() const { return sound_volume_db; }
+	void set_sound_voices(int p_voices);
+	int get_sound_voices() const { return sound_voices; }
+	void set_sound_max_distance(float p_distance);
+	float get_sound_max_distance() const { return sound_max_distance; }
+	void set_sound_unit_size(float p_size);
+	float get_sound_unit_size() const { return sound_unit_size; }
+	void set_sound_bus(const StringName &p_bus);
+	StringName get_sound_bus() const { return sound_bus; }
+	Dictionary get_sound_stats() const;
+	PackedFloat32Array debug_render_sound(const Array &p_events, float p_seconds, float p_rate = 48000.0f) const;
 	float get_foam(const Vector3 &p_position) const;
 	Dictionary get_body_foam_stats() const;
 	Dictionary get_cpu_wave_stats() const;

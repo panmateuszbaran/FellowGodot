@@ -59,6 +59,7 @@ class FellowBuoyancy3D : public Node3D {
 	float angular_drag = 3.0f; // 1/s, at full submersion
 	bool follow_waves = true;
 	float foam = 1.0f;
+	float sound = 1.0f;
 
 	LocalVector<Point> points;
 	LocalVector<uint8_t> under; // each point under the surface at the last tick (1 until known)
@@ -102,6 +103,8 @@ public:
 	void set_foam(float p_foam) { foam = MAX(0.0f, p_foam); }
 	float get_foam() const { return foam; }
 	bool is_in_water() const { return in_water; }
+	void set_sound(float p_sound) { sound = MAX(0.0f, p_sound); }
+	float get_sound() const { return sound; }
 
 	void rebuild_points() { points_dirty = true; }
 	int get_point_count();

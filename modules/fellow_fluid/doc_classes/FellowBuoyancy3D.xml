@@ -67,6 +67,9 @@
 		<member name="point_spacing" type="float" setter="set_point_spacing" getter="get_point_spacing" default="0.25">
 			The spacing of the points filling the shapes, in metres.
 		</member>
+		<member name="sound" type="float" setter="set_sound" getter="get_sound" default="1.0">
+			How loud the body is in the water ([member FellowWater3D.sound_enabled]), as a factor; [code]0.0[/code]: silent. A body out of the water striking it faster than 1 m/s plays a splash ([method FellowWater3D.play_splash]: its striking points' footprint, their speed); the water closing over points of a body in it faster than 0.15 m/s (a wave, its bobbing, it going deeper) a lap, softer; its waterline moving through the water a wake ([method FellowWater3D.add_wake_sound]).
+		</member>
 		<member name="water_density" type="float" setter="set_water_density" getter="get_water_density" default="1000.0">
 			The water's density, in kg/m³ (sea water: 1025). The body floats if its mass over its volume is less.
 		</member>

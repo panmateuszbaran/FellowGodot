@@ -44,11 +44,14 @@
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
+#include "scene/3d/audio_listener_3d.h"
+#include "scene/3d/audio_stream_player_3d.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/3d/light_3d.h"
 #include "scene/main/scene_tree.h"
 #include "scene/main/viewport.h"
 #include "scene/main/window.h"
+#include "servers/audio/audio_server.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_server.h"
 
@@ -794,6 +797,324 @@ Dictionary FellowWater3D::get_body_foam_stats() const {
 	return d;
 }
 
+// Milestone 177 (decision 0319): the water's sound.
+static const float SOUND_MERGE = 2.5f; // m: a splash this near a sounding voice joins it
+static const float WAKE_MERGE = 4.0f; // m: wakes this near each other share a voice
+static const double SOUND_IDLE = 10.0; // s of silence before the voices stop
+
+bool FellowWater3D::_sound_listener(const Vector3 &p_at, float &r_distance) const {
+	r_distance = 0.0f;
+	Viewport *vp = is_inside_tree() ? get_viewport() : nullptr;
+	Node3D *listener = vp ? (Node3D *)vp->get_audio_listener_3d() : nullptr;
+	if (!listener && vp) {
+		listener = vp->get_camera_3d();
+	}
+	if (!listener) {
+		return true; // nothing hears it from anywhere: kept
+	}
+	r_distance = float(listener->get_global_position().distance_to(p_at));
+	return r_distance <= sound_max_distance;
+}
+
+void FellowWater3D::_sound_make_voices() {
+	if (!voices.is_empty() || !AudioServer::get_singleton() || !is_inside_tree()) {
+		return;
+	}
+	voices.resize(sound_voices);
+	for (SoundVoice &v : voices) {
+		Ref<FellowWaterSoundStream> stream;
+		stream.instantiate();
+		v.player = memnew(AudioStreamPlayer3D);
+		v.player->set_name("WaterSound");
+		v.player->set_stream(stream);
+		v.player->set_bus(sound_bus);
+		v.player->set_volume_db(sound_volume_db);
+		v.player->set_unit_size(sound_unit_size);
+		v.player->set_max_distance(sound_max_distance);
+		v.player->set_as_top_level(true);
+		add_child(v.player, false, INTERNAL_MODE_FRONT);
+	}
+}
+
+void FellowWater3D::_sound_start(SoundVoice &p_voice) {
+	if (!p_voice.player->is_playing() || p_voice.playback.is_null()) {
+		// All of them: the next sounds start at the next mix.
+		for (SoundVoice &v : voices) {
+			if (!v.player->is_playing() || v.playback.is_null()) {
+				v.player->set_global_position(&v == &p_voice ? p_voice.position : v.position);
+				v.player->play();
+				v.playback = v.player->get_stream_playback();
+			}
+		}
+	}
+	sound_heard = sound_clock;
+}
+
+void FellowWater3D::play_splash(const Vector3 &p_position, float p_speed, float p_size) {
+	fellow_splash(p_position, p_speed, p_size, 1.0f);
+}
+
+void FellowWater3D::fellow_splash(const Vector3 &p_position, float p_speed, float p_size, float p_gain) {
+	if (!sound_enabled || p_gain <= 0.0f || p_speed <= 0.0f || p_size <= 0.0f || !is_inside_tree() || !p_position.is_finite()) {
+		return;
+	}
+	float distance = 0.0f;
+	if (!_sound_listener(p_position, distance)) {
+		sound_dropped++;
+		return;
+	}
+	_sound_make_voices();
+	if (voices.is_empty()) {
+		return;
+	}
+	sound_splashes++;
+	const float loud = p_gain * CLAMP(0.1f * p_speed * Math::sqrt(p_size), 0.0f, 1.5f) / MAX(1.0f, distance / sound_unit_size);
+	SoundVoice *v = nullptr;
+	for (SoundVoice &o : voices) {
+		if (o.busy_until > sound_clock && o.position.distance_to(p_position) < SOUND_MERGE) {
+			v = &o;
+			sound_merged++;
+			break;
+		}
+	}
+	if (!v) {
+		for (SoundVoice &o : voices) {
+			if (o.busy_until <= sound_clock && o.wake <= 0.0f && o.wake_weight <= 0.0f) {
+				v = &o;
+				break;
+			}
+		}
+		if (!v) {
+			SoundVoice *least = nullptr;
+			for (SoundVoice &o : voices) {
+				if (!least || MAX(o.loudness, 0.3f * o.wake) < MAX(least->loudness, 0.3f * least->wake)) {
+					least = &o;
+				}
+			}
+			if (!least || MAX(least->loudness, 0.3f * least->wake) >= loud) {
+				sound_dropped++;
+				return;
+			}
+			v = least;
+			if (v->playback.is_valid()) {
+				v->playback->post_clear();
+			}
+			v->wake = 0.0f;
+			v->wake_sum = 0.0f;
+			v->wake_weight = 0.0f;
+			sound_stolen++;
+		}
+		v->position = p_position;
+	}
+	_sound_start(*v);
+	if (v->playback.is_valid()) {
+		FellowWaterSynth::Splash sp;
+		sp.speed = p_speed;
+		sp.size = p_size;
+		sp.gain = p_gain;
+		sp.seed = uint32_t(sound_splashes * 2654435761u) | 1u;
+		v->playback->post_splash(sp);
+	}
+	v->busy_until = MAX(v->busy_until, sound_clock + 0.5 + 0.4 * p_size);
+	v->loudness = MAX(v->loudness, loud);
+}
+
+void FellowWater3D::add_wake_sound(const Vector3 &p_position, float p_level) {
+	if (!sound_enabled || p_level <= 0.0f || !is_inside_tree() || !p_position.is_finite()) {
+		return;
+	}
+	float distance = 0.0f;
+	if (!_sound_listener(p_position, distance)) {
+		return;
+	}
+	_sound_make_voices();
+	SoundVoice *v = nullptr;
+	for (SoundVoice &o : voices) {
+		if ((o.wake_weight > 0.0f || o.wake > 0.0f) && o.wake_position.distance_to(p_position) < WAKE_MERGE) {
+			v = &o;
+			break;
+		}
+	}
+	if (!v) {
+		for (SoundVoice &o : voices) {
+			if (o.busy_until <= sound_clock && o.wake <= 0.0f && o.wake_weight <= 0.0f) {
+				v = &o;
+				v->position = p_position;
+				break;
+			}
+		}
+	}
+	if (!v) {
+		return; // every voice sounding elsewhere
+	}
+	v->wake_position = v->wake_weight > 0.0f ? (v->wake_position * v->wake_weight + p_position * p_level) / (v->wake_weight + p_level) : p_position;
+	v->wake_weight += p_level;
+	v->wake_sum += p_level;
+}
+
+// Once a frame: each voice's wake (the bodies' over the frame's physics ticks), its place, and the voices stopped when
+// all have been quiet for SOUND_IDLE seconds (a playing voice starts a sound at the next mix; a stopped one a physics
+// tick later, when its player starts it).
+void FellowWater3D::_sound_update(double p_dt) {
+	sound_clock += p_dt;
+	if (voices.is_empty()) {
+		return;
+	}
+	const uint64_t pf = Engine::get_singleton()->get_physics_frames();
+	const float ticks = float(MAX<uint64_t>(1, pf - sound_last_physics_frame));
+	sound_last_physics_frame = pf;
+	for (SoundVoice &v : voices) {
+		const float w = v.wake_sum / ticks;
+		if (w > 0.0f || v.wake > 0.0f) {
+			if (w > 0.0f && v.busy_until <= sound_clock) {
+				v.position = v.wake_position;
+			}
+			if (w > 0.0f) {
+				_sound_start(v);
+			}
+			if (v.playback.is_valid()) {
+				v.playback->post_wake(w);
+			}
+		}
+		v.wake = w;
+		v.wake_sum = 0.0f;
+		v.wake_weight = 0.0f;
+		v.loudness *= float(Math::exp(-p_dt / 0.3));
+		if (v.player->is_playing()) {
+			v.player->set_global_position(v.position);
+		}
+		if (v.busy_until > sound_clock - 0.5 || w > 0.0f) {
+			sound_heard = sound_clock;
+		}
+	}
+	if (sound_clock - sound_heard > SOUND_IDLE) {
+		for (SoundVoice &v : voices) {
+			if (v.player->is_playing()) {
+				v.player->stop();
+				v.playback.unref();
+			}
+		}
+	}
+}
+
+void FellowWater3D::set_sound_enabled(bool p_enabled) {
+	sound_enabled = p_enabled;
+	if (!sound_enabled) {
+		for (SoundVoice &v : voices) {
+			v.player->stop();
+			v.playback.unref();
+			v.busy_until = -1.0;
+			v.wake = 0.0f;
+		}
+	}
+}
+
+void FellowWater3D::set_sound_volume_db(float p_db) {
+	sound_volume_db = p_db;
+	for (SoundVoice &v : voices) {
+		v.player->set_volume_db(p_db);
+	}
+}
+
+void FellowWater3D::set_sound_voices(int p_voices) {
+	sound_voices = CLAMP(p_voices, 1, 32);
+	for (SoundVoice &v : voices) {
+		v.player->queue_free();
+	}
+	voices.clear(); // made again at the next sound
+}
+
+void FellowWater3D::set_sound_max_distance(float p_distance) {
+	sound_max_distance = MAX(1.0f, p_distance);
+	for (SoundVoice &v : voices) {
+		v.player->set_max_distance(sound_max_distance);
+	}
+}
+
+void FellowWater3D::set_sound_unit_size(float p_size) {
+	sound_unit_size = MAX(0.1f, p_size);
+	for (SoundVoice &v : voices) {
+		v.player->set_unit_size(sound_unit_size);
+	}
+}
+
+void FellowWater3D::set_sound_bus(const StringName &p_bus) {
+	sound_bus = p_bus;
+	for (SoundVoice &v : voices) {
+		v.player->set_bus(p_bus);
+	}
+}
+
+Dictionary FellowWater3D::get_sound_stats() const {
+	Dictionary d;
+	int playing = 0;
+	uint64_t frames = 0, usec = 0, bubbles = 0, dropped_bubbles = 0;
+	int active = 0, peak = 0;
+	for (const SoundVoice &v : voices) {
+		playing += v.player->is_playing() ? 1 : 0;
+		if (v.playback.is_valid()) {
+			uint64_t f, u;
+			FellowWaterSynth::Stats st;
+			v.playback->get_mix_stats(f, u, st);
+			frames += f;
+			usec += u;
+			bubbles += st.bubbles;
+			dropped_bubbles += st.dropped;
+			active += st.active;
+			peak = MAX(peak, st.peak_active);
+		}
+	}
+	const float rate = AudioServer::get_singleton() ? AudioServer::get_singleton()->get_mix_rate() : 48000.0f;
+	d["voices"] = (int64_t)voices.size();
+	d["playing"] = playing;
+	d["splashes"] = (int64_t)sound_splashes;
+	d["merged"] = (int64_t)sound_merged;
+	d["stolen"] = (int64_t)sound_stolen;
+	d["dropped"] = (int64_t)sound_dropped;
+	d["bubbles"] = (int64_t)bubbles;
+	d["bubbles_dropped"] = (int64_t)dropped_bubbles;
+	d["active_bubbles"] = active;
+	d["peak_bubbles"] = peak;
+	d["mixed_seconds"] = double(frames) / rate;
+	d["mix_usec_per_second"] = frames > 0 ? double(usec) / (double(frames) / rate) : 0.0;
+	return d;
+}
+
+// The synthesis offline (for tests): events by time — {time, speed, size[, gain]} a splash, {time, wake} the wake's
+// level from then, {time, bubble, amplitude[, rise]} one bubble of that radius — rendered mono.
+PackedFloat32Array FellowWater3D::debug_render_sound(const Array &p_events, float p_seconds, float p_rate) const {
+	PackedFloat32Array out;
+	const int total = int(MAX(0.0f, p_seconds) * p_rate);
+	out.resize(total);
+	FellowWaterSynth synth;
+	synth.set_rate(p_rate);
+	float *w = out.ptrw();
+	int pos = 0;
+	for (int e = 0; e <= p_events.size() && pos < total; e++) {
+		const Dictionary ev = e < p_events.size() ? Dictionary(p_events[e]) : Dictionary();
+		const int at = e < p_events.size() ? CLAMP(int(float(ev.get("time", 0.0)) * p_rate), pos, total) : total;
+		if (at > pos) {
+			synth.render(w + pos, at - pos);
+			pos = at;
+		}
+		if (ev.has("speed")) {
+			FellowWaterSynth::Splash sp;
+			sp.speed = ev["speed"];
+			sp.size = ev.get("size", 0.3f);
+			sp.gain = ev.get("gain", 1.0f);
+			sp.seed = uint32_t(e + 1) * 2654435761u | 1u;
+			synth.add_splash(sp);
+		}
+		if (ev.has("wake")) {
+			synth.set_wake(ev["wake"]);
+		}
+		if (ev.has("bubble")) {
+			synth.add_bubble(ev["bubble"], ev.get("amplitude", 0.5f), 0.0f, ev.get("rise", 0.1f));
+		}
+	}
+	return out;
+}
+
 Dictionary FellowWater3D::debug_compare_cpu_waves(int p_cascade) {
 	Dictionary d;
 	Ref<Image> img = debug_get_displacement_image(p_cascade);
@@ -1128,6 +1449,7 @@ void FellowWater3D::_notification(int p_what) {
 			if (mesh_dirty) {
 				_update_mesh();
 			}
+			_sound_update(dt);
 			if (material.is_null()) {
 				return;
 			}
@@ -1690,6 +2012,22 @@ void FellowWater3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_body_foam_decay"), &FellowWater3D::get_body_foam_decay);
 	ClassDB::bind_method(D_METHOD("add_foam", "position", "radius", "amount"), &FellowWater3D::add_foam);
 	ClassDB::bind_method(D_METHOD("get_foam", "position"), &FellowWater3D::get_foam);
+	ClassDB::bind_method(D_METHOD("play_splash", "position", "speed", "size"), &FellowWater3D::play_splash);
+	ClassDB::bind_method(D_METHOD("add_wake_sound", "position", "level"), &FellowWater3D::add_wake_sound);
+	ClassDB::bind_method(D_METHOD("set_sound_enabled", "enabled"), &FellowWater3D::set_sound_enabled);
+	ClassDB::bind_method(D_METHOD("is_sound_enabled"), &FellowWater3D::is_sound_enabled);
+	ClassDB::bind_method(D_METHOD("set_sound_volume_db", "db"), &FellowWater3D::set_sound_volume_db);
+	ClassDB::bind_method(D_METHOD("get_sound_volume_db"), &FellowWater3D::get_sound_volume_db);
+	ClassDB::bind_method(D_METHOD("set_sound_voices", "voices"), &FellowWater3D::set_sound_voices);
+	ClassDB::bind_method(D_METHOD("get_sound_voices"), &FellowWater3D::get_sound_voices);
+	ClassDB::bind_method(D_METHOD("set_sound_max_distance", "distance"), &FellowWater3D::set_sound_max_distance);
+	ClassDB::bind_method(D_METHOD("get_sound_max_distance"), &FellowWater3D::get_sound_max_distance);
+	ClassDB::bind_method(D_METHOD("set_sound_unit_size", "size"), &FellowWater3D::set_sound_unit_size);
+	ClassDB::bind_method(D_METHOD("get_sound_unit_size"), &FellowWater3D::get_sound_unit_size);
+	ClassDB::bind_method(D_METHOD("set_sound_bus", "bus"), &FellowWater3D::set_sound_bus);
+	ClassDB::bind_method(D_METHOD("get_sound_bus"), &FellowWater3D::get_sound_bus);
+	ClassDB::bind_method(D_METHOD("get_sound_stats"), &FellowWater3D::get_sound_stats);
+	ClassDB::bind_method(D_METHOD("debug_render_sound", "events", "seconds", "rate"), &FellowWater3D::debug_render_sound, DEFVAL(48000.0f));
 	ClassDB::bind_method(D_METHOD("get_body_foam_stats"), &FellowWater3D::get_body_foam_stats);
 	ClassDB::bind_method(D_METHOD("debug_compare_cpu_waves", "cascade"), &FellowWater3D::debug_compare_cpu_waves);
 	ClassDB::bind_method(D_METHOD("set_time", "seconds"), &FellowWater3D::set_time);
@@ -1738,6 +2076,13 @@ void FellowWater3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "grid_segments", PROPERTY_HINT_RANGE, "16,2048,1"), "set_grid_segments", "get_grid_segments");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "grid_near", PROPERTY_HINT_RANGE, "0.01,10,0.01,suffix:m"), "set_grid_near", "get_grid_near");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "grid_far", PROPERTY_HINT_RANGE, "10,100000,1,suffix:m"), "set_grid_far", "get_grid_far");
+	ADD_GROUP("Sound", "sound_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sound_enabled"), "set_sound_enabled", "is_sound_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_volume_db", PROPERTY_HINT_RANGE, "-60,24,0.1,suffix:dB"), "set_sound_volume_db", "get_sound_volume_db");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "sound_voices", PROPERTY_HINT_RANGE, "1,32,1"), "set_sound_voices", "get_sound_voices");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_max_distance", PROPERTY_HINT_RANGE, "1,500,0.1,suffix:m"), "set_sound_max_distance", "get_sound_max_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_unit_size", PROPERTY_HINT_RANGE, "0.1,100,0.1,suffix:m"), "set_sound_unit_size", "get_sound_unit_size");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "sound_bus"), "set_sound_bus", "get_sound_bus");
 	ADD_GROUP("Simulation", "simulation_");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "simulation_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "FellowShallowWater3D"), "set_simulation_path", "get_simulation_path");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "simulation_wave_scale", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_simulation_wave_scale", "get_simulation_wave_scale");

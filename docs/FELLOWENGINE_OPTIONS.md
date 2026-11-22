@@ -259,6 +259,27 @@ Methods and signals: `FellowWater3D.add_foam(position, radius, amount)`, `get_fo
 `benchmarks/tools/buoyancy/interaction.gd` (`--frame_work_ms=4`: other work on the main thread after the nodes'
 process); pictures with `interaction_demo.gd` (a Vulkan device; `--before`: as milestone 175).
 
+### Water's sound (milestone 177)
+
+Decision 0319: splashes, laps and wakes synthesised from the bubbles they entrain (each at its Minnaert frequency,
+3.26 m/s over its radius, damped by its losses, its pitch rising), on the audio thread, no samples. A water nothing
+strikes is silent and costs nothing.
+
+| node | property | default | meaning |
+|---|---|---|---|
+| `FellowWater3D` | `sound_enabled` | true | the water's sound |
+| `FellowWater3D` | `sound_volume_db` | 0 dB | its voices' volume |
+| `FellowWater3D` | `sound_voices` | 8 | sounds at once (3D players made at the first sound; a splash joins a voice within 2.5 m, else a free one, else the quietest if louder; wakes within 4 m share one; all stop after 10 s of silence) |
+| `FellowWater3D` | `sound_max_distance` | 60 m | nothing farther from the listener is played |
+| `FellowWater3D` | `sound_unit_size` | 6 m | the voices' `unit_size` |
+| `FellowWater3D` | `sound_bus` | Master | their bus |
+| `FellowBuoyancy3D` | `sound` | 1.0 | its body's splashes (striking the water from out of it faster than 1 m/s), laps (the water closing over its points faster than 0.15 m/s) and wake; 0: silent |
+
+Methods: `FellowWater3D.play_splash(position, speed, size)`, `add_wake_sound(position, level)`,
+`get_sound_stats()`, `debug_render_sound(events, seconds[, rate])`. Measured with
+`benchmarks/tools/buoyancy/water_sound.gd` + `water_sound.py` (the synthesis offline; `showreel.wav` to listen to) and
+`sound_timing.gd` (Movie Maker; `water_sound.py --timing`).
+
 ## Rain and wet surfaces (milestone 25)
 
 A `FellowRain3D` node (module `fellow_fluid`; one active at a time) makes it rain around the camera and wets the

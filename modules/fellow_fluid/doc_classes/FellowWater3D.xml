@@ -21,6 +21,14 @@
 				Adds foam on the surface around a point (world): [param amount] at the centre, less outwards, none at [param radius] metres; a place holds at most [code]1.0[/code] (as covered as the foam's pattern gets). It fades by [member body_foam_decay] and is drawn within [member body_foam_size] of the camera (outside it, nothing is added). [FellowBuoyancy3D] adds the foam of bodies splashing in and moving through the water; a game can add an explosion's, a character's wading, a boat's.
 			</description>
 		</method>
+		<method name="add_wake_sound">
+			<return type="void" />
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="level" type="float" />
+			<description>
+				Adds to this frame's sound of water moving past a body near a point (world): [param level] is the waterline's length times how fast the water passes it (m²/s; a 2 m raft pushed at 3 m/s about 4). Called every physics tick while it lasts (the level is the frame's mean over its ticks; wakes within 4 m share a voice); it fades out 50 ms after the calls stop. [FellowBuoyancy3D] calls it for its body.
+			</description>
+		</method>
 		<method name="debug_compare_cpu_waves">
 			<return type="Dictionary" />
 			<param index="0" name="cascade" type="int" />
@@ -40,6 +48,15 @@
 			<param index="0" name="cascade" type="int" />
 			<description>
 				The initial spectrum of a cascade as uploaded (h0(k), conj(h0(-k))): for tests against a reference.
+			</description>
+		</method>
+		<method name="debug_render_sound" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<param index="0" name="events" type="Array" />
+			<param index="1" name="seconds" type="float" />
+			<param index="2" name="rate" type="float" default="48000.0" />
+			<description>
+				The sound's synthesis offline, mono at [param rate] for [param seconds]: [param events] (by time) are dictionaries — [code]{time, speed, size[, gain]}[/code] a splash, [code]{time, wake}[/code] the wake's level from then, [code]{time, bubble, amplitude[, rise]}[/code] one bubble of that radius (metres). For tests and tuning (see [code]benchmarks/tools/buoyancy/water_sound.gd[/code]).
 			</description>
 		</method>
 		<method name="get_body_foam_stats" qualifiers="const">
@@ -79,6 +96,12 @@
 				The cascades' slopes (sx, sz, sx², sz²), one layer per cascade, with mipmaps.
 			</description>
 		</method>
+		<method name="get_sound_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The sound: [code]voices[/code], [code]playing[/code], [code]splashes[/code] (played), [code]merged[/code] (joined a voice sounding near them), [code]stolen[/code] (took the quietest voice), [code]dropped[/code] (too far from the listener, or quieter than every voice), [code]bubbles[/code] (synthesised), [code]bubbles_dropped[/code], [code]active_bubbles[/code], [code]peak_bubbles[/code] (most at once in a voice), [code]mixed_seconds[/code] and [code]mix_usec_per_second[/code] (the audio thread's time a second of sound, all voices).
+			</description>
+		</method>
 		<method name="get_surface_ceiling">
 			<return type="float" />
 			<description>
@@ -109,6 +132,15 @@
 			<return type="float" />
 			<description>
 				GPU time of the waves' compute passes in the last measured frame (RenderingDevice timestamps).
+			</description>
+		</method>
+		<method name="play_splash">
+			<return type="void" />
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="speed" type="float" />
+			<param index="2" name="size" type="float" />
+			<description>
+				Plays the sound of something [param size] metres across striking the water at [param speed] m/s at a point (world): a slap, the bubbles it entrains ringing, and for a large or fast body its cavity closing. [FellowBuoyancy3D] plays its body's; a game can play a character's dive or a shell's impact. Nothing farther than [member sound_max_distance] from the listener.
 			</description>
 		</method>
 	</methods>
@@ -202,6 +234,24 @@
 		</member>
 		<member name="simulation_wave_scale" type="float" setter="set_simulation_wave_scale" getter="get_simulation_wave_scale" default="0.35">
 			Scale of the wind waves inside the simulation (they also fade in water shallower than 60 cm).
+		</member>
+		<member name="sound_bus" type="StringName" setter="set_sound_bus" getter="get_sound_bus" default="&amp;&quot;Master&quot;">
+			The audio bus the water's voices play on.
+		</member>
+		<member name="sound_enabled" type="bool" setter="set_sound_enabled" getter="is_sound_enabled" default="true">
+			If [code]true[/code], splashes and wakes ([method play_splash], [method add_wake_sound], [FellowBuoyancy3D]) are heard: synthesised from the physics of the air bubbles they entrain (each ringing at its Minnaert frequency, 3.26 m/s over its radius, damped by its losses, its pitch rising as it nears the surface — van den Doel's model), with no samples, on the audio thread, in [member sound_voices] 3D voices made at the first sound. A water nothing strikes makes no sound and costs nothing.
+		</member>
+		<member name="sound_max_distance" type="float" setter="set_sound_max_distance" getter="get_sound_max_distance" default="60.0">
+			Sounds farther than this from the listener (the viewport's [AudioListener3D], else its camera) are not played; the voices' [member AudioStreamPlayer3D.max_distance].
+		</member>
+		<member name="sound_unit_size" type="float" setter="set_sound_unit_size" getter="get_sound_unit_size" default="6.0">
+			The voices' [member AudioStreamPlayer3D.unit_size]: the distance at which they are heard at their full level.
+		</member>
+		<member name="sound_voices" type="int" setter="set_sound_voices" getter="get_sound_voices" default="8">
+			How many sounds play at once: a splash joins a voice sounding within 2.5 m of it, else takes a free one, else the quietest if it is louder.
+		</member>
+		<member name="sound_volume_db" type="float" setter="set_sound_volume_db" getter="get_sound_volume_db" default="0.0">
+			The voices' volume.
 		</member>
 		<member name="sun_path" type="NodePath" setter="set_sun_path" getter="get_sun_path" default="NodePath(&quot;&quot;)">
 			The [DirectionalLight3D] whose direction the caustics use. Empty: the scene's first visible directional light.
