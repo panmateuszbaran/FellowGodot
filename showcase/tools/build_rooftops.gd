@@ -1511,6 +1511,13 @@ func _build_player() -> PackedScene:
 	lock.set("contact_height", 0.012) # the clips' soles come down within a centimetre: grabbed any higher, a landing foot is held short
 	lock.set("blend_halflife", 0.1)
 	_add(skel, lock, "FootLock")
+	# Milestone 174 (decision 0316): the feet on the roofs' slopes, the steps and the cobbles under them (the clips are made
+	# on flat ground), the hips lowered for the lower foot; after the lock (the held feet placed where they are held). The
+	# player script gives it the lock's weight.
+	var place: Node = ClassDB.instantiate("FellowFootPlacement3D")
+	place.set("influence", 0.0)
+	place.set("collision_mask", LAYER_WORLD)
+	_add(skel, place, "FootPlacement")
 	# Milestone 154: the head turned to where the body goes (the player script moves the target and sets the weight).
 	var look := LookAtModifier3D.new()
 	look.bone_name = "Head"

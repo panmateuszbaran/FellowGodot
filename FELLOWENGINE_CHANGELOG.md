@@ -9,6 +9,23 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 174 — foot placement: the feet on the ground under them (2026-11-22)
+
+- `FellowFootPlacement3D` (decision 0316), a skeleton modifier for characters animated on flat ground walking on
+  slopes, stairs, roofs and rubble: rays under each foot's heel and ball, each foot raised or lowered onto the ground
+  under it and turned to it while down, the hips lowered as far as the lower foot goes down and as far as a leg needs
+  to reach; eased in the world (a foot down stays put while the body climbs over it), following moving goals with
+  their velocity, a swinging foot looking 0.05 s ahead for step edges. After a `FellowFootLock3D` the held feet are
+  placed where they are held. Nothing on flat ground.
+- The foot placement course (`benchmarks/tools/foot_placement/`, new): CMU's walk and run driving a CharacterBody3D
+  over eight lanes. Walking up 20°: the feet down sunk 10.9 → 0.8 cm, floating 8.6 → 0.8 cm (95th percentiles); up
+  stairs floating 15.8 → 4.3 cm; a swinging foot in the ground 28 % → 0 of its frames on the ramp, 13 % → 1.2 % on the
+  stairs; 4-7 µs a character.
+- The rooftops showcase: its player has one after the foot lock, with the lock's weight (its 38 animation gates
+  unchanged); `showcase/tools/foot_placement_lab.gd` pictures the mannequin across a roof and up stairs with and
+  without it.
+- The leg IK shared by `FellowFootLock3D` and `FellowFootPlacement3D` (`fellow_leg_ik.h`; the lock's results the same).
+
 ## Milestone 173 — the foot lock lets go without jumps (2026-11-22)
 
 - Decision 0315, `FellowFootLock3D` (behaviour; no new settings):

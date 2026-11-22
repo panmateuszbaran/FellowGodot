@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowFootPlacement3D" inherits="SkeletonModifier3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a character's feet on the ground under them — slopes, stairs, roofs, rubble — with animations made on flat ground; the hips lowered for the lower foot.
+	</brief_description>
+	<description>
+		A modifier of the character's [Skeleton3D], after the animation (and after a [FellowFootLock3D]: the held feet are placed where they are held). Rays under each foot's heel and ball (the toe bone's joint) find the ground, from [member probe_up] above the foot to [member probe_down] below the character's ground (the skeleton's origin, where the animation's feet stand). Each foot is raised or lowered so that every point of its sole is as high over the ground under it as the animation has it over the character's ground, its sole turned to the ground while it is down ([member foot_alignment], at most [member max_alignment_angle]), and the hips are lowered as far as the lower foot goes down and as far as a leg needs to reach its foot (the leg over the higher ground bends rather than the lower one straightening), by two-bone IK on the legs (the foot's parent and grandparent bones; the knee in its animated plane).
+		The feet's heights and the hips' are eased in the world: a foot down stays where it is while the body climbs over it or is set down a stair, and a goal that moves steadily (a swinging foot's ground along a slope) is followed with its velocity, without lag. Up onto higher ground in [member raise_halflife], down in [member lower_halflife] while the foot is down (in the air as fast as up). A swinging foot also looks at the ground a little ahead of its ball: a step's edge is seen before the toe reaches it. On flat ground under the character it does nothing (offsets under 2 mm are none).
+		On FellowEngine's foot placement course (CMU's walk, its root motion driving a [CharacterBody3D]): the feet down sink into a 20° ramp by 10.9 cm and float over it by 8.6 cm at the 95th percentile without it, 0.8 and 0.8 cm with it; up stairs 5.1 and 15.8 cm against 0.2 and 4.3; a swinging foot in the ground in 28 % of its frames on the ramp, 13 % on the stairs, against none and 1.2 %; 4-7 µs a character (CPU, four or five rays). Give it its weight with [member SkeletonModifier3D.influence]: on the ground, not in the air or while another modifier poses the legs. Placed elsewhere (a cut), call [method reset]. See [code]docs/decisions/0316-foot-placement.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_foot_offset" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="foot" type="int" />
+			<description>
+				How far the foot [param foot] (0: left, 1: right) is raised over the animation's, in metres (below zero: lowered).
+			</description>
+		</method>
+		<method name="get_hips_drop" qualifiers="const">
+			<return type="float" />
+			<description>
+				How far the hips are moved from the animation's, in metres (below zero: lowered).
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				[code]frames[/code] (the modifier's passes), [code]rays[/code] (cast), [code]usec_per_frame[/code] (its mean CPU time a pass).
+			</description>
+		</method>
+		<method name="reset">
+			<return type="void" />
+			<description>
+				Forgets the eased heights: the next pass places the feet and the hips at once (call it when the character is placed elsewhere).
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="collision_mask" type="int" setter="set_collision_mask" getter="get_collision_mask" default="1">
+			The physics layers the feet stand on.
+		</member>
+		<member name="contact_height" type="float" setter="set_contact_height" getter="get_contact_height" default="0.05">
+			A foot whose sole is within this of the animation's ground is down (its sole turned to the ground); it is in the air by [member swing_height] above that.
+		</member>
+		<member name="foot_alignment" type="float" setter="set_foot_alignment" getter="get_foot_alignment" default="1.0">
+			How far a foot that is down is turned to the ground under it (0: the animation's turn).
+		</member>
+		<member name="heel_offset" type="float" setter="set_heel_offset" getter="get_heel_offset" default="0.05">
+			How far behind the ankle the heel's point is (from the toe's side), in metres.
+		</member>
+		<member name="hips_halflife" type="float" setter="set_hips_halflife" getter="get_hips_halflife" default="0.08">
+			The half-life of the hips' easing, in seconds (as far as a leg needs to reach its foot they come down at once).
+		</member>
+		<member name="left_foot_bone" type="StringName" setter="set_left_foot_bone" getter="get_left_foot_bone" default="&amp;&quot;LeftFoot&quot;">
+			The left foot's bone (its parent and grandparent are the lower and upper leg).
+		</member>
+		<member name="left_toe_bone" type="StringName" setter="set_left_toe_bone" getter="get_left_toe_bone" default="&amp;&quot;LeftToes&quot;">
+			The left toe's bone (its joint is the ball's point); empty: the heel only.
+		</member>
+		<member name="lower_halflife" type="float" setter="set_lower_halflife" getter="get_lower_halflife" default="0.1">
+			The half-life of a foot coming down onto lower ground while it is down, and of its turn to the ground, in seconds.
+		</member>
+		<member name="max_alignment_angle" type="float" setter="set_max_alignment_angle" getter="get_max_alignment_angle" default="40.0">
+			The furthest a foot is turned to the ground, in degrees.
+		</member>
+		<member name="max_hips_drop" type="float" setter="set_max_hips_drop" getter="get_max_hips_drop" default="0.45">
+			The furthest the hips are lowered (or raised for a while, when the body is set down a stair), in metres.
+		</member>
+		<member name="probe_down" type="float" setter="set_probe_down" getter="get_probe_down" default="0.6">
+			How far below the character's ground the rays look for the ground, in metres: a foot is lowered no further.
+		</member>
+		<member name="probe_up" type="float" setter="set_probe_up" getter="get_probe_up" default="0.5">
+			How far above each foot the rays start, in metres: a foot is raised no further (a table over the foot is not stepped onto).
+		</member>
+		<member name="raise_halflife" type="float" setter="set_raise_halflife" getter="get_raise_halflife" default="0.04">
+			The half-life of a foot going up onto higher ground (and down while in the air), in seconds.
+		</member>
+		<member name="right_foot_bone" type="StringName" setter="set_right_foot_bone" getter="get_right_foot_bone" default="&amp;&quot;RightFoot&quot;">
+			The right foot's bone.
+		</member>
+		<member name="right_toe_bone" type="StringName" setter="set_right_toe_bone" getter="get_right_toe_bone" default="&amp;&quot;RightToes&quot;">
+			The right toe's bone.
+		</member>
+		<member name="swing_height" type="float" setter="set_swing_height" getter="get_swing_height" default="0.2">
+			Above [member contact_height] by this much, a foot is in the air (not turned to the ground).
+		</member>
+	</members>
+</class>

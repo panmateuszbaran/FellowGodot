@@ -879,6 +879,28 @@ rest more than 0.1 m below the skeleton's origin (mocap resting on its hips) the
 rest as the ground. The course: `benchmarks/tools/animation_transitions/transitions.gd` (`--contact`, `--unlock`,
 `--lock_halflife`, `--release`).
 
+## Foot placement (milestone 174)
+
+`FellowFootPlacement3D` (module `fellow_animation`; decision 0316), a `SkeletonModifier3D` under the `Skeleton3D`, after
+the animation and after a `FellowFootLock3D`: the feet of clips made on flat ground put on the ground under them.
+
+| property | default | meaning |
+|---|---|---|
+| `left_foot_bone`, `right_foot_bone` | `LeftFoot`, `RightFoot` | the feet (their parents and grandparents: the legs) |
+| `left_toe_bone`, `right_toe_bone` | `LeftToes`, `RightToes` | the toes (their joints: the balls' points; empty: the heel only) |
+| `collision_mask` | 1 | the layers the feet stand on (the character's own bodies are left out) |
+| `probe_up`, `probe_down` | 0.5, 0.6 m | the rays from this far over each foot to this far under the character's ground: as far as a foot is raised or lowered |
+| `heel_offset` | 0.05 m | the heel's point behind the ankle |
+| `contact_height`, `swing_height` | 0.05, 0.2 m | a sole within the first of the animation's ground is down (turned to the ground), the second above that in the air |
+| `foot_alignment`, `max_alignment_angle` | 1.0, 40° | how far a foot down is turned to the ground |
+| `max_hips_drop` | 0.45 m | the furthest the hips move from the animation's |
+| `raise_halflife`, `lower_halflife`, `hips_halflife` | 0.04, 0.1, 0.08 s | the easing: up onto higher ground (and down while in the air), down while a foot is down (and the turn), the hips |
+
+Methods: `get_foot_offset(foot)`, `get_hips_drop()`, `get_stats()` (`frames`, `rays`, `usec_per_frame`), `reset()`
+(after placing the character elsewhere). Give it its weight with `influence` (on the ground; not climbing, hanging or
+in the air). Measured with `benchmarks/tools/foot_placement/placement.gd` (`--gait=walk|run`, `--lanes=`,
+`--variants=off,on,lock,lock_on`, `--set=property:value,...`); pictured by `showcase/tools/foot_placement_lab.gd`.
+
 ## Traversal: mantling and vaulting (milestone 72)
 
 Module `fellow_animation`; nothing changes without the nodes (decision 0180). `FellowTraversal3D`, a child of the

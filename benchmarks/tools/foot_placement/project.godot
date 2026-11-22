@@ -1,0 +1,12 @@
+; FellowEngine's foot placement course (milestone 174): CMU mocap walking and running on slopes, stairs and rubble,
+; measured headless (placement.gd).
+
+config_version=5
+
+[application]
+
+config/name="Foot Placement Course"
+
+[physics]
+
+3d/physics_engine="Jolt Physics"

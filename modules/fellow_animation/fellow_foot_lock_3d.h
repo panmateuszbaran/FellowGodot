@@ -73,7 +73,6 @@ class FellowFootLock3D : public SkeletonModifier3D {
 	bool bones_valid = false;
 
 	void _find_bones();
-	static void _two_bone(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_end, const Vector3 &p_target, const Vector3 &p_pole);
 
 protected:
 	static void _bind_methods();

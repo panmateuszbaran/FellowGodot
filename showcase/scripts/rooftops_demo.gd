@@ -214,6 +214,9 @@ func _start(i: int) -> void:
 		var lock := _player.get_node_or_null("Model/Mannequin/Skeleton3D/FootLock")
 		if lock:
 			lock.call("reset")
+		var place := _player.get_node_or_null("Model/Mannequin/Skeleton3D/FootPlacement")
+		if place:
+			place.call("reset") # placed elsewhere: no easing from where the feet were
 		_player.mode = 0
 		_player.wish = Vector3()
 		_player.want_sprint = false

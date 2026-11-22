@@ -654,6 +654,9 @@ influence = 0.0
 contact_height = 0.012
 blend_halflife = 0.1
 
+[node name="FootPlacement" type="FellowFootPlacement3D" parent="Model/Mannequin/Skeleton3D" unique_id=1729401118]
+influence = 0.0
+
 [node name="HeadLook" type="LookAtModifier3D" parent="Model/Mannequin/Skeleton3D" unique_id=543043308]
 influence = 0.0
 target_node = NodePath("../../../../LookTarget")

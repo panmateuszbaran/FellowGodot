@@ -30,6 +30,8 @@
 
 #include "fellow_foot_lock_3d.h"
 
+#include "fellow_leg_ik.h"
+
 #include "core/object/class_db.h"
 #include "scene/3d/skeleton_3d.h"
 
@@ -39,22 +41,8 @@ namespace {
 // animation puts it, if further).
 const float REACH_SHARE = 0.99f;
 
-// The exact decay of a critically damped spring towards zero over a step (D. Holden, "Spring-It-On").
 void decay(Vector3 &r_x, Vector3 &r_v, float p_halflife, float p_dt) {
-	if (p_halflife <= 0.0f) {
-		r_x = Vector3();
-		r_v = Vector3();
-		return;
-	}
-	const float y = 4.0f * 0.69314718056f / (p_halflife + 1e-5f) / 2.0f;
-	const Vector3 j1 = r_v + r_x * y;
-	const float e = Math::exp(-y * p_dt);
-	r_x = (r_x + j1 * p_dt) * e;
-	r_v = (r_v - j1 * y * p_dt) * e;
-}
-
-Quaternion global_rotation(const Skeleton3D *p_skeleton, int p_bone) {
-	return p_bone < 0 ? Quaternion() : p_skeleton->get_bone_global_pose(p_bone).basis.get_rotation_quaternion();
+	fellow_spring_decay(r_x, r_v, p_halflife, p_dt);
 }
 
 } // namespace
@@ -113,57 +101,6 @@ void FellowFootLock3D::_find_bones() {
 void FellowFootLock3D::_skeleton_changed(Skeleton3D *p_old, Skeleton3D *p_new) {
 	SkeletonModifier3D::_skeleton_changed(p_old, p_new);
 	_find_bones();
-}
-
-// A two-bone chain reaching for a target (skeleton space), bending towards a pole, with a soft limit in the last 0.2 % of
-// its reach (a target out of reach does not snap the knee straight; one the animation reaches is reached — an earlier
-// soft limit would bend every leg the animation stretches near full length).
-void FellowFootLock3D::_two_bone(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_end, const Vector3 &p_target, const Vector3 &p_pole) {
-	const Transform3D gu = p_skeleton->get_bone_global_pose(p_upper);
-	const Transform3D gl = p_skeleton->get_bone_global_pose(p_lower);
-	const Transform3D ge = p_skeleton->get_bone_global_pose(p_end);
-	const Vector3 s = gu.origin;
-	const Vector3 e = gl.origin;
-	const Vector3 h = ge.origin;
-	const float a = s.distance_to(e);
-	const float b = e.distance_to(h);
-	const Vector3 to = p_target - s;
-	float d = to.length();
-	if (a < 1e-4f || b < 1e-4f || d < 1e-4f) {
-		return;
-	}
-	const Vector3 dir = to / d;
-	const float reach = a + b - 1e-3f;
-	const float soft = reach * 0.998f;
-	if (d > soft) {
-		d = soft + (reach - soft) * (1.0f - Math::exp(-(d - soft) / (reach - soft)));
-	}
-	d = MAX(d, Math::abs(a - b) + 1e-3f);
-	const float cos_a = CLAMP((a * a + d * d - b * b) / (2.0f * a * d), -1.0f, 1.0f);
-	const float sin_a = Math::sqrt(MAX(0.0f, 1.0f - cos_a * cos_a));
-	Vector3 bend = p_pole - s;
-	bend -= dir * bend.dot(dir);
-	if (bend.length() < 1e-4f) {
-		bend = (e - s) - dir * (e - s).dot(dir);
-	}
-	if (bend.length() < 1e-4f) {
-		return;
-	}
-	bend.normalize();
-	const Vector3 e2 = s + dir * (a * cos_a) + bend * (a * sin_a);
-	const Vector3 h2 = s + dir * d;
-	const Quaternion q1((e - s).normalized(), (e2 - s).normalized());
-	const Quaternion q2(q1.xform(h - e).normalized(), (h2 - e2).normalized());
-	const Quaternion upper_parent = global_rotation(p_skeleton, p_skeleton->get_bone_parent(p_upper));
-	const Quaternion lower_parent = global_rotation(p_skeleton, p_skeleton->get_bone_parent(p_lower));
-	const Quaternion end_global = ge.basis.get_rotation_quaternion();
-	const Quaternion upper_local = (upper_parent.inverse() * (q1 * gu.basis.get_rotation_quaternion())).normalized();
-	const Quaternion lower_local = ((q1 * lower_parent).inverse() * (q2 * q1 * gl.basis.get_rotation_quaternion())).normalized();
-	p_skeleton->set_bone_pose_rotation(p_upper, upper_local);
-	p_skeleton->set_bone_pose_rotation(p_lower, lower_local);
-	// The foot keeps its animated turn.
-	const Quaternion lower_now = global_rotation(p_skeleton, p_lower);
-	p_skeleton->set_bone_pose_rotation(p_end, (lower_now.inverse() * end_global).normalized());
 }
 
 void FellowFootLock3D::_process_modification(double p_delta) {
@@ -301,26 +238,9 @@ void FellowFootLock3D::_process_modification(double p_delta) {
 				}
 			}
 			const Vector3 target = to_skeleton.xform(ankle + f.offset);
-			Vector3 pole = knee + (knee - (hip + foot_now) * 0.5f) * 4.0f;
-			{
-				// Milestone 173: the knee's bend from the animation's where its leg is bent, from the foot's forward where it is
-				// nearly straight (the animated knee then lies on the line from the hip to the animated foot, and against a held
-				// foot elsewhere its side flips: the knee swung round the leg in a frame).
-				const float leg_len = hip.distance_to(knee) + knee.distance_to(foot_now);
-				const Vector3 line = (foot_now - hip).normalized();
-				Vector3 knee_off = (knee - hip) - line * (knee - hip).dot(line);
-				const float w = CLAMP(knee_off.length() / (0.05f * leg_len), 0.0f, 1.0f);
-				Vector3 fwd = f.toe >= 0 ? sk->get_bone_global_pose(f.toe).origin - foot_now : Vector3();
-				fwd -= line * fwd.dot(line);
-				Vector3 bend_dir = knee_off.length() > 1e-6f ? knee_off.normalized() * w : Vector3();
-				if (fwd.length() > 1e-6f) {
-					bend_dir += fwd.normalized() * (1.0f - w);
-				}
-				if (bend_dir.length() > 1e-6f) {
-					pole = knee + bend_dir.normalized() * leg_len;
-				}
-			}
-			_two_bone(sk, f.upper, f.lower, f.foot, target, pole);
+			const Vector3 pole = fellow_leg_pole(sk, hip, knee, foot_now, f.toe);
+			// The foot keeps its animated turn.
+			fellow_two_bone_ik(sk, f.upper, f.lower, f.foot, target, pole, fellow_bone_global_rotation(sk, f.foot));
 			shown = xform.xform(sk->get_bone_global_pose(f.foot).origin);
 		}
 		if (contact && f.has_last) {

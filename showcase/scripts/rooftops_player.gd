@@ -530,11 +530,15 @@ var _look_weight := 0.0
 ## Milestone 155 (decision 0295): the feet held where they come down, on the ground (off it, and while the traversal
 ## poses the body, nothing to hold); eased in and out over 0.1 s.
 @onready var _foot_lock: SkeletonModifier3D = get_node_or_null("Model/Mannequin/Skeleton3D/FootLock")
+## Milestone 174 (decision 0316): the feet on the ground under them (the roofs' slopes, steps), with the lock's weight.
+@onready var _foot_place: SkeletonModifier3D = get_node_or_null("Model/Mannequin/Skeleton3D/FootPlacement")
 
 func _process(delta: float) -> void:
+	var down: bool = mode == Mode.GROUND and is_on_floor() and not traversal.is_active() and not traversal.is_hanging() and not _crawling
 	if _foot_lock:
-		var down: bool = mode == Mode.GROUND and is_on_floor() and not traversal.is_active() and not traversal.is_hanging() and not _crawling
 		_foot_lock.influence = move_toward(_foot_lock.influence, 1.0 if down else 0.0, delta / 0.1)
+	if _foot_place:
+		_foot_place.influence = move_toward(_foot_place.influence, 1.0 if down else 0.0, delta / 0.1)
 	if _look_target == null or _head_look == null:
 		return
 	var head := get_global_transform_interpolated().origin + Vector3.UP * 1.6
