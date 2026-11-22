@@ -9,7 +9,7 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
-## Milestone 168 — screen probes that keep their place (2026-11-21)
+## Milestone 168 — screen probes that keep their place; the clouds' detail (2026-11-22)
 
 - Decision 0309: `sdfgi/screen_gather_persistent` (on). The screen gathers' probes keep their world point and their
   history while that point is still seen in their tile, instead of being placed again at their tile's centre pixel
@@ -21,11 +21,24 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - `raytracing/gi_screen_gather_feedback` (on): the ray-traced gather's hits take their further bounces from the
   previous frame's screen probes where they saw them, DDGI's probes elsewhere: GI Lab's room +0.35 → +0.25 stops
   against the path tracer on lavapipe (DDGI +0.86). In GI Arcade the ray-traced gather is 0.08 stops off a pixel.
-- Found: inside GI Lab's room the RTX's real-time GI is 0.9-1.4 stops brighter than lavapipe's (SDFGI, its gather and
-  DDGI alike) while their path tracers agree to 0.00 stops; not the resolution, the autotuner or FellowEngine (stock
-  SDFGI the same on lavapipe). A GPU job is prepared (f533); the RTX was not used this milestone.
+- On the RTX (job f532, Sponza's curtains): the flicker the SDF gather adds 0.58 → 0.10 % of a still view's pixels
+  (SDFGI's 0.10 %), the ray-traced gather's 7.62 → 3.44 % (DDGI's 1.55 %), its probes now keeping their history
+  (lag-1 +0.38). Against the path tracer the further bounces from the probes take GI Lab's room +1.22 → +0.73 stops;
+  the ray-traced gather is 0.26 stops off a pixel over 23 views (SDFGI 0.39, DDGI 1.05).
+- Found: in shade (GI Lab's room, GI Arcade's gallery) the RTX's real-time GI is 0.4-1.4 stops brighter than
+  lavapipe's (SDFGI, the gathers and DDGI alike) while their path tracers agree to 0.01 stops; not the resolution,
+  the autotuner or FellowEngine (stock SDFGI the same on lavapipe). A GPU job is prepared (f533).
 - GI Arcade (`--scene=gi_arcade`): a colonnade with folded double-sided curtains, a tree of 600 leaves and a shutter's
   slats, for the gathers' stability without Sponza's assets.
+- Decision 0310: `post/clouds/detail` (on). The clouds' detail noise had eroded every edge alike (its octaves' sum
+  varies by a tenth: now stretched to [0, 1]) at features of a pixel or less (now 150-600 m), under a march of 64
+  even steps of several hundred metres: now coarse steps through clear air and fine ones inside the clouds (25 m near
+  the camera), the billows shading one another and Schneider's powder term away from the sun.
+- The showcase's look beside the owner's reference: the light's balance (the sky's own ambient light, a stronger sun,
+  a quarter of the haze); a thin layer of stratocumulus (the owner's choice); a sky lit by a sun 10 degrees up over a
+  square lit from 27 (a light only the sky sees: the golden hour's sky without the climb's wall falling into shade),
+  four times as bright as the sun's energy made it (its light on the scene, its sun's disk and the light shafts as
+  before), the square's sunlight coloured by the same air.
 
 ## Milestone 167 — diffuse light gathered per screen probe (2026-11-21)
 

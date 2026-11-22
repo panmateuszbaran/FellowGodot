@@ -7,9 +7,9 @@ Code:
 * `renderer_rd/forward_clustered/render_forward_clustered.cpp` (`_fellow_screen_gather()`), `fellow_settings.*`;
 * `benchmarks/project/scenes/gi_arcade.gd` (GI Arcade).
 
-Checks: lavapipe only (the owner needs the laptop: its GPU is not used for this decision): GI Arcade and GI Lab, still
-frames and linear captures against the path tracer; the image regression suite (38 scenes identical). The RTX's confirmation in Sponza is
-prepared (job f532), not run.
+Checks: lavapipe: GI Arcade and GI Lab, still frames and linear captures against the path tracer; the image regression
+suite (38 scenes identical). The RTX (job f532, the m168a template, 1280x720): Sponza's curtains in 16 still frames for
+every option, and linear captures of every scene against the path tracer (GI Arcade's reference new).
 
 ## Problem
 
@@ -106,6 +106,45 @@ the shade.
 * The further bounces from the screen probes take a third of the ray-traced gather's remaining excess in GI Lab's room
   (+0.35 to +0.25 stops; the same after 600 frames, +0.34 to +0.24: converged).
 
+## On the RTX (job f532)
+
+Sponza's curtains (`sponza_cam_01`, 1280x720, 600 frames to settle, 16 still frames; the share of pixels changing by
+more than 2 levels, of all pixels and of those calm without GI; the lag-1 autocorrelation over the flickering pixels):
+
+| GI | all pixels | added by the GI | lag-1 |
+|---|---:|---:|---:|
+| ray-traced DDGI | 3.68 % | 1.55 % | +0.39 |
+| ray-traced gather, M167 | 10.69 % | 7.62 % | −0.03 |
+| ray-traced gather, persistent probes (with or without the further bounces) | **6.40 %** | **3.44 %** | **+0.38** |
+| SDFGI | 2.14 % | 0.10 % | - |
+| SDF gather, M167 | 2.58 % | 0.58 % | - |
+| SDF gather, persistent probes | **2.10 %** | **0.10 %** | - |
+
+* The SDF gather's flicker is gone: as SDFGI's.
+* The ray-traced gather's is halved and no longer white: its probes keep their history (lag-1 +0.38, as DDGI's).
+  What remains, twice DDGI's, is the averaged probes' own noise (16 rays a frame, a sun-lit hit or a shadowed one):
+  with the history now kept, more of it (decision 0308's 32 or 64 frames, which changed nothing while the probes
+  started over) is the next step on the RTX.
+
+Against the path tracer (bias / error in stops; 600 frames; the reference 16 bounces):
+
+| | GI Lab: room | GI Lab: dark corner | Bistro inside (4 views) | Sponza (6 views) | GI Arcade: gallery | GI Arcade: shutter | all 23 views |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| ray-traced DDGI | +2.07 / 2.07 | +1.77 / 1.78 | +0.66 / 0.67 | +1.80 / 1.81 | +1.42 / 1.43 | +1.65 / 1.65 | +1.05 / 1.05 |
+| ray-traced gather, M167 | +1.22 / 1.22 | +1.03 / 1.03 | +0.21 / 0.21 | +0.11 / 0.24 | - | - | +0.24 / 0.29 |
+| … persistent probes | +1.22 / 1.22 | +1.03 / 1.03 | +0.21 / 0.21 | +0.11 / 0.25 | +0.62 / 0.63 | +0.70 / 0.70 | +0.26 / 0.31 |
+| **… and further bounces from its probes** | **+0.73 / 0.74** | **+0.68 / 0.68** | **+0.18 / 0.18** | +0.11 / 0.25 | **+0.47 / 0.48** | **+0.62 / 0.63** | **+0.21 / 0.26** |
+| SDFGI | +0.71 / 0.80 | +0.63 / 0.73 | +0.00 / 0.17 | +0.09 / 0.47 | −0.44 / 0.55 | −0.43 / 0.50 | −0.02 / 0.39 |
+| SDF gather, M167 | −0.01 / 0.19 | +0.02 / 0.18 | −0.05 / 0.12 | +0.07 / 0.45 | - | - | −0.11 / 0.34 |
+| SDF gather, persistent probes | −0.01 / 0.19 | +0.02 / 0.18 | −0.05 / 0.12 | +0.05 / 0.45 | −0.68 / 0.72 | −0.72 / 0.74 | −0.16 / 0.35 |
+
+(The M167 arms are decision 0308's captures, without GI Arcade; the means over the views each arm has.)
+
+* Persistent probes leave the light as it was on the RTX too (every view within 0.03 stops).
+* The further bounces from the screen probes take 40 % of the ray-traced gather's excess in GI Lab's room (+1.22 to
+  +0.73) and a third in its dark corner, a quarter in GI Arcade's gallery; the ray-traced gather is the closest
+  option to the path tracer on the RTX (0.26 stops a pixel, SDFGI 0.39, DDGI 1.05).
+
 ## Found on the way: the RTX and lavapipe disagree inside GI Lab's room
 
 The path tracer's pictures of GI Lab are the same on the RTX (decision 0308's captures, 1280x720) and on lavapipe
@@ -126,11 +165,20 @@ gather is right in GI Lab's room (RTX) and this decision's that it is 0.9 stops 
 side; the comparisons between options on one platform hold on each. Job f533 (prepared, not run) renders the room on
 the RTX with FellowEngine off (stock Godot) and with full barriers between the render graph's commands.
 
+GI Arcade (f532) shows the same in its shade. The two platforms' path tracers agree within 0.01 stops in all four
+views, and every real-time option agrees within 0.13 in the sun-lit ones (the colonnade, the tree), but in the
+gallery's and the shutter's shade the RTX's are brighter: SDFGI by 1.40 and 1.32 stops, ray-traced DDGI by 1.07 and
+1.19, the ray-traced gather by 0.43 and 0.58. Lavapipe's ray-traced gather is within 0.05 of the path tracer there,
+the RTX's 0.5 above it. Whatever it is lifts the light that reaches shade through the options' own caches (SDFGI's
+cascades, DDGI's probes and the gather's further bounces from them) and not the path tracer's light, which traces
+every bounce again each frame.
+
 ## Decision
 
-KEEP both, on by default where a gather is on: the gathers' flicker is gone at no cost in accuracy, and the ray-traced
-gather comes closer to the path tracer in an enclosed room. The cost is nine reprojections and up to 81 depth reads per
-probe and frame (persistent probes) and 4 probe reads per ray (feedback); not measured on the RTX yet (f532).
+KEEP both, on by default where a gather is on: the SDF gather's flicker is gone and the ray-traced gather's halved at
+no cost in accuracy (both platforms), and the ray-traced gather comes closer to the path tracer in enclosed rooms (both
+platforms). The cost is nine reprojections and up to 81 depth reads per probe and frame (persistent probes) and 4
+probe reads per ray (feedback); its GPU time is not measured yet.
 
 ## Rejected / not done
 

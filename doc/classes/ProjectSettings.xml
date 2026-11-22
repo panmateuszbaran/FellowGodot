@@ -3559,6 +3559,9 @@
 		<member name="rendering/fellow/post/clouds/density" type="float" setter="" getter="" default="1.0">
 			The clouds' density: thicker, darker clouds above 1.
 		</member>
+		<member name="rendering/fellow/post/clouds/detail" type="bool" setter="" getter="" default="true">
+			The clouds' detail (decision 0310): the ray marches in coarse steps through the clear air and in fine ones (from 25 m near the camera) once inside a cloud, where the detail noise erodes the edges more deeply, and the sunlit side's thin edges are darkened (the powder term) as cumulus' are: billows and wisps instead of smooth blobs. Off: decision 0109's 64 even steps.
+		</member>
 		<member name="rendering/fellow/post/clouds/enabled" type="bool" setter="" getter="" default="false">
 			Volumetric clouds over the sky's pixels (ray-marched at half resolution, temporal), lit through the atmosphere when it is on, with their shadows on the scene. A FellowWeather3D sets their coverage and density. Decision 0109.
 		</member>
