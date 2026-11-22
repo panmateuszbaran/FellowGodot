@@ -1,0 +1,12 @@
+; FellowEngine's character course (milestone 169): CharacterBody3D over steps, ledges and rubble, headless.
+; run_course.py copies this folder and picks the physics engine with an override.cfg.
+
+config_version=5
+
+[application]
+
+config/name="Character Course"
+
+[physics]
+
+common/physics_ticks_per_second=60

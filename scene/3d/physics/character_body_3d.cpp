@@ -34,6 +34,7 @@
 #include "core/object/class_db.h"
 
 #ifndef DISABLE_DEPRECATED
+#include "scene/resources/3d/world_3d.h" // FellowEngine (decision 0311)
 #include "servers/physics_3d/physics_server_3d_extension.h"
 #endif
 
@@ -95,6 +96,8 @@ bool CharacterBody3D::move_and_slide() {
 
 	bool was_on_floor = collision_state.floor;
 	collision_state.state = 0;
+	fellow_last_step = 0.0; // FellowEngine (decision 0311)
+	fellow_floor_valid = fellow_floor_valid && was_on_floor;
 
 	last_motion = Vector3();
 
@@ -191,6 +194,21 @@ void CharacterBody3D::_move_and_slide_grounded(double p_delta, bool p_was_on_flo
 					if (motion_vertical_velocity.dot(up_direction) > 0 || ceiling_vertical_velocity.length_squared() > motion_vertical_velocity.length_squared()) {
 						velocity = ceiling_vertical_velocity + velocity.slide(up_direction);
 					}
+				}
+			}
+
+			// FellowEngine (decision 0311): stopped by a riser or a step's edge while on the floor: up onto the step.
+			if (floor_step_height > 0.0 && p_was_on_floor && !vel_dir_facing_up && up_direction != Vector3() && _fellow_step_ahead(result, result.remainder.slide(up_direction))) {
+				Vector3 motion_left;
+				if (_fellow_step_up(result.remainder.slide(up_direction), motion_left)) {
+					total_travel += result.travel;
+					motion = motion_left;
+					if (motion.is_zero_approx()) {
+						break;
+					}
+					sliding_enabled = true;
+					first_slide = false;
+					continue;
 				}
 			}
 
@@ -463,7 +481,7 @@ void CharacterBody3D::apply_floor_snap() {
 	}
 
 	// Snap by at least collision margin to keep floor state consistent.
-	real_t length = MAX(floor_snap_length, margin);
+	real_t length = _fellow_snap_length(); // FellowEngine (decision 0311): down a step too
 
 	PhysicsServer3D::MotionParameters parameters(get_global_transform(), -up_direction * length, margin);
 	parameters.max_collisions = 4;
@@ -489,6 +507,11 @@ void CharacterBody3D::apply_floor_snap() {
 
 			parameters.from.origin += result.travel;
 			set_global_transform(parameters.from);
+			// FellowEngine (decision 0311): a step down (further than stock's snap would have reached).
+			const real_t drop = -result.travel.dot(up_direction);
+			if (drop > floor_snap_length) {
+				fellow_last_step -= drop;
+			}
 		}
 	}
 }
@@ -507,7 +530,7 @@ bool CharacterBody3D::_on_floor_if_snapped(bool p_was_on_floor, bool p_vel_dir_f
 	}
 
 	// Snap by at least collision margin to keep floor state consistent.
-	real_t length = MAX(floor_snap_length, margin);
+	real_t length = _fellow_snap_length(); // FellowEngine (decision 0311)
 
 	PhysicsServer3D::MotionParameters parameters(get_global_transform(), -up_direction * length, margin);
 	parameters.max_collisions = 4;
@@ -544,13 +567,16 @@ void CharacterBody3D::_set_collision_direction(const PhysicsServer3D::MotionResu
 		if (motion_mode == MOTION_MODE_GROUNDED) {
 			// Check if any collision is floor.
 			real_t floor_angle = collision.get_angle(up_direction);
-			if (floor_angle <= floor_max_angle + FLOOR_ANGLE_THRESHOLD) {
+			// FellowEngine (decision 0311): with steps, a steep contact under the body on a walkable top's edge too.
+			if (floor_angle <= floor_max_angle + FLOOR_ANGLE_THRESHOLD || (floor_step_height > 0.0 && _fellow_edge_is_floor(collision))) {
 				r_state.floor = true;
 				if (p_apply_state.floor && collision.depth > floor_depth) {
 					collision_state.floor = true;
 					floor_normal = collision.normal;
 					floor_depth = collision.depth;
 					_set_platform_data(collision);
+					fellow_floor_height = collision.position.dot(up_direction); // FellowEngine (decision 0311)
+					fellow_floor_valid = true;
 				}
 				continue;
 			}
@@ -635,6 +661,160 @@ void CharacterBody3D::_set_platform_data(const PhysicsServer3D::MotionCollision 
 	{
 		platform_layer = bs->get_collision_layer();
 	}
+}
+
+// FellowEngine (decision 0311): steps.
+
+real_t CharacterBody3D::_fellow_snap_length() const {
+	// Down a step as well as stock's snap: the body walks down stairs instead of falling down each step.
+	return MAX(MAX(floor_snap_length, floor_step_height), margin);
+}
+
+// A steep contact under the body that is the edge of a walkable top (a step's nosing, a kerb, a box's rim): a ray down
+// just past the contact, on the edge's side, finds a walkable face at about the contact's height, and one on the body's
+// side a floor within a step below. The contact's own normal
+// stays the floor's: sliding along it rolls the body over the edge (or off it) instead of stopping against it.
+bool CharacterBody3D::_fellow_edge_is_floor(const PhysicsServer3D::MotionCollision &p_collision) const {
+	if (p_collision.normal.dot(up_direction) <= 0.01 || !is_inside_tree()) {
+		return false; // not under the body
+	}
+	if (fellow_floor_valid && p_collision.position.dot(up_direction) - fellow_floor_height > floor_step_height + margin) {
+		return false; // higher above the floor the body is on than a step
+	}
+	Vector3 outward = -p_collision.normal.slide(up_direction);
+	if (outward.length_squared() < CMP_EPSILON2) {
+		return false;
+	}
+	outward.normalize();
+	PhysicsDirectSpaceState3D *space = get_world_3d()->get_direct_space_state();
+	if (space == nullptr) {
+		return false;
+	}
+	PhysicsDirectSpaceState3D::RayParameters ray;
+	// 5 cm in from the contact and up to 6 cm above it: Jolt rounds boxes' edges by their margin (4 cm by default), its
+	// contacts on them below the top's plane.
+	ray.from = p_collision.position + outward * 0.05 + up_direction * 0.1;
+	ray.to = ray.from - up_direction * 0.2;
+	ray.exclude.insert(get_rid());
+	ray.collision_mask = get_collision_mask();
+	PhysicsDirectSpaceState3D::RayResult hit;
+	if (!space->intersect_ray(ray, hit)) {
+		return false;
+	}
+	if (Math::acos(CLAMP(hit.normal.dot(up_direction), (real_t)-1.0, (real_t)1.0)) > floor_max_angle + FLOOR_ANGLE_THRESHOLD) {
+		return false; // a steep face beyond the edge: no walkable top
+	}
+	if (Math::abs((hit.position - p_collision.position).dot(up_direction)) > 0.06) {
+		return false;
+	}
+	// And a floor no more than a step below it on the body's side: a step's edge, not a ledge's (walking off a ledge
+	// higher than a step the body falls, its rounded bottom not held on the edge).
+	ray.from = p_collision.position - outward * 0.05 + up_direction * 0.02;
+	ray.to = ray.from - up_direction * (floor_step_height + 0.08);
+	return space->intersect_ray(ray, hit);
+}
+
+bool CharacterBody3D::_fellow_is_floor(const PhysicsServer3D::MotionCollision &p_collision) const {
+	return p_collision.get_angle(up_direction) <= floor_max_angle + FLOOR_ANGLE_THRESHOLD || _fellow_edge_is_floor(p_collision);
+}
+
+// A move stopped by what may be a step: a contact steeper than floor (a riser, or a step's edge under the body's rounded
+// bottom), not a ceiling, facing the way the body goes on, and not touching it higher above the floor than a step (a
+// wall: no casts for it).
+bool CharacterBody3D::_fellow_step_ahead(const PhysicsServer3D::MotionResult &p_result, const Vector3 &p_along) const {
+	if (p_along.length_squared() < CMP_EPSILON2) {
+		return false;
+	}
+	for (int i = 0; i < p_result.collision_count; i++) {
+		const PhysicsServer3D::MotionCollision &c = p_result.collisions[i];
+		if (c.get_angle(up_direction) > floor_max_angle + FLOOR_ANGLE_THRESHOLD && c.normal.dot(up_direction) > -0.01 && c.normal.slide(up_direction).dot(p_along) < 0.0) {
+			if (fellow_floor_valid && c.position.dot(up_direction) - fellow_floor_height > floor_step_height + margin) {
+				continue;
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+// From where the move stopped against a step: up by floor_step_height (less under a ceiling), along the motion left,
+// and down onto what is there. Kept if it lands on floor (or a walkable edge) higher than it started and no more than
+// floor_step_height above the floor it stood on: the body moved there, on the floor, at once (get_last_step() says by
+// how much); r_motion_left is what the move along did not make (another riser further on).
+bool CharacterBody3D::_fellow_step_up(const Vector3 &p_along, Vector3 &r_motion_left) {
+	const Vector3 along = p_along;
+	const Transform3D start = get_global_transform();
+	const real_t length = along.length();
+	const Vector3 dir = along / length;
+	if (start.origin.distance_squared_to(fellow_step_failed_at) < margin * margin && dir.dot(fellow_step_failed_dir) > 0.9998 && length <= fellow_step_failed_length + margin) {
+		return false; // failed from here that way and that far already (a body pushing against a wall: no three casts every tick)
+	}
+	fellow_step_failed_at = start.origin; // until it succeeds below
+	fellow_step_failed_dir = dir;
+	fellow_step_failed_length = length;
+	PhysicsServer3D::MotionParameters parameters(start, up_direction * floor_step_height, margin);
+	PhysicsServer3D::MotionResult up;
+	move_and_collide(parameters, up, true, false);
+	const real_t raised = up.travel.dot(up_direction);
+	if (raised <= margin) {
+		return false; // no room above
+	}
+	parameters.from.origin = start.origin + up_direction * raised;
+	parameters.motion = along;
+	PhysicsServer3D::MotionResult forward;
+	move_and_collide(parameters, forward, true, false);
+	const Vector3 forward_travel = forward.travel.slide(up_direction);
+	if (forward_travel.length_squared() < CMP_EPSILON2) {
+		return false; // the wall goes on above the step's height
+	}
+	parameters.from.origin += forward_travel;
+	parameters.motion = -up_direction * (raised + margin);
+	parameters.max_collisions = 4;
+	parameters.recovery_as_collision = true;
+	parameters.collide_separation_ray = true;
+	PhysicsServer3D::MotionResult down;
+	if (!move_and_collide(parameters, down, true, false)) {
+		return false; // nothing under it at the height it started from
+	}
+	const Vector3 landed = parameters.from.origin + up_direction * up_direction.dot(down.travel);
+	const real_t rise = (landed - start.origin).dot(up_direction);
+	if (rise <= margin) {
+		return false; // no higher than it was: not a step
+	}
+	real_t top = -INFINITY;
+	for (int i = 0; i < down.collision_count; i++) {
+		if (_fellow_is_floor(down.collisions[i])) {
+			top = MAX(top, down.collisions[i].position.dot(up_direction));
+		}
+	}
+	if (top == -INFINITY) {
+		return false; // a steep slope, not a step
+	}
+	if (fellow_floor_valid && top - fellow_floor_height > floor_step_height + margin) {
+		return false; // higher than a step above the floor it stood on (the rounded bottom reaching over the edge)
+	}
+	CollisionState landing;
+	set_global_transform(Transform3D(start.basis, landed));
+	collision_state.wall = false;
+	wall_normal = Vector3();
+	_set_collision_direction(down, landing, CollisionState(true, false, false));
+	fellow_last_step += rise;
+	fellow_step_failed_at = Vector3(Math::INF, Math::INF, Math::INF);
+	r_motion_left = forward.remainder.slide(up_direction);
+	return true;
+}
+
+real_t CharacterBody3D::get_floor_step_height() const {
+	return floor_step_height;
+}
+
+void CharacterBody3D::set_floor_step_height(real_t p_height) {
+	ERR_FAIL_COND(p_height < 0);
+	floor_step_height = p_height;
+}
+
+real_t CharacterBody3D::get_last_step() const {
+	return fellow_last_step;
 }
 
 void CharacterBody3D::set_safe_margin(real_t p_margin) {
@@ -896,6 +1076,9 @@ void CharacterBody3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_floor_max_angle", "radians"), &CharacterBody3D::set_floor_max_angle);
 	ClassDB::bind_method(D_METHOD("get_floor_snap_length"), &CharacterBody3D::get_floor_snap_length);
 	ClassDB::bind_method(D_METHOD("set_floor_snap_length", "floor_snap_length"), &CharacterBody3D::set_floor_snap_length);
+	ClassDB::bind_method(D_METHOD("get_floor_step_height"), &CharacterBody3D::get_floor_step_height); // FellowEngine (decision 0311)
+	ClassDB::bind_method(D_METHOD("set_floor_step_height", "height"), &CharacterBody3D::set_floor_step_height);
+	ClassDB::bind_method(D_METHOD("get_last_step"), &CharacterBody3D::get_last_step);
 	ClassDB::bind_method(D_METHOD("get_wall_min_slide_angle"), &CharacterBody3D::get_wall_min_slide_angle);
 	ClassDB::bind_method(D_METHOD("set_wall_min_slide_angle", "radians"), &CharacterBody3D::set_wall_min_slide_angle);
 	ClassDB::bind_method(D_METHOD("get_up_direction"), &CharacterBody3D::get_up_direction);
@@ -936,6 +1119,7 @@ void CharacterBody3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "floor_block_on_wall"), "set_floor_block_on_wall_enabled", "is_floor_block_on_wall_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "floor_max_angle", PROPERTY_HINT_RANGE, "0,180,0.1,radians_as_degrees"), "set_floor_max_angle", "get_floor_max_angle");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "floor_snap_length", PROPERTY_HINT_RANGE, "0,1,0.01,or_greater,suffix:m"), "set_floor_snap_length", "get_floor_snap_length");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "floor_step_height", PROPERTY_HINT_RANGE, "0,1,0.01,or_greater,suffix:m"), "set_floor_step_height", "get_floor_step_height"); // FellowEngine (decision 0311)
 
 	ADD_GROUP("Moving Platform", "platform_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "platform_on_leave", PROPERTY_HINT_ENUM, "Add Velocity,Add Upward Velocity,Do Nothing", PROPERTY_USAGE_DEFAULT), "set_platform_on_leave", "get_platform_on_leave");

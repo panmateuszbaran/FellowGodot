@@ -49,6 +49,12 @@
 				Returns a [KinematicCollision3D] if a collision occurred. The returned value contains information about the latest collision that occurred during the last call to [method move_and_slide]. Returns [code]null[/code] if no collision occurred. See also [method get_slide_collision].
 			</description>
 		</method>
+		<method name="get_last_step" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns how far the last call to [method move_and_slide] moved the body up a step (positive) or down one (negative) with [member floor_step_height]: the steps are taken at once, so a camera or the body's model can ease them out by offsetting itself by the negative of this value and returning to [code]0.0[/code] over a few frames. Snaps down no further than [member floor_snap_length] are not counted. [code]0.0[/code] when no step was taken. FellowEngine.
+			</description>
+		</method>
 		<method name="get_platform_angular_velocity" qualifiers="const">
 			<return type="Vector3" />
 			<description>
@@ -154,6 +160,13 @@
 		<member name="floor_snap_length" type="float" setter="set_floor_snap_length" getter="get_floor_snap_length" default="0.1">
 			Sets a snapping distance. When set to a value different from [code]0.0[/code], the body is kept attached to slopes when calling [method move_and_slide]. The snapping vector is determined by the given distance along the opposite direction of the [member up_direction].
 			As long as the snapping vector is in contact with the ground and the body moves against [member up_direction], the body will remain attached to the surface. Snapping is not applied if the body moves along [member up_direction], meaning it contains vertical rising velocity, so it will be able to detach from the ground when jumping or when the body is pushed up by something. If you want to apply a snap without taking into account the velocity, use [method apply_floor_snap].
+		</member>
+		<member name="floor_step_height" type="float" setter="set_floor_step_height" getter="get_floor_step_height" default="0.0">
+			The highest step the body walks up and down while on the floor when calling [method move_and_slide], in meters (FellowEngine). [code]0.0[/code] (the default): none, the body moves as in stock Godot. Above [code]0.0[/code]:
+			- Walking into a riser or a step's edge, the body moves up onto the step at once if its top is a floor no higher than this above the floor the body stands on and there is room above; taller obstacles, steep slopes and too-low ceilings still stop it. [method get_last_step] says how far it moved.
+			- Walking off a step or a ledge no higher than this, the body is snapped down onto the floor below (the floor snap reaches this far as well as [member floor_snap_length]) instead of falling.
+			- A contact under the body's rounded bottom on the edge of a walkable top (a step's nosing, a kerb) counts as floor, the body standing on the edge or rolling over it instead of sliding off.
+			Jumping (moving along [member up_direction]) takes no steps. Typical values are [code]0.3[/code] to [code]0.4[/code] for a person-sized body.
 		</member>
 		<member name="floor_stop_on_slope" type="bool" setter="set_floor_stop_on_slope_enabled" getter="is_floor_stop_on_slope_enabled" default="true">
 			If [code]true[/code], the body will not slide on slopes when calling [method move_and_slide] when the body is standing still.

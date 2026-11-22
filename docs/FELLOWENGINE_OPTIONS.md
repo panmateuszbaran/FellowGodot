@@ -834,6 +834,21 @@ how opaque the strands are to light crossing them); `get_stats()` adds `self_sha
 `SpotLight3D` (the map along the direction towards it from the hair's centre, the material dimming the light that is
 not directional within about 18° of it); `hair_check.gd --lamp=<m>`.
 
+## Characters up and down steps (milestone 169)
+
+`CharacterBody3D.floor_step_height` (m, 0 by default: stock's behaviour bit for bit; decision 0311). Above 0, while the
+body is on the floor and not moving up, `move_and_slide()`:
+
+* steps up a riser or a step's edge it is stopped by, if the step's top is a floor no higher than this above the floor
+  it stands on and there is room above (cast up, along the motion left, down; at once — `get_last_step()` says how far,
+  for a camera or model to ease it out);
+* snaps down a step or ledge no higher than this as well as `floor_snap_length` (no fall down each step);
+* counts a steep contact under its rounded bottom on a step's edge as floor (a walkable top just past it, a floor no
+  more than a step below on the body's side): it stands on the edge or rolls over it.
+
+Typical: 0.3-0.4 m for a person-sized capsule; the editor's mantling character preset sets 0.35 m. The character
+course (`benchmarks/tools/character_course/run_course.py`) measures it on both physics engines.
+
 ## Traversal: mantling and vaulting (milestone 72)
 
 Module `fellow_animation`; nothing changes without the nodes (decision 0180). `FellowTraversal3D`, a child of the

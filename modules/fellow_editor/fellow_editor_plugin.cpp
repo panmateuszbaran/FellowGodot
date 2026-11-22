@@ -987,6 +987,7 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			shape->set_shape(capsule);
 			shape->set_position(Vector3(0, 0.9, 0));
 			body->add_child(shape);
+			body->set_floor_step_height(0.35); // milestone 169 (decision 0311): up and down stairs and kerbs
 			top = body;
 			_fellow_make("FellowTraversal3D", "FellowTraversal3D", top);
 		} break;

@@ -1,0 +1,1553 @@
+{
+ "session": "20261122_143423_physics",
+ "label": "",
+ "args": {
+  "builds": "stock=/tmp/claude-0/m169/godot_stock,new=/home/claude/godot/bin/godot.linuxbsd.editor.x86_64",
+  "engines": "godot,jolt",
+  "cases": "chars,pile",
+  "ticks": 300,
+  "warm": 0,
+  "repeats": 1,
+  "ref": null,
+  "extra": "",
+  "session": null,
+  "label": "",
+  "cooldown": 0.0,
+  "timeout": 900.0
+ },
+ "hardware": {
+  "timestamp_local": "2026-11-22T14:34:23.748681",
+  "host": "vm",
+  "python": "3.13.18",
+  "os": {
+   "platform": "Linux-6.18.44-fc-v726-x86_64-with-glibc2.39",
+   "release": "6.18.44-fc-v726",
+   "version": "#1 SMP PREEMPT_DYNAMIC @0"
+  },
+  "gpu": [],
+  "engine": {
+   "commit": "082286390c9fc603106623c7f93ce4476d97b55f",
+   "describe": "4.7.2-stable-1153-g082286390c-dirty",
+   "branch": "fellow/geometry",
+   "status_short": "M benchmarks/README.md\n M doc/classes/CharacterBody3D.xml\n M modules/fellow_editor/fellow_editor_plugin.cpp\n M scene/3d/physics/character_body_3d.cpp\n M scene/3d/physics/character_body_3d.h"
+  },
+  "build_flags": "platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no (MSVC, see BUILDING_FELLOWENGINE.md)",
+  "compiler": {
+   "visual_studio": "",
+   "msvc_toolsets": []
+  },
+  "binaries": {
+   "stock": {
+    "path": "../../../tmp/claude-0/m169/godot_stock",
+    "size": 171771080,
+    "sha256": "decb7ad26a799ef4ac7785066901bc592d0ba5f715f4076ea1ddf4364e04fc08",
+    "mtime": "2026-11-22T14:19:55.899291"
+   },
+   "new": {
+    "path": "bin/godot.linuxbsd.editor.x86_64",
+    "size": 171783368,
+    "sha256": "e790ba3170897f86bb26a0c70cae73cb15c08f5db421331e22a68df8011cb5fc",
+    "mtime": "2026-11-22T14:32:25.883335"
+   }
+  }
+ },
+ "reference": "stock",
+ "results": {
+  "godot|chars|stock": {
+   "engine": "godot",
+   "case": "chars",
+   "variant": "stock",
+   "bin": "/tmp/claude-0/m169/godot_stock",
+   "fellow": "",
+   "valid_runs": 1,
+   "stats": {
+    "physics_ms": {
+     "median": 27.31789,
+     "runs": [
+      27.31789
+     ]
+    },
+    "frame_ms": {
+     "median": 27.72114,
+     "runs": [
+      27.72114
+     ]
+    },
+    "step_ms": {
+     "median": 1.05349333333333,
+     "runs": [
+      1.05349333333333
+     ]
+    },
+    "process_ms": {
+     "median": 26.25799,
+     "runs": [
+      26.25799
+     ]
+    },
+    "sync_ms": {
+     "median": 0.00472999999999998,
+     "runs": [
+      0.00472999999999998
+     ]
+    },
+    "end_ms": {
+     "median": 0.00167666666666667,
+     "runs": [
+      0.00167666666666667
+     ]
+    },
+    "phases_ms": {
+     "godot_integrate_forces": 0.17576,
+     "godot_broadphase": 0.495946666666667,
+     "godot_islands": 0.0620166666666667,
+     "godot_setup": 0.202523333333333,
+     "godot_solve": 0.0736533333333333,
+     "godot_integrate_velocities": 0.03779,
+     "godot_bp_optimize": 0.00268,
+     "godot_bp_cull": 0.468926666666667,
+     "godot_bp_pairs": 0.0218133333333333,
+     "jolt_pre_step": 0.0,
+     "jolt_update": 0.0,
+     "jolt_post_step": 0.0
+    }
+   },
+   "repeat_hashes_equal": true,
+   "hashes_equal_ref": true,
+   "first_hash_difference_tick": null,
+   "runs": [
+    {
+     "valid": true,
+     "summary": {
+      "physics_ms": {
+       "mean": 27.31789,
+       "p50": 29.427,
+       "p95": 31.769,
+       "max": 33.184,
+       "total": 8195.367
+      },
+      "frame_ms": {
+       "mean": 27.72114,
+       "p50": 29.845,
+       "p95": 32.205,
+       "max": 33.631,
+       "total": 8316.342
+      },
+      "sync_ms": {
+       "mean": 0.00472999999999998,
+       "p50": 0.005,
+       "p95": 0.006,
+       "max": 0.039,
+       "total": 1.419
+      },
+      "process_ms": {
+       "mean": 26.25799,
+       "p50": 28.296,
+       "p95": 30.714,
+       "max": 32.02,
+       "total": 7877.397
+      },
+      "step_ms": {
+       "mean": 1.05349333333333,
+       "p50": 1.04,
+       "p95": 1.309,
+       "max": 3.797,
+       "total": 316.048
+      },
+      "end_ms": {
+       "mean": 0.00167666666666667,
+       "p50": 0.002,
+       "p95": 0.003,
+       "max": 0.003,
+       "total": 0.503
+      }
+     },
+     "hashes": [
+      [
+       30,
+       "141d102b21105a8ac21767b046063efc34f7028899790cb720513eae9299b1e2"
+      ],
+      [
+       60,
+       "4fd0cb4fa466d8625950126c2f459e30977669549e644c5793a1fa06b96c1620"
+      ],
+      [
+       90,
+       "3cba19b7bb9433d55c340a3ba7d05fd014c47499b82b0a282852302899a67114"
+      ],
+      [
+       120,
+       "af85ff3971b01c0dbef44e170e7e2b6a3dc67eda5869b9f65686b10faf4e643e"
+      ],
+      [
+       150,
+       "353f2bba0a6062367a4f248d26aa7caf4f27ccb78f0d8e7fdf9093d18d372695"
+      ],
+      [
+       180,
+       "820b012e94f0b9d9cafc2e778396437f1c5f71c9eef56e6bf04e39a2cefa66a0"
+      ],
+      [
+       210,
+       "d75c33f02a04d63d37382b7416804691f648e075aca8c8c530fcf2e893a512c7"
+      ],
+      [
+       240,
+       "311dd30da906880ff4aac7e40012f9afd3dc8b4f8557324a4bfff0b95df00698"
+      ],
+      [
+       270,
+       "873afbd3f4d2572bcf7bbe17b0ea93e859b1e4a70e69f299fc2c17d79e163f33"
+      ],
+      [
+       300,
+       "67b7c4cf9090c4fd023d72e9841bd36737e46858fde45343ce6ea5d4e5224ac0"
+      ]
+     ],
+     "counters": {
+      "tick": 302
+     },
+     "engine": "DEFAULT",
+     "threads": 2,
+     "phases_ms": {
+      "godot_integrate_forces": 0.17576,
+      "godot_broadphase": 0.495946666666667,
+      "godot_islands": 0.0620166666666667,
+      "godot_setup": 0.202523333333333,
+      "godot_solve": 0.0736533333333333,
+      "godot_integrate_velocities": 0.03779,
+      "godot_bp_optimize": 0.00268,
+      "godot_bp_cull": 0.468926666666667,
+      "godot_bp_pairs": 0.0218133333333333,
+      "jolt_pre_step": 0.0,
+      "jolt_update": 0.0,
+      "jolt_post_step": 0.0
+     },
+     "states": {},
+     "wall_s": 8.324099,
+     "fellow_requested": {},
+     "verify": {
+      "physics_verify_faces": 0,
+      "physics_verify_mismatches": 0
+     },
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 8.800283908843994,
+      "peak_working_set": 139296768,
+      "peak_private_bytes": 0
+     }
+    }
+   ]
+  },
+  "godot|chars|new": {
+   "engine": "godot",
+   "case": "chars",
+   "variant": "new",
+   "bin": "/home/claude/godot/bin/godot.linuxbsd.editor.x86_64",
+   "fellow": "",
+   "valid_runs": 1,
+   "stats": {
+    "physics_ms": {
+     "median": 26.4528866666667,
+     "runs": [
+      26.4528866666667
+     ]
+    },
+    "frame_ms": {
+     "median": 26.8634766666667,
+     "runs": [
+      26.8634766666667
+     ]
+    },
+    "step_ms": {
+     "median": 1.23719,
+     "runs": [
+      1.23719
+     ]
+    },
+    "process_ms": {
+     "median": 25.2095766666667,
+     "runs": [
+      25.2095766666667
+     ]
+    },
+    "sync_ms": {
+     "median": 0.00451999999999999,
+     "runs": [
+      0.00451999999999999
+     ]
+    },
+    "end_ms": {
+     "median": 0.0016,
+     "runs": [
+      0.0016
+     ]
+    },
+    "phases_ms": {
+     "godot_integrate_forces": 0.178093333333333,
+     "godot_broadphase": 0.517936666666667,
+     "godot_islands": 0.0637833333333333,
+     "godot_setup": 0.339783333333333,
+     "godot_solve": 0.0932133333333333,
+     "godot_integrate_velocities": 0.0383966666666667,
+     "godot_bp_optimize": 0.00295,
+     "godot_bp_cull": 0.489916666666667,
+     "godot_bp_pairs": 0.0224933333333333,
+     "jolt_pre_step": 0.0,
+     "jolt_update": 0.0,
+     "jolt_post_step": 0.0
+    }
+   },
+   "repeat_hashes_equal": true,
+   "hashes_equal_ref": true,
+   "first_hash_difference_tick": null,
+   "runs": [
+    {
+     "valid": true,
+     "summary": {
+      "physics_ms": {
+       "mean": 26.4528866666667,
+       "p50": 28.553,
+       "p95": 31.191,
+       "max": 61.294,
+       "total": 7935.866
+      },
+      "frame_ms": {
+       "mean": 26.8634766666667,
+       "p50": 28.951,
+       "p95": 31.624,
+       "max": 61.823,
+       "total": 8059.043
+      },
+      "sync_ms": {
+       "mean": 0.00451999999999999,
+       "p50": 0.005,
+       "p95": 0.006,
+       "max": 0.01,
+       "total": 1.356
+      },
+      "process_ms": {
+       "mean": 25.2095766666667,
+       "p50": 27.415,
+       "p95": 29.813,
+       "max": 31.491,
+       "total": 7562.873
+      },
+      "step_ms": {
+       "mean": 1.23719,
+       "p50": 1.055,
+       "p95": 1.725,
+       "max": 31.238,
+       "total": 371.157
+      },
+      "end_ms": {
+       "mean": 0.0016,
+       "p50": 0.002,
+       "p95": 0.002,
+       "max": 0.003,
+       "total": 0.48
+      }
+     },
+     "hashes": [
+      [
+       30,
+       "141d102b21105a8ac21767b046063efc34f7028899790cb720513eae9299b1e2"
+      ],
+      [
+       60,
+       "4fd0cb4fa466d8625950126c2f459e30977669549e644c5793a1fa06b96c1620"
+      ],
+      [
+       90,
+       "3cba19b7bb9433d55c340a3ba7d05fd014c47499b82b0a282852302899a67114"
+      ],
+      [
+       120,
+       "af85ff3971b01c0dbef44e170e7e2b6a3dc67eda5869b9f65686b10faf4e643e"
+      ],
+      [
+       150,
+       "353f2bba0a6062367a4f248d26aa7caf4f27ccb78f0d8e7fdf9093d18d372695"
+      ],
+      [
+       180,
+       "820b012e94f0b9d9cafc2e778396437f1c5f71c9eef56e6bf04e39a2cefa66a0"
+      ],
+      [
+       210,
+       "d75c33f02a04d63d37382b7416804691f648e075aca8c8c530fcf2e893a512c7"
+      ],
+      [
+       240,
+       "311dd30da906880ff4aac7e40012f9afd3dc8b4f8557324a4bfff0b95df00698"
+      ],
+      [
+       270,
+       "873afbd3f4d2572bcf7bbe17b0ea93e859b1e4a70e69f299fc2c17d79e163f33"
+      ],
+      [
+       300,
+       "67b7c4cf9090c4fd023d72e9841bd36737e46858fde45343ce6ea5d4e5224ac0"
+      ]
+     ],
+     "counters": {
+      "tick": 302
+     },
+     "engine": "DEFAULT",
+     "threads": 2,
+     "phases_ms": {
+      "godot_integrate_forces": 0.178093333333333,
+      "godot_broadphase": 0.517936666666667,
+      "godot_islands": 0.0637833333333333,
+      "godot_setup": 0.339783333333333,
+      "godot_solve": 0.0932133333333333,
+      "godot_integrate_velocities": 0.0383966666666667,
+      "godot_bp_optimize": 0.00295,
+      "godot_bp_cull": 0.489916666666667,
+      "godot_bp_pairs": 0.0224933333333333,
+      "jolt_pre_step": 0.0,
+      "jolt_update": 0.0,
+      "jolt_post_step": 0.0
+     },
+     "states": {},
+     "wall_s": 8.066834,
+     "fellow_requested": {},
+     "verify": {
+      "physics_verify_faces": 0,
+      "physics_verify_mismatches": 0
+     },
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 8.556298017501831,
+      "peak_working_set": 144035840,
+      "peak_private_bytes": 0
+     }
+    }
+   ]
+  },
+  "godot|pile|stock": {
+   "engine": "godot",
+   "case": "pile",
+   "variant": "stock",
+   "bin": "/tmp/claude-0/m169/godot_stock",
+   "fellow": "",
+   "valid_runs": 1,
+   "stats": {
+    "physics_ms": {
+     "median": 57.8561933333333,
+     "runs": [
+      57.8561933333333
+     ]
+    },
+    "frame_ms": {
+     "median": 58.3988133333334,
+     "runs": [
+      58.3988133333334
+     ]
+    },
+    "step_ms": {
+     "median": 54.13414,
+     "runs": [
+      54.13414
+     ]
+    },
+    "process_ms": {
+     "median": 1.18830333333333,
+     "runs": [
+      1.18830333333333
+     ]
+    },
+    "sync_ms": {
+     "median": 2.531,
+     "runs": [
+      2.531
+     ]
+    },
+    "end_ms": {
+     "median": 0.00275,
+     "runs": [
+      0.00275
+     ]
+    },
+    "phases_ms": {
+     "godot_integrate_forces": 0.34875,
+     "godot_broadphase": 6.33752666666667,
+     "godot_islands": 2.72531666666667,
+     "godot_setup": 22.7684666666667,
+     "godot_solve": 19.4997766666667,
+     "godot_integrate_velocities": 2.44545,
+     "godot_bp_optimize": 0.00714333333333333,
+     "godot_bp_cull": 4.79023666666667,
+     "godot_bp_pairs": 1.53294666666667,
+     "jolt_pre_step": 0.0,
+     "jolt_update": 0.0,
+     "jolt_post_step": 0.0
+    }
+   },
+   "repeat_hashes_equal": true,
+   "hashes_equal_ref": true,
+   "first_hash_difference_tick": null,
+   "runs": [
+    {
+     "valid": true,
+     "summary": {
+      "physics_ms": {
+       "mean": 57.8561933333333,
+       "p50": 65.758,
+       "p95": 81.783,
+       "max": 161.78,
+       "total": 17356.858
+      },
+      "frame_ms": {
+       "mean": 58.3988133333334,
+       "p50": 66.317,
+       "p95": 82.415,
+       "max": 162.408,
+       "total": 17519.644
+      },
+      "sync_ms": {
+       "mean": 2.531,
+       "p50": 2.489,
+       "p95": 3.248,
+       "max": 5.374,
+       "total": 759.300000000001
+      },
+      "process_ms": {
+       "mean": 1.18830333333333,
+       "p50": 1.176,
+       "p95": 1.558,
+       "max": 4.236,
+       "total": 356.491
+      },
+      "step_ms": {
+       "mean": 54.13414,
+       "p50": 62.165,
+       "p95": 77.388,
+       "max": 157.153,
+       "total": 16240.242
+      },
+      "end_ms": {
+       "mean": 0.00275,
+       "p50": 0.002,
+       "p95": 0.004,
+       "max": 0.031,
+       "total": 0.825000000000001
+      }
+     },
+     "hashes": [
+      [
+       30,
+       "90c0d69fc415a34de540398d7bcf67ad1a5665080856a08c4423089b9642e405"
+      ],
+      [
+       60,
+       "32c20346dac0fe4505f41526fcf2eb6913ca8c1afdd4dff202c99a761882c1f6"
+      ],
+      [
+       90,
+       "968769eabd9145742edce2f6a0d7375da7ee3953a535e5a35ec3d9bea746a461"
+      ],
+      [
+       120,
+       "26c7ec5d48e21ca1d885e53415ab3b952bc06bed98c54b58e9e40d9421665346"
+      ],
+      [
+       150,
+       "8bcf30e3e4084ecfb2e4c3e4c62e9f252c73cb98339c20004c3aefce6dab87a2"
+      ],
+      [
+       180,
+       "aa032e71338507417b504ac7f0d0b4c5395f30d8a52e494e207f227ce93a697c"
+      ],
+      [
+       210,
+       "d5254b602841028de804469facc813e5a816de2e2d51e230119c5dd3a6167ad3"
+      ],
+      [
+       240,
+       "b6ab4a640197f5417aee02b6b7098effeddbf8ca74e2d07b932ccf612a3fbbf1"
+      ],
+      [
+       270,
+       "f8dbcb34e622296a160b4fc0e6702b670fe5f0bac584a29802ee47644eaa8edf"
+      ],
+      [
+       300,
+       "3679a4d8be3ede0416664318a4ab92e54f85b3dec429abf11f4a74928bacbf9c"
+      ]
+     ],
+     "counters": {
+      "tick": 302
+     },
+     "engine": "DEFAULT",
+     "threads": 2,
+     "phases_ms": {
+      "godot_integrate_forces": 0.34875,
+      "godot_broadphase": 6.33752666666667,
+      "godot_islands": 2.72531666666667,
+      "godot_setup": 22.7684666666667,
+      "godot_solve": 19.4997766666667,
+      "godot_integrate_velocities": 2.44545,
+      "godot_bp_optimize": 0.00714333333333333,
+      "godot_bp_cull": 4.79023666666667,
+      "godot_bp_pairs": 1.53294666666667,
+      "jolt_pre_step": 0.0,
+      "jolt_update": 0.0,
+      "jolt_post_step": 0.0
+     },
+     "states": {},
+     "wall_s": 17.558675,
+     "fellow_requested": {},
+     "verify": {
+      "physics_verify_faces": 0,
+      "physics_verify_mismatches": 0
+     },
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 18.197347402572632,
+      "peak_working_set": 185143296,
+      "peak_private_bytes": 0
+     }
+    }
+   ]
+  },
+  "godot|pile|new": {
+   "engine": "godot",
+   "case": "pile",
+   "variant": "new",
+   "bin": "/home/claude/godot/bin/godot.linuxbsd.editor.x86_64",
+   "fellow": "",
+   "valid_runs": 1,
+   "stats": {
+    "physics_ms": {
+     "median": 50.0469966666667,
+     "runs": [
+      50.0469966666667
+     ]
+    },
+    "frame_ms": {
+     "median": 50.5090066666667,
+     "runs": [
+      50.5090066666667
+     ]
+    },
+    "step_ms": {
+     "median": 47.1725666666667,
+     "runs": [
+      47.1725666666667
+     ]
+    },
+    "process_ms": {
+     "median": 0.89093,
+     "runs": [
+      0.89093
+     ]
+    },
+    "sync_ms": {
+     "median": 1.98116333333333,
+     "runs": [
+      1.98116333333333
+     ]
+    },
+    "end_ms": {
+     "median": 0.00233666666666667,
+     "runs": [
+      0.00233666666666667
+     ]
+    },
+    "phases_ms": {
+     "godot_integrate_forces": 0.27531,
+     "godot_broadphase": 5.31544666666667,
+     "godot_islands": 2.22151333333333,
+     "godot_setup": 20.7007266666667,
+     "godot_solve": 16.62557,
+     "godot_integrate_velocities": 2.027,
+     "godot_bp_optimize": 0.00595333333333333,
+     "godot_bp_cull": 4.10650666666667,
+     "godot_bp_pairs": 1.19717,
+     "jolt_pre_step": 0.0,
+     "jolt_update": 0.0,
+     "jolt_post_step": 0.0
+    }
+   },
+   "repeat_hashes_equal": true,
+   "hashes_equal_ref": true,
+   "first_hash_difference_tick": null,
+   "runs": [
+    {
+     "valid": true,
+     "summary": {
+      "physics_ms": {
+       "mean": 50.0469966666667,
+       "p50": 56.256,
+       "p95": 72.138,
+       "max": 78.857,
+       "total": 15014.099
+      },
+      "frame_ms": {
+       "mean": 50.5090066666667,
+       "p50": 56.776,
+       "p95": 72.778,
+       "max": 79.434,
+       "total": 15152.702
+      },
+      "sync_ms": {
+       "mean": 1.98116333333333,
+       "p50": 1.867,
+       "p95": 2.547,
+       "max": 3.232,
+       "total": 594.349
+      },
+      "process_ms": {
+       "mean": 0.89093,
+       "p50": 0.841,
+       "p95": 1.226,
+       "max": 1.685,
+       "total": 267.279
+      },
+      "step_ms": {
+       "mean": 47.1725666666667,
+       "p50": 53.341,
+       "p95": 68.873,
+       "max": 75.13,
+       "total": 14151.77
+      },
+      "end_ms": {
+       "mean": 0.00233666666666667,
+       "p50": 0.002,
+       "p95": 0.003,
+       "max": 0.029,
+       "total": 0.701000000000001
+      }
+     },
+     "hashes": [
+      [
+       30,
+       "90c0d69fc415a34de540398d7bcf67ad1a5665080856a08c4423089b9642e405"
+      ],
+      [
+       60,
+       "32c20346dac0fe4505f41526fcf2eb6913ca8c1afdd4dff202c99a761882c1f6"
+      ],
+      [
+       90,
+       "968769eabd9145742edce2f6a0d7375da7ee3953a535e5a35ec3d9bea746a461"
+      ],
+      [
+       120,
+       "26c7ec5d48e21ca1d885e53415ab3b952bc06bed98c54b58e9e40d9421665346"
+      ],
+      [
+       150,
+       "8bcf30e3e4084ecfb2e4c3e4c62e9f252c73cb98339c20004c3aefce6dab87a2"
+      ],
+      [
+       180,
+       "aa032e71338507417b504ac7f0d0b4c5395f30d8a52e494e207f227ce93a697c"
+      ],
+      [
+       210,
+       "d5254b602841028de804469facc813e5a816de2e2d51e230119c5dd3a6167ad3"
+      ],
+      [
+       240,
+       "b6ab4a640197f5417aee02b6b7098effeddbf8ca74e2d07b932ccf612a3fbbf1"
+      ],
+      [
+       270,
+       "f8dbcb34e622296a160b4fc0e6702b670fe5f0bac584a29802ee47644eaa8edf"
+      ],
+      [
+       300,
+       "3679a4d8be3ede0416664318a4ab92e54f85b3dec429abf11f4a74928bacbf9c"
+      ]
+     ],
+     "counters": {
+      "tick": 302
+     },
+     "engine": "DEFAULT",
+     "threads": 2,
+     "phases_ms": {
+      "godot_integrate_forces": 0.27531,
+      "godot_broadphase": 5.31544666666667,
+      "godot_islands": 2.22151333333333,
+      "godot_setup": 20.7007266666667,
+      "godot_solve": 16.62557,
+      "godot_integrate_velocities": 2.027,
+      "godot_bp_optimize": 0.00595333333333333,
+      "godot_bp_cull": 4.10650666666667,
+      "godot_bp_pairs": 1.19717,
+      "jolt_pre_step": 0.0,
+      "jolt_update": 0.0,
+      "jolt_post_step": 0.0
+     },
+     "states": {},
+     "wall_s": 15.188136,
+     "fellow_requested": {},
+     "verify": {
+      "physics_verify_faces": 0,
+      "physics_verify_mismatches": 0
+     },
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 15.912895679473877,
+      "peak_working_set": 183189504,
+      "peak_private_bytes": 0
+     }
+    }
+   ]
+  },
+  "jolt|chars|stock": {
+   "engine": "jolt",
+   "case": "chars",
+   "variant": "stock",
+   "bin": "/tmp/claude-0/m169/godot_stock",
+   "fellow": "",
+   "valid_runs": 1,
+   "stats": {
+    "physics_ms": {
+     "median": 11.27021,
+     "runs": [
+      11.27021
+     ]
+    },
+    "frame_ms": {
+     "median": 11.5198566666667,
+     "runs": [
+      11.5198566666667
+     ]
+    },
+    "step_ms": {
+     "median": 0.31285,
+     "runs": [
+      0.31285
+     ]
+    },
+    "process_ms": {
+     "median": 10.94098,
+     "runs": [
+      10.94098
+     ]
+    },
+    "sync_ms": {
+     "median": 0.01577,
+     "runs": [
+      0.01577
+     ]
+    },
+    "end_ms": {
+     "median": 0.00061,
+     "runs": [
+      0.00061
+     ]
+    },
+    "phases_ms": {
+     "godot_integrate_forces": 0.0,
+     "godot_broadphase": 0.0,
+     "godot_islands": 0.0,
+     "godot_setup": 0.0,
+     "godot_solve": 0.0,
+     "godot_integrate_velocities": 0.0,
+     "godot_bp_optimize": 0.0,
+     "godot_bp_cull": 0.0,
+     "godot_bp_pairs": 0.0,
+     "jolt_pre_step": 0.0366333333333333,
+     "jolt_update": 0.26391,
+     "jolt_post_step": 0.00104666666666667
+    }
+   },
+   "repeat_hashes_equal": true,
+   "hashes_equal_ref": true,
+   "first_hash_difference_tick": null,
+   "runs": [
+    {
+     "valid": true,
+     "summary": {
+      "physics_ms": {
+       "mean": 11.27021,
+       "p50": 11.174,
+       "p95": 15.11,
+       "max": 16.381,
+       "total": 3381.063
+      },
+      "frame_ms": {
+       "mean": 11.5198566666667,
+       "p50": 11.413,
+       "p95": 15.641,
+       "max": 16.597,
+       "total": 3455.957
+      },
+      "sync_ms": {
+       "mean": 0.01577,
+       "p50": 0.003,
+       "p95": 0.006,
+       "max": 3.646,
+       "total": 4.73099999999999
+      },
+      "process_ms": {
+       "mean": 10.94098,
+       "p50": 10.895,
+       "p95": 14.662,
+       "max": 15.371,
+       "total": 3282.294
+      },
+      "step_ms": {
+       "mean": 0.31285,
+       "p50": 0.287,
+       "p95": 0.414,
+       "max": 3.166,
+       "total": 93.855
+      },
+      "end_ms": {
+       "mean": 0.00061,
+       "p50": 0.001,
+       "p95": 0.001,
+       "max": 0.002,
+       "total": 0.183
+      }
+     },
+     "hashes": [
+      [
+       30,
+       "cbd3268c7f1b4cfb2ee94362ec9eca646d62f5b87cba5c214f52ad57dabe5937"
+      ],
+      [
+       60,
+       "215492c598542fcd54f2c8f5f83c218cc094d3e4dff907e569adbd76a0a459fa"
+      ],
+      [
+       90,
+       "39ebbcd178a33c93fc1c234ff936feacedcf60c68b62ac776993e0fd13c5eb91"
+      ],
+      [
+       120,
+       "7a2aa6cece2f2a10bf4448f94e5635c39af2bea3a311f41af7fa6ee014dfcfaf"
+      ],
+      [
+       150,
+       "7d89ded1cef977ea8c00c91d75785b3664dc18eb28e367d6b66a652191de58c2"
+      ],
+      [
+       180,
+       "8fd847512d88d9cb55394ed4be7c5554e610a9e0ea91ea71c9f31e094f83f37a"
+      ],
+      [
+       210,
+       "55889ee0bd6b8b8696697b066e506067ae0b9857e99c5fcbd635866a8ac81113"
+      ],
+      [
+       240,
+       "6356f3c300f74ebea7524b4d5ff2e1139f1a2c2940f9fd07715583a4a9272e79"
+      ],
+      [
+       270,
+       "6c04602375fd7b3a663e3a93b44424b305337e604afd2cdbf620e65cb8798d88"
+      ],
+      [
+       300,
+       "7e6d7caddb053e751031ff8f871cbacc7c350f998932f2fba2bf2d4e96185eea"
+      ]
+     ],
+     "counters": {
+      "tick": 302
+     },
+     "engine": "Jolt Physics",
+     "threads": 2,
+     "phases_ms": {
+      "godot_integrate_forces": 0.0,
+      "godot_broadphase": 0.0,
+      "godot_islands": 0.0,
+      "godot_setup": 0.0,
+      "godot_solve": 0.0,
+      "godot_integrate_velocities": 0.0,
+      "godot_bp_optimize": 0.0,
+      "godot_bp_cull": 0.0,
+      "godot_bp_pairs": 0.0,
+      "jolt_pre_step": 0.0366333333333333,
+      "jolt_update": 0.26391,
+      "jolt_post_step": 0.00104666666666667
+     },
+     "states": {},
+     "wall_s": 3.46151,
+     "fellow_requested": {},
+     "verify": {
+      "physics_verify_faces": 0,
+      "physics_verify_mismatches": 0
+     },
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 4.0226731300354,
+      "peak_working_set": 140271616,
+      "peak_private_bytes": 0
+     }
+    }
+   ]
+  },
+  "jolt|chars|new": {
+   "engine": "jolt",
+   "case": "chars",
+   "variant": "new",
+   "bin": "/home/claude/godot/bin/godot.linuxbsd.editor.x86_64",
+   "fellow": "",
+   "valid_runs": 1,
+   "stats": {
+    "physics_ms": {
+     "median": 12.55695,
+     "runs": [
+      12.55695
+     ]
+    },
+    "frame_ms": {
+     "median": 12.8635833333333,
+     "runs": [
+      12.8635833333333
+     ]
+    },
+    "step_ms": {
+     "median": 0.349193333333333,
+     "runs": [
+      0.349193333333333
+     ]
+    },
+    "process_ms": {
+     "median": 12.1868533333333,
+     "runs": [
+      12.1868533333333
+     ]
+    },
+    "sync_ms": {
+     "median": 0.0198666666666666,
+     "runs": [
+      0.0198666666666666
+     ]
+    },
+    "end_ms": {
+     "median": 0.00103666666666667,
+     "runs": [
+      0.00103666666666667
+     ]
+    },
+    "phases_ms": {
+     "godot_integrate_forces": 0.0,
+     "godot_broadphase": 0.0,
+     "godot_islands": 0.0,
+     "godot_setup": 0.0,
+     "godot_solve": 0.0,
+     "godot_integrate_velocities": 0.0,
+     "godot_bp_optimize": 0.0,
+     "godot_bp_cull": 0.0,
+     "godot_bp_pairs": 0.0,
+     "jolt_pre_step": 0.04817,
+     "jolt_update": 0.27658,
+     "jolt_post_step": 0.00110666666666667
+    }
+   },
+   "repeat_hashes_equal": true,
+   "hashes_equal_ref": true,
+   "first_hash_difference_tick": null,
+   "runs": [
+    {
+     "valid": true,
+     "summary": {
+      "physics_ms": {
+       "mean": 12.55695,
+       "p50": 13.184,
+       "p95": 15.128,
+       "max": 17.78,
+       "total": 3767.085
+      },
+      "frame_ms": {
+       "mean": 12.8635833333333,
+       "p50": 13.441,
+       "p95": 15.536,
+       "max": 18.177,
+       "total": 3859.075
+      },
+      "sync_ms": {
+       "mean": 0.0198666666666666,
+       "p50": 0.004,
+       "p95": 0.006,
+       "max": 4.726,
+       "total": 5.95999999999999
+      },
+      "process_ms": {
+       "mean": 12.1868533333333,
+       "p50": 12.726,
+       "p95": 14.721,
+       "max": 17.165,
+       "total": 3656.056
+      },
+      "step_ms": {
+       "mean": 0.349193333333333,
+       "p50": 0.344,
+       "p95": 0.447,
+       "max": 3.425,
+       "total": 104.758
+      },
+      "end_ms": {
+       "mean": 0.00103666666666667,
+       "p50": 0.001,
+       "p95": 0.002,
+       "max": 0.022,
+       "total": 0.311
+      }
+     },
+     "hashes": [
+      [
+       30,
+       "cbd3268c7f1b4cfb2ee94362ec9eca646d62f5b87cba5c214f52ad57dabe5937"
+      ],
+      [
+       60,
+       "215492c598542fcd54f2c8f5f83c218cc094d3e4dff907e569adbd76a0a459fa"
+      ],
+      [
+       90,
+       "39ebbcd178a33c93fc1c234ff936feacedcf60c68b62ac776993e0fd13c5eb91"
+      ],
+      [
+       120,
+       "7a2aa6cece2f2a10bf4448f94e5635c39af2bea3a311f41af7fa6ee014dfcfaf"
+      ],
+      [
+       150,
+       "7d89ded1cef977ea8c00c91d75785b3664dc18eb28e367d6b66a652191de58c2"
+      ],
+      [
+       180,
+       "8fd847512d88d9cb55394ed4be7c5554e610a9e0ea91ea71c9f31e094f83f37a"
+      ],
+      [
+       210,
+       "55889ee0bd6b8b8696697b066e506067ae0b9857e99c5fcbd635866a8ac81113"
+      ],
+      [
+       240,
+       "6356f3c300f74ebea7524b4d5ff2e1139f1a2c2940f9fd07715583a4a9272e79"
+      ],
+      [
+       270,
+       "6c04602375fd7b3a663e3a93b44424b305337e604afd2cdbf620e65cb8798d88"
+      ],
+      [
+       300,
+       "7e6d7caddb053e751031ff8f871cbacc7c350f998932f2fba2bf2d4e96185eea"
+      ]
+     ],
+     "counters": {
+      "tick": 302
+     },
+     "engine": "Jolt Physics",
+     "threads": 2,
+     "phases_ms": {
+      "godot_integrate_forces": 0.0,
+      "godot_broadphase": 0.0,
+      "godot_islands": 0.0,
+      "godot_setup": 0.0,
+      "godot_solve": 0.0,
+      "godot_integrate_velocities": 0.0,
+      "godot_bp_optimize": 0.0,
+      "godot_bp_cull": 0.0,
+      "godot_bp_pairs": 0.0,
+      "jolt_pre_step": 0.04817,
+      "jolt_update": 0.27658,
+      "jolt_post_step": 0.00110666666666667
+     },
+     "states": {},
+     "wall_s": 3.865112,
+     "fellow_requested": {},
+     "verify": {
+      "physics_verify_faces": 0,
+      "physics_verify_mismatches": 0
+     },
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 4.5271828174591064,
+      "peak_working_set": 144068608,
+      "peak_private_bytes": 0
+     }
+    }
+   ]
+  },
+  "jolt|pile|stock": {
+   "engine": "jolt",
+   "case": "pile",
+   "variant": "stock",
+   "bin": "/tmp/claude-0/m169/godot_stock",
+   "fellow": "",
+   "valid_runs": 1,
+   "stats": {
+    "physics_ms": {
+     "median": 16.9157866666667,
+     "runs": [
+      16.9157866666667
+     ]
+    },
+    "frame_ms": {
+     "median": 17.2197966666667,
+     "runs": [
+      17.2197966666667
+     ]
+    },
+    "step_ms": {
+     "median": 13.8714,
+     "runs": [
+      13.8714
+     ]
+    },
+    "process_ms": {
+     "median": 0.950333333333334,
+     "runs": [
+      0.950333333333334
+     ]
+    },
+    "sync_ms": {
+     "median": 2.09231,
+     "runs": [
+      2.09231
+     ]
+    },
+    "end_ms": {
+     "median": 0.00174333333333333,
+     "runs": [
+      0.00174333333333333
+     ]
+    },
+    "phases_ms": {
+     "godot_integrate_forces": 0.0,
+     "godot_broadphase": 0.0,
+     "godot_islands": 0.0,
+     "godot_setup": 0.0,
+     "godot_solve": 0.0,
+     "godot_integrate_velocities": 0.0,
+     "godot_bp_optimize": 0.0,
+     "godot_bp_cull": 0.0,
+     "godot_bp_pairs": 0.0,
+     "jolt_pre_step": 0.520123333333333,
+     "jolt_update": 13.33703,
+     "jolt_post_step": 0.00140333333333333
+    }
+   },
+   "repeat_hashes_equal": true,
+   "hashes_equal_ref": true,
+   "first_hash_difference_tick": null,
+   "runs": [
+    {
+     "valid": true,
+     "summary": {
+      "physics_ms": {
+       "mean": 16.9157866666667,
+       "p50": 19.233,
+       "p95": 25.671,
+       "max": 30.022,
+       "total": 5074.736
+      },
+      "frame_ms": {
+       "mean": 17.2197966666667,
+       "p50": 19.609,
+       "p95": 26.114,
+       "max": 30.681,
+       "total": 5165.939
+      },
+      "sync_ms": {
+       "mean": 2.09231,
+       "p50": 2.1,
+       "p95": 3.111,
+       "max": 4.524,
+       "total": 627.693
+      },
+      "process_ms": {
+       "mean": 0.950333333333334,
+       "p50": 0.891,
+       "p95": 1.525,
+       "max": 4.271,
+       "total": 285.1
+      },
+      "step_ms": {
+       "mean": 13.8714,
+       "p50": 15.874,
+       "p95": 21.319,
+       "max": 24.863,
+       "total": 4161.42
+      },
+      "end_ms": {
+       "mean": 0.00174333333333333,
+       "p50": 0.002,
+       "p95": 0.003,
+       "max": 0.016,
+       "total": 0.523
+      }
+     },
+     "hashes": [
+      [
+       30,
+       "97685b8c7706ec645261ecab0fcc3472045872dcf1c37766ad68bed4a70b7579"
+      ],
+      [
+       60,
+       "beb1a988369f8de25e174842737b1056b1db0b3dd2175f9c738758283e1649b6"
+      ],
+      [
+       90,
+       "7228aaf1824a7c1ea9ceee19d856c375e9e393b8504529860a7fe7379872e4f0"
+      ],
+      [
+       120,
+       "8e18b36184cad7f0685001db966e7184a2a86bedc3c440ff7af31262dac5b957"
+      ],
+      [
+       150,
+       "5311eb2c15ca857d3bf052b4dc5fac6f2159d2624599384cba5170b2f254d4ad"
+      ],
+      [
+       180,
+       "ca73a72696e117b9ac2c2afcd671cd4f515d9571bc75643bfae1a99ff7466cf4"
+      ],
+      [
+       210,
+       "1b5b831feb6703aac654d5648be886e41af572a5fe7c18c224442a0f6583d115"
+      ],
+      [
+       240,
+       "3b2e9da14cbe670bb8bb0259eaada11126b18122efefa0f39227db89ba298e30"
+      ],
+      [
+       270,
+       "628bd492be05bf35ad742304251ee009b8da48786b3c919cd0a90eaa2426d1fd"
+      ],
+      [
+       300,
+       "2f2f29e27ae92ed38557f2b62458213281242913d017a30673b958b70fa806e5"
+      ]
+     ],
+     "counters": {
+      "tick": 302
+     },
+     "engine": "Jolt Physics",
+     "threads": 2,
+     "phases_ms": {
+      "godot_integrate_forces": 0.0,
+      "godot_broadphase": 0.0,
+      "godot_islands": 0.0,
+      "godot_setup": 0.0,
+      "godot_solve": 0.0,
+      "godot_integrate_velocities": 0.0,
+      "godot_bp_optimize": 0.0,
+      "godot_bp_cull": 0.0,
+      "godot_bp_pairs": 0.0,
+      "jolt_pre_step": 0.520123333333333,
+      "jolt_update": 13.33703,
+      "jolt_post_step": 0.00140333333333333
+     },
+     "states": {},
+     "wall_s": 5.194019,
+     "fellow_requested": {},
+     "verify": {
+      "physics_verify_faces": 0,
+      "physics_verify_mismatches": 0
+     },
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 5.790300130844116,
+      "peak_working_set": 169078784,
+      "peak_private_bytes": 0
+     }
+    }
+   ]
+  },
+  "jolt|pile|new": {
+   "engine": "jolt",
+   "case": "pile",
+   "variant": "new",
+   "bin": "/home/claude/godot/bin/godot.linuxbsd.editor.x86_64",
+   "fellow": "",
+   "valid_runs": 1,
+   "stats": {
+    "physics_ms": {
+     "median": 17.2697766666667,
+     "runs": [
+      17.2697766666667
+     ]
+    },
+    "frame_ms": {
+     "median": 17.5881,
+     "runs": [
+      17.5881
+     ]
+    },
+    "step_ms": {
+     "median": 14.01504,
+     "runs": [
+      14.01504
+     ]
+    },
+    "process_ms": {
+     "median": 1.03788333333333,
+     "runs": [
+      1.03788333333333
+     ]
+    },
+    "sync_ms": {
+     "median": 2.21505666666667,
+     "runs": [
+      2.21505666666667
+     ]
+    },
+    "end_ms": {
+     "median": 0.00179666666666667,
+     "runs": [
+      0.00179666666666667
+     ]
+    },
+    "phases_ms": {
+     "godot_integrate_forces": 0.0,
+     "godot_broadphase": 0.0,
+     "godot_islands": 0.0,
+     "godot_setup": 0.0,
+     "godot_solve": 0.0,
+     "godot_integrate_velocities": 0.0,
+     "godot_bp_optimize": 0.0,
+     "godot_bp_cull": 0.0,
+     "godot_bp_pairs": 0.0,
+     "jolt_pre_step": 0.569246666666667,
+     "jolt_update": 13.43154,
+     "jolt_post_step": 0.00132666666666667
+    }
+   },
+   "repeat_hashes_equal": true,
+   "hashes_equal_ref": true,
+   "first_hash_difference_tick": null,
+   "runs": [
+    {
+     "valid": true,
+     "summary": {
+      "physics_ms": {
+       "mean": 17.2697766666667,
+       "p50": 19.737,
+       "p95": 24.661,
+       "max": 50.728,
+       "total": 5180.933
+      },
+      "frame_ms": {
+       "mean": 17.5881,
+       "p50": 20.09,
+       "p95": 25.01,
+       "max": 51.033,
+       "total": 5276.43
+      },
+      "sync_ms": {
+       "mean": 2.21505666666667,
+       "p50": 2.56,
+       "p95": 2.989,
+       "max": 4.298,
+       "total": 664.517
+      },
+      "process_ms": {
+       "mean": 1.03788333333333,
+       "p50": 1.25,
+       "p95": 1.443,
+       "max": 2.675,
+       "total": 311.365
+      },
+      "step_ms": {
+       "mean": 14.01504,
+       "p50": 15.924,
+       "p95": 20.508,
+       "max": 47.611,
+       "total": 4204.512
+      },
+      "end_ms": {
+       "mean": 0.00179666666666667,
+       "p50": 0.002,
+       "p95": 0.003,
+       "max": 0.02,
+       "total": 0.539
+      }
+     },
+     "hashes": [
+      [
+       30,
+       "97685b8c7706ec645261ecab0fcc3472045872dcf1c37766ad68bed4a70b7579"
+      ],
+      [
+       60,
+       "beb1a988369f8de25e174842737b1056b1db0b3dd2175f9c738758283e1649b6"
+      ],
+      [
+       90,
+       "7228aaf1824a7c1ea9ceee19d856c375e9e393b8504529860a7fe7379872e4f0"
+      ],
+      [
+       120,
+       "8e18b36184cad7f0685001db966e7184a2a86bedc3c440ff7af31262dac5b957"
+      ],
+      [
+       150,
+       "5311eb2c15ca857d3bf052b4dc5fac6f2159d2624599384cba5170b2f254d4ad"
+      ],
+      [
+       180,
+       "ca73a72696e117b9ac2c2afcd671cd4f515d9571bc75643bfae1a99ff7466cf4"
+      ],
+      [
+       210,
+       "1b5b831feb6703aac654d5648be886e41af572a5fe7c18c224442a0f6583d115"
+      ],
+      [
+       240,
+       "3b2e9da14cbe670bb8bb0259eaada11126b18122efefa0f39227db89ba298e30"
+      ],
+      [
+       270,
+       "628bd492be05bf35ad742304251ee009b8da48786b3c919cd0a90eaa2426d1fd"
+      ],
+      [
+       300,
+       "2f2f29e27ae92ed38557f2b62458213281242913d017a30673b958b70fa806e5"
+      ]
+     ],
+     "counters": {
+      "tick": 302
+     },
+     "engine": "Jolt Physics",
+     "threads": 2,
+     "phases_ms": {
+      "godot_integrate_forces": 0.0,
+      "godot_broadphase": 0.0,
+      "godot_islands": 0.0,
+      "godot_setup": 0.0,
+      "godot_solve": 0.0,
+      "godot_integrate_velocities": 0.0,
+      "godot_bp_optimize": 0.0,
+      "godot_bp_cull": 0.0,
+      "godot_bp_pairs": 0.0,
+      "jolt_pre_step": 0.569246666666667,
+      "jolt_update": 13.43154,
+      "jolt_post_step": 0.00132666666666667
+     },
+     "states": {},
+     "wall_s": 5.306109,
+     "fellow_requested": {},
+     "verify": {
+      "physics_verify_faces": 0,
+      "physics_verify_mismatches": 0
+     },
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 6.045109748840332,
+      "peak_working_set": 166789120,
+      "peak_private_bytes": 0
+     }
+    }
+   ]
+  }
+ }
+}

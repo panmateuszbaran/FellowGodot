@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 169 — characters up and down steps (2026-11-22)
+
+- Decision 0311: `CharacterBody3D.floor_step_height` (0 by default: stock bit for bit). Stock's capsule climbs only
+  what its rounded bottom touches under the floor angle (8.8 cm at a 30 cm radius): every stair, kerb and doorstep
+  above stopped it, and every step down was a fall. Above 0, a move stopped by a riser or a step's edge steps up onto
+  the step (cast up, along, down; kept on a floor within the step height of the floor it stood on; `get_last_step()`
+  for the camera to ease it), the floor snap reaches a step down, and a step's edge under the body counts as floor.
+  - The character course (new, `benchmarks/tools/character_course/`, headless, both physics engines): stairs of
+    10-30 cm walked and run up and down in 2 % more time than flat ground, never off the floor; rubble crossed; 40 cm
+    stairs, a 50° slope and a ceiling too low for the first step still stop it; a 60 cm ledge is still fallen off;
+    standing on the stairs the body stays (0-5.5 mm while stopping). Stock: stopped at the first riser or stone,
+    9-14 ticks in the air off a 20-30 cm ledge.
+  - `move_and_slide()` as fast on stairs as on flat ground; a failed step is not tried again from the same place.
+- The editor's mantling character preset gets a 0.35 m step height.
+
 ## Milestone 168 — screen probes that keep their place; the clouds' detail (2026-11-22)
 
 - Decision 0309: `sdfgi/screen_gather_persistent` (on). The screen gathers' probes keep their world point and their

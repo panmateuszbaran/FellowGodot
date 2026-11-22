@@ -114,6 +114,9 @@ REM a soak: Slice Lab played in real time for an hour (frame times, hitches, mem
 REM sampled from outside), then its CSV, chart and summary
 .tools\venv\Scripts\python.exe benchmarks\tools\soak\run_soak.py --godot <template> --out <dir> --minutes 60
 .tools\venv\Scripts\python.exe benchmarks\tools\soak\soak_report.py <dir>\slice_soak_<date>.json --out <dir>\report
+REM CharacterBody3D over steps, ledges, rubble, a steep slope and a ceiling (headless, both physics engines; milestone
+REM 169): how far, how high, the ticks off the floor, the largest rise in a tick, move_and_slide()'s time
+.tools\venv\Scripts\python.exe benchmarks\tools\character_course\run_course.py --godot <editor> --variants stock=-1,steps=0.35
 REM whole plans (baseline = perf + profile + captures + temporal + references; ab = the same without references)
 .tools\venv\Scripts\python.exe benchmarks\run_suite.py baseline --build stock --tag godot-4.7.2
 REM report (HTML with sliders, graphs, tables) -> reports/<date>_<commit>/ and reports/latest/

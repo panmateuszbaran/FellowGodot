@@ -96,6 +96,11 @@ public:
 	real_t get_floor_snap_length();
 	void set_floor_snap_length(real_t p_floor_snap_length);
 
+	// FellowEngine (decision 0311): steps up and down, and standing on their edges.
+	real_t get_floor_step_height() const;
+	void set_floor_step_height(real_t p_height);
+	real_t get_last_step() const;
+
 	real_t get_wall_min_slide_angle() const;
 	void set_wall_min_slide_angle(real_t p_radians);
 
@@ -147,6 +152,13 @@ private:
 	uint32_t platform_floor_layers = UINT32_MAX;
 	uint32_t platform_wall_layers = 0;
 	real_t floor_snap_length = 0.1;
+	real_t floor_step_height = 0.0; // FellowEngine (decision 0311): 0, stock's behaviour
+	real_t fellow_last_step = 0.0; // the height the last move_and_slide() stepped up (+) or down (-)
+	real_t fellow_floor_height = 0.0; // the floor's contact along up_direction, while on it (fellow_floor_valid)
+	bool fellow_floor_valid = false;
+	Vector3 fellow_step_failed_at = Vector3(Math::INF, Math::INF, Math::INF); // where and which way the last step up failed:
+	Vector3 fellow_step_failed_dir; // not tried there that way again, no further (a longer move may land on the step)
+	real_t fellow_step_failed_length = 0.0;
 	real_t floor_max_angle = Math::deg_to_rad((real_t)45.0);
 	real_t wall_min_slide_angle = Math::deg_to_rad((real_t)15.0);
 	Vector3 up_direction = Vector3(0.0, 1.0, 0.0);
@@ -175,6 +187,12 @@ private:
 	void _set_collision_direction(const PhysicsServer3D::MotionResult &p_result, CollisionState &r_state, CollisionState p_apply_state = CollisionState(true, true, true));
 	void _set_platform_data(const PhysicsServer3D::MotionCollision &p_collision);
 	void _snap_on_floor(bool p_was_on_floor, bool p_vel_dir_facing_up);
+	// FellowEngine (decision 0311).
+	real_t _fellow_snap_length() const;
+	bool _fellow_edge_is_floor(const PhysicsServer3D::MotionCollision &p_collision) const;
+	bool _fellow_is_floor(const PhysicsServer3D::MotionCollision &p_collision) const;
+	bool _fellow_step_ahead(const PhysicsServer3D::MotionResult &p_result, const Vector3 &p_along) const;
+	bool _fellow_step_up(const Vector3 &p_along, Vector3 &r_motion_left);
 
 protected:
 	void _notification(int p_what);
