@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowInertializer3D" inherits="SkeletonModifier3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Hides an animation's switch to another: the pose the character had, carried on by its own velocity, blended to the new animation's (inertialization by dead blending). FellowEngine.
+	</brief_description>
+	<description>
+		A [SkeletonModifier3D] for animation transitions. Instead of a cross-fade, which evaluates both animations for its whole length and mixes their poses (feet sliding, a jolt in the bones' speed at its start), switch the animation at once — [method AnimationPlayer.play] with [code]custom_blend[/code] [code]0.0[/code], an [AnimationTree]'s transitions with no cross-fade — and let this node, a child of the [Skeleton3D], blend over [member blend_time] from the last pose drawn, carried on by the velocity it had and slowing ([member extrapolation_halflife]), to the new animation's pose. Only the new animation is evaluated meanwhile (Holden's "dead blending", 2023, an inertialization).
+		A blend starts when [method blend] is called, when the [AnimationMixer] at [member animation_mixer_path] emits [signal AnimationMixer.animation_started], or, with [member detect_jumps], when a bone turns further in a frame than its velocity carries it.
+		Over 120 random switches between 128 CMU mocap clips (FellowEngine's [code]benchmarks/tools/animation_transitions[/code]), against [AnimationPlayer]'s cross-fade of the same 0.25 s: the feet planted in the new animation slide 18 % less (0.79 m/s against 0.97), the largest bone turn in a frame is half (22.8° against 43.6°), the bones' angular acceleration's 95th percentile 21 % lower, and the player evaluates one animation instead of two (its time 5.8 µs against 8.8, the modifier 2.7 µs; 31 bones).
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="blend">
+			<return type="void" />
+			<param index="0" name="seconds" type="float" default="-1.0" />
+			<description>
+				Starts a blend from the pose last drawn to the animation's, over [param seconds] ([member blend_time] if negative). Call it in the frame the animation switches (before or after [method AnimationPlayer.play]). A blend started during another starts from the pose that one had reached, with its velocity.
+			</description>
+		</method>
+		<method name="get_blend_progress" qualifiers="const">
+			<return type="float" />
+			<description>
+				How far the current blend has gone, from [code]0.0[/code] to [code]1.0[/code]; [code]1.0[/code] when not blending.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				[code]frames[/code] (the modifier's passes), [code]blends[/code] (started), [code]usec_per_frame[/code] (its mean CPU time a pass).
+			</description>
+		</method>
+		<method name="is_blending" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether a blend is under way.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="animation_mixer_path" type="NodePath" setter="set_animation_mixer_path" getter="get_animation_mixer_path" default="NodePath(&quot;&quot;)">
+			An [AnimationPlayer] or [AnimationTree] whose [signal AnimationMixer.animation_started] starts a blend: its animations switched at once are blended by this node with no code. Leave its own cross-fades at [code]0.0[/code].
+		</member>
+		<member name="blend_time" type="float" setter="set_blend_time" getter="get_blend_time" default="0.25">
+			The blends' length in seconds (a smoothstep from the carried-on old pose to the new animation's).
+		</member>
+		<member name="detect_jumps" type="bool" setter="set_detect_jumps" getter="is_detect_jumps" default="false">
+			If [code]true[/code], a blend also starts when a bone of the new pose has turned more than [member jump_angle] further than its last velocity would have turned it in the frame: switches no signal announces (a script setting bone poses, a state machine's instant transitions) are hidden too. A fast motion may start blends of its own.
+		</member>
+		<member name="extrapolation_halflife" type="float" setter="set_extrapolation_halflife" getter="get_extrapolation_halflife" default="0.05">
+			While blending, the old pose carries on with the velocities it had, which halve every this many seconds. Small values hold the old pose still as it fades (measured: slightly less foot sliding); larger ones carry its motion on further.
+		</member>
+		<member name="jump_angle" type="float" setter="set_jump_angle" getter="get_jump_angle" default="20.0">
+			See [member detect_jumps], in degrees.
+		</member>
+	</members>
+</class>

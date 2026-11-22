@@ -12,6 +12,7 @@ def get_doc_classes():
         "FellowFaceAnimator",
         "FellowFootLock3D",
         "FellowHeadMotion3D",
+        "FellowInertializer3D",
         "FellowLadder3D",
         "FellowMotionDatabase",
         "FellowMotionMatcher3D",

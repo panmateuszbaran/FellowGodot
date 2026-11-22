@@ -33,6 +33,7 @@
 #include "fellow_face_animator.h"
 #include "fellow_foot_lock_3d.h"
 #include "fellow_head_motion_3d.h"
+#include "fellow_inertializer_3d.h"
 #include "fellow_ladder_3d.h"
 #include "fellow_motion_database.h"
 #include "fellow_motion_matcher_3d.h"
@@ -93,6 +94,7 @@ void initialize_fellow_animation_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowFaceAnimator); // milestone 83
 		GDREGISTER_CLASS(FellowHeadMotion3D); // milestone 104
 		GDREGISTER_CLASS(FellowFootLock3D); // milestone 155
+		GDREGISTER_CLASS(FellowInertializer3D); // milestone 171
 
 		Performance *performance = Performance::get_singleton();
 		if (performance) {

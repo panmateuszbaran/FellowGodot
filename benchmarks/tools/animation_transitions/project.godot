@@ -1,0 +1,8 @@
+; FellowEngine's animation transitions (milestone 171): CMU mocap clips switched every second, cross-faded and
+; inertialized, measured headless (transitions.gd).
+
+config_version=5
+
+[application]
+
+config/name="Animation Transitions"

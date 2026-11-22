@@ -859,6 +859,17 @@ move at the character's pace, heavy ones slowly or not at all against their fric
 body then, it is pushed. With a standing mass, the rigid body stood on gets that weight at the floor's contact (seesaws,
 boats, planks). Typical: 300-600 N, the character's mass. `run_course.py --course push` measures it.
 
+## Inertialized animation transitions (milestone 171)
+
+`FellowInertializer3D` (module `fellow_animation`; decision 0313), a `SkeletonModifier3D` under the `Skeleton3D`: let
+the animation switch at once (`AnimationPlayer.play()` with no blend, an `AnimationTree`'s transitions with no
+cross-fade) and the node blends over `blend_time` (0.25 s) from the last pose drawn, carried on by its velocity
+(halving every `extrapolation_halflife`, 0.05 s), to the new animation's. Blends start on `blend(seconds)`, on the
+`animation_started` of the mixer at `animation_mixer_path`, or with `detect_jumps` (off) when a bone turns more than
+`jump_angle` (20°) further in a frame than its velocity carries it. `is_blending()`, `get_blend_progress()`,
+`get_stats()`. Against a cross-fade of the same length (CMU clips): 18-21 % less foot sliding, half the largest bone
+turn in a frame, one animation evaluated instead of two.
+
 ## Traversal: mantling and vaulting (milestone 72)
 
 Module `fellow_animation`; nothing changes without the nodes (decision 0180). `FellowTraversal3D`, a child of the

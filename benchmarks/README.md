@@ -117,6 +117,8 @@ REM sampled from outside), then its CSV, chart and summary
 REM CharacterBody3D over steps, ledges, rubble, a steep slope and a ceiling (headless, both physics engines; milestone
 REM 169): how far, how high, the ticks off the floor, the largest rise in a tick, move_and_slide()'s time
 .tools\venv\Scripts\python.exe benchmarks\tools\character_course\run_course.py --godot <editor> --variants stock=-1,steps=0.35
+REM animation transitions (milestone 171): CMU clips switched every second, cross-faded and inertialized side by side
+godot --headless --fixed-fps 60 --path benchmarks\tools\animation_transitions -s transitions.gd -- --data=<cmu dir> --out=<file.json> --blend=0.25
 REM whole plans (baseline = perf + profile + captures + temporal + references; ab = the same without references)
 .tools\venv\Scripts\python.exe benchmarks\run_suite.py baseline --build stock --tag godot-4.7.2
 REM report (HTML with sliders, graphs, tables) -> reports/<date>_<commit>/ and reports/latest/

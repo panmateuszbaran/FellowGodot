@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 171 — inertialized animation transitions (2026-11-22)
+
+- Decision 0313: `FellowInertializer3D`, a skeleton modifier. Godot cross-fades animation transitions: both animations
+  evaluated for the whole fade and their poses mixed, the feet sliding and the bones' speed jolting at the fade's ends.
+  With the node, the animation switches at once and is blended from the last pose drawn, carried on by its own
+  velocity, to the new one's (Holden's dead blending, an inertialization): only the new animation is evaluated. Blends
+  start on `blend()`, an AnimationPlayer's or AnimationTree's `animation_started` (`animation_mixer_path`), or a
+  detected jump in the pose.
+  - The transitions course (new, `benchmarks/tools/animation_transitions/`): 120 random switches between 128 CMU
+    locomotion clips, root motion applied. At 0.25 s against AnimationPlayer's cross-fade: the feet planted in the new
+    animation slide 0.79 m/s instead of 0.97 (−18 %), the largest bone turn in a frame 22.8° instead of 43.6°, the
+    angular acceleration's 95th percentile −21 %; the player's time 5.8 µs instead of 8.8, the modifier 2.7 µs. At
+    0.4 s: −21 %, −41 %, −29 %.
+
 ## Milestone 170 — characters push rigid bodies and weigh on them (2026-11-22)
 
 - Decision 0312: `CharacterBody3D.rigid_push_force` and `rigid_standing_mass` (0 by default: stock bit for bit). A
