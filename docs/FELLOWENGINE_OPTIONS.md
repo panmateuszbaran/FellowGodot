@@ -758,6 +758,16 @@ milestone 166's cones (`swing_limit`, `twist_limit`) and masses by volume. `get_
 as high as the database's are when down (their 5th percentile in contact); `get_stats()`'s `ground_shifts_mm`.
 Matching Lab's `--matching_grounding` and its planted toes' heights; its mannequin's feet got soles.
 
+Milestone 186 (decision 0328), on by default: `FellowPhysicalAnimation3D.fall_step_time` (0.4 s; 0: milestone 185's
+fall where it stands) — with balance and a motion matcher, a hit whose capture point is beyond `fall_threshold` but
+within twice it first pushes the matcher that way (ω c, at most 2.5 m/s, decaying over twice this time; `staggered` is
+emitted) and the fall begins after this long from where the step took it; as the legs give way each foot turns flat
+about its ankle and comes down to where the lower one stands (0.15 s). `get_balance_stats()`'s `fall_steps`.
+`FellowPhysicalAnimation3D.stuck_rescue` (on): a body held at full strength more than 5 cm from its place without
+coming nearer (under 0.1 m/s towards it) for 0.3 s is put there if its shapes, 2 cm higher, meet nothing but the
+character's own bodies — while the animation is followed (with balance: standing or staggering); `get_stats()`'s
+`stuck_rescues`. `balance_check.gd`'s `--fall_step`, `--stuck_rescue`.
+
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
 Module `fellow_world`; nothing changes without the node (decision 0187). `FellowVehicleEffects3D` (a `Node3D`, a child

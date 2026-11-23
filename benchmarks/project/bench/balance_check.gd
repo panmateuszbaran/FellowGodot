@@ -14,11 +14,15 @@ extends SceneTree
 ## how far it slides on, and when the fall went limp (its hips' height and lean then, whether at the knees).
 ## Milestone 185 (decision 0327): while the body is limp, the knees' and elbows' flexion at its least and most (negative:
 ## bent backwards) and the trunk's bend at its most (the lower back's bone against the neck's).
+## Milestone 186 (decision 0328): a fall's step first — when it fell after the push, how far the character had gone
+## then and how many times a foot had left the ground (`--fall_step=0`: milestone 185's fall where it stands).
+## And a foot's body caught 8 cm under a thin floor (a 3 cm slab, as a roof's), standing: its distance from its place
+## after 0.25, 0.5 and 1 s.
 ## Prints one JSON line (with --trace=1 also a line a frame: the feet, the hips, the motion matcher's feet and clip, the
 ## fastest body; --trace_feet=1 adds its feet's locks). Run on Jolt Physics (benchmarks/project/override.cfg:
 ## [physics] 3d/physics_engine="Jolt Physics"):
 ##   godot --headless --fixed-fps 60 --path benchmarks/project -s res://bench/balance_check.gd -- \
-##       [--pushes=20,40,60,80,100,130,160,200] [--fall=200] [--trace=1] [--anatomical=0] [--grounding=0]
+##       [--pushes=20,40,60,80,100,130,160,200] [--fall=200] [--trace=1] [--anatomical=0] [--grounding=0] [--fall_step=0] [--stuck_rescue=0]
 ## The clips: benchmarks/scripts/get_cmu_locomotion.sh (subjects 16, 35, 69, 139, 140).
 
 const STEP := 1.0 / 60.0
@@ -33,6 +37,7 @@ var pa
 var events := []
 var joints := [] # [body, parent body, the child bone's place in the parent bone's space (rest)]
 var foot_y0 := [] # the feet's bodies' heights standing
+var ground: StaticBody3D
 
 
 func _initialize() -> void:
@@ -115,6 +120,11 @@ func _trial(impulse: Vector3, at: Vector3, seconds: float) -> Dictionary:
 	var elbow_lo := 1e9
 	var elbow_hi := -1e9
 	var trunk_bend := 0.0
+	# Milestone 186: before the fall, the feet's lifts and how far it went.
+	var fell_at := -1.0
+	var fell_travel := 0.0
+	var lifts := 0
+	var lifted := [false, false]
 	while t < seconds:
 		await physics_frame
 		t += STEP
@@ -134,8 +144,16 @@ func _trial(impulse: Vector3, at: Vector3, seconds: float) -> Dictionary:
 			var nk: Node3D = pa.get_node_or_null("../FellowPhysicalBones/Body_Neck1")
 			if lb and nk:
 				trunk_bend = maxf(trunk_bend, rad_to_deg((-lb.global_transform.basis.z).angle_to(-nk.global_transform.basis.z)))
+		if fell_at < 0.0 and events.has("fell"):
+			fell_at = t
+			fell_travel = travel
 		for k in 2:
 			var fp: Vector3 = feet[k].global_position
+			if fell_at < 0.0:
+				var up: bool = fp.y > foot_y0[k] + 0.03
+				if up and not lifted[k]:
+					lifts += 1
+				lifted[k] = up
 			var after_up: bool = got_up_at >= 0.0 and t - got_up_at < 2.0
 			var on: bool = fp.y < foot_y0[k] + 0.03 and ((s < 3 and t < 4.0 and got_up_at < 0.0) or after_up)
 			if on and anchor[k] == null:
@@ -215,7 +233,8 @@ func _trial(impulse: Vector3, at: Vector3, seconds: float) -> Dictionary:
 		r["hips_slide_after_m"] = snappedf(after_slide, 0.01)
 	var st: Dictionary = pa.get_balance_stats()
 	if events.has("fell"):
-		r["fall"] = {"landed": FACES[int(st["landed_face"])], "lying_after_s": snappedf(float(st["fall_seconds"]), 0.01),
+		r["fall"] = {"after_s": snappedf(fell_at, 0.01), "stepped_m": snappedf(fell_travel, 0.01), "feet_lifted": lifts,
+			"landed": FACES[int(st["landed_face"])], "lying_after_s": snappedf(float(st["fall_seconds"]), 0.01),
 			"limp_after_s": snappedf(float(st["fall_limp_seconds"]), 0.01), "limp_hips_m": snappedf(float(st["fall_limp_hips_m"]), 0.01),
 			"limp_lean_deg": snappedf(float(st["fall_limp_lean_deg"]), 0.1), "kneeling": st["fall_kneeling"]}
 		if events.has("got_up"):
@@ -242,7 +261,8 @@ func _run() -> void:
 		quit(1)
 		return
 	lab.visible = false
-	get_root().add_child(_floor())
+	ground = _floor()
+	get_root().add_child(ground)
 	var out := {"engine": str(ProjectSettings.get_setting("physics/3d/physics_engine"))}
 
 	ch = Node3D.new()
@@ -258,6 +278,10 @@ func _run() -> void:
 	pa.balance = true
 	pa.anatomical_limits = str(args.get("anatomical", "1")) == "1" # milestone 185: --anatomical=0 for milestone 184's ragdoll
 	mm.foot_grounding = str(args.get("grounding", "1")) == "1"
+	if args.has("stuck_rescue"):
+		pa.stuck_rescue = str(args["stuck_rescue"]) == "1" # milestone 186: 0 for milestone 185's (a body 0.75 m away put back)
+	if args.has("fall_step"):
+		pa.fall_step_time = float(args["fall_step"]) # milestone 186: 0 for milestone 185's fall where it stands
 	skel.add_child(pa)
 	pa.motion_matcher_path = pa.get_path_to(mm)
 	for sig in ["staggered", "fell", "landed", "got_up"]:
@@ -293,6 +317,32 @@ func _run() -> void:
 		await _reset(Vector3.ZERO, Vector3(0, 0, 1))
 		falls[side[0]] = await _trial(side[1], _chest(), 16.0)
 	out["falls"] = falls
+
+	# Milestone 186: a foot's body caught under a thin floor (a 3 cm slab where the ground was), standing.
+	var slab := StaticBody3D.new()
+	var slab_shape := CollisionShape3D.new()
+	slab_shape.shape = BoxShape3D.new()
+	slab_shape.shape.size = Vector3(400, 0.03, 400)
+	slab_shape.position = Vector3(0, -0.015, 0)
+	slab.add_child(slab_shape)
+	get_root().add_child(slab)
+	ground.position.y = -2.0
+	await _reset(Vector3.ZERO, Vector3(0, 0, 1))
+	var foot_body: PhysicalBone3D = pa.get_node("../FellowPhysicalBones/Body_LeftFoot")
+	var fi: int = Array(pa.get_body_bones()).find("LeftFoot")
+	var ft := foot_body.global_transform
+	ft.origin.y -= 0.08
+	PhysicsServer3D.body_set_state(foot_body.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, ft)
+	var stuck := {}
+	var r0: int = pa.get_stats()["stuck_rescues"]
+	for i in 60:
+		await physics_frame
+		if i + 1 in [15, 30, 60]:
+			stuck["after_%.2f_s_mm" % ((i + 1) / 60.0)] = snappedf(1000.0 * pa.get_body_errors()[fi], 0.1)
+	stuck["put_back"] = int(pa.get_stats()["stuck_rescues"]) - r0
+	out["foot_under_floor"] = stuck
+	slab.queue_free()
+	ground.position.y = 0.0
 
 	# A push from the side while walking.
 	await _reset(Vector3.ZERO, Vector3(0, 0, 1))

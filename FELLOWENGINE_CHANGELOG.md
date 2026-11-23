@@ -9,6 +9,22 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 186 — a step before the fall, caught bodies put back (2026-11-23)
+
+- Milestone 184's and 185's open items: a push it could not catch made the legs give way where it stood (no foot left
+  the ground); a body caught near its place (a foot through a thin floor) stayed caught — only one 0.75 m away was put
+  back.
+- `FellowPhysicalAnimation3D.fall_step_time` (new, 0.4 s; decision 0328): a push whose capture point is beyond
+  `fall_threshold` but within twice it is first stepped after (the motion matcher pushed that way as fast as the centre
+  of mass would go, at most 2.5 m/s: the database's own step), then the legs give way from where the step took it; the
+  feet land flat (a foot in the air turns flat about its ankle and comes down to the ground). Jolt, five 200 N·s falls:
+  the fall begins 0.4 s after the push, after one step of 0.45-0.63 m by the foot on the side pushed; the hips reach the
+  ground 1.0-1.2 s after the push. `get_balance_stats()`'s `fall_steps`.
+- `FellowPhysicalAnimation3D.stuck_rescue` (new, on): a body held at full strength more than 5 cm from its place
+  without coming nearer for 0.3 s is put there if the place is free (a shape query), while the animation is followed:
+  a foot caught 8 cm under a 3 cm slab 74 mm from its place after a second → 0.4 mm. `get_stats()`'s `stuck_rescues`.
+- `balance_check.gd` measures a fall's step and a foot caught under a thin floor (`--fall_step`, `--stuck_rescue`).
+
 ## Milestone 185 — a ragdoll with bones, feet on the ground (2026-11-23)
 
 - The owner: "now the feet hang over the ground, and the ragdoll folds the body as if it were a soft body with no

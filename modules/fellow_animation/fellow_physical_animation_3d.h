@@ -87,6 +87,8 @@ public:
 		Vector3 neutral; // a hip's: the thigh's way at rest, in its parent's bone's space (flexion from it)
 		float friction = 0.0f; // N·m: the limp joint's friction (a motor held at rest, its torque limited)
 		int8_t part = 0; // JOINT_PART_*: what it is (statistics)
+		float stuck_time = 0.0f; // s held at full strength away from its place without coming nearer (milestone 186)
+		Vector3 sole_up; // the body's space: a foot's sole's up (milestone 186); none without a sole
 	};
 	enum {
 		JOINT_BALL = 0,
@@ -131,6 +133,11 @@ private:
 	NodePath motion_matcher_path;
 	float step_threshold = 0.12f; // m
 	float fall_threshold = 0.7f; // m
+	float fall_step_time = 0.4f; // s: milestone 186's step before a fall (0: it falls where it stands)
+	bool fall_pending = false; // stepping before the fall
+	Vector3 fall_pending_direction;
+	float fall_pending_speed = 0.0f;
+	int64_t stat_fall_steps = 0;
 	float topple_angle = Math::deg_to_rad(60.0f); // the fall's lean where the body goes limp (if its hips are still up)
 	StringName get_up_tag = "get_up";
 	bool auto_get_up = true;
@@ -167,6 +174,10 @@ private:
 	float fall_height = 1.0f; // buckling: the hips' bone's distance from the feet; stiff: the centre of mass's height
 	float fall_ground = 0.0f;
 	float fall_sink = 0.0f; // m the hips have sunk
+	float fall_foot_drop[2] = { 0.0f, 0.0f }; // m a foot in the air as it falls (mid-step) comes down to the ground
+	Quaternion fall_foot_flat[2]; // and turns flat about its ankle
+	float _fall_land() const;
+	void _fall_foot_target(int p_side, const Transform3D &p_from, const Vector3 &p_move, Transform3D &r_to) const;
 	float fall_sink_speed = 0.0f;
 	float stat_fall_limp_time = 0.0f; // s from the fall's start to going limp
 	float stat_fall_limp_height = 0.0f; // the hips' target over the ground then
@@ -184,6 +195,9 @@ private:
 	static constexpr float FALL_LIMP_HEIGHT = 0.38f; // m: the hips' bone over the ground where it goes limp
 	static constexpr float FALL_REACH_DELAY = 0.1f; // s before the arms reach out
 	static constexpr float FALL_REACH_TIME = 0.35f; // s they take
+	static constexpr float FALL_FOOT_LAND_TIME = 0.15f; // s a foot in the air takes to come down
+	static constexpr float STUCK_DISTANCE = 0.05f; // m from its place: a body caught (milestone 186)
+	static constexpr float STUCK_TIME = 0.3f; // s before it is put back
 	// The get-up clips found in the database: their range, the frames played (from just before the body rises to
 	// standing), the face they start on.
 	struct GetUpClip {
@@ -226,6 +240,9 @@ private:
 	bool pending_start = false;
 	float rescue_distance = 0.75f;
 	int64_t rescues = 0;
+	int64_t stuck_rescues = 0; // milestone 186: bodies caught near their place put back
+	bool stuck_rescue = true; // milestone 186
+	bool _place_free(const Body &p_body, const Transform3D &p_at) const;
 
 	// Statistics since reset_stats(): the bodies' distance from the animation's bones (with full strength only).
 	double error_sum = 0.0;
@@ -320,6 +337,10 @@ public:
 	float get_step_threshold() const { return step_threshold; }
 	void set_fall_threshold(float p_metres) { fall_threshold = MAX(p_metres, 0.0f); }
 	float get_fall_threshold() const { return fall_threshold; }
+	void set_fall_step_time(float p_seconds) { fall_step_time = MAX(p_seconds, 0.0f); }
+	float get_fall_step_time() const { return fall_step_time; }
+	void set_stuck_rescue(bool p_enabled) { stuck_rescue = p_enabled; }
+	bool is_stuck_rescue() const { return stuck_rescue; }
 	void set_topple_angle(float p_radians) { topple_angle = CLAMP(p_radians, 0.0f, Math::PI * 0.5f); }
 	float get_topple_angle() const { return topple_angle; }
 	void set_get_up_tag(const StringName &p_tag) {

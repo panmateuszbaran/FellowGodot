@@ -765,6 +765,7 @@ void FellowPhysicalAnimation3D::_sole_shapes() {
 		cs->set_shape(box);
 		cs->set_transform(b.offset.affine_inverse() * t);
 		b.radius = sole - 0.5f * ball.dot(down); // (from the body's centre down to the sole, for the feet's height)
+		b.sole_up = b.offset.basis.orthonormalized().xform_inv(-down).normalized();
 	}
 }
 
@@ -1001,11 +1002,32 @@ void FellowPhysicalAnimation3D::_drive(double p_delta) {
 		pb->set_linear_velocity(v);
 		pb->set_angular_velocity(w);
 		// A body held fast far from its bone (caught behind a wall, under the ground) is put back on it.
-		if (s > 0.5f && (b.target.origin - cur.origin).length() > rescue_distance) {
+		const Vector3 off = b.target.origin - cur.origin;
+		if (s > 0.5f && off.length() > rescue_distance) {
 			PhysicsServer3D::get_singleton()->body_set_state(pb->get_rid(), PhysicsServer3D::BODY_STATE_TRANSFORM, b.target);
 			pb->set_linear_velocity(v_ff);
 			pb->set_angular_velocity(w_ff);
 			rescues++;
+			b.stuck_time = 0.0f;
+		}
+		// Milestone 186 (decision 0328): a body held at full strength that stays more than 5 cm from its place without
+		// coming nearer (caught under a thin floor it went through, wedged by its neighbours) for 0.3 s is put
+		// there if the place is free — its shapes, 2 cm higher, meet nothing but the character's own bodies. Only while
+		// the animation is followed: a fall's or a get-up's targets may be in the ground on purpose.
+		const bool following = !balance || this->state == STATE_STANDING || this->state == STATE_STAGGERING;
+		if (stuck_rescue && following && s > 0.99f && off.length() > STUCK_DISTANCE && (v_now - v_ff).dot(off) < 0.1f * off.length()) {
+			b.stuck_time += dt;
+		} else {
+			b.stuck_time = 0.0f;
+		}
+		if (b.stuck_time > STUCK_TIME) {
+			b.stuck_time = 0.0f;
+			if (_place_free(b, Transform3D(b.target.basis, b.target.origin + Vector3(0, 0.02f, 0)))) {
+				PhysicsServer3D::get_singleton()->body_set_state(pb->get_rid(), PhysicsServer3D::BODY_STATE_TRANSFORM, b.target);
+				pb->set_linear_velocity(v_ff);
+				pb->set_angular_velocity(w_ff);
+				stuck_rescues++;
+			}
 		}
 		speed_max = MAX(speed_max, float(v.length()));
 		if (s > 0.99f && b.has_previous) {
@@ -1074,22 +1096,39 @@ void FellowPhysicalAnimation3D::apply_hit(const Vector3 &p_position, const Vecto
 		// more, as much as kicks it 1.5 m/s faster than the rest (at most 30 %). All of it on one body (a chest's 10 kg at
 		// 23 m/s from 230 N·s) tore the ragdoll's joints 11 cm apart; 30 % of 130 N·s, 13 cm.
 		const bool falls = c > fall_threshold;
-		const float local = falls ? 0.0f : MIN(0.3f, 1.5f * b.node->get_mass() / MAX(float(p_impulse.length()), 1e-3f));
+		FellowMotionMatcher3D *matcher = _get_matcher();
+		// Milestone 186 (decision 0328): a push it cannot catch where it stands is first stepped after — the motion
+		// matcher pushed that way as fast as it can go for fall_step_time — and the legs give way from where the step
+		// took it; past twice a step's reach it falls at once. People step before they fall (the stepping strategy:
+		// Maki and McIlroy 1997); falling where it stood looked like a puppet whose strings were cut.
+		const bool stumble = falls && fall_step_time > 0.0f && matcher && c < 2.0f * fall_threshold;
+		const float local = (falls && !stumble) ? 0.0f : MIN(0.3f, 1.5f * b.node->get_mass() / MAX(float(p_impulse.length()), 1e-3f));
 		if (local > 0.0f) {
 			b.node->apply_impulse(p_impulse * local, p_position - b.node->get_global_position());
 		}
 		for (Body &e : bodies) {
 			e.node->apply_central_impulse(p_impulse * ((1.0f - local) * e.node->get_mass() / MAX(mass, 1e-3f)));
 		}
-		if (falls) {
+		if (falls && !stumble) {
 			// The fall begins as fast as the centre of mass would still be moving after the farthest step (the capture
 			// point beyond a step's reach); the whole push's speed toppled it in a third of a second.
+			fall_pending = false;
 			_fall(capture / c, omega * (c - fall_threshold));
 			return;
 		}
 		if (c > step_threshold) {
-			FellowMotionMatcher3D *mm = _get_matcher();
-			if (mm) {
+			FellowMotionMatcher3D *mm = matcher;
+			fall_pending = false;
+			if (mm && stumble) {
+				// The step: as fast as the pendulum would carry the centre of mass to the capture point (at most
+				// 2.5 m/s), the fall after it as fast as it would still be moving.
+				mm->push(capture / c * MIN(omega * c, 2.5f), 2.0f * fall_step_time);
+				stagger_end = fall_step_time;
+				fall_pending = true;
+				fall_pending_direction = capture / c;
+				fall_pending_speed = omega * (c - fall_threshold);
+				stat_fall_steps++;
+			} else if (mm) {
 				// The steps carry the body about as far as the capture point, decaying over a little more than twice
 				// the pendulum's time.
 				const float duration = 2.6f / omega;
@@ -1136,6 +1175,33 @@ void FellowPhysicalAnimation3D::apply_hit_to_bone(const StringName &p_bone, cons
 
 // Milestone 183 (decision 0325): balance, falls and getting up.
 
+bool FellowPhysicalAnimation3D::_place_free(const Body &p_body, const Transform3D &p_at) const {
+	// Whether the body's shapes at `p_at` meet anything it collides with but the character's own bodies.
+	if (!is_inside_tree() || get_world_3d().is_null()) {
+		return false;
+	}
+	PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+	PhysicsDirectSpaceState3D *space = ps->space_get_direct_state(get_world_3d()->get_space());
+	if (!space) {
+		return false;
+	}
+	const RID rid = p_body.node->get_rid();
+	PhysicsDirectSpaceState3D::ShapeParameters query;
+	for (const Body &o : bodies) {
+		query.exclude.insert(o.node->get_rid());
+	}
+	query.collision_mask = p_body.node->get_collision_mask();
+	for (int i = 0; i < ps->body_get_shape_count(rid); i++) {
+		query.shape_rid = ps->body_get_shape(rid, i);
+		query.transform = p_at * ps->body_get_shape_transform(rid, i);
+		PhysicsDirectSpaceState3D::ShapeResult result;
+		if (space->intersect_shape(query, &result, 1) > 0) {
+			return false;
+		}
+	}
+	return true;
+}
+
 FellowMotionMatcher3D *FellowPhysicalAnimation3D::_get_matcher() const {
 	if (motion_matcher_path.is_empty() || !is_inside_tree()) {
 		return nullptr;
@@ -1144,6 +1210,9 @@ FellowMotionMatcher3D *FellowPhysicalAnimation3D::_get_matcher() const {
 }
 
 void FellowPhysicalAnimation3D::_set_state(State p_state) {
+	if (p_state != STATE_STAGGERING) {
+		fall_pending = false;
+	}
 	state = p_state;
 	state_time = 0.0f;
 	still_time = 0.0f;
@@ -1219,8 +1288,30 @@ void FellowPhysicalAnimation3D::_fall(const Vector3 &p_direction, float p_speed)
 	stat_fall_limp_time = 0.0f;
 	_fall_parts();
 	fall_kneeling = false;
+	fall_foot_drop[0] = fall_foot_drop[1] = 0.0f;
+	fall_foot_flat[0] = Quaternion();
+	fall_foot_flat[1] = Quaternion();
 	if (fall_buckles) {
 		fall_height = MAX(float(fall_hips.distance_to(fall_pivot)), 0.3f);
+		// Milestone 186: the feet as the legs give way — a foot in the air (falling mid-step: a step's, landing on its
+		// toes or its heel) turns flat about its ankle and comes down to where the lower one stands.
+		float bottom[2] = { 1e20f, 1e20f };
+		for (int s = 0; s < 2; s++) {
+			const Body &f = bodies[fall_leg[s][2]];
+			const Transform3D foot = fall_targets[fall_leg[s][2]];
+			const Vector3 ankle = (foot * f.offset.affine_inverse()).origin;
+			if (f.sole_up.length_squared() > 0.5f) {
+				const Vector3 sole_up = foot.basis.xform(f.sole_up).normalized();
+				if (sole_up.y > 0.2f && sole_up.angle_to(Vector3(0, 1, 0)) > 0.035f) {
+					fall_foot_flat[s] = Quaternion(sole_up, Vector3(0, 1, 0));
+				}
+			}
+			bottom[s] = float((ankle + fall_foot_flat[s].xform(foot.origin - ankle)).y) - f.radius;
+		}
+		const float ground = MIN(bottom[0], bottom[1]);
+		for (int s = 0; s < 2; s++) {
+			fall_foot_drop[s] = CLAMP(bottom[s] - ground, 0.0f, 0.5f);
+		}
 	} else {
 		// Pushed the way of the fall the feet would trip over: the pivot at their edge on that side.
 		fall_pivot += dir * 0.08f;
@@ -1397,7 +1488,9 @@ bool FellowPhysicalAnimation3D::_fall_leg(int p_side, const Vector3 &p_hips, con
 	const Vector3 a1 = p_hips + p_lean.xform(a0 - fall_hips);
 	const float la = MAX((b0 - a0).length(), 1e-3f);
 	const float lb = MAX((c0 - b0).length(), 1e-3f);
-	Vector3 c1 = c0;
+	// Where the foot stands: where it was, or (a foot in the air) coming down to the ground.
+	const Vector3 stand = c0 - up * (fall_foot_drop[p_side] * _fall_land());
+	Vector3 c1 = stand;
 	Vector3 ac = c1 - a1;
 	const float reach = (la + lb) * 0.999f;
 	if (ac.length() > reach) {
@@ -1418,14 +1511,28 @@ bool FellowPhysicalAnimation3D::_fall_leg(int p_side, const Vector3 &p_hips, con
 		h.y = 0.0f;
 		h = h.length() > 1e-4f ? h.normalized() : fall_forward;
 		b1 = a1 + h * Math::sqrt(MAX(la * la - (a1.y - knee_y) * (a1.y - knee_y), 0.0f)) + up * (knee_y - a1.y);
-		const Vector3 bc = c0 - b1;
+		const Vector3 bc = stand - b1;
 		c1 = b1 + (bc.length() > 1e-4f ? bc.normalized() : -up) * lb;
-		c1.y = MAX(c1.y, c0.y);
+		c1.y = MAX(c1.y, stand.y);
 	}
 	r_thigh = Transform3D(Basis(Quaternion((b0 - a0).normalized(), (b1 - a1).normalized())) * thigh.basis, a1) * bodies[th].offset;
 	r_shin = Transform3D(Basis(Quaternion((c0 - b0).normalized(), (c1 - b1).normalized())) * shin.basis, b1) * bodies[sh].offset;
 	r_foot = c1 - c0;
 	return clear;
+}
+
+float FellowPhysicalAnimation3D::_fall_land() const {
+	// How far the feet have come down and turned flat (milestone 186): over FALL_FOOT_LAND_TIME, eased.
+	const float x = CLAMP(state_time / FALL_FOOT_LAND_TIME, 0.0f, 1.0f);
+	return x * x * (3.0f - 2.0f * x);
+}
+
+void FellowPhysicalAnimation3D::_fall_foot_target(int p_side, const Transform3D &p_from, const Vector3 &p_move, Transform3D &r_to) const {
+	// A body of a foot as it falls: turned flat about the ankle as far as it has landed, moved with the ankle.
+	const int ft = fall_leg[p_side][2];
+	const Vector3 ankle = (fall_targets[ft] * bodies[ft].offset.affine_inverse()).origin;
+	const Quaternion q = Quaternion().slerp(fall_foot_flat[p_side], _fall_land());
+	r_to = Transform3D(Basis(q) * p_from.basis, ankle + q.xform(p_from.origin - ankle) + p_move);
 }
 
 void FellowPhysicalAnimation3D::_fall_pose() {
@@ -1446,11 +1553,9 @@ void FellowPhysicalAnimation3D::_fall_pose() {
 	for (int s = 0; s < 2; s++) {
 		Vector3 foot;
 		_fall_leg(s, hips, lean, bodies[fall_leg[s][0]].target, bodies[fall_leg[s][1]].target, foot);
-		if (foot.length_squared() > 1e-10f) {
-			for (uint32_t i = 0; i < bodies.size(); i++) {
-				if (fall_part[i] == FALL_FOOT + s) {
-					bodies[i].target.origin += foot;
-				}
+		for (uint32_t i = 0; i < bodies.size(); i++) {
+			if (fall_part[i] == FALL_FOOT + s) {
+				_fall_foot_target(s, fall_targets[i], foot, bodies[i].target);
 			}
 		}
 	}
@@ -1761,7 +1866,11 @@ void FellowPhysicalAnimation3D::_update_balance(float p_dt) {
 		case STATE_STANDING:
 			break;
 		case STATE_STAGGERING: {
-			if (state_time >= stagger_end) {
+			if (fall_pending && state_time >= stagger_end) {
+				// Milestone 186: the step taken, the push still not caught: the fall, from where the step took it.
+				fall_pending = false;
+				_fall(fall_pending_direction, fall_pending_speed);
+			} else if (state_time >= stagger_end) {
 				_set_state(STATE_STANDING);
 			}
 		} break;
@@ -1896,6 +2005,7 @@ Dictionary FellowPhysicalAnimation3D::get_balance_stats() const {
 	d["landed_face"] = landed_face;
 	d["fall_seconds"] = stat_fall_seconds;
 	d["fall_buckles"] = fall_buckles;
+	d["fall_steps"] = stat_fall_steps;
 	d["fall_limp_seconds"] = stat_fall_limp_time;
 	d["fall_limp_hips_m"] = stat_fall_limp_height;
 	d["fall_limp_lean_deg"] = Math::rad_to_deg(stat_fall_limp_angle);
@@ -1931,6 +2041,7 @@ Dictionary FellowPhysicalAnimation3D::get_stats() const {
 	}
 	d["weakness_max"] = weakness;
 	d["rescues"] = rescues;
+	d["stuck_rescues"] = stuck_rescues;
 	return d;
 }
 
@@ -1943,6 +2054,7 @@ void FellowPhysicalAnimation3D::reset_stats() {
 	drive_usec = 0;
 	drive_steps = 0;
 	rescues = 0;
+	stuck_rescues = 0;
 }
 
 void FellowPhysicalAnimation3D::_bind_methods() {
@@ -1994,6 +2106,10 @@ void FellowPhysicalAnimation3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_step_threshold", "metres"), &FellowPhysicalAnimation3D::set_step_threshold);
 	ClassDB::bind_method(D_METHOD("get_step_threshold"), &FellowPhysicalAnimation3D::get_step_threshold);
 	ClassDB::bind_method(D_METHOD("set_fall_threshold", "metres"), &FellowPhysicalAnimation3D::set_fall_threshold);
+	ClassDB::bind_method(D_METHOD("set_fall_step_time", "seconds"), &FellowPhysicalAnimation3D::set_fall_step_time);
+	ClassDB::bind_method(D_METHOD("get_fall_step_time"), &FellowPhysicalAnimation3D::get_fall_step_time);
+	ClassDB::bind_method(D_METHOD("set_stuck_rescue", "enabled"), &FellowPhysicalAnimation3D::set_stuck_rescue);
+	ClassDB::bind_method(D_METHOD("is_stuck_rescue"), &FellowPhysicalAnimation3D::is_stuck_rescue);
 	ClassDB::bind_method(D_METHOD("get_fall_threshold"), &FellowPhysicalAnimation3D::get_fall_threshold);
 	ClassDB::bind_method(D_METHOD("set_topple_angle", "radians"), &FellowPhysicalAnimation3D::set_topple_angle);
 	ClassDB::bind_method(D_METHOD("get_topple_angle"), &FellowPhysicalAnimation3D::get_topple_angle);
@@ -2031,6 +2147,8 @@ void FellowPhysicalAnimation3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "motion_matcher_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "FellowMotionMatcher3D"), "set_motion_matcher_path", "get_motion_matcher_path");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "step_threshold", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:m"), "set_step_threshold", "get_step_threshold");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fall_threshold", PROPERTY_HINT_RANGE, "0,3,0.01,suffix:m"), "set_fall_threshold", "get_fall_threshold");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fall_step_time", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"), "set_fall_step_time", "get_fall_step_time");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "stuck_rescue"), "set_stuck_rescue", "is_stuck_rescue");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "topple_angle", PROPERTY_HINT_RANGE, "0,90,0.1,radians_as_degrees"), "set_topple_angle", "get_topple_angle");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "get_up_tag"), "set_get_up_tag", "get_get_up_tag");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "auto_get_up"), "set_auto_get_up", "is_auto_get_up");

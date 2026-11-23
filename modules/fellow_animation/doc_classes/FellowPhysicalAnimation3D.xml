@@ -49,7 +49,7 @@
 		<method name="get_balance_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				Milestone 183 (decision 0325), with [member balance]: [code]state[/code], [code]hits[/code], [code]staggers[/code], [code]falls[/code], [code]get_ups[/code], the last hit's [code]capture_offset_m[/code], [code]landed_face[/code], [code]fall_seconds[/code] (from the fall to lying still), the last fall's [code]fall_buckles[/code] (the legs gave way; [code]false[/code]: the stiff fall, the legs' roles not found), [code]fall_limp_seconds[/code], [code]fall_limp_hips_m[/code] and [code]fall_limp_lean_deg[/code] (when it went limp, the hips' height over the ground and the lean then) and [code]fall_kneeling[/code] (it went limp as its knees reached the ground), the last get-up's [code]get_up_clip[/code], [code]get_up_match_error_m[/code] (the mean distance of its first pose's bones from the bodies', after the fit), [code]get_up_blend_speed_max_m_s[/code] and [code]get_up_seconds[/code], and [code]get_up_clips[/code] (the clips found: [code]{name, face, frames}[/code]).
+				Milestone 183 (decision 0325), with [member balance]: [code]state[/code], [code]hits[/code], [code]staggers[/code], [code]falls[/code], [code]get_ups[/code], the last hit's [code]capture_offset_m[/code], [code]landed_face[/code], [code]fall_seconds[/code] (from the fall to lying still), [code]fall_steps[/code] (falls that stepped first: [member fall_step_time]), the last fall's [code]fall_buckles[/code] (the legs gave way; [code]false[/code]: the stiff fall, the legs' roles not found), [code]fall_limp_seconds[/code], [code]fall_limp_hips_m[/code] and [code]fall_limp_lean_deg[/code] (when it went limp, the hips' height over the ground and the lean then) and [code]fall_kneeling[/code] (it went limp as its knees reached the ground), the last get-up's [code]get_up_clip[/code], [code]get_up_match_error_m[/code] (the mean distance of its first pose's bones from the bodies', after the fit), [code]get_up_blend_speed_max_m_s[/code] and [code]get_up_seconds[/code], and [code]get_up_clips[/code] (the clips found: [code]{name, face, frames}[/code]).
 			</description>
 		</method>
 		<method name="get_body_bones" qualifiers="const">
@@ -109,6 +109,7 @@
 				- [code]drive_usec_per_step[/code]: the drive's time a physics step;
 				- [code]limp[/code]: whether the bodies are limp now (a ragdoll's joints; milestone 185);
 				- [code]rescues[/code]: bodies put back on their bones, held more than 0.75 m from them (behind a wall, under the ground);
+				- [code]stuck_rescues[/code]: bodies caught near their place put there ([member stuck_rescue]);
 				- [code]bodies[/code], [code]weakness_max[/code].
 			</description>
 		</method>
@@ -152,13 +153,16 @@
 			Gets up on its own after lying still [member get_up_delay] seconds ([method get_up]).
 		</member>
 		<member name="balance" type="bool" setter="set_balance" getter="is_balance" default="false">
-			Milestone 183 (decision 0325): a hit's capture point decides what follows — where the centre of mass would have to be stood over to stop (its offset from the animation's plus the hit's velocity for the whole body, over [code]sqrt(g / h)[/code]). Under [member step_threshold] the drive takes the hit back where it stands; beyond it the character staggers (the [member motion_matcher_path]'s [method FellowMotionMatcher3D.push] that way, about as far as the capture point); beyond [member fall_threshold] it falls. Milestone 184 (decision 0326): after a reaction's time (0.12 s) the legs give way — the hips sink (at up to 2 m/s) and lean about the feet as an inverted pendulum, the upper body with them, the knees bending forward over the feet, which stay where they stand (two-bone IK; the legs' roles from the motion matcher's database), the arms reaching towards the ground it falls to — until the hips are 0.38 m over the ground, the knees reach it (falling forward) or the lean passes [member topple_angle]: then it goes limp (about 0.6 s after the push, the hips landing at 2.6-2.8 m/s). Without the legs' roles: milestone 183's stiff fall (the pose turned about the feet, limp past [member topple_angle]). Lying still, it gets up ([member auto_get_up], [method get_up]) and walks on. The impulse of a hit is spread over the body by mass (the struck part as much more as kicks it 1.5 m/s faster). Off: milestone 166's node.
+			Milestone 183 (decision 0325): a hit's capture point decides what follows — where the centre of mass would have to be stood over to stop (its offset from the animation's plus the hit's velocity for the whole body, over [code]sqrt(g / h)[/code]). Under [member step_threshold] the drive takes the hit back where it stands; beyond it the character staggers (the [member motion_matcher_path]'s [method FellowMotionMatcher3D.push] that way, about as far as the capture point); beyond [member fall_threshold] it falls. Milestone 184 (decision 0326): after a reaction's time (0.12 s) the legs give way — the hips sink (at up to 2 m/s) and lean about the feet as an inverted pendulum, the upper body with them, the knees bending forward over the feet, which stay where they stand (two-bone IK; the legs' roles from the motion matcher's database), the arms reaching towards the ground it falls to — until the hips are 0.38 m over the ground, the knees reach it (falling forward) or the lean passes [member topple_angle]: then it goes limp (about 0.6 s after the push, the hips landing at 2.6-2.8 m/s). Without the legs' roles: milestone 183's stiff fall (the pose turned about the feet, limp past [member topple_angle]). Milestone 186 (decision 0328): a push one step could almost catch (within twice [member fall_threshold]) is first stepped after, the legs giving way [member fall_step_time] later from where the step took it. Lying still, it gets up ([member auto_get_up], [method get_up]) and walks on. The impulse of a hit is spread over the body by mass (the struck part as much more as kicks it 1.5 m/s faster). Off: milestone 166's node.
 		</member>
 		<member name="collision_layer" type="int" setter="set_collision_layer" getter="get_collision_layer" default="32768">
 			The bodies' physics layers (when they are built).
 		</member>
 		<member name="collision_mask" type="int" setter="set_collision_mask" getter="get_collision_mask" default="1">
 			The physics layers the bodies meet (when they are built). Not their own: they do not meet one another.
+		</member>
+		<member name="fall_step_time" type="float" setter="set_fall_step_time" getter="get_fall_step_time" default="0.4">
+			Milestone 186 (decision 0328): how long the body steps after a push it cannot catch before its legs give way. A hit whose capture point is beyond [member fall_threshold] but within twice it first makes the [member motion_matcher_path]'s character step that way (its [method FellowMotionMatcher3D.push] as fast as the pendulum would carry the centre of mass to the capture point, at most 2.5 m/s), the [signal staggered] signal emitted; after this long the fall begins from where the step took it, a foot still in the air coming down to the ground. Further, or [code]0[/code], or without a motion matcher: it falls where it stands (milestone 185).
 		</member>
 		<member name="fall_threshold" type="float" setter="set_fall_threshold" getter="get_fall_threshold" default="0.7">
 			The capture point's offset beyond which a hit makes the body fall (a step's reach).
@@ -198,6 +202,9 @@
 		</member>
 		<member name="strength" type="float" setter="set_strength" getter="get_strength" default="1.0">
 			How hard the bodies are driven: 1, they follow the animation as far as they can; under 0.5, the joints are made cones about the pose at that moment; 0, a ragdoll.
+		</member>
+		<member name="stuck_rescue" type="bool" setter="set_stuck_rescue" getter="is_stuck_rescue" default="true">
+			Milestone 186 (decision 0328): a body held at full strength that stays more than 5 cm from where the animation has it without coming nearer for 0.3 s (caught under a thin floor it went through, wedged by its neighbours) is put there if the place is free: its shapes, 2 cm higher, meet nothing it collides with but the character's own bodies. Only while the animation is followed (with [member balance], standing or staggering: a fall's and a get-up's targets may be in the ground on purpose). [method get_stats]'s [code]stuck_rescues[/code] counts them. Off: only a body [code]0.75[/code] m away is put back.
 		</member>
 		<member name="swing_limit" type="float" setter="set_swing_limit" getter="get_swing_limit" default="0.87266463">
 			A limp body's cone joint: how far it swings from the pose it went limp in (radians). With [member anatomical_limits], only a body that is no part of a person found.
