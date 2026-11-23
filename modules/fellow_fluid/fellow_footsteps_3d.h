@@ -110,7 +110,7 @@ public:
 		float grain_level;
 		float press; // s: how long the weight keeps crushing
 		float hiss; // brushing (grass, leaves)
-		float level; // the ground's loudness
+		float level; // what the ground radiates (an output gain; milestone 181b: the grounds' balance)
 	};
 	static const GroundInfo &ground_info(int p_ground);
 

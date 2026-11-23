@@ -52,23 +52,26 @@ static _FORCE_INLINE_ float foot_soft_limit(float p_x) {
 }
 
 // The grounds: resonances (Hz, Q, gain), how hard (the click, the ring), the compression's thump, the grains (a
-// second at a walking step's energy, their Pareto exponent, level), how long the weight crushes, brushing.
+// second at a walking step's energy, their Pareto exponent, level), how long the weight crushes, brushing, and what
+// the ground radiates (milestone 181b, decision 0323: a step's K-weighted energy over a sneaker's on stone — wood
+// +8 dB and gravel well over it as walking measured binaurally, Aletta et al. 2016, grass under stone; a steel deck a
+// few dB over a wooden floor, its lower mobility against its lower damping; wading with gravel; mud under gravel).
 const FellowFootstepSynth::GroundInfo &FellowFootstepSynth::ground_info(int p_ground) {
 	static const GroundInfo infos[GROUND_MAX] = {
 		// name, loose, resonances (Hz, Q, gain), hardness, thump (Hz, level), grains (a second, Pareto, level), press, hiss, level
 		{ "stone", false, 1, { 900.0f }, { 2.0f }, { 0.3f }, 1.0f, 120.0f, 0.2f, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 1.0f },
 		{ "wood", false, 5, { 95.0f, 165.0f, 290.0f, 470.0f, 820.0f }, { 5.0f, 7.0f, 9.0f, 8.0f, 6.0f }, { 0.5f, 0.4f, 0.3f, 0.22f, 0.15f }, 0.8f, 110.0f, 0.3f, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 1.0f },
-		{ "metal", false, 5, { 230.0f, 560.0f, 930.0f, 1560.0f, 2380.0f }, { 60.0f, 90.0f, 80.0f, 100.0f, 90.0f }, { 1.0f, 0.8f, 0.7f, 0.5f, 0.4f }, 1.0f, 120.0f, 0.3f, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 1.0f },
+		{ "metal", false, 5, { 230.0f, 560.0f, 930.0f, 1560.0f, 2380.0f }, { 60.0f, 90.0f, 80.0f, 100.0f, 90.0f }, { 1.0f, 0.8f, 0.7f, 0.5f, 0.4f }, 1.0f, 120.0f, 0.3f, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.42f },
 		{ "tile", false, 2, { 1800.0f, 3100.0f }, { 6.0f, 8.0f }, { 0.6f, 0.5f }, 1.2f, 130.0f, 0.15f, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 1.0f },
 		{ "carpet", false, 1, { 110.0f }, { 0.8f }, { 0.5f }, 0.12f, 90.0f, 0.12f, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 1.0f },
-		{ "gravel", true, 3, { 2100.0f, 3400.0f, 5200.0f }, { 4.0f, 5.0f, 4.0f }, { 1.0f, 0.8f, 0.6f }, 0.0f, 140.0f, 0.3f, 1200.0f, 1.6f, 0.5f, 0.16f, 0.0f, 1.0f },
+		{ "gravel", true, 3, { 2100.0f, 3400.0f, 5200.0f }, { 4.0f, 5.0f, 4.0f }, { 1.0f, 0.8f, 0.6f }, 0.0f, 140.0f, 0.3f, 1200.0f, 1.6f, 0.5f, 0.16f, 0.0f, 1.58f },
 		{ "sand", true, 2, { 2800.0f, 5600.0f }, { 1.2f, 1.4f }, { 1.0f, 0.7f }, 0.0f, 110.0f, 0.2f, 4000.0f, 3.5f, 1.0f, 0.2f, 0.0f, 1.0f },
 		{ "snow", true, 3, { 900.0f, 2300.0f, 4100.0f }, { 1.8f, 2.5f, 3.0f }, { 1.0f, 0.8f, 0.5f }, 0.0f, 90.0f, 0.5f, 1800.0f, 2.2f, 0.7f, 0.24f, 0.0f, 1.0f },
-		{ "grass", true, 2, { 2500.0f, 5000.0f }, { 1.0f, 1.2f }, { 1.0f, 0.7f }, 0.0f, 120.0f, 0.25f, 2500.0f, 3.0f, 0.5f, 0.14f, 0.2f, 1.0f },
+		{ "grass", true, 2, { 2500.0f, 5000.0f }, { 1.0f, 1.2f }, { 1.0f, 0.7f }, 0.0f, 120.0f, 0.25f, 2500.0f, 3.0f, 0.5f, 0.14f, 0.2f, 0.46f },
 		{ "leaves", true, 3, { 2600.0f, 4400.0f, 6000.0f }, { 3.0f, 3.5f, 3.0f }, { 1.0f, 0.8f, 0.5f }, 0.0f, 120.0f, 0.25f, 500.0f, 1.4f, 0.9f, 0.22f, 0.12f, 1.0f },
 		{ "dirt", true, 1, { 1300.0f }, { 1.5f }, { 1.0f }, 0.0f, 110.0f, 1.0f, 200.0f, 2.0f, 0.4f, 0.1f, 0.0f, 1.0f },
-		{ "mud", true, 1, { 600.0f }, { 1.2f }, { 1.0f }, 0.0f, 80.0f, 0.9f, 80.0f, 2.0f, 0.2f, 0.2f, 0.0f, 1.0f },
-		{ "water", true, 0, {}, {}, {}, 0.0f, 90.0f, 0.3f, 0.0f, 2.0f, 0.0f, 0.1f, 0.0f, 1.0f },
+		{ "mud", true, 1, { 600.0f }, { 1.2f }, { 1.0f }, 0.0f, 80.0f, 0.9f, 80.0f, 2.0f, 0.2f, 0.2f, 0.0f, 0.2f },
+		{ "water", true, 0, {}, {}, {}, 0.0f, 90.0f, 0.3f, 0.0f, 2.0f, 0.0f, 0.1f, 0.0f, 0.32f },
 	};
 	return infos[CLAMP(p_ground, 0, int(GROUND_MAX) - 1)];
 }
@@ -144,16 +147,16 @@ void FellowFootstepSynth::_start(const Event &p_event, int p_ground, float p_wei
 	const FellowShoeInfo &si = shoe_info(p_event.shoe);
 	const float part = p_event.part == PART_HEEL ? 1.0f : (p_event.part == PART_BALL ? 0.55f : 0.3f);
 	const float speed = CLAMP(p_event.speed, 0.05f, 6.0f);
-	const float amp = FOOT_LEVEL * gi.level * Math::sqrt(MAX(p_event.load, 1.0f) / 75.0f) * (speed / 0.5f) * part * p_weight;
+	const float amp = FOOT_LEVEL * Math::sqrt(MAX(p_event.load, 1.0f) / 75.0f) * (speed / 0.5f) * part * p_weight;
 	if (p_event.part == PART_LIFT) {
 		// The toe leaving: loose ground kicked (a few grains), mud sucking, water dripping.
 		if (p_ground == GROUND_MUD) {
-			_bubble(p_event.delay + int(0.02f * rate), 0.004f + 0.003f * rng.randf(), amp * 6.0f, 3.0f);
+			_bubble(p_event.delay + int(0.02f * rate), 0.004f + 0.003f * rng.randf(), amp * 6.0f * gi.level, 3.0f);
 			stats.bubbles++;
 		} else if (p_ground == GROUND_WATER) {
 			const int n = 2 + int(rng.rand() % 3);
 			for (int i = 0; i < n; i++) {
-				_bubble(p_event.delay + int((0.05f + 0.3f * rng.randf()) * rate), 0.0006f + 0.0009f * rng.randf(), amp * 0.6f, 0.1f);
+				_bubble(p_event.delay + int((0.05f + 0.3f * rng.randf()) * rate), 0.0006f + 0.0009f * rng.randf(), amp * 0.6f * gi.level, 0.1f);
 				stats.bubbles++;
 			}
 			return;
@@ -206,7 +209,7 @@ void FellowFootstepSynth::_start(const Event &p_event, int p_ground, float p_wei
 		s.hiss_lp.set(7000.0f, rate);
 		const int n = 6 + int(rng.rand() % 8);
 		for (int i = 0; i < n; i++) {
-			_bubble(s.delay + int(0.08f * rng.randf() * rate), 0.0008f + 0.0032f * rng.randf(), amp * (0.2f + 0.4f * rng.randf()), 0.1f);
+			_bubble(s.delay + int(0.08f * rng.randf() * rate), 0.0008f + 0.0032f * rng.randf(), amp * (0.2f + 0.4f * rng.randf()) * gi.level, 0.1f);
 			stats.bubbles++;
 		}
 	}
@@ -301,7 +304,7 @@ void FellowFootstepSynth::render(float *r_left, float *r_right, int p_frames) {
 					x += s.amp * 2.5f * s.squelch * s.squelch_y;
 					s.squelch *= Math::exp(-1.0f / (0.15f * rate));
 				}
-				L[i] += x;
+				L[i] += x * gi.level;
 			}
 			for (int r = 0; r < s.nres; r++) {
 				if (Math::abs(s.res[r].y1) + Math::abs(s.res[r].y2) < 1e-15f) {
@@ -389,7 +392,7 @@ void FellowFootstepSynth::render(float *r_left, float *r_right, int p_frames) {
 					squeak_phase += float(Math::TAU) * squeak_f * (1.0f + 0.02f * Math::sin(vibrato)) * dt;
 					x += FOOT_LEVEL * 0.15f * squeak_env * (Math::sin(squeak_phase) + 0.4f * Math::sin(2.0f * squeak_phase) + 0.15f * Math::sin(3.0f * squeak_phase));
 				}
-				L[i] += x;
+				L[i] += x * gi.level;
 			}
 		} else {
 			squeak_env = 0.0f;

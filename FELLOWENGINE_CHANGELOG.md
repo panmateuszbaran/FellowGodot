@@ -21,8 +21,12 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   (splash, drips).
 - `FellowContactSound3D.surface` and `get_ground()`; `FellowTerrainLayer.surface` (a terrain's layers mixed by their
   weights under the foot); a collider's `fellow_surface` metadata.
-- `benchmarks/tools/world_sound/footstep_sound.gd` + `footstep_sound.py`; `benchmarks/tools/foot_placement/footsteps_demo.gd`
-  (a CMU walk across the grounds, `--terrain`).
+- `benchmarks/tools/world_sound/footstep_sound.gd` + `footstep_sound.py`;
+  `benchmarks/tools/foot_placement/footsteps_demo.gd` (a CMU walk across the grounds, `--terrain`).
+- 181b, the grounds' balance (the owner's ear: mud and the steel deck far louder than the rest): a ground's level is
+  what it radiates, set against walking measured on stone, wood, gravel and grass (Aletta et al. 2016) and the
+  physics elsewhere — a step over a step on stone (K-weighted): metal +19.5 → +12.0 LU, mud +19.9 → +5.9, water
+  +21.9 → +12.0, gravel +8.0 → +11.9, grass +3.8 → −3.0; `footstep_sound.py` measures it.
 
 ## Milestone 180 — bodies' contact sound: modal synthesis (2026-11-23)
 

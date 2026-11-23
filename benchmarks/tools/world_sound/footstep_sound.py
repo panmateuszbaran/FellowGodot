@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """FellowEngine's footsteps (milestone 181, decision 0323): measures the cases footstep_sound.gd rendered.
 
-* each ground (four walking steps, sneakers, 75 kg): the peak and loudness (dBFS at a metre), the spectral centroid,
-  the share of the sound under 300 Hz, 300 Hz-2 kHz, 2-6 kHz and over 6 kHz, the grains and bubbles a step;
+* each ground (four walking steps, sneakers, 75 kg): the peak and RMS (dBFS at sound_unit_size), a step's loudness
+  against a step on stone (its K-weighted energy, ITU-R BS.1770's filter: the grounds' balance, milestone 181b), the
+  spectral centroid, the share of the sound under 300 Hz, 300 Hz-2 kHz, 2-6 kHz and over 6 kHz, the grains and
+  bubbles a step;
 * the shoes on stone and wood: the centroid, the share over 2 kHz (the click);
 * sneaking, walking, running and landing on stone and gravel: their peaks against walking's;
 * a light (50 kg) and a heavy (100 kg) walker on gravel; grass over dirt;
@@ -69,6 +71,33 @@ def describe(x, rate):
     }
 
 
+def _biquad(b, a, x):
+    try:
+        from scipy.signal import lfilter
+
+        return lfilter(b, a, x)
+    except ImportError:
+        y = np.zeros_like(x)
+        x1 = x2 = y1 = y2 = 0.0
+        for i, v in enumerate(x):
+            o = b[0] * v + b[1] * x1 + b[2] * x2 - a[1] * y1 - a[2] * y2
+            x2, x1, y2, y1 = x1, v, y1, o
+            y[i] = o
+        return y
+
+
+def step_loudness(x, rate, steps, period=0.55, start=0.1):
+    """A step's loudness (LUFS-like): its K-weighted energy (BS.1770's filter at 48 kHz) over a second, the mean over the steps."""
+    k = _biquad([1.53512485958697, -2.69169618940638, 1.19839281085285], [1.0, -1.69065929318241, 0.73248077421585], x)
+    k = _biquad([1.0, -2.0, 1.0], [1.0, -1.99004745483398, 0.99007225036621], k)
+    e = []
+    for i in range(steps):
+        a = int((start + period * i - 0.01) * rate)
+        b = int((start + period * (i + 1) - 0.01) * rate)
+        e.append(10 * np.log10(np.sum(k[a:b] ** 2) / rate + 1e-30) - 0.691)
+    return float(np.mean(e))
+
+
 def squeak(x, rate):
     n = 8192
     seg = x[: (len(x) // n) * n].reshape(-1, n)
@@ -91,10 +120,16 @@ def main():
         rep["cpu"][name] = c["usec_per_second"]
     for g in GROUNDS:
         c = cases["walk_" + g]
-        r = describe(load(d, "walk_" + g), rate)
+        x = load(d, "walk_" + g)
+        r = describe(x, rate)
+        r["step_loudness"] = step_loudness(x, rate, c["steps"])
         r["grains_per_step"] = c["grains"] / c["steps"]
         r["bubbles_per_step"] = c["bubbles"] / c["steps"]
         rep["grounds"][g] = r
+    for g in GROUNDS:
+        rep["grounds"][g]["over_stone_lu"] = (
+            rep["grounds"][g]["step_loudness"] - rep["grounds"]["stone"]["step_loudness"]
+        )
     rep["grounds"]["grass over dirt"] = describe(load(d, "grass_over_dirt"), rate)
     for s, shoe in enumerate(SHOES):
         for g in ("stone", "wood"):
@@ -120,11 +155,13 @@ def main():
         rep["scuff"][name] = r
     json.dump(rep, open(os.path.join(d, "report.json"), "w"), indent=1)
 
-    print("grounds (four walking steps, sneakers, 75 kg; at a metre):")
+    print("grounds (four walking steps, sneakers, 75 kg; at sound_unit_size):")
     for g, r in rep["grounds"].items():
         extra = ""
+        if "over_stone_lu" in r:
+            extra += ", a step %+5.1f LU over stone's" % r["over_stone_lu"]
         if "grains_per_step" in r:
-            extra = ", %.0f grains, %.0f bubbles a step" % (r["grains_per_step"], r["bubbles_per_step"])
+            extra += ", %.0f grains, %.0f bubbles a step" % (r["grains_per_step"], r["bubbles_per_step"])
         print(
             "  %-15s peak %6.1f dBFS, RMS %6.1f, centroid %5.0f Hz, under 300 Hz %3.0f %%, to 2 kHz %3.0f %%, to 6 kHz %3.0f %%, over %3.0f %%%s"
             % (
