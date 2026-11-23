@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 180 — bodies' contact sound: modal synthesis (2026-11-23)
+
+- `FellowContactSound3D` (new, a child of a `RigidBody3D`; decision 0322): the body heard from its own vibration
+  when it strikes, slides or rolls — `material` (wood, metal, stone, glass, plastic, rubber, ceramic),
+  `wall_thickness` (hollow), `ground_material`, `mode_count`, `sound_*`, the `impact` signal, `get_modes()`,
+  `get_sound_stats()`, `debug_render(events, seconds[, rate, seed])`. On a static body it gives its material to what
+  strikes it.
+- Modes from the body's shape and material (a beam's, plates', a ring's bending; decay from the loss factor); strikes
+  from the contacts (the impulse over the mass, the Hertzian contact's duration, each mode's shape where it lands, the
+  body's own click); sliding and rolling from the surfaces' roughness; resting damps.
+- `FellowDestructible3D`: its pieces sound like its body when it has a `FellowContactSound3D`.
+- `benchmarks/tools/world_sound/impact_sound.gd` + `impact_sound.py` (offline: the modes against beam theory, decay,
+  where it lands, speed, hardness, sliding) and `impact_demo.gd` (a yard of falling things with Movie Maker).
+
 ## Milestone 179 — fire's sound: the flames' roar, the wood's crackle (2026-11-23)
 
 - A fire is heard where it burns (decision 0321), synthesised on the audio thread with no samples and placed by an

@@ -47,6 +47,7 @@
 #include "servers/physics_3d/physics_server_3d.h"
 
 #include "modules/fellow_fluid/fellow_buoyancy_3d.h"
+#include "modules/fellow_fluid/fellow_contact_sound_3d.h"
 #include "modules/fellow_fluid/fellow_water_3d.h"
 
 FellowDestructible3D::GlobalStats FellowDestructible3D::global_stats;
@@ -1737,6 +1738,27 @@ void FellowDestructible3D::_check_impacts() {
 // 0318): a FellowBuoyancy3D, its points as fine as a third of the piece (at most 16).
 void FellowDestructible3D::_spawn_debris(RigidBody3D *p_body) {
 	_add_debris(p_body, debris_lifetime);
+	// Milestone 180 (decision 0322): the pieces sound as the body did — its FellowContactSound3D's material, each piece
+	// solid, a dozen modes.
+	if (const CollisionObject3D *whole = _get_body()) {
+		for (int i = 0; i < whole->get_child_count(); i++) {
+			const FellowContactSound3D *cs = Object::cast_to<FellowContactSound3D>(whole->get_child(i));
+			if (!cs || !cs->is_sound_enabled()) {
+				continue;
+			}
+			FellowContactSound3D *sound = memnew(FellowContactSound3D);
+			sound->set_name("ContactSound");
+			sound->set_material(cs->get_material());
+			sound->set_ground_material(cs->get_ground_material());
+			sound->set_mode_count(12);
+			sound->set_sound_volume_db(cs->get_sound_volume_db());
+			sound->set_sound_bus(cs->get_sound_bus());
+			sound->set_sound_unit_size(cs->get_sound_unit_size());
+			sound->set_sound_max_distance(cs->get_sound_max_distance());
+			p_body->add_child(sound);
+			break;
+		}
+	}
 	if (!debris_floats || !FellowWater3D::has_instances()) {
 		return;
 	}

@@ -1,7 +1,7 @@
-; FellowEngine's world sounds (milestones 178-179): the weather's sound synthesised — rain, wind, thunder — and the
-; fire's — flames, crackle, embers — rendered offline (weather_sound.gd, fire_sound.gd, headless) and measured
-; (weather_sound.py, fire_sound.py); a storm and a campfire with Movie Maker (storm_demo.gd, fire_demo.gd, a Vulkan
-; device: lavapipe will do).
+; FellowEngine's world sounds (milestones 178-180): the weather's sound synthesised — rain, wind, thunder —, the
+; fire's — flames, crackle, embers — and bodies' contacts (modal synthesis), rendered offline (weather_sound.gd,
+; fire_sound.gd, impact_sound.gd, headless) and measured (the .py beside each); a storm, a campfire and a yard of
+; falling things with Movie Maker (storm_demo.gd, fire_demo.gd, impact_demo.gd, a Vulkan device: lavapipe will do).
 
 config_version=5
 

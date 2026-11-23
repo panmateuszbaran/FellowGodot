@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowContactSound3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		A body's sound from its own vibration when it strikes, slides or rolls: modal synthesis, no samples.
+	</brief_description>
+	<description>
+		Milestone 180 ([code]docs/decisions/0322-contact-sound.md[/code]). A child of a [RigidBody3D]: the body is heard where it is, from its contacts (the node raises the body's [member RigidBody3D.max_contacts_reported] to 8). The body's modes come from its collision shapes' size, [member material] and [member wall_thickness] — a beam's bending for a long body (a rod, a pipe, a plank), plates' bending for a slab or each pair of a hollow box's walls, a ring's for a can or a bottle — their decay from the material's loss factor (wood a fraction of a second, metal seconds). A strike drives them with the contact's force: a half-sine as long as the Hertzian contact lasts (hard on hard short and bright, rubber long and dull), weighted by each mode's shape where it lands (a plank struck in its middle lacks its second mode); the body's own sudden slowing radiates a click (what a small stone is heard as). Sliding drives the modes with the surfaces' roughness passing under the contact, rolling likewise but smoother; resting on something damps them. Level: full scale is 120 dB SPL at a metre; [member sound_unit_size] places that distance.
+		A child of a [StaticBody3D] (or any collision object) only gives its material to what strikes it (a floor, a table); colliders without one are [member ground_material]. Pieces of a [FellowDestructible3D] whose body has one sound like it. Voices: an [AudioStreamPlayer3D] while the body sounds (started when it moves fast near the listener, so the first strike is not late), stopped three seconds after it falls quiet; at most 24 at once. Not in the editor.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="debug_render">
+			<return type="Dictionary" />
+			<param index="0" name="events" type="Array" />
+			<param index="1" name="seconds" type="float" />
+			<param index="2" name="rate" type="float" default="48000.0" />
+			<param index="3" name="seed" type="int" default="1" />
+			<description>
+				The body's sound offline (tests and tuning, [code]benchmarks/tools/world_sound/impact_sound.gd[/code]): [param events] by time, each a [Dictionary] — [code]{time, kind: "impact", speed, other, position, mass, held}[/code] (a strike closing at [code]speed[/code] m/s against the material [code]other[/code], at [code]position[/code] in the body's space; [code]held[/code]: ringing free after it), [code]{time, kind: "slide"}[/code] or [code]"roll"[/code] with [code]speed[/code] and [code]other[/code], [code]{time, kind: "rest"}[/code], [code]{time, kind: "free"}[/code]. Returns [code]samples[/code] (interleaved stereo, the same in both), [code]modes[/code] (as [method get_modes]), [code]strikes[/code], [code]contact_durations[/code] and [code]clicks[/code] (each strike's, seconds and full scale) and [code]usec_per_second[/code].
+			</description>
+		</method>
+		<method name="get_modes">
+			<return type="Array" />
+			<description>
+				The body's modes, lowest first: dictionaries [code]{frequency, decay, gain}[/code] (Hz, the amplitude's decay a second, full scale for 1 m/s of the mode's velocity).
+			</description>
+		</method>
+		<method name="get_sound_stats">
+			<return type="Dictionary" />
+			<description>
+				[code]playing[/code], the [code]modes[/code], [code]impacts[/code] (strikes found), [code]dropped[/code] (strikes not heard: no voice free), [code]sliding[/code] and [code]rolling[/code] (m/s now), [code]slid_seconds[/code] and [code]rolled_seconds[/code], [code]active_voices[/code] (all bodies'), the synthesis's [code]strikes[/code] and [code]peak[/code], [code]mixed_seconds[/code] and [code]mix_usec_per_second[/code].
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="ground_material" type="int" setter="set_ground_material" getter="get_ground_material" enum="FellowContactSound3D.SoundMaterial" default="2">
+			The material of what the body strikes when that has no FellowContactSound3D of its own (the ground).
+		</member>
+		<member name="material" type="int" setter="set_material" getter="get_material" enum="FellowContactSound3D.SoundMaterial" default="0">
+			What the body is made of: its stiffness and density (the modes' frequencies), its loss factor (how long they ring), its hardness in a contact and how much it scrapes.
+		</member>
+		<member name="mode_count" type="int" setter="set_mode_count" getter="get_mode_count" default="24">
+			How many modes ring (the lowest; fewer for small debris).
+		</member>
+		<member name="sound_bus" type="StringName" setter="set_sound_bus" getter="get_sound_bus" default="&amp;&quot;Master&quot;">
+			The audio bus the body's sound plays on.
+		</member>
+		<member name="sound_enabled" type="bool" setter="set_sound_enabled" getter="is_sound_enabled" default="true">
+			The body is heard. Off: no voice, no strikes found (the [signal impact] signal neither).
+		</member>
+		<member name="sound_max_distance" type="float" setter="set_sound_max_distance" getter="get_sound_max_distance" default="40.0">
+			Beyond this distance from the listener the body is not heard (its voice stops).
+		</member>
+		<member name="sound_unit_size" type="float" setter="set_sound_unit_size" getter="get_sound_unit_size" default="1.0">
+			The distance (metres) at which the body is heard at the level synthesised — the pressure at a metre; nearer louder, farther quieter ([member AudioStreamPlayer3D.unit_size]).
+		</member>
+		<member name="sound_volume_db" type="float" setter="set_sound_volume_db" getter="get_sound_volume_db" default="0.0">
+			The body's sound's volume.
+		</member>
+		<member name="wall_thickness" type="float" setter="set_wall_thickness" getter="get_wall_thickness" default="0.0">
+			A hollow body's wall (metres): a crate's planks, a pipe's or a bottle's wall, a can's sheet; 0: solid. A hollow box rings in its walls and gives way under a blow (its click softer); a hollow round body rings round its shell.
+		</member>
+	</members>
+	<signals>
+		<signal name="impact">
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="speed" type="float" />
+			<param index="2" name="collider" type="Object" />
+			<description>
+				A strike: where (world), how fast the contact closed (m/s), against what. What a game uses to break things, to raise dust, to let guards hear.
+			</description>
+		</signal>
+	</signals>
+	<constants>
+		<constant name="MATERIAL_WOOD" value="0" enum="SoundMaterial">
+			Wood (along the grain): E 10 GPa, 600 kg/m³, loss factor 0.012.
+		</constant>
+		<constant name="MATERIAL_METAL" value="1" enum="SoundMaterial">
+			Steel: E 200 GPa, 7850 kg/m³, loss factor 0.0004.
+		</constant>
+		<constant name="MATERIAL_STONE" value="2" enum="SoundMaterial">
+			Stone, concrete: E 50 GPa, 2600 kg/m³, loss factor 0.005.
+		</constant>
+		<constant name="MATERIAL_GLASS" value="3" enum="SoundMaterial">
+			Glass: E 70 GPa, 2500 kg/m³, loss factor 0.0015.
+		</constant>
+		<constant name="MATERIAL_PLASTIC" value="4" enum="SoundMaterial">
+			Hard plastic: E 2.5 GPa, 1100 kg/m³, loss factor 0.03.
+		</constant>
+		<constant name="MATERIAL_RUBBER" value="5" enum="SoundMaterial">
+			Rubber: E 10 MPa, 1100 kg/m³, loss factor 0.15.
+		</constant>
+		<constant name="MATERIAL_CERAMIC" value="6" enum="SoundMaterial">
+			Ceramic: E 100 GPa, 2400 kg/m³, loss factor 0.002.
+		</constant>
+		<constant name="MATERIAL_MAX" value="7" enum="SoundMaterial">
+			The number of materials.
+		</constant>
+	</constants>
+</class>

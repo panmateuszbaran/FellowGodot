@@ -33,6 +33,7 @@
 #include "fellow_buoyancy_3d.h"
 #include "fellow_burnable_3d.h"
 #include "fellow_cloth_3d.h"
+#include "fellow_contact_sound_3d.h"
 #include "fellow_gas_emitter_3d.h"
 #include "fellow_gas_volume_3d.h"
 #include "fellow_hair_3d.h"
@@ -76,6 +77,7 @@ void initialize_fellow_fluid_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowShallowWater3D);
 		GDREGISTER_CLASS(FellowWater3D);
 		GDREGISTER_CLASS(FellowBuoyancy3D); // milestone 175
+		GDREGISTER_CLASS(FellowContactSound3D); // milestone 180
 		GDREGISTER_CLASS(FellowRain3D);
 		GDREGISTER_CLASS(FellowWind3D);
 		GDREGISTER_CLASS(FellowLightning3D);

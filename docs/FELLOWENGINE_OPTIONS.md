@@ -300,6 +300,27 @@ through the cloud) and heard from its first arrival (distance / 343 s). Methods:
 `FellowLightning3D.debug_render_thunder(distance, azimuth_degrees, seconds[, rate, seed])`. Measured with
 `benchmarks/tools/world_sound/weather_sound.gd` + `weather_sound.py`; a storm with `storm_demo.gd` (Movie Maker).
 
+### Bodies' contact sound (milestone 180)
+
+Decision 0322: `FellowContactSound3D`, a child of a `RigidBody3D`, makes the body heard from its own vibration (modal
+synthesis, no samples) when it strikes, slides or rolls; placed at the body by an `AudioStreamPlayer3D` while it
+sounds (at most 24 at once); not in the editor. On a static body it only gives its material to what strikes it.
+
+| property | default | meaning |
+|---|---|---|
+| `material` | Wood | wood, metal, stone, glass, plastic, rubber, ceramic: the modes' frequencies, their decay, the contact's hardness, the scrape |
+| `wall_thickness` | 0 m | a hollow body's wall (a crate's planks, a pipe's, a bottle's); 0: solid |
+| `ground_material` | Stone | what it strikes when that has no FellowContactSound3D |
+| `mode_count` | 24 | the modes ringing (debris from a `FellowDestructible3D`: 12) |
+| `sound_enabled` | true | heard (and the `impact` signal) |
+| `sound_volume_db`, `sound_bus` | 0 dB, Master | its volume and bus |
+| `sound_unit_size` | 1 m | where the level synthesised (the pressure at a metre; full scale 120 dB SPL) is heard |
+| `sound_max_distance` | 40 m | not heard beyond it |
+
+Signal `impact(position, speed, collider)`; methods `get_modes()`, `get_sound_stats()`,
+`debug_render(events, seconds[, rate, seed])`. The node raises its body's `max_contacts_reported` to 8. Measured with
+`benchmarks/tools/world_sound/impact_sound.gd` + `impact_sound.py`; a yard with `impact_demo.gd` (Movie Maker).
+
 ### Fire's sound (milestone 179)
 
 Decision 0321: a fire heard where it burns, synthesised on the audio thread, no samples, each source placed by an
