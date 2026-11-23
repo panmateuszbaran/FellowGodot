@@ -6,7 +6,11 @@ extends SceneTree
 ## the windows' glass (its shader is long to compile on lavapipe).
 ##
 ##   godot --path showcase --rendering-driver vulkan --resolution 640x360 --fixed-fps 60 -s res://tools/flicker_look.gd \
-##       -- --out=<dir> [--view=east] [--still=30] [--moving=60] [--settle=20]
+##       -- --out=<dir> [--view=east] [--still=30] [--moving=60] [--settle=20] [--configs=base,no_contact,...]
+##
+## --configs: one sequence after another in one run, each in <dir>/<config>/ with one feature off — base (none),
+## no_contact (FellowEngine's contact shadows), no_cache (the directional shadow cache), no_taa, no_ssao (SSAO and
+## SSIL), no_soft (the directional shadows' soft filter), no_sdfgi.
 
 const VIEWS := {
 	# from, to, the way it moves (m a second)
@@ -23,6 +27,7 @@ func _init() -> void:
 	var moving := 60
 	var settle := 20
 	var plain_glass := false
+	var configs := PackedStringArray()
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			out = a.get_slice("=", 1)
@@ -34,6 +39,8 @@ func _init() -> void:
 			moving = int(a.get_slice("=", 1))
 		elif a.begins_with("--settle="):
 			settle = int(a.get_slice("=", 1))
+		elif a.begins_with("--configs="):
+			configs = a.get_slice("=", 1).split(",")
 		elif a == "--plain_glass=1":
 			plain_glass = true
 		elif a.begins_with("--set="):
@@ -75,14 +82,44 @@ func _init() -> void:
 	var p: Array = VIEWS[view]
 	var from: Vector3 = p[0]
 	var look: Vector3 = p[1] - p[0]
-	for i in settle + still + moving:
-		var k := maxi(i - settle - still, 0)
-		cam.current = true
-		cam.global_position = from + p[2] * (k / 60.0)
-		cam.look_at(cam.global_position + look, Vector3.UP)
-		await process_frame
-		if i >= settle:
-			await RenderingServer.frame_post_draw
-			root.get_texture().get_image().save_png("%s/f%04d.png" % [out, i - settle])
-	print("flicker_look: %d frames" % (still + moving))
+	if configs.is_empty():
+		configs = PackedStringArray([""])
+	var env: Environment = null
+	for n in sc.find_children("*", "WorldEnvironment", true, false):
+		env = (n as WorldEnvironment).environment
+	for config in configs:
+		_configure(config, env, true)
+		var dir := out if config == "" else out.path_join(config)
+		DirAccess.make_dir_recursive_absolute(dir)
+		for i in settle + still + moving:
+			var k := maxi(i - settle - still, 0)
+			cam.current = true
+			cam.global_position = from + p[2] * (k / 60.0)
+			cam.look_at(cam.global_position + look, Vector3.UP)
+			await process_frame
+			if i >= settle:
+				await RenderingServer.frame_post_draw
+				root.get_texture().get_image().save_png("%s/f%04d.png" % [dir, i - settle])
+		_configure(config, env, false)
+		print("flicker_look: %s %d frames" % [config, still + moving])
 	quit()
+
+
+## One feature off for a sequence (p_off), or on again after it.
+func _configure(p_config: String, p_env: Environment, p_off: bool) -> void:
+	match p_config:
+		"no_contact":
+			ProjectSettings.set_setting("rendering/fellow/post/contact_shadows/enabled", not p_off)
+		"no_cache":
+			ProjectSettings.set_setting("rendering/fellow/shadows/directional_cache", not p_off)
+		"no_taa":
+			root.use_taa = not p_off
+		"no_ssao":
+			if p_env:
+				p_env.ssao_enabled = not p_off
+				p_env.ssil_enabled = not p_off
+		"no_soft":
+			RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_HARD if p_off else RenderingServer.SHADOW_QUALITY_SOFT_MEDIUM)
+		"no_sdfgi":
+			if p_env:
+				p_env.sdfgi_enabled = not p_off
