@@ -624,11 +624,6 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 			const float still = 1.0f - CLAMP((Vector2(char_velocity.x, char_velocity.z).length() - 0.3f) / 0.4f, 0.0f, 1.0f);
 			lift_goal = MIN(speed * 0.12f, foot_step_lift * 0.5f) * low * still;
 		}
-		{
-			float x = foot.lift - lift_goal;
-			decay_spring_damper_exact(x, foot.lift_velocity, 0.05f, p_dt);
-			foot.lift = MAX(lift_goal + x, 0.0f);
-		}
 		Vector3 &target = targets[s];
 		if (foot.locked) {
 			target = foot.lock_position;
@@ -650,23 +645,42 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 				}
 			}
 		}
+		// How high the foot is over the ground: the lower of its ankle (where it is held) and its toe (the animation's,
+		// from the ankle) over their heights when down (FellowMotionDatabase.get_foot_ground_height()).
+		if (ground_heights_of != database->get_instance_id()) {
+			ground_heights_of = database->get_instance_id();
+			for (int k = 0; k < 4; k++) {
+				ground_heights[k] = database->get_foot_ground_height(k % 2, k >= 2);
+			}
+		}
+		const int toe_bone = database->get_bone_role(roles[s][3]);
+		const float toe_rise = toe_bone >= 0 ? gp[toe_bone].y - gp[ankle].y : 0.0f;
+		const float ground_level = char_position.y + (place ? ground_foot_offset[s] : 0.0f);
+		const float over_ground = MIN(target.y - ground_level - ground_heights[s], toe_bone >= 0 ? target.y - ground_level + toe_rise - ground_heights[2 + s] : 1e9f);
+		// Milestone 187 (decision 0329): a foot down but not held that moves over the ground — stepping to where its
+		// animation went, or carried by a transition's blend between two stances (the database's feet in contact do not
+		// move) — is lifted by its speed as a shuffle is (0.12 s of it, at most half of foot_step_lift, its step's arc
+		// counted), whether the character stands or not: a stagger's feet slid 14-26 cm over the ground at 1-1.6 m/s.
+		if (foot_skate_guard && foot_step_lift > 0.0f && contact && !foot.locked && foot.has_last_target && p_dt > 0.0f) {
+			const Vector3 moved = target - foot.last_target;
+			const float speed = Vector2(moved.x, moved.z).length() / p_dt;
+			lift_goal = MAX(lift_goal, MIN(speed * 0.12f, foot_step_lift * 0.5f) - foot.raised);
+		}
+		foot.last_target = target;
+		foot.has_last_target = true;
+		{
+			float x = foot.lift - lift_goal;
+			decay_spring_damper_exact(x, foot.lift_velocity, 0.05f, p_dt);
+			foot.lift = MAX(lift_goal + x, 0.0f);
+		}
 		// Milestone 185 (decision 0327): a foot down stands on the ground — lowered (or raised) so that the lower of its
-		// ankle (where it is held) and its toe (the animation's, from the ankle) is as high as the database's feet's are
-		// when down (their 5th percentile in contact): the recordings' floors differ, and half of the feet held down stood
-		// 2-5 cm over the ground.
+		// ankle and its toe is as high as the database's feet's are when down (their 5th percentile in contact): the
+		// recordings' floors differ, and half of the feet held down stood 2-5 cm over the ground.
 		float shift_goal = 0.0f;
 		if (foot_grounding && contact) {
-			if (ground_heights_of != database->get_instance_id()) {
-				ground_heights_of = database->get_instance_id();
-				for (int k = 0; k < 4; k++) {
-					ground_heights[k] = database->get_foot_ground_height(k % 2, k >= 2);
-				}
-			}
-			const int toe_bone = database->get_bone_role(roles[s][3]);
-			const float ankle_y = target.y - char_position.y - (place ? ground_foot_offset[s] : 0.0f);
-			const float over_ankle = ankle_y - ground_heights[s];
-			const float over_toe = toe_bone >= 0 ? ankle_y + (gp[toe_bone].y - gp[ankle].y) - ground_heights[2 + s] : over_ankle;
-			shift_goal = -CLAMP(MIN(over_ankle, over_toe), -0.05f, 0.08f);
+			// Under its step's arc (milestone 187: counted, the grounding took the arc back down, and a foot stepping to
+			// where its animation went slid there over the ground — its contact stays on through such a step).
+			shift_goal = -CLAMP(over_ground - (foot_skate_guard ? foot.raised : 0.0f), -0.05f, 0.08f);
 		}
 		{
 			float x = foot.ground_shift - shift_goal;
@@ -800,6 +814,17 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 			output = character.xform(lower_p + lower_q.xform(out_positions[ankle]));
 		}
 
+		// Milestone 187: a foot in the air skimming the ground (under 1 cm over it): how far it goes.
+		if (!contact && foot.has_last) {
+			const int toe_of = database->get_bone_role(roles[s][3]);
+			const float level = char_position.y + (place ? ground_foot_offset[s] : 0.0f);
+			const float over = MIN(output.y - level - ground_heights[s], toe_of >= 0 ? output.y - level + gp[toe_of].y - gp[ankle].y - ground_heights[2 + s] : 1e9f);
+			if (over < 0.01f) {
+				const Vector3 d = output - foot.last_output;
+				foot_skim_distance += Vector2(d.x, d.z).length();
+			}
+			foot_air_time += p_dt;
+		}
 		// Foot sliding: how far a foot in contact moves on the ground.
 		if (contact && foot.last_contact && foot.has_last) {
 			const Vector3 d = output - foot.last_output;
@@ -1132,6 +1157,7 @@ void FellowMotionMatcher3D::_update(float p_dt, int p_lod) {
 			foot.offset = Vector3();
 			foot.offset_velocity = Vector3();
 			foot.has_last = false;
+			foot.has_last_target = false;
 			foot.step_from = 0.0f;
 			foot.lift = 0.0f;
 			foot.lift_velocity = 0.0f;
@@ -1282,6 +1308,8 @@ Dictionary FellowMotionMatcher3D::get_stats() const {
 	d["foot_contact_time"] = foot_contact_time;
 	d["foot_slide_locked"] = foot_slide_locked;
 	d["foot_slide_raised"] = foot_slide_raised;
+	d["foot_skim_distance"] = foot_skim_distance;
+	d["foot_air_time"] = foot_air_time;
 	d["foot_slide_speed"] = foot_contact_time > 0.0 ? foot_slide_distance / foot_contact_time : 0.0;
 	d["hips_drop_mm"] = hips_drop * 1000.0f;
 	d["hips_drop_min_mm"] = hips_drop_min * 1000.0f;
@@ -1372,6 +1400,8 @@ void FellowMotionMatcher3D::reset_stats() {
 	hips_drop_min = 0.0f;
 	foot_slide_locked = 0.0;
 	foot_slide_raised = 0.0;
+	foot_skim_distance = 0.0;
+	foot_air_time = 0.0;
 	foot_contact_time = 0.0;
 	trajectory_error_sum = 0.0;
 	trajectory_time = 0.0;
@@ -1476,6 +1506,8 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_foot_step_lift", "height"), &FellowMotionMatcher3D::set_foot_step_lift);
 	ClassDB::bind_method(D_METHOD("set_foot_grounding", "enable"), &FellowMotionMatcher3D::set_foot_grounding);
 	ClassDB::bind_method(D_METHOD("is_foot_grounding"), &FellowMotionMatcher3D::is_foot_grounding);
+	ClassDB::bind_method(D_METHOD("set_foot_skate_guard", "enable"), &FellowMotionMatcher3D::set_foot_skate_guard);
+	ClassDB::bind_method(D_METHOD("is_foot_skate_guard"), &FellowMotionMatcher3D::is_foot_skate_guard);
 	ClassDB::bind_method(D_METHOD("get_foot_step_lift"), &FellowMotionMatcher3D::get_foot_step_lift);
 	ClassDB::bind_method(D_METHOD("set_tags_required", "tags"), &FellowMotionMatcher3D::set_tags_required);
 	ClassDB::bind_method(D_METHOD("get_tags_required"), &FellowMotionMatcher3D::get_tags_required);
@@ -1565,6 +1597,7 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "unlock_radius", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:m"), "set_unlock_radius", "get_unlock_radius");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "foot_step_lift", PROPERTY_HINT_RANGE, "0,0.3,0.005,suffix:m"), "set_foot_step_lift", "get_foot_step_lift");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "foot_grounding"), "set_foot_grounding", "is_foot_grounding");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "foot_skate_guard"), "set_foot_skate_guard", "is_foot_skate_guard");
 	ADD_GROUP("Warping", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "orientation_warping"), "set_orientation_warping", "is_orientation_warping");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "orientation_warping_max_angle", PROPERTY_HINT_RANGE, "0,150,0.1,radians_as_degrees"), "set_orientation_warping_max_angle", "get_orientation_warping_max_angle");

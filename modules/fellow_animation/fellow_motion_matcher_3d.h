@@ -62,6 +62,8 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 		float ground_shift = 0.0f; // Milestone 185: down onto the ground (or up out of it) while in contact
 		float ground_shift_velocity = 0.0f;
 		bool has_ground = false;
+		Vector3 last_target; // Milestone 187: where it was to be (before its lift), last update
+		bool has_last_target = false;
 	};
 
 	// Updated from the worker threads of advance_group().
@@ -103,6 +105,7 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 	float unlock_radius = 0.2f;
 	float foot_step_lift = 0.08f; // Milestone 184 (decision 0326): a foot that would slide over the ground steps (0: it slides).
 	bool foot_grounding = true; // Milestone 185 (decision 0327): a foot down stands on the ground, not over it
+	bool foot_skate_guard = true; // Milestone 187 (decision 0329): a foot down but not held that moves is lifted (it steps)
 	ObjectID ground_heights_of; // the database the next are its
 	float ground_heights[4] = {}; // its feet's ankles' and toes' heights when down (left, right; ankles, toes)
 	float force_search_velocity_change = 0.1f; // m/s of desired velocity that triggers a search.
@@ -258,6 +261,8 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 	double foot_slide_locked = 0.0; // Of which while locked (the IK not reaching).
 	double foot_slide_raised = 0.0; // Milestone 184: of which with the foot raised 1 cm or more (stepping, not sliding).
 	double foot_contact_time = 0.0;
+	double foot_skim_distance = 0.0; // Milestone 187: a foot in the air under 1 cm over the ground, how far it went
+	double foot_air_time = 0.0;
 	double trajectory_error_sum = 0.0;
 	// Popping: per frame, the largest second difference of the hips' and the legs' joint positions in the character's
 	// space (an acceleration times dt², in millimetres), as a histogram of 0.5 mm bins.
@@ -333,6 +338,8 @@ public:
 	float get_foot_step_lift() const { return foot_step_lift; }
 	void set_foot_grounding(bool p_enable) { foot_grounding = p_enable; }
 	bool is_foot_grounding() const { return foot_grounding; }
+	void set_foot_skate_guard(bool p_enable) { foot_skate_guard = p_enable; }
+	bool is_foot_skate_guard() const { return foot_skate_guard; }
 	void set_inertialization(bool p_enable) { inertialization = p_enable; }
 	bool is_inertialization() const { return inertialization; }
 	void set_synchronization(bool p_enable) { synchronization = p_enable; }

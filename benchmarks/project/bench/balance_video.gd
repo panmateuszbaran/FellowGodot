@@ -7,6 +7,8 @@ extends SceneTree
 ## Run on Jolt Physics (benchmarks/project/override.cfg: [physics] 3d/physics_engine="Jolt Physics"):
 ##   godot --path benchmarks/project --rendering-driver vulkan --resolution 960x540 --fixed-fps 60 \
 ##       -s res://bench/balance_video.gd -- --out=<dir> [--seconds=32]
+## Milestone 187: --program=staggers films only staggers, standing, from the front, the side and behind, the camera
+## low at the feet (13 s); --skate_guard=0 films milestone 186's feet (FellowMotionMatcher3D.foot_skate_guard off).
 
 const PUSHES := [
 	[2.0, Vector3(0, 0, -60)], # taken back where it stands
@@ -14,6 +16,12 @@ const PUSHES := [
 	[7.5, Vector3(0, 0, -230)], # a fall onto its back
 	[19.5, Vector3(85, 0, 0)], # from the side, walking
 	[23.5, Vector3(0, 0, 230)], # a fall onto its face
+]
+const STAGGERS := [
+	[1.5, Vector3(0, 0, -60)], # from the front
+	[4.5, Vector3(0, 0, -80)],
+	[7.5, Vector3(-60, 0, 0)], # from the side
+	[10.5, Vector3(0, 0, 80)], # from behind
 ]
 
 
@@ -38,6 +46,9 @@ func _run() -> void:
 	mm.auto_update = true
 	mm.teleport(Vector3.ZERO, Vector3(0, 0, 1))
 	mm.desired_velocity = Vector3.ZERO
+	var staggers := str(args.get("program", "")) == "staggers"
+	if args.has("skate_guard"):
+		mm.foot_skate_guard = str(args["skate_guard"]) == "1"
 	var pa = ClassDB.instantiate("FellowPhysicalAnimation3D")
 	pa.balance = true
 	skel.add_child(pa)
@@ -59,18 +70,18 @@ func _run() -> void:
 	cam.fov = 45.0
 	lab.add_child(cam)
 	cam.current = true
-	var frames := int(float(args.get("seconds", "32")) * 30.0)
+	var frames := int(float(args.get("seconds", "13" if staggers else "32")) * 30.0)
 	var look := Vector3.ZERO
-	var side := Vector3(3.6, 0.0, 1.2)
+	var side := Vector3(2.4, 0.0, 1.4) if staggers else Vector3(3.6, 0.0, 1.2)
 	for i in frames:
 		var t := i / 30.0
-		for p in PUSHES:
+		for p in (STAGGERS if staggers else PUSHES):
 			if absf(p[0] - t) < 0.5 / 30.0:
 				var chest: Node3D = skel.get_node_or_null("FellowPhysicalBones/Body_Spine1")
 				if chest:
 					pa.apply_hit(chest.global_position, p[1])
 					print("balance_video: %.1f s push %s → %s" % [t, p[1], ["standing", "staggering", "falling", "down", "getting up"][pa.get_state()]])
-		if absf(t - 17.0) < 0.5 / 30.0:
+		if not staggers and absf(t - 17.0) < 0.5 / 30.0:
 			mm.desired_velocity = Vector3(0, 0, 1.2)
 		if absf(t - 21.5) < 0.5 / 30.0:
 			mm.desired_velocity = Vector3.ZERO
@@ -79,8 +90,8 @@ func _run() -> void:
 		var hips: Node3D = skel.get_node("FellowPhysicalBones").get_child(0)
 		var p3: Vector3 = hips.global_position * Vector3(1, 0, 1)
 		look = p3 if i == 0 else look.lerp(p3, 0.08)
-		cam.global_position = look + side + Vector3(0, 1.1, 0)
-		cam.look_at(look + Vector3(0, 0.7, 0), Vector3.UP)
+		cam.global_position = look + side + Vector3(0, 0.8 if staggers else 1.1, 0)
+		cam.look_at(look + Vector3(0, 0.45 if staggers else 0.7, 0), Vector3.UP)
 		await process_frame
 		await RenderingServer.frame_post_draw
 		get_root().get_texture().get_image().save_png("%s/f%04d.png" % [out, i])

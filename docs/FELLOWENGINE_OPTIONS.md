@@ -768,6 +768,13 @@ coming nearer (under 0.1 m/s towards it) for 0.3 s is put there if its shapes, 2
 character's own bodies — while the animation is followed (with balance: standing or staggering); `get_stats()`'s
 `stuck_rescues`. `balance_check.gd`'s `--fall_step`, `--stuck_rescue`.
 
+Milestone 187 (decision 0329), on by default: `FellowMotionMatcher3D.foot_skate_guard` (with `foot_step_lift` above 0)
+— a foot in contact that no lock holds (stepping to where its animation went, carried by a transition's blend) is
+lifted by its speed over the ground (0.12 s of it, at most half of `foot_step_lift`, its step's arc counted), whether
+the character stands or not, and `foot_grounding` keeps a step's arc over the ground; off: milestone 186's feet.
+`get_stats()`'s `foot_skim_distance`, `foot_air_time`. `balance_check.gd`'s `--skate_guard` (and the feet's skating),
+`balance_video.gd`'s `--program=staggers`, Matching Lab's `--matching_skate_guard` (and the feet's skimming).
+
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
 Module `fellow_world`; nothing changes without the node (decision 0187). `FellowVehicleEffects3D` (a `Node3D`, a child

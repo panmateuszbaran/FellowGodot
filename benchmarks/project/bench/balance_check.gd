@@ -16,13 +16,17 @@ extends SceneTree
 ## bent backwards) and the trunk's bend at its most (the lower back's bone against the neck's).
 ## Milestone 186 (decision 0328): a fall's step first — when it fell after the push, how far the character had gone
 ## then and how many times a foot had left the ground (`--fall_step=0`: milestone 185's fall where it stands).
+## Milestone 187 (decision 0329): the feet's skating — how far a foot's body goes over the ground while within 1 cm of
+## its standing height (each such stretch's farthest from where it began, summed) while standing or staggering
+## (`--skate_guard=0`: milestone 186's feet), and how far the motion matcher's own feet in the air went under 1 cm
+## over the ground (`skim`). Five pushes while walking, not one.
 ## And a foot's body caught 8 cm under a thin floor (a 3 cm slab, as a roof's), standing: its distance from its place
 ## after 0.25, 0.5 and 1 s.
 ## Prints one JSON line (with --trace=1 also a line a frame: the feet, the hips, the motion matcher's feet and clip, the
 ## fastest body; --trace_feet=1 adds its feet's locks). Run on Jolt Physics (benchmarks/project/override.cfg:
 ## [physics] 3d/physics_engine="Jolt Physics"):
 ##   godot --headless --fixed-fps 60 --path benchmarks/project -s res://bench/balance_check.gd -- \
-##       [--pushes=20,40,60,80,100,130,160,200] [--fall=200] [--trace=1] [--anatomical=0] [--grounding=0] [--fall_step=0] [--stuck_rescue=0]
+##       [--pushes=20,40,60,80,100,130,160,200] [--fall=200] [--trace=1] [--anatomical=0] [--grounding=0] [--fall_step=0] [--stuck_rescue=0] [--skate_guard=0]
 ## The clips: benchmarks/scripts/get_cmu_locomotion.sh (subjects 16, 35, 69, 139, 140).
 
 const STEP := 1.0 / 60.0
@@ -125,6 +129,11 @@ func _trial(impulse: Vector3, at: Vector3, seconds: float) -> Dictionary:
 	var fell_travel := 0.0
 	var lifts := 0
 	var lifted := [false, false]
+	# Milestone 187: the feet skating over the ground (within 1 cm of standing) while standing or staggering.
+	var skate_from := [null, null]
+	var skate_far := [0.0, 0.0]
+	var skate := 0.0
+	var skim0 := float(mm.get_stats()["foot_skim_distance"])
 	while t < seconds:
 		await physics_frame
 		t += STEP
@@ -149,6 +158,14 @@ func _trial(impulse: Vector3, at: Vector3, seconds: float) -> Dictionary:
 			fell_travel = travel
 		for k in 2:
 			var fp: Vector3 = feet[k].global_position
+			if s < 2 and got_up_at < 0.0 and fp.y < foot_y0[k] + 0.01:
+				if skate_from[k] == null:
+					skate_from[k] = fp
+					skate_far[k] = 0.0
+				skate_far[k] = maxf(skate_far[k], Vector2(fp.x - skate_from[k].x, fp.z - skate_from[k].z).length())
+			elif skate_from[k] != null:
+				skate += skate_far[k]
+				skate_from[k] = null
 			if fell_at < 0.0:
 				var up: bool = fp.y > foot_y0[k] + 0.03
 				if up and not lifted[k]:
@@ -244,6 +261,11 @@ func _trial(impulse: Vector3, at: Vector3, seconds: float) -> Dictionary:
 				"hips_height_m": snappedf(_hips_body().y, 0.001),
 				"tracking_after_mm": snappedf(1000.0 * err_sum / maxf(err_n, 1), 0.1),
 				"feet_slip_after_cm": snappedf(up_slip * 100.0, 0.1)}
+	for k in 2:
+		if skate_from[k] != null:
+			skate += skate_far[k]
+	r["feet_skate_cm"] = snappedf(skate * 100.0, 0.1)
+	r["matcher_skim_cm"] = snappedf((float(mm.get_stats()["foot_skim_distance"]) - skim0) * 100.0, 0.1)
 	r["events"] = events.duplicate()
 	return r
 
@@ -280,6 +302,8 @@ func _run() -> void:
 	mm.foot_grounding = str(args.get("grounding", "1")) == "1"
 	if args.has("stuck_rescue"):
 		pa.stuck_rescue = str(args["stuck_rescue"]) == "1" # milestone 186: 0 for milestone 185's (a body 0.75 m away put back)
+	if args.has("skate_guard"):
+		mm.foot_skate_guard = str(args["skate_guard"]) == "1" # milestone 187: 0 for milestone 186's feet
 	if args.has("fall_step"):
 		pa.fall_step_time = float(args["fall_step"]) # milestone 186: 0 for milestone 185's fall where it stands
 	skel.add_child(pa)
@@ -350,6 +374,16 @@ func _run() -> void:
 	for i in 90:
 		await physics_frame
 	out["walking_side_push"] = await _trial(Vector3(70, 0, 0), _chest(), 6.0)
+	# Milestone 187: more pushes while walking (one is a single chaotic sample): from the left, from behind, from the
+	# front, and a stronger one from the right.
+	var walks := []
+	for push in [Vector3(-70, 0, 0), Vector3(0, 0, 70), Vector3(0, 0, -70), Vector3(110, 0, 0)]:
+		await _reset(Vector3.ZERO, Vector3(0, 0, 1))
+		mm.desired_velocity = Vector3(0, 0, 1.3)
+		for i in 90:
+			await physics_frame
+		walks.append(await _trial(push, _chest(), 6.0))
+	out["walking_pushes"] = walks
 	out["stats"] = pa.get_balance_stats()
 	out["get_up_clips"] = out["stats"]["get_up_clips"]
 	out["stats"].erase("get_up_clips")

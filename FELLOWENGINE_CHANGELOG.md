@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 187 — feet that step, not skate (2026-11-23)
+
+- A stagger's feet still skated: a foot let go of to step where its animation had gone kept its contact on, and since
+  milestone 185 the grounding took its step's arc back down to the ground — it slid there, 14-26 cm at 1-1.6 m/s.
+- `FellowMotionMatcher3D.foot_skate_guard` (new, on; decision 0329): the grounding keeps a step's arc; a foot down but
+  not held is lifted by its speed as it moves (0.12 s of it, at most half of `foot_step_lift`), whether the character
+  stands or not. Jolt, standing, pushed at the chest: the feet over the ground (within 1 cm of standing) 20.8 → 3.2 cm
+  at 20 N·s, 13.4 → 2.2 at 60, 11.7 → 5.7 at 80; after getting up 7-29 → 7-16 cm; walking and falls as before.
+  Matching Lab's crowd: a foot in contact moving over the ground with it down 0.0312 → 0.0245 m/s (−21 %).
+- `get_stats()`'s `foot_skim_distance`, `foot_air_time` (a foot in the air under 1 cm over the ground).
+- `balance_check.gd` measures the feet's skating and five pushes while walking (`--skate_guard`);
+  `balance_video.gd --program=staggers` films staggers with the feet in view; Matching Lab's `--matching_skate_guard`.
+
 ## Milestone 186 — a step before the fall, caught bodies put back (2026-11-23)
 
 - Milestone 184's and 185's open items: a push it could not catch made the legs give way where it stood (no foot left
