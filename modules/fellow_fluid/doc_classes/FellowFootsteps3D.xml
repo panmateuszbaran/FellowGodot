@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowFootsteps3D" inherits="SkeletonModifier3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		A character's footsteps synthesised from its feet as drawn and what they land on: no animation events, no samples.
+	</brief_description>
+	<description>
+		Milestone 181 ([code]docs/decisions/0323-footsteps.md[/code]). Put it last among a character's [Skeleton3D] modifiers (after [FellowFootLock3D] and [FellowFootPlacement3D]): it reads each sole's heel and ball (the points [FellowFootLock3D] uses) against the ground under the foot — a ray down through it, the character's own body left out — every time the pose changes. A foot is down when its lower point is within [member contact_height] of the ground and planted (slower than 0.6 m/s across it); up again when both points rise 2 cm higher or are swept away (1.2 m/s). Touching down is a step at the speed the point came down; the other point coming down after is the sole rolling onto it; leaving, the toe lifts; a foot moving across the ground while down scuffs.
+		What it stands on: the ray's collider's [FellowContactSound3D] ([member FellowContactSound3D.surface], or its material: wood a wooden floor, metal a steel deck, stone, glass, plastic and ceramic tiles, rubber a mat), its [code]fellow_surface[/code] metadata (a ground's name — "gravel", "snow", ... — or number), a [FellowTerrain3D]'s layers there by their weights ([member FellowTerrainLayer.surface]; the two strongest mixed), else [member default_ground]; water over the ground there (a [FellowWater3D]) makes it water.
+		The sound, synthesised on the audio thread and placed at the feet: on hard ground the sole's contact (a half-sine of force as long as the [member shoe] takes to compress) through the shoe's and the floor's resonances, its click and the weight's thump; on loose ground grains crushed at a rate with the step's energy (Cook's PhISEM), each a click through the material's resonances, over the ground's compression; mud's squelch and suction, water's splash and drips (bubbles); scuffs (a sneaker squeaks on wood or tiles). A step's strength goes with the sole's speed and the root of [member body_mass]. The [signal footstep] signal is a game's (guards hearing, tracks in snow, dust); it is sent whether or not the sound is heard.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="debug_render" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="events" type="Array" />
+			<param index="1" name="seconds" type="float" />
+			<param index="2" name="rate" type="float" default="48000.0" />
+			<param index="3" name="seed" type="int" default="1" />
+			<description>
+				Footsteps synthesised offline (tests and tuning, [code]benchmarks/tools/world_sound/footstep_sound.gd[/code]): [param events] by time, each a [Dictionary] — [code]{time, part: "heel", "ball" or "lift", ground (a [enum Ground] or a name), ground2 and weight2 (a second ground and its share), shoe, speed (m/s), load (kg)}[/code] or [code]{time, part: "scuff", ground, shoe, speed}[/code] (speed 0 ends it). Returns [code]samples[/code] (interleaved stereo, the same in both), [code]strikes[/code], [code]grains[/code], [code]bubbles[/code] and [code]usec_per_second[/code].
+			</description>
+		</method>
+		<method name="get_foot_state" qualifiers="const">
+			<return type="Dictionary" />
+			<param index="0" name="foot" type="int" />
+			<description>
+				A foot ([param foot]: 0 left, 1 right) as last seen: [code]down[/code], [code]heel_height[/code] and [code]ball_height[/code] (metres over the ground under it), [code]heel_sweep[/code] and [code]ball_sweep[/code] (m/s across it), [code]ground[/code], [code]ground2[/code] and [code]weight2[/code] (a terrain's mix).
+			</description>
+		</method>
+		<method name="get_ground" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="foot" type="int" />
+			<description>
+				What [param foot] (0 left, 1 right) last stood on (a [enum Ground]).
+			</description>
+		</method>
+		<method name="get_sound_stats">
+			<return type="Dictionary" />
+			<description>
+				[code]playing[/code], [code]steps[/code] and [code]lifts[/code] found, [code]scuff_seconds[/code], the last [code]ground[/code], the synthesis's [code]strikes[/code], [code]grains[/code], [code]bubbles[/code] and [code]peak[/code], [code]mixed_seconds[/code] and [code]mix_usec_per_second[/code].
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="body_mass" type="float" setter="set_body_mass" getter="get_body_mass" default="75.0">
+			The character's mass (kg): a step's strength goes with its root.
+		</member>
+		<member name="collision_mask" type="int" setter="set_collision_mask" getter="get_collision_mask" default="1">
+			What the ray under each foot finds the ground in.
+		</member>
+		<member name="contact_height" type="float" setter="set_contact_height" getter="get_contact_height" default="0.04">
+			A foot is down when its lower point comes this close to the ground (metres) and is planted. Motion capture's soles often stand a few centimetres up (CMU's 3-5 cm: 0.05).
+		</member>
+		<member name="default_ground" type="int" setter="set_default_ground" getter="get_default_ground" enum="FellowFootsteps3D.Ground" default="0">
+			The ground when the collider says nothing of its own.
+		</member>
+		<member name="heel_offset" type="float" setter="set_heel_offset" getter="get_heel_offset" default="0.05">
+			How far behind the ankle the heel's point is (metres), as [member FellowFootLock3D.heel_offset].
+		</member>
+		<member name="left_foot_bone" type="StringName" setter="set_left_foot_bone" getter="get_left_foot_bone" default="&amp;&quot;LeftFoot&quot;">
+			The left foot's bone.
+		</member>
+		<member name="left_toe_bone" type="StringName" setter="set_left_toe_bone" getter="get_left_toe_bone" default="&amp;&quot;LeftToes&quot;">
+			The left toes' bone (the ball of the foot); none: the heel alone.
+		</member>
+		<member name="right_foot_bone" type="StringName" setter="set_right_foot_bone" getter="get_right_foot_bone" default="&amp;&quot;RightFoot&quot;">
+			The right foot's bone.
+		</member>
+		<member name="right_toe_bone" type="StringName" setter="set_right_toe_bone" getter="get_right_toe_bone" default="&amp;&quot;RightToes&quot;">
+			The right toes' bone.
+		</member>
+		<member name="shoe" type="int" setter="set_shoe" getter="get_shoe" enum="FellowFootsteps3D.Shoe" default="0">
+			What the character wears: the sole's contact (a sneaker's 2 ms, a boot's 1, a hard heel's 0.35: its click, bare feet 3 ms), its resonance, the squeak.
+		</member>
+		<member name="sound_bus" type="StringName" setter="set_sound_bus" getter="get_sound_bus" default="&amp;&quot;Master&quot;">
+			The audio bus the footsteps play on.
+		</member>
+		<member name="sound_enabled" type="bool" setter="set_sound_enabled" getter="is_sound_enabled" default="true">
+			The footsteps are heard (the [signal footstep] signal is sent either way).
+		</member>
+		<member name="sound_max_distance" type="float" setter="set_sound_max_distance" getter="get_sound_max_distance" default="30.0">
+			Beyond this distance from the listener the footsteps are not heard (their voice stops).
+		</member>
+		<member name="sound_unit_size" type="float" setter="set_sound_unit_size" getter="get_sound_unit_size" default="3.0">
+			The distance (metres) at which the footsteps are heard at the level synthesised (3: a third-person camera's); nearer louder, farther quieter ([member AudioStreamPlayer3D.unit_size]).
+		</member>
+		<member name="sound_volume_db" type="float" setter="set_sound_volume_db" getter="get_sound_volume_db" default="0.0">
+			The footsteps' volume.
+		</member>
+	</members>
+	<signals>
+		<signal name="footstep">
+			<param index="0" name="foot" type="int" />
+			<param index="1" name="position" type="Vector3" />
+			<param index="2" name="ground" type="int" />
+			<param index="3" name="speed" type="float" />
+			<description>
+				A foot touching down: which ([param foot]: 0 left, 1 right), where (world), on what ([param ground], a [enum Ground]), how fast it came down (m/s).
+			</description>
+		</signal>
+	</signals>
+	<constants>
+		<constant name="GROUND_STONE" value="0" enum="Ground">
+			Stone, concrete: the sole's contact alone.
+		</constant>
+		<constant name="GROUND_WOOD" value="1" enum="Ground">
+			A wooden floor: its boards boom.
+		</constant>
+		<constant name="GROUND_METAL" value="2" enum="Ground">
+			A steel deck: it rings.
+		</constant>
+		<constant name="GROUND_TILE" value="3" enum="Ground">
+			Tiles (ceramic, glass, plastic): they click.
+		</constant>
+		<constant name="GROUND_CARPET" value="4" enum="Ground">
+			Carpet, a rubber mat: muffled.
+		</constant>
+		<constant name="GROUND_GRAVEL" value="5" enum="Ground">
+			Gravel: grains crunching (2-5 kHz).
+		</constant>
+		<constant name="GROUND_SAND" value="6" enum="Ground">
+			Sand: fine grains hissing.
+		</constant>
+		<constant name="GROUND_SNOW" value="7" enum="Ground">
+			Snow: crunching lower (0.9-4 kHz), a soft thump.
+		</constant>
+		<constant name="GROUND_GRASS" value="8" enum="Ground">
+			Grass: brushing over soft ground.
+		</constant>
+		<constant name="GROUND_LEAVES" value="9" enum="Ground">
+			Dry leaves: crackling.
+		</constant>
+		<constant name="GROUND_DIRT" value="10" enum="Ground">
+			Dirt: a dull thump, a few grains.
+		</constant>
+		<constant name="GROUND_MUD" value="11" enum="Ground">
+			Mud: a squelch, a suck as the toe lifts.
+		</constant>
+		<constant name="GROUND_WATER" value="12" enum="Ground">
+			Shallow water: a splash, drips.
+		</constant>
+		<constant name="GROUND_MAX" value="13" enum="Ground">
+			The number of grounds.
+		</constant>
+		<constant name="SHOE_SNEAKER" value="0" enum="Shoe">
+			Soft rubber: a dull step; squeaks on smooth floors.
+		</constant>
+		<constant name="SHOE_BOOT" value="1" enum="Shoe">
+			A harder sole and heel.
+		</constant>
+		<constant name="SHOE_HARD" value="2" enum="Shoe">
+			A hard heel (leather, wood): a click.
+		</constant>
+		<constant name="SHOE_BAREFOOT" value="3" enum="Shoe">
+			Bare feet: the flesh's slap.
+		</constant>
+	</constants>
+</class>

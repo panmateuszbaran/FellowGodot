@@ -596,6 +596,16 @@ void FellowContactSound3D::_make_strike(float p_dv, float p_mass, float p_speed,
 	_strike_weights(p_local, r_strike.weights);
 }
 
+// Milestone 181 (decision 0323): what a foot on this body stands on — its surface, or its material's (wood a wooden
+// floor, metal a deck, stone, glass, plastic and ceramic tiles, rubber a mat).
+int FellowContactSound3D::get_ground() const {
+	if (surface >= 0) {
+		return surface;
+	}
+	static const int by_material[MATERIAL_MAX] = { 1, 2, 0, 3, 3, 4, 3 }; // FellowFootstepSynth::Ground
+	return by_material[CLAMP(int(material), 0, int(MATERIAL_MAX) - 1)];
+}
+
 int FellowContactSound3D::_material_of(Object *p_other) {
 	Node *node = Object::cast_to<Node>(p_other);
 	if (!node) {
@@ -960,6 +970,9 @@ void FellowContactSound3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_wall_thickness"), &FellowContactSound3D::get_wall_thickness);
 	ClassDB::bind_method(D_METHOD("set_ground_material", "material"), &FellowContactSound3D::set_ground_material);
 	ClassDB::bind_method(D_METHOD("get_ground_material"), &FellowContactSound3D::get_ground_material);
+	ClassDB::bind_method(D_METHOD("set_surface", "surface"), &FellowContactSound3D::set_surface);
+	ClassDB::bind_method(D_METHOD("get_surface"), &FellowContactSound3D::get_surface);
+	ClassDB::bind_method(D_METHOD("get_ground"), &FellowContactSound3D::get_ground);
 	ClassDB::bind_method(D_METHOD("set_mode_count", "count"), &FellowContactSound3D::set_mode_count);
 	ClassDB::bind_method(D_METHOD("get_mode_count"), &FellowContactSound3D::get_mode_count);
 	ClassDB::bind_method(D_METHOD("set_sound_enabled", "enabled"), &FellowContactSound3D::set_sound_enabled);
@@ -980,6 +993,7 @@ void FellowContactSound3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wall_thickness", PROPERTY_HINT_RANGE, "0,0.1,0.0005,or_greater,suffix:m"), "set_wall_thickness", "get_wall_thickness");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "ground_material", PROPERTY_HINT_ENUM, "Wood,Metal,Stone,Glass,Plastic,Rubber,Ceramic"), "set_ground_material", "get_ground_material");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "mode_count", PROPERTY_HINT_RANGE, "1,32,1"), "set_mode_count", "get_mode_count");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "surface", PROPERTY_HINT_ENUM, "From Material:-1,Stone:0,Wood:1,Metal:2,Tile:3,Carpet:4,Gravel:5,Sand:6,Snow:7,Grass:8,Leaves:9,Dirt:10,Mud:11,Water:12"), "set_surface", "get_surface");
 	ADD_GROUP("Sound", "sound_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sound_enabled"), "set_sound_enabled", "is_sound_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_volume_db", PROPERTY_HINT_RANGE, "-60,24,0.1,suffix:dB"), "set_sound_volume_db", "get_sound_volume_db");

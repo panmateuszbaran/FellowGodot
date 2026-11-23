@@ -114,6 +114,8 @@ void FellowTerrainLayer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_roughness"), &FellowTerrainLayer::get_roughness);
 	ClassDB::bind_method(D_METHOD("set_texture_size", "metres"), &FellowTerrainLayer::set_texture_size);
 	ClassDB::bind_method(D_METHOD("get_texture_size"), &FellowTerrainLayer::get_texture_size);
+	ClassDB::bind_method(D_METHOD("set_surface", "surface"), &FellowTerrainLayer::set_surface);
+	ClassDB::bind_method(D_METHOD("get_surface"), &FellowTerrainLayer::get_surface);
 	ClassDB::bind_method(D_METHOD("set_triplanar", "enable"), &FellowTerrainLayer::set_triplanar);
 	ClassDB::bind_method(D_METHOD("is_triplanar"), &FellowTerrainLayer::is_triplanar);
 
@@ -124,6 +126,7 @@ void FellowTerrainLayer::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "normal_strength", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_normal_strength", "get_normal_strength");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "roughness", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_roughness", "get_roughness");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "texture_size", PROPERTY_HINT_RANGE, "0.01,100,0.01,or_greater,suffix:m"), "set_texture_size", "get_texture_size");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "surface", PROPERTY_HINT_ENUM, "Stone,Wood,Metal,Tile,Carpet,Gravel,Sand,Snow,Grass,Leaves,Dirt,Mud,Water"), "set_surface", "get_surface");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "triplanar"), "set_triplanar", "is_triplanar");
 }
 

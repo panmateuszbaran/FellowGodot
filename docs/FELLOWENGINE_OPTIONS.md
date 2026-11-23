@@ -300,6 +300,33 @@ through the cloud) and heard from its first arrival (distance / 343 s). Methods:
 `FellowLightning3D.debug_render_thunder(distance, azimuth_degrees, seconds[, rate, seed])`. Measured with
 `benchmarks/tools/world_sound/weather_sound.gd` + `weather_sound.py`; a storm with `storm_demo.gd` (Movie Maker).
 
+### Footsteps (milestone 181)
+
+Decision 0323: `FellowFootsteps3D`, last among a skeleton's modifiers, hears a character's feet as drawn and
+synthesises their steps on what the ray under each foot finds; placed at the feet; not in the editor.
+
+| property | default | meaning |
+|---|---|---|
+| `left_foot_bone`, `right_foot_bone`, `left_toe_bone`, `right_toe_bone` | LeftFoot, RightFoot, LeftToes, RightToes | the feet (the toes: the ball; none: the heel alone) |
+| `contact_height` | 0.04 m | a foot is down when its lower point is this close to the ground and planted (motion capture's soles: often 0.05) |
+| `heel_offset` | 0.05 m | the heel's point behind the ankle |
+| `collision_mask` | 1 | what the ray under the foot hits |
+| `body_mass` | 75 kg | a step's strength goes with its root |
+| `shoe` | Sneaker | sneaker, boot, hard heel, bare feet: the sole's contact, its click, a squeak |
+| `default_ground` | Stone | when the collider says nothing |
+| `sound_enabled` | true | heard (the `footstep` signal is sent either way) |
+| `sound_volume_db`, `sound_bus` | 0 dB, Master | its volume and bus |
+| `sound_unit_size` | 3 m | where the level synthesised is heard (a third-person camera's distance) |
+| `sound_max_distance` | 30 m | not heard beyond it |
+
+The ground: the collider's `FellowContactSound3D.surface` (or its material: wood, metal, stone, tiles, a mat), a
+`fellow_surface` metadata (`"gravel"`, `"snow"`, ... or a number), a `FellowTerrain3D`'s layers by their weights there
+(`FellowTerrainLayer.surface`, default dirt), water over the ground. Grounds: stone, wood, metal, tile, carpet, gravel,
+sand, snow, grass, leaves, dirt, mud, water. Signal `footstep(foot, position, ground, speed)`; methods `get_ground`,
+`get_foot_state`, `get_sound_stats`, static `debug_render`. Measured with
+`benchmarks/tools/world_sound/footstep_sound.gd` + `footstep_sound.py`; a CMU walk with
+`benchmarks/tools/foot_placement/footsteps_demo.gd`.
+
 ### Bodies' contact sound (milestone 180)
 
 Decision 0322: `FellowContactSound3D`, a child of a `RigidBody3D`, makes the body heard from its own vibration (modal

@@ -27,6 +27,9 @@
 		<member name="roughness" type="float" setter="set_roughness" getter="get_roughness" default="0.9">
 			The layer's roughness.
 		</member>
+		<member name="surface" type="int" setter="set_surface" getter="get_surface" default="10">
+			What a foot on this layer stands on, for [FellowFootsteps3D] (a [enum FellowFootsteps3D.Ground]; dirt by default): under a foot the terrain's two strongest layers there are mixed by their weights.
+		</member>
 		<member name="texture_size" type="float" setter="set_texture_size" getter="get_texture_size" default="4.0">
 			The metres one repeat of the textures covers.
 		</member>

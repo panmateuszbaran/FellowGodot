@@ -158,6 +158,7 @@ private:
 	SoundMaterial material = MATERIAL_WOOD;
 	float wall_thickness = 0.0f; // m, 0: solid
 	SoundMaterial ground_material = MATERIAL_STONE;
+	int surface = -1; // milestone 181: what a foot stands on (a FellowFootsteps3D::Ground; -1: from the material)
 	int mode_count = 24;
 	bool sound_enabled = true;
 	float sound_volume_db = 0.0f;
@@ -214,6 +215,9 @@ public:
 	SoundMaterial get_material() const { return material; }
 	void set_wall_thickness(float p_thickness);
 	float get_wall_thickness() const { return wall_thickness; }
+	void set_surface(int p_surface) { surface = CLAMP(p_surface, -1, 12); }
+	int get_surface() const { return surface; }
+	int get_ground() const; // milestone 181: the surface, or the material's (stone, wood, metal, tile, carpet)
 	void set_ground_material(SoundMaterial p_material) { ground_material = p_material; }
 	SoundMaterial get_ground_material() const { return ground_material; }
 	void set_mode_count(int p_count);

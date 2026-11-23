@@ -56,6 +56,7 @@ class FellowTerrainLayer : public Resource {
 	float normal_strength = 1.0f;
 	float roughness = 0.9f;
 	float texture_size = 4.0f; // metres a texture repeat covers
+	int surface = 10; // milestone 181: what a foot stands on here (a FellowFootsteps3D::Ground; dirt)
 	bool triplanar = false;
 
 protected:
@@ -74,6 +75,8 @@ public:
 	float get_normal_strength() const { return normal_strength; }
 	void set_roughness(float p_roughness);
 	float get_roughness() const { return roughness; }
+	void set_surface(int p_surface) { surface = CLAMP(p_surface, 0, 12); }
+	int get_surface() const { return surface; }
 	void set_texture_size(float p_metres);
 	float get_texture_size() const { return texture_size; }
 	void set_triplanar(bool p_enable);

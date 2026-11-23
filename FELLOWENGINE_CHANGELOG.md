@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 181 — footsteps (2026-11-23)
+
+- `FellowFootsteps3D` (new, a `SkeletonModifier3D` last on a character's skeleton; decision 0323): footsteps from the
+  feet as drawn — each touch down (at the speed the sole came down), the sole rolling onto the ball, the toe lifting,
+  scuffs — on what the ray under the foot finds; `contact_height`, `heel_offset`, `collision_mask`, `body_mass`,
+  `shoe` (sneaker, boot, hard heel, bare feet), `default_ground`, `sound_*`, the `footstep` signal, `get_ground()`,
+  `get_foot_state()`, `get_sound_stats()`, the static `debug_render(events, seconds[, rate, seed])`.
+- Thirteen grounds: stone, wood, metal, tile, carpet (the sole's contact through the shoe's and the floor's
+  resonances), gravel, sand, snow, grass, leaves, dirt (grains crushed: Cook's PhISEM), mud (squelch, suction), water
+  (splash, drips).
+- `FellowContactSound3D.surface` and `get_ground()`; `FellowTerrainLayer.surface` (a terrain's layers mixed by their
+  weights under the foot); a collider's `fellow_surface` metadata.
+- `benchmarks/tools/world_sound/footstep_sound.gd` + `footstep_sound.py`; `benchmarks/tools/foot_placement/footsteps_demo.gd`
+  (a CMU walk across the grounds, `--terrain`).
+
 ## Milestone 180 — bodies' contact sound: modal synthesis (2026-11-23)
 
 - `FellowContactSound3D` (new, a child of a `RigidBody3D`; decision 0322): the body heard from its own vibration

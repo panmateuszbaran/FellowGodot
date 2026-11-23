@@ -20,6 +20,12 @@
 				The body's sound offline (tests and tuning, [code]benchmarks/tools/world_sound/impact_sound.gd[/code]): [param events] by time, each a [Dictionary] — [code]{time, kind: "impact", speed, other, position, mass, held}[/code] (a strike closing at [code]speed[/code] m/s against the material [code]other[/code], at [code]position[/code] in the body's space; [code]held[/code]: ringing free after it), [code]{time, kind: "slide"}[/code] or [code]"roll"[/code] with [code]speed[/code] and [code]other[/code], [code]{time, kind: "rest"}[/code], [code]{time, kind: "free"}[/code]. Returns [code]samples[/code] (interleaved stereo, the same in both), [code]modes[/code] (as [method get_modes]), [code]strikes[/code], [code]contact_durations[/code] and [code]clicks[/code] (each strike's, seconds and full scale) and [code]usec_per_second[/code].
 			</description>
 		</method>
+		<method name="get_ground" qualifiers="const">
+			<return type="int" />
+			<description>
+				What a foot on this body stands on (milestone 181, [FellowFootsteps3D]): [member surface] if set, else the [member material]'s floor — wood a wooden floor, metal a steel deck, stone stone, glass, plastic and ceramic tiles, rubber a mat (a [enum FellowFootsteps3D.Ground]).
+			</description>
+		</method>
 		<method name="get_modes">
 			<return type="Array" />
 			<description>
@@ -57,6 +63,9 @@
 		</member>
 		<member name="sound_volume_db" type="float" setter="set_sound_volume_db" getter="get_sound_volume_db" default="0.0">
 			The body's sound's volume.
+		</member>
+		<member name="surface" type="int" setter="set_surface" getter="get_surface" default="-1">
+			What a foot on this body stands on, for [FellowFootsteps3D] (a [enum FellowFootsteps3D.Ground]: a floor of gravel, a snowy roof); [code]-1[/code]: from [member material] (see [method get_ground]).
 		</member>
 		<member name="wall_thickness" type="float" setter="set_wall_thickness" getter="get_wall_thickness" default="0.0">
 			A hollow body's wall (metres): a crate's planks, a pipe's or a bottle's wall, a can's sheet; 0: solid. A hollow box rings in its walls and gives way under a blow (its click softer); a hollow round body rings round its shell.
