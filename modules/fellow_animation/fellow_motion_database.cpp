@@ -130,6 +130,59 @@ Quaternion FellowMotionDatabase::get_root_rotation(int p_frame) const {
 	return read_quat(root_rotations.ptr() + p_frame * 4);
 }
 
+float FellowMotionDatabase::get_foot_ground_height(int p_side, bool p_toe) const {
+	// Milestone 185 (decision 0327): a foot's ankle's (or toe's) height over the root's ground when it is down — the
+	// 5th percentile over the frames in contact (the root's space: the hips relative to the root, the bones down the leg
+	// from there). The recordings' floors differ: a planted foot's toe stood 1-8 cm up, half of them 2-5 cm higher than
+	// it is when down.
+	MutexLock lock(foot_ground_mutex);
+	if (!foot_ground_ready) {
+		foot_ground_ready = true;
+		const BoneRole roles[2][2] = { { ROLE_LEFT_FOOT, ROLE_LEFT_TOE }, { ROLE_RIGHT_FOOT, ROLE_RIGHT_TOE } };
+		for (int s = 0; s < 2; s++) {
+			const int ankle = bone_roles[roles[s][0]];
+			const int toe = bone_roles[roles[s][1]];
+			foot_ground[s] = foot_ground[2 + s] = 0.0f;
+			if (ankle < 0 || frame_count == 0 || contacts.size() != frame_count * 2) {
+				continue;
+			}
+			LocalVector<int> chain; // root first, down to the toe (or the ankle)
+			for (int b = toe >= 0 ? toe : ankle; b >= 0; b = bone_parents[b]) {
+				chain.push_back(b);
+			}
+			chain.reverse();
+			LocalVector<float> ankles;
+			LocalVector<float> toes;
+			for (int f = 0; f < frame_count; f++) {
+				if (!get_contact(f, s)) {
+					continue;
+				}
+				Vector3 p;
+				Quaternion q;
+				for (int b : chain) {
+					p += q.xform(get_bone_position(f, b));
+					q = q * get_bone_rotation(f, b);
+					if (b == ankle) {
+						ankles.push_back(p.y);
+					}
+					if (b == toe) {
+						toes.push_back(p.y);
+					}
+				}
+			}
+			if (!ankles.is_empty()) {
+				ankles.sort();
+				foot_ground[s] = ankles[ankles.size() / 20];
+			}
+			if (!toes.is_empty()) {
+				toes.sort();
+				foot_ground[2 + s] = toes[toes.size() / 20];
+			}
+		}
+	}
+	return foot_ground[(p_toe ? 2 : 0) + CLAMP(p_side, 0, 1)];
+}
+
 int FellowMotionDatabase::get_range_of(int p_frame) const {
 	// Ranges are in order: the last one starting at or before the frame.
 	int lo = 0;
@@ -502,6 +555,7 @@ Error FellowMotionDatabase::build(Object *p_skeleton, const TypedArray<Animation
 
 	// Contacts: a toe low and slow.
 	contacts.resize(frame_count * 2);
+	foot_ground_ready = false;
 	{
 		float low[2] = { FLT_MAX, FLT_MAX };
 		LocalVector<float> heights[2];
@@ -867,6 +921,7 @@ void FellowMotionDatabase::set_data(const Dictionary &p_data) {
 	root_positions = p_data.get("root_positions", PackedVector3Array());
 	root_rotations = p_data.get("root_rotations", PackedFloat32Array());
 	contacts = p_data.get("contacts", PackedByteArray());
+	foot_ground_ready = false;
 	range_starts = p_data.get("range_starts", PackedInt32Array());
 	range_stops = p_data.get("range_stops", PackedInt32Array());
 	range_names = p_data.get("range_names", PackedStringArray());
@@ -1048,6 +1103,7 @@ void FellowMotionDatabase::_bind_methods() {
 	ClassDB::bind_static_method("FellowMotionDatabase", D_METHOD("create_skeleton", "bvh"), &FellowMotionDatabase::create_skeleton);
 	ClassDB::bind_method(D_METHOD("get_info"), &FellowMotionDatabase::get_info);
 	ClassDB::bind_method(D_METHOD("get_frame_count"), &FellowMotionDatabase::get_frame_count);
+	ClassDB::bind_method(D_METHOD("get_foot_ground_height", "side", "toe"), &FellowMotionDatabase::get_foot_ground_height);
 	ClassDB::bind_method(D_METHOD("set_data", "data"), &FellowMotionDatabase::set_data);
 	ClassDB::bind_method(D_METHOD("get_data"), &FellowMotionDatabase::get_data);
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_data", "get_data");

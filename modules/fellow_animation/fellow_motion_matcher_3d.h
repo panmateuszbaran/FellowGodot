@@ -59,6 +59,8 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 		float lift = 0.0f; // Milestone 184: a shuffle's lift
 		float lift_velocity = 0.0f;
 		float ground_y = 0.0f; // the animated foot's height when last in contact
+		float ground_shift = 0.0f; // Milestone 185: down onto the ground (or up out of it) while in contact
+		float ground_shift_velocity = 0.0f;
 		bool has_ground = false;
 	};
 
@@ -100,6 +102,9 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 	float clamp_angle = Math::PI * 0.5f;
 	float unlock_radius = 0.2f;
 	float foot_step_lift = 0.08f; // Milestone 184 (decision 0326): a foot that would slide over the ground steps (0: it slides).
+	bool foot_grounding = true; // Milestone 185 (decision 0327): a foot down stands on the ground, not over it
+	ObjectID ground_heights_of; // the database the next are its
+	float ground_heights[4] = {}; // its feet's ankles' and toes' heights when down (left, right; ankles, toes)
 	float force_search_velocity_change = 0.1f; // m/s of desired velocity that triggers a search.
 	bool inertialization = true;
 	bool synchronization = true;
@@ -326,6 +331,8 @@ public:
 	float get_unlock_radius() const { return unlock_radius; }
 	void set_foot_step_lift(float p_height) { foot_step_lift = MAX(p_height, 0.0f); }
 	float get_foot_step_lift() const { return foot_step_lift; }
+	void set_foot_grounding(bool p_enable) { foot_grounding = p_enable; }
+	bool is_foot_grounding() const { return foot_grounding; }
 	void set_inertialization(bool p_enable) { inertialization = p_enable; }
 	bool is_inertialization() const { return inertialization; }
 	void set_synchronization(bool p_enable) { synchronization = p_enable; }

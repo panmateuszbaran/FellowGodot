@@ -9,6 +9,25 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 185 — a ragdoll with bones, feet on the ground (2026-11-23)
+
+- The owner: "now the feet hang over the ground, and the ragdoll folds the body as if it were a soft body with no
+  bones". Measured: every limp joint a 50° cone (knees folded through themselves, the trunk double), masses by the
+  capsules' volumes (the neck 13 kg, the head 0.19) whose joints stretched 4-9 cm; half the planted feet 2-5 cm over the
+  ground, the physical feet capsules 1-5 cm up.
+- `FellowPhysicalAnimation3D.anatomical_limits` (new, on; decision 0327): the skeleton's trunk, limbs, legs and arms
+  found; limp, six-degree joints as each part bends — knees and elbows hinges −3° … 145°, a hip −15° … 120° from the
+  thigh's rest, the spine 12° a segment, the girdles' short bones 6°, joint friction; masses a person's (de Leva 1996);
+  the feet soles. The joints open 1-3 cm at most (4-9), the knees stay within 112-153° as it lands, the trunk bends 58°
+  at most (75). `get_joint_angles()`; `get_stats()`'s `limp`. `PhysicalBone3D.get_joint_rid()` (C++, one line).
+- `FellowMotionMatcher3D.foot_grounding` (new, on): a planted foot lowered or raised so that its ankle or toe is as high
+  as the database's are when down (`FellowMotionDatabase.get_foot_ground_height()`): Matching Lab's planted feet within
+  −0.8 … +1.6 cm of the ground (−3.0 … +3.1), their slide on the ground 0.0366 → 0.0312 m/s.
+- With balance off, `physical_check.gd`: tracking 3.4 mm; hits knock the heavier chest and head 58 and 134 mm (104,
+  226); the ragdoll 30 mm into the floor (52).
+- `balance_check.gd` measures the limp joints (`--anatomical`, `--grounding`); Matching Lab measures planted feet over
+  the ground (`--matching_grounding`), its mannequin has soles; `physical_check.gd` reads a sole's depth.
+
 ## Milestone 184 — falls that buckle, feet that step (2026-11-23)
 
 - The owner: milestone 183's character "sometimes slides unnaturally, and the falls are very sudden". Measured: the hips

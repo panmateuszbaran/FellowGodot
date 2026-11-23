@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/io/resource.h"
+#include "core/os/mutex.h"
 #include "core/templates/local_vector.h"
 #include "core/variant/typed_array.h"
 #include "scene/resources/animation.h"
@@ -92,6 +93,11 @@ private:
 	PackedVector3Array root_positions; // in the clip's space
 	PackedFloat32Array root_rotations; // yaw, xyzw
 	PackedByteArray contacts; // frame_count * 2 (left, right)
+	// Milestone 185 (decision 0327): how high the ankles and the toes are when the feet are down (computed when first
+	// asked for: get_foot_ground_height()).
+	mutable BinaryMutex foot_ground_mutex;
+	mutable bool foot_ground_ready = false;
+	mutable float foot_ground[4] = {}; // the left ankle, the right, the left toe, the right
 
 	// Clips: [start, stop) frame ranges.
 	PackedInt32Array range_starts;
@@ -164,6 +170,7 @@ public:
 	Vector3 get_root_position(int p_frame) const { return root_positions[p_frame]; }
 	Quaternion get_root_rotation(int p_frame) const;
 	bool get_contact(int p_frame, int p_side) const { return contacts[p_frame * 2 + p_side] != 0; }
+	float get_foot_ground_height(int p_side, bool p_toe) const;
 	int get_range_of(int p_frame) const;
 	int get_range_start(int p_range) const { return range_starts[p_range]; }
 	int get_range_stop(int p_range) const { return range_stops[p_range]; }

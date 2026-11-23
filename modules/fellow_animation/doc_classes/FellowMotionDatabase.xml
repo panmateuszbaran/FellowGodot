@@ -26,6 +26,14 @@
 				A new [Skeleton3D] with the bones of a BVH hierarchy read by [method import_bvh] (rests at the joints' offsets).
 			</description>
 		</method>
+		<method name="get_foot_ground_height" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="toe" type="bool" />
+			<description>
+				Milestone 185 (decision 0327): how high a foot's ankle (or with [param toe], its toe) is over the root's ground when the foot is down — the 5th percentile over the frames it is in contact ([param side] 0 the left, 1 the right). Worked out when first asked for. [member FellowMotionMatcher3D.foot_grounding] stands the feet on the ground by it.
+			</description>
+		</method>
 		<method name="get_frame_count" qualifiers="const">
 			<return type="int" />
 			<description>

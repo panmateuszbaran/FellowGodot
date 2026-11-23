@@ -75,6 +75,35 @@ public:
 		int parent = -1; // The nearest body up the bones.
 		float radius = 0.0f;
 		float length = 0.0f;
+		// Milestone 185 (decision 0327): the joint to its parent as a ragdoll's, from where it sits in the body (with
+		// anatomical_limits): a ball (swing about two axes, twist about the bone) or a hinge (a knee, an elbow: its
+		// flexion about `hinge_axis`, between flex_min and flex_max from straight).
+		int8_t joint_kind = 0; // JOINT_BALL, JOINT_HINGE
+		float swing = 0.0f; // radians
+		float twist = 0.0f;
+		float flex_min = 0.0f;
+		float flex_max = 0.0f;
+		Vector3 hinge_axis; // the hinge's axis in its parent's bone's space (flexion positive about it)
+		Vector3 neutral; // a hip's: the thigh's way at rest, in its parent's bone's space (flexion from it)
+		float friction = 0.0f; // N·m: the limp joint's friction (a motor held at rest, its torque limited)
+		int8_t part = 0; // JOINT_PART_*: what it is (statistics)
+	};
+	enum {
+		JOINT_BALL = 0,
+		JOINT_HINGE = 1,
+		JOINT_HIP = 2, // a ball whose flexion is limited from the thigh's way at rest, not about the pose it went limp in
+	};
+	enum {
+		JOINT_PART_OTHER = 0,
+		JOINT_PART_SPINE,
+		JOINT_PART_NECK,
+		JOINT_PART_GIRDLE, // a hip's or a shoulder's own bone (the pelvis's, a collarbone)
+		JOINT_PART_HIP,
+		JOINT_PART_KNEE,
+		JOINT_PART_ANKLE,
+		JOINT_PART_SHOULDER,
+		JOINT_PART_ELBOW,
+		JOINT_PART_WRIST,
 	};
 
 private:
@@ -90,6 +119,7 @@ private:
 	uint32_t collision_mask = 1u;
 	float swing_limit = Math::deg_to_rad(50.0f);
 	float twist_limit = Math::deg_to_rad(30.0f);
+	bool anatomical_limits = true; // milestone 185 (decision 0327): each joint limp as its part of the body bends
 
 	// Milestone 183 (decision 0325): balance — a hit's capture point (where the centre of mass must be stood over to
 	// stop: its offset plus its velocity over sqrt(g / h)) beyond `step_threshold` staggers the character (its motion
@@ -222,6 +252,12 @@ private:
 	int _top_bone() const;
 	void _auto_build();
 	void _rebuild_joints();
+	void _classify_joints();
+	void _anatomical_masses(LocalVector<float> &r_masses) const;
+	void _sole_shapes();
+	void _limp_joint(Body &p_body);
+	float _hinge_flexion(const Body &p_body, Vector3 *r_axis = nullptr) const;
+	float _hip_flexion(const Body &p_body, Vector3 *r_axis = nullptr) const;
 	void _apply_simulate();
 	PhysicalBoneSimulator3D *_get_simulator() const;
 
@@ -271,6 +307,9 @@ public:
 	float get_swing_limit() const { return swing_limit; }
 	void set_twist_limit(float p_radians) { twist_limit = CLAMP(p_radians, 0.0f, Math::PI); }
 	float get_twist_limit() const { return twist_limit; }
+	void set_anatomical_limits(bool p_enable);
+	bool is_anatomical_limits() const { return anatomical_limits; }
+	PackedFloat32Array get_joint_angles() const;
 
 	// Milestone 183 (decision 0325).
 	void set_balance(bool p_balance) { balance = p_balance; }

@@ -12,11 +12,13 @@ extends SceneTree
 ## its standing height: each stance's farthest from where it began, summed, until the body lies down; and in the two
 ## seconds after getting up), and a fall's timing — when the hips' body reaches 0.3 m and how fast it comes down then,
 ## how far it slides on, and when the fall went limp (its hips' height and lean then, whether at the knees).
+## Milestone 185 (decision 0327): while the body is limp, the knees' and elbows' flexion at its least and most (negative:
+## bent backwards) and the trunk's bend at its most (the lower back's bone against the neck's).
 ## Prints one JSON line (with --trace=1 also a line a frame: the feet, the hips, the motion matcher's feet and clip, the
 ## fastest body; --trace_feet=1 adds its feet's locks). Run on Jolt Physics (benchmarks/project/override.cfg:
 ## [physics] 3d/physics_engine="Jolt Physics"):
 ##   godot --headless --fixed-fps 60 --path benchmarks/project -s res://bench/balance_check.gd -- \
-##       [--pushes=20,40,60,80,100,130,160,200] [--fall=200] [--trace=1]
+##       [--pushes=20,40,60,80,100,130,160,200] [--fall=200] [--trace=1] [--anatomical=0] [--grounding=0]
 ## The clips: benchmarks/scripts/get_cmu_locomotion.sh (subjects 16, 35, 69, 139, 140).
 
 const STEP := 1.0 / 60.0
@@ -105,11 +107,33 @@ func _trial(impulse: Vector3, at: Vector3, seconds: float) -> Dictionary:
 	var impact_at := Vector3()
 	var after_slide := 0.0
 	var hips_last := _hips_body()
+	# Milestone 185: the limp body's joints — the knees' and elbows' flexion at its least and most (negative: bent
+	# backwards), and the trunk's bend (its lower back's bone against the neck's) at its most.
+	var bones: PackedStringArray = pa.get_body_bones()
+	var knee_lo := 1e9
+	var knee_hi := -1e9
+	var elbow_lo := 1e9
+	var elbow_hi := -1e9
+	var trunk_bend := 0.0
 	while t < seconds:
 		await physics_frame
 		t += STEP
 		var s: int = pa.get_state()
 		gap = maxf(gap, _joint_gap())
+		if pa.get_stats()["limp"]:
+			var ang: PackedFloat32Array = pa.get_joint_angles()
+			for k in ang.size():
+				var bn: String = bones[k]
+				if bn in ["LeftLeg", "RightLeg"]:
+					knee_lo = minf(knee_lo, ang[k])
+					knee_hi = maxf(knee_hi, ang[k])
+				elif bn in ["LeftForeArm", "RightForeArm"]:
+					elbow_lo = minf(elbow_lo, ang[k])
+					elbow_hi = maxf(elbow_hi, ang[k])
+			var lb: Node3D = pa.get_node_or_null("../FellowPhysicalBones/Body_LowerBack")
+			var nk: Node3D = pa.get_node_or_null("../FellowPhysicalBones/Body_Neck1")
+			if lb and nk:
+				trunk_bend = maxf(trunk_bend, rad_to_deg((-lb.global_transform.basis.z).angle_to(-nk.global_transform.basis.z)))
 		for k in 2:
 			var fp: Vector3 = feet[k].global_position
 			var after_up: bool = got_up_at >= 0.0 and t - got_up_at < 2.0
@@ -174,6 +198,8 @@ func _trial(impulse: Vector3, at: Vector3, seconds: float) -> Dictionary:
 	r["states"] = states
 	r["travel_m"] = snappedf(travel, 0.01)
 	r["joint_gap_max_mm"] = snappedf(gap * 1000.0, 0.1)
+	if knee_hi > -1e8:
+		r["limp_joints_deg"] = {"knees": [snappedf(knee_lo, 1), snappedf(knee_hi, 1)], "elbows": [snappedf(elbow_lo, 1), snappedf(elbow_hi, 1)], "trunk_bend": snappedf(trunk_bend, 1)}
 	for k in 2:
 		if anchor[k] != null:
 			if got_up_at >= 0.0:
@@ -230,6 +256,8 @@ func _run() -> void:
 	mm.teleport(Vector3.ZERO, Vector3(0, 0, 1))
 	pa = ClassDB.instantiate("FellowPhysicalAnimation3D")
 	pa.balance = true
+	pa.anatomical_limits = str(args.get("anatomical", "1")) == "1" # milestone 185: --anatomical=0 for milestone 184's ragdoll
+	mm.foot_grounding = str(args.get("grounding", "1")) == "1"
 	skel.add_child(pa)
 	pa.motion_matcher_path = pa.get_path_to(mm)
 	for sig in ["staggered", "fell", "landed", "got_up"]:

@@ -748,6 +748,16 @@ milestone 183's feet): a foot lock let go of on the ground waits until the foot 
 lifted on an arc; a foot let go of as it lifts gets the arc on top; a foot dragged low while the character stands is
 lifted by its speed; `get_stats()`'s `foot_slide_raised` (stepping). Matching Lab's `--matching_step_lift`.
 
+Milestone 185 (decision 0327), on by default: `FellowPhysicalAnimation3D.anatomical_limits` — the bodies a person's,
+found from the skeleton (the trunk, the limbs off it, each limb's two longest neighbouring bodies its upper and lower
+part, a limb below the root a leg): masses shared out as people's (de Leva 1996), the feet soles (boxes from the heel
+to past the ball), and limp, six-degree joints as each part bends — the spine 12° a segment, the neck 30°, a hip flexed
+−15°…120° from the thigh's rest, a knee and an elbow hinges −3°…145°, the girdle's bones 6°, with joint friction; off:
+milestone 166's cones (`swing_limit`, `twist_limit`) and masses by volume. `get_joint_angles()`; `get_stats()`'s
+`limp`. `FellowMotionMatcher3D.foot_grounding` (on): a foot in contact lowered (or raised) so that its ankle or toe is
+as high as the database's are when down (their 5th percentile in contact); `get_stats()`'s `ground_shifts_mm`.
+Matching Lab's `--matching_grounding` and its planted toes' heights; its mannequin's feet got soles.
+
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
 Module `fellow_world`; nothing changes without the node (decision 0187). `FellowVehicleEffects3D` (a `Node3D`, a child

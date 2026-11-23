@@ -34,6 +34,8 @@ var _root: Node3D
 var build_info := {}
 var matcher_wall_usec := 0
 var matcher_steps := 0
+var _planted_toes: Array = [] # milestone 185: how high the feet held down stand over the ground
+var _ground_heights: Array = []
 
 
 func build(p_args: Dictionary) -> void:
@@ -212,6 +214,11 @@ func _build_body() -> void:
 		elif pname.ends_with("Shoulder"):
 			r = 0.045
 		_prism(st, a, c, r, r * 0.8, p)
+		if pname.ends_with("Foot"):
+			# Milestone 185: a sole under the foot, from the heel to past the ball, as low as the ground when the foot is
+			# down (its ankle 8 cm up): the bar from the ankle to the ball alone left the heel 4 cm over the ground.
+			var floor_y := a.y - 0.08
+			_prism(st, Vector3(a.x, floor_y + 0.03, a.z - 0.05), Vector3(c.x, floor_y + 0.022, c.z + 0.03), 0.03, 0.022, p)
 		if skel.get_bone_name(b) == "Head":
 			_sphere(st, c + Vector3(0, 0.1, 0.02), 0.1, b)
 	st.generate_normals()
@@ -319,6 +326,9 @@ func _build_crowd() -> void:
 		# Milestone 184: --matching_step_lift=<m> (0: feet blended back or dragged by the animation slide).
 		if args.has("matching_step_lift"):
 			mm.foot_step_lift = float(args["matching_step_lift"])
+		# Milestone 185: --matching_grounding=0|1 (feet down stood on the ground).
+		if args.has("matching_grounding"):
+			mm.foot_grounding = args["matching_grounding"] == "1"
 		# Milestone 165: --matching_orient=0|1 (orientation warping), --matching_strafe=1 (every character faces the
 		# square's centre while it walks to its waypoints: a third-person game's aiming).
 		if args.has("matching_orient"):
@@ -405,6 +415,19 @@ func _step(dt: float) -> void:
 			mm.advance(dt)
 	matcher_wall_usec += Time.get_ticks_usec() - t0
 	matcher_steps += 1
+	# Milestone 185: how high the feet held down stand over the ground — the lower of the ankle's and the toe's
+	# heights over theirs when the database's feet are down (a step in four).
+	if matcher_steps % 4 == 0:
+		if _ground_heights.is_empty():
+			for k in 4:
+				_ground_heights.append(database.get_foot_ground_height(k % 2, k >= 2))
+		for mm in _matchers:
+			var st: Dictionary = mm.get_stats()
+			var toes: PackedVector3Array = st["toe_positions"]
+			var ankles: PackedVector3Array = mm.get_foot_positions()
+			for side in 2:
+				if st["left_locked" if side == 0 else "right_locked"]:
+					_planted_toes.append(minf(ankles[side].y - _ground_heights[side], toes[side].y - _ground_heights[2 + side]))
 
 
 func set_time(t: float) -> void:
@@ -422,6 +445,11 @@ func set_time(t: float) -> void:
 func sample_extra() -> Dictionary:
 	if _matchers.is_empty():
 		return {}
+	var d_planted := {}
+	if not _planted_toes.is_empty():
+		_planted_toes.sort()
+		var n := _planted_toes.size()
+		d_planted = {"matching_planted_over_ground_p5_m": _planted_toes[n / 20], "matching_planted_over_ground_p50_m": _planted_toes[n / 2], "matching_planted_over_ground_p95_m": _planted_toes[n * 19 / 20]}
 	var g: Dictionary = ClassDB.class_call_static("FellowMotionMatcher3D", "get_global_stats")
 	var d := {}
 	for k in ["updates", "update_usec", "update_usec_max", "update_usec_p50", "update_usec_p99", "update_usec_p999", "searches", "search_usec", "search_usec_max", "search_usec_p50", "search_usec_p99", "search_usec_p999", "frames_checked", "transitions", "lod0_updates", "lod1_updates", "lod2_updates"]:
@@ -474,6 +502,7 @@ func sample_extra() -> Dictionary:
 	d["matching_foot_contact_time"] = contact
 	d["matching_trajectory_error"] = traj / _matchers.size()
 	d["matching_wall_usec_per_step"] = float(matcher_wall_usec) / maxi(matcher_steps, 1)
+	d.merge(d_planted)
 	return d
 
 

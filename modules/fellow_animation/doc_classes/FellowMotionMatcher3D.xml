@@ -81,7 +81,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				This matcher's searches, transitions, search microseconds, foot sliding while in contact ([code]foot_slide_distance[/code], [code]foot_slide_locked[/code], [code]foot_slide_raised[/code] (of it with the foot raised 1 cm or more by [member foot_step_lift]: stepping), [code]foot_contact_time[/code], [code]foot_slide_speed[/code]), [code]trajectory_error[/code] (the mean distance between the character and the simulation), popping ([code]pop_p50_mm[/code], [code]pop_p99_mm[/code], [code]pop_p999_mm[/code], [code]pop_max_mm[/code]: per frame the largest second difference of the hips' and legs' joints), the clip, frame and LOD. With [member ground_adaptation]: [code]hips_drop_mm[/code] (how far the hips are lowered now) and [code]hips_drop_min_mm[/code] (the lowest since [method reset_stats]), [code]ground_offsets_mm[/code] (each foot's ground over the root's, as a [Vector2]: left, right), and [code]toe_positions[/code] (where the toes were shown, global).
+				This matcher's searches, transitions, search microseconds, foot sliding while in contact ([code]foot_slide_distance[/code], [code]foot_slide_locked[/code], [code]foot_slide_raised[/code] (of it with the foot raised 1 cm or more by [member foot_step_lift]: stepping), [code]foot_contact_time[/code], [code]foot_slide_speed[/code]), [code]trajectory_error[/code] (the mean distance between the character and the simulation), popping ([code]pop_p50_mm[/code], [code]pop_p99_mm[/code], [code]pop_p999_mm[/code], [code]pop_max_mm[/code]: per frame the largest second difference of the hips' and legs' joints), the clip, frame and LOD. With [member ground_adaptation]: [code]hips_drop_mm[/code] (how far the hips are lowered now) and [code]hips_drop_min_mm[/code] (the lowest since [method reset_stats]), [code]ground_offsets_mm[/code] (each foot's ground over the root's, as a [Vector2]: left, right), [code]ground_shifts_mm[/code] (how far [member foot_grounding] moves each foot now: left, right), and [code]toe_positions[/code] (where the toes were shown, global).
 			</description>
 		</method>
 		<method name="is_pushed" qualifiers="const">
@@ -152,6 +152,9 @@
 		</member>
 		<member name="desired_velocity" type="Vector3" setter="set_desired_velocity" getter="get_desired_velocity" default="Vector3(0, 0, 0)">
 			The velocity on the ground the character should reach.
+		</member>
+		<member name="foot_grounding" type="bool" setter="set_foot_grounding" getter="is_foot_grounding" default="true">
+			Milestone 185 (decision 0327): a foot in contact (the database's contacts) stands on the ground — lowered (or raised, by up to 5 cm; lowered by up to 8) so that the lower of its ankle (where it is held) and its toe (the animation's, from the ankle) is as high over the root's ground as the database's are when the feet are down ([method FellowMotionDatabase.get_foot_ground_height]), springing there in 0.04 s (with [member foot_ik]). Recordings' floors differ: half of the feet held down stood 2-5 cm over the ground. [method get_stats]' [code]ground_shifts_mm[/code].
 		</member>
 		<member name="foot_ik" type="bool" setter="set_foot_ik" getter="is_foot_ik" default="true">
 			Two-bone IK of the legs reaching the locked feet.

@@ -250,6 +250,7 @@ public:
 
 	void set_body_offset(const Transform3D &p_offset);
 	const Transform3D &get_body_offset() const;
+	RID get_joint_rid() const { return joint; } // FellowEngine (milestone 185): its joint's settings beyond JointData's (a motor's friction).
 
 	void set_simulate_physics(bool p_simulate);
 	bool get_simulate_physics();

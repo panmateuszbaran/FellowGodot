@@ -650,7 +650,30 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 				}
 			}
 		}
-		target.y += foot.lift;
+		// Milestone 185 (decision 0327): a foot down stands on the ground — lowered (or raised) so that the lower of its
+		// ankle (where it is held) and its toe (the animation's, from the ankle) is as high as the database's feet's are
+		// when down (their 5th percentile in contact): the recordings' floors differ, and half of the feet held down stood
+		// 2-5 cm over the ground.
+		float shift_goal = 0.0f;
+		if (foot_grounding && contact) {
+			if (ground_heights_of != database->get_instance_id()) {
+				ground_heights_of = database->get_instance_id();
+				for (int k = 0; k < 4; k++) {
+					ground_heights[k] = database->get_foot_ground_height(k % 2, k >= 2);
+				}
+			}
+			const int toe_bone = database->get_bone_role(roles[s][3]);
+			const float ankle_y = target.y - char_position.y - (place ? ground_foot_offset[s] : 0.0f);
+			const float over_ankle = ankle_y - ground_heights[s];
+			const float over_toe = toe_bone >= 0 ? ankle_y + (gp[toe_bone].y - gp[ankle].y) - ground_heights[2 + s] : over_ankle;
+			shift_goal = -CLAMP(MIN(over_ankle, over_toe), -0.05f, 0.08f);
+		}
+		{
+			float x = foot.ground_shift - shift_goal;
+			decay_spring_damper_exact(x, foot.ground_shift_velocity, 0.04f, p_dt);
+			foot.ground_shift = shift_goal + x;
+		}
+		target.y += foot.lift + foot.ground_shift;
 		foot.raised += foot.lift;
 
 		animated_of[s] = animated;
@@ -703,7 +726,7 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 		const Vector3 shown = shown_of[s];
 		const Vector3 target = targets[s];
 		Vector3 output = animated;
-		if (foot_ik && (warped || foot.locked || foot.offset.length_squared() > 1e-8f || foot.lift > 1e-4f || (place && !animated.is_equal_approx(shown)) || (place && ground_align_weight[s] > 1e-3f))) {
+		if (foot_ik && (warped || foot.locked || foot.offset.length_squared() > 1e-8f || foot.lift > 1e-4f || Math::abs(foot.ground_shift) > 1e-4f || (place && !animated.is_equal_approx(shown)) || (place && ground_align_weight[s] > 1e-3f))) {
 			// Two-bone IK (D. Holden, "Simple Two Joint IK"), in the character's space.
 			const Vector3 t = character_inv.xform(target);
 			const Vector3 a = gp[upper];
@@ -1112,6 +1135,8 @@ void FellowMotionMatcher3D::_update(float p_dt, int p_lod) {
 			foot.step_from = 0.0f;
 			foot.lift = 0.0f;
 			foot.lift_velocity = 0.0f;
+			foot.ground_shift = 0.0f;
+			foot.ground_shift_velocity = 0.0f;
 		}
 	}
 	pose_ready = true;
@@ -1261,6 +1286,7 @@ Dictionary FellowMotionMatcher3D::get_stats() const {
 	d["hips_drop_mm"] = hips_drop * 1000.0f;
 	d["hips_drop_min_mm"] = hips_drop_min * 1000.0f;
 	d["ground_offsets_mm"] = Vector2(ground_foot_offset[0], ground_foot_offset[1]) * 1000.0f;
+	d["ground_shifts_mm"] = Vector2(feet[0].ground_shift, feet[1].ground_shift) * 1000.0f;
 	d["toe_positions"] = PackedVector3Array({ feet[0].last_toe, feet[1].last_toe });
 	d["trajectory_error"] = trajectory_time > 0.0 ? trajectory_error_sum / trajectory_time : 0.0;
 	// Popping percentiles (mm a frame²).
@@ -1448,6 +1474,8 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_unlock_radius"), &FellowMotionMatcher3D::get_unlock_radius);
 	ClassDB::bind_method(D_METHOD("play_from", "frame", "position", "facing"), &FellowMotionMatcher3D::play_from);
 	ClassDB::bind_method(D_METHOD("set_foot_step_lift", "height"), &FellowMotionMatcher3D::set_foot_step_lift);
+	ClassDB::bind_method(D_METHOD("set_foot_grounding", "enable"), &FellowMotionMatcher3D::set_foot_grounding);
+	ClassDB::bind_method(D_METHOD("is_foot_grounding"), &FellowMotionMatcher3D::is_foot_grounding);
 	ClassDB::bind_method(D_METHOD("get_foot_step_lift"), &FellowMotionMatcher3D::get_foot_step_lift);
 	ClassDB::bind_method(D_METHOD("set_tags_required", "tags"), &FellowMotionMatcher3D::set_tags_required);
 	ClassDB::bind_method(D_METHOD("get_tags_required"), &FellowMotionMatcher3D::get_tags_required);
@@ -1536,6 +1564,7 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "foot_ik"), "set_foot_ik", "is_foot_ik");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "unlock_radius", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:m"), "set_unlock_radius", "get_unlock_radius");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "foot_step_lift", PROPERTY_HINT_RANGE, "0,0.3,0.005,suffix:m"), "set_foot_step_lift", "get_foot_step_lift");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "foot_grounding"), "set_foot_grounding", "is_foot_grounding");
 	ADD_GROUP("Warping", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "orientation_warping"), "set_orientation_warping", "is_orientation_warping");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "orientation_warping_max_angle", PROPERTY_HINT_RANGE, "0,150,0.1,radians_as_degrees"), "set_orientation_warping_max_angle", "get_orientation_warping_max_angle");

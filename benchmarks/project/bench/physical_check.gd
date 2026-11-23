@@ -158,11 +158,14 @@ func _run() -> void:
 		for b in bodies:
 			if b is PhysicalBone3D:
 				sp = maxf(sp, b.linear_velocity.length())
-				var r := 0.0
 				for s in b.get_children():
-					if s is CollisionShape3D:
-						r = s.shape.radius
-				lowest = minf(lowest, b.global_position.y - r)
+					if s is CollisionShape3D and s.shape is BoxShape3D:
+						# (Milestone 185: a foot's sole, a box — its lowest corner.)
+						var e: Vector3 = s.shape.size * 0.5
+						var t: Transform3D = s.global_transform
+						lowest = minf(lowest, t.origin.y - absf(t.basis.x.y) * e.x - absf(t.basis.y.y) * e.y - absf(t.basis.z.y) * e.z)
+					elif s is CollisionShape3D:
+						lowest = minf(lowest, b.global_position.y - s.shape.radius)
 		vmax = maxf(vmax, sp)
 		last_speed = sp
 	var hips_node: Node3D = bodies[0]

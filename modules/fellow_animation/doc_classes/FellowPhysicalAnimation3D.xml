@@ -10,7 +10,7 @@
 		- a sphere for the root;
 		- a small body for every bone between two bodies, so that no joint spans a bone that turns;
 		- a sphere for a leaf bone named like a head when the bone above it has no body.
-		Their masses go by volume and together make [member total_mass]. Each body is joined to the nearest body up the bones: by a pin while the bodies are driven (their angles are the animation's), by a cone limited to [member swing_limit] and [member twist_limit] about the pose it went limp in once [member strength] is under 0.5. The bodies are on [member collision_layer] and meet [member collision_mask]; they do not meet one another.
+		Their masses go by volume and together make [member total_mass] (with [member anatomical_limits]: by the part of a person's body each is). Each body is joined to the nearest body up the bones: by a pin while the bodies are driven (their angles are the animation's), by a cone limited to [member swing_limit] and [member twist_limit] about the pose it went limp in once [member strength] is under 0.5 (with [member anatomical_limits]: by its part's limits). The bodies are on [member collision_layer] and meet [member collision_mask]; they do not meet one another.
 		[b]The drive[/b] runs each physics step. Each body's velocity goes towards the animation's own motion plus a share of the error ([member position_gain], [member rotation_gain] of it a step), less the gravity the step will add. The share of the step it takes is the strength cubed, so a weakened body is let go of. With nothing pushing, the bodies stay within millimetres of the animation.
 		[b]Hits[/b] ([method apply_hit]): the impulse goes to the body nearest the point. That body is weakened by [member hit_weakening], its neighbours by half of it a link (two links), and the weakness fades with [member recovery_halflife], so the body gives way and comes back.
 		[b]A ragdoll[/b]: [member strength] 0. Use Jolt Physics; Godot Physics' joints jitter there.
@@ -82,6 +82,12 @@
 				Each body's weakness from hits (0 to 1).
 			</description>
 		</method>
+		<method name="get_joint_angles" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<description>
+				Milestone 185 (decision 0327): each body's joint now, in degrees: a knee's or an elbow's flexion from straight (with [member anatomical_limits]; negative: bent backwards), else how far its bone is turned from its parent's (0 for the root).
+			</description>
+		</method>
 		<method name="get_landed_face" qualifiers="const">
 			<return type="int" />
 			<description>
@@ -101,6 +107,7 @@
 				- [code]tracking_error_mean_m[/code], [code]tracking_angle_mean_rad[/code], [code]tracking_error_max_m[/code]: the bodies' distance and angle from the animation's bones, while driven at full strength;
 				- [code]speed_max_m_s[/code]: the fastest body;
 				- [code]drive_usec_per_step[/code]: the drive's time a physics step;
+				- [code]limp[/code]: whether the bodies are limp now (a ragdoll's joints; milestone 185);
 				- [code]rescues[/code]: bodies put back on their bones, held more than 0.75 m from them (behind a wall, under the ground);
 				- [code]bodies[/code], [code]weakness_max[/code].
 			</description>
@@ -138,6 +145,9 @@
 		</method>
 	</methods>
 	<members>
+		<member name="anatomical_limits" type="bool" setter="set_anatomical_limits" getter="is_anatomical_limits" default="true">
+			Milestone 185 (decision 0327): the bodies are a person's — found from the skeleton (its trunk from the root to the topmost bone; the limbs, the branches off it; in each the two longest neighbouring bodies are the upper and the lower limb, a limb reaching below the root a leg): their masses shared out as people's are (de Leva 1996: the head 5.6 %, a thigh 14.2 %, a shank 4.3 %, a foot 1.4 %, an upper arm 2.7 %, a forearm 1.6 %, a hand 0.6 %, the trunk the rest), the feet soles (a box from the heel to past the ball, its underside as far under the ankle as the motion matcher's database's ankles are over the ground when down), and limp, each joint as its part bends (six-degree joints about the pose it went limp in): a spine segment 12° (twist 6°), the neck and the head 30° (35°), a pelvis's hip bone or a collarbone 6° (5°), a shoulder 80° (50°), an ankle 30° (12°), a wrist 35° (20°); a hip flexed from 15° back to 120° forward of the thigh's way at rest, abducted 35° (twist 30°); a knee and an elbow hinges, from 3° backwards to 145° bent — the flexions measured from the body's own rest, whatever they are when it goes limp; and each joint's friction, 15 % of the torque of the bodies hanging from it held out at its length. Off: [member swing_limit] and [member twist_limit] for every joint and the masses by volume (milestone 166), which folded the trunk double and bent knees backwards.
+		</member>
 		<member name="auto_get_up" type="bool" setter="set_auto_get_up" getter="is_auto_get_up" default="true">
 			Gets up on its own after lying still [member get_up_delay] seconds ([method get_up]).
 		</member>
@@ -190,7 +200,7 @@
 			How hard the bodies are driven: 1, they follow the animation as far as they can; under 0.5, the joints are made cones about the pose at that moment; 0, a ragdoll.
 		</member>
 		<member name="swing_limit" type="float" setter="set_swing_limit" getter="get_swing_limit" default="0.87266463">
-			A limp body's cone joint: how far it swings from the pose it went limp in (radians).
+			A limp body's cone joint: how far it swings from the pose it went limp in (radians). With [member anatomical_limits], only a body that is no part of a person found.
 		</member>
 		<member name="topple_angle" type="float" setter="set_topple_angle" getter="get_topple_angle" default="1.0471976">
 			How far the body leans in a fall (driven) before it goes limp if its hips are still up (milestone 184: 60°; milestone 183's stiff fall went limp at 40°).
@@ -199,7 +209,7 @@
 			The bodies' mass together (kilograms; when they are built).
 		</member>
 		<member name="twist_limit" type="float" setter="set_twist_limit" getter="get_twist_limit" default="0.5235988">
-			A limp body's cone joint: how far it twists (radians).
+			A limp body's cone joint: how far it twists (radians). With [member anatomical_limits], only a body that is no part of a person found.
 		</member>
 	</members>
 	<signals>
