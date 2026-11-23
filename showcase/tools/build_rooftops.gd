@@ -11,6 +11,7 @@ extends SceneTree
 ## them and adds the light, the sky, the cloth, the water and the player.
 
 const OUT := "res://rooftops"
+const WindowUV2 := preload("res://tools/window_uv2.gd")
 
 ## Where each model stands: its centre on the ground (x, z) and its heading (degrees; 0: its front towards +Z).
 const PLACES := {
@@ -175,7 +176,8 @@ func _make_materials() -> void:
 	# Milestone 158: the windows' wooden casements give the panes; a lamp in fewer rooms, dimmer (one lit behind the
 	# climbed window had glowed white beside the reference's dark glass).
 	# Milestone 159: no lamps lit in the golden hour's daylight (one had lit the climbed window white).
-	mats["glass"] = _shader_mat("window_glass", {"lead_width": 0.0, "lit_share": 0.0, "lamp_energy": 0.3})
+	# Milestone 188: rooms behind the windows (FellowInteriorMaterial3D; each window's UV2 from tools/window_uv2.gd).
+	mats["glass"] = WindowUV2.glass_material()
 	mats["hay"] = _shader_mat("hay", {})
 	mats["cloth"] = _shader_mat("banner_cloth", {"pattern": 1})
 	var iron := StandardMaterial3D.new()
@@ -401,6 +403,8 @@ func _remap(p_mesh: Mesh, p_collision: bool, p_prefix := "") -> ArrayMesh:
 		var m := p_mesh.surface_get_material(i)
 		if m:
 			mname = m.resource_name
+		if mname == "glass" and not p_collision:
+			arrays = WindowUV2.add(arrays, WindowUV2.ROOM_HEIGHT) # milestone 188: each window's room
 		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		if not p_collision:
 			if mats.has(p_prefix + mname):

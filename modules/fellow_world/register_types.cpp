@@ -35,6 +35,7 @@
 #include "fellow_audio_director.h"
 #include "fellow_destructible_3d.h"
 #include "fellow_hlod_3d.h"
+#include "fellow_interior_material_3d.h"
 #include "fellow_pipeline_warmer_3d.h"
 #include "fellow_terrain_3d.h"
 #include "fellow_vehicle_3d.h"
@@ -126,7 +127,9 @@ void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowSoundEvent); // milestone 82
 		GDREGISTER_CLASS(FellowMixSnapshot);
 		GDREGISTER_CLASS(FellowAudioDirector);
+		GDREGISTER_CLASS(FellowInteriorMaterial3D); // milestone 188
 		FellowBakeShaders::register_provider(&FellowTerrain3D::fellow_bake_shader_codes); // milestone 61
+		FellowBakeShaders::register_provider(&FellowInteriorMaterial3D::fellow_bake_shader_codes);
 
 		Performance *performance = Performance::get_singleton();
 		if (performance) {
@@ -143,6 +146,7 @@ void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 void uninitialize_fellow_world_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
 		FellowDestructible3D::clear_cache(); // the shared pieces' meshes and shapes, before the servers go
+		FellowInteriorMaterial3D::cleanup_shader();
 		Performance *performance = Performance::get_singleton();
 		if (performance) {
 			for (const char *id : FELLOW_WORLD_MONITORS) {

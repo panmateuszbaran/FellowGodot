@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowInteriorMaterial3D" inherits="Material" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: window glass with a room behind it — interior mapping (milestone 188).
+	</brief_description>
+	<description>
+		A material for windows' glass that shows a room behind each window without its geometry: the view's ray is followed into a box (its side walls, floor, ceiling and back wall), whatever it meets drawn there — the walls' plaster or paper, panelling, a skirting and a cornice; on the back wall a painting, a door (shut, or open on the dark of the next room), a bookcase or a wardrobe; pictures on the side walls; cotto tiles, boards, a parquet or stone on the floor, and a rug; wooden beams across the ceiling or plaster; furniture across the middle of the room (a table with chairs and a vase, a sofa, an armchair with a lamp beside it, a desk) and in front of the back wall (a sideboard with a lamp or a vase on it, a bed's head); a lamp hanging from the ceiling; curtains just behind the glass (drapes drawn to either side, or a net). Each window's room is another, chosen by a hash of where its room is in the mesh and [member seed]. The rooms are lit by the day through the window, falling off into them ([member daylight], [member daylight_color]), and, in [member lamp_share] of them, by their lamp ([member lamp_energy], [member lamp_color]); all of it seen through the glass by Fresnel's law, with grime, the sky's reflection ([member reflection]) and old panes a little out of true ([member pane_size]).
+		Where the rooms are: with [member rooms_from_uv2] each window has its own, centred on it, from the glass's UV2 — the metres right of the window's middle (along the facade: the up axis crossed with the glass's normal) and up from its room's floor (for a window with a sill, 0.9 m under its bottom). With it off, the facade is cut into rooms [member room_size] wide and high from [member floor_height], in the mesh's space. Glass facing up or down shows no room. One shader for every instance, made once.
+		See [code]docs/decisions/0330-rooms-behind-the-windows.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="curtain_share" type="float" setter="set_curtain_share" getter="get_curtain_share" default="0.6">
+			The share of windows with curtains: of them six in ten drapes drawn to either side, four a net across the glass.
+		</member>
+		<member name="daylight" type="float" setter="set_daylight" getter="get_daylight" default="1.0">
+			How bright the rooms are by day, near the window: the light falls off into the room, to a tenth at its back wall, and less into its corners. The rooms glow with it (it is not the scene's light): lower it at dusk, to [code]0.05[/code] or so at night, when [member lamp_share] lights some.
+		</member>
+		<member name="daylight_color" type="Color" setter="set_daylight_color" getter="get_daylight_color" default="Color(1, 0.93, 0.84, 1)">
+			The day's light's colour in the rooms.
+		</member>
+		<member name="floor_height" type="float" setter="set_floor_height" getter="get_floor_height" default="0.0">
+			With [member rooms_from_uv2] off: the height of a storey's floor in the mesh's space (the storeys [member room_size]'s height apart from it).
+		</member>
+		<member name="furniture" type="float" setter="set_furniture" getter="get_furniture" default="1.0">
+			How furnished the rooms are: [code]1[/code] eight in ten rooms with furniture across the middle and half with some against the back wall; [code]0[/code] none.
+		</member>
+		<member name="glass_roughness" type="float" setter="set_glass_roughness" getter="get_glass_roughness" default="0.08">
+			The glass's roughness (more where it is grimy).
+		</member>
+		<member name="glass_tint" type="Color" setter="set_glass_tint" getter="get_glass_tint" default="Color(0.92, 0.95, 0.93, 1)">
+			The colour the glass gives what is seen through it.
+		</member>
+		<member name="grime" type="float" setter="set_grime" getter="get_grime" default="0.25">
+			How dirty the glass is: dimmer and rougher in patches.
+		</member>
+		<member name="lamp_color" type="Color" setter="set_lamp_color" getter="get_lamp_color" default="Color(1, 0.7, 0.42, 1)">
+			The lamps' light's colour.
+		</member>
+		<member name="lamp_energy" type="float" setter="set_lamp_energy" getter="get_lamp_energy" default="3.0">
+			How bright a lit lamp is, and the room round it.
+		</member>
+		<member name="lamp_share" type="float" setter="set_lamp_share" getter="get_lamp_share" default="0.0">
+			The share of rooms whose hanging lamp is lit (the others' hangs dark).
+		</member>
+		<member name="pane_size" type="Vector2" setter="set_pane_size" getter="get_pane_size" default="Vector2(0, 0)">
+			The size of a window's panes in metres (in its UV2's frame): each pane's normal a little out of true, as old glass is, so that the reflections break at its edges. [code]Vector2(0, 0)[/code]: flat glass.
+		</member>
+		<member name="reflection" type="float" setter="set_reflection" getter="get_reflection" default="0.35">
+			How much of the sky the glass mirrors (the environment's reflection, occluded by this much: a street's other houses hide most of the sky a window would mirror).
+		</member>
+		<member name="room_size" type="Vector3" setter="set_room_size" getter="get_room_size" default="Vector3(3.6, 3.6, 4.5)">
+			A room's width (along the facade), height and depth (into the building), in metres.
+		</member>
+		<member name="rooms_from_uv2" type="bool" setter="set_rooms_from_uv2" getter="is_rooms_from_uv2" default="true">
+			Each window its own room from its glass's UV2 (above). Off: a grid of rooms along the facade in the mesh's space ([member room_size], [member floor_height]), a window possibly looking into two.
+		</member>
+		<member name="seed" type="float" setter="set_seed" getter="get_seed" default="0.0">
+			Another set of rooms for the same windows.
+		</member>
+	</members>
+</class>

@@ -1,11 +1,5 @@
-[gd_resource type="ShaderMaterial" format=3]
-
-[ext_resource type="Shader" path="res://rooftops/shaders/window_glass.gdshader" id="1_d4b3x"]
+[gd_resource type="FellowInteriorMaterial3D" format=3]
 
 [resource]
-render_priority = 0
-shader = ExtResource("1_d4b3x")
-shader_parameter/lit_share = 0.0
-shader_parameter/curtain_share = null
-shader_parameter/lamp_energy = 0.3
-shader_parameter/lead_width = 0.0
+reflection = 0.3
+pane_size = Vector2(0.6, 0.75)

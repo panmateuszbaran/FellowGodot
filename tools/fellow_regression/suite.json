@@ -38,7 +38,8 @@
     "vehicle_damage",
     "structure",
     "stress",
-    "hair"
+    "hair",
+    "interiors"
    ]
   },
   "stock": {

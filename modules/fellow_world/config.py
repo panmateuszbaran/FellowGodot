@@ -13,6 +13,7 @@ def get_doc_classes():
     return [
         "FellowDestructible3D",
         "FellowHLOD3D",
+        "FellowInteriorMaterial3D",
         "FellowPipelineWarmer3D",
         "FellowStreamingCell3D",
         "FellowTerrain3D",
