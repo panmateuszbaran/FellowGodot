@@ -8,9 +8,15 @@ extends SceneTree
 ##    well its first pose fits the body (the mean distance of the bones), the bodies' fastest while blending in, how long
 ##    getting up takes, the hips' height standing again, and two seconds after: the bodies' distance from the animation;
 ##  * a push from the side while walking.
-## Prints one JSON line. Run on Jolt Physics (benchmarks/project/override.cfg: [physics] 3d/physics_engine="Jolt Physics"):
+## Milestone 184 (decision 0326), each trial: the feet's slip (how far a foot moves over the ground while within 3 cm of
+## its standing height: each stance's farthest from where it began, summed, until the body lies down; and in the two
+## seconds after getting up), and a fall's timing — when the hips' body reaches 0.3 m and how fast it comes down then,
+## how far it slides on, and when the fall went limp (its hips' height and lean then, whether at the knees).
+## Prints one JSON line (with --trace=1 also a line a frame: the feet, the hips, the motion matcher's feet and clip, the
+## fastest body; --trace_feet=1 adds its feet's locks). Run on Jolt Physics (benchmarks/project/override.cfg:
+## [physics] 3d/physics_engine="Jolt Physics"):
 ##   godot --headless --fixed-fps 60 --path benchmarks/project -s res://bench/balance_check.gd -- \
-##       [--pushes=20,40,60,80,100,130,160,200] [--fall=200]
+##       [--pushes=20,40,60,80,100,130,160,200] [--fall=200] [--trace=1]
 ## The clips: benchmarks/scripts/get_cmu_locomotion.sh (subjects 16, 35, 69, 139, 140).
 
 const STEP := 1.0 / 60.0
@@ -24,6 +30,7 @@ var mm
 var pa
 var events := []
 var joints := [] # [body, parent body, the child bone's place in the parent bone's space (rest)]
+var foot_y0 := [] # the feet's bodies' heights standing
 
 
 func _initialize() -> void:
@@ -86,11 +93,65 @@ func _trial(impulse: Vector3, at: Vector3, seconds: float) -> Dictionary:
 	var err_sum := 0.0
 	var err_n := 0
 	var gap := 0.0
+	# Milestone 184: the feet's slip and the fall's timing (see the top).
+	var feet: Array = [pa.get_node("../FellowPhysicalBones/Body_LeftFoot"), pa.get_node("../FellowPhysicalBones/Body_RightFoot")]
+	var anchor: Array = [null, null]
+	var stance_slip := [0.0, 0.0]
+	var slip := 0.0
+	var slip_max := 0.0
+	var up_slip := 0.0 # the same in the two seconds after getting up (the motion matcher taking over)
+	var impact_t := -1.0
+	var impact_v := 0.0
+	var impact_at := Vector3()
+	var after_slide := 0.0
+	var hips_last := _hips_body()
 	while t < seconds:
 		await physics_frame
 		t += STEP
 		var s: int = pa.get_state()
 		gap = maxf(gap, _joint_gap())
+		for k in 2:
+			var fp: Vector3 = feet[k].global_position
+			var after_up: bool = got_up_at >= 0.0 and t - got_up_at < 2.0
+			var on: bool = fp.y < foot_y0[k] + 0.03 and ((s < 3 and t < 4.0 and got_up_at < 0.0) or after_up)
+			if on and anchor[k] == null:
+				anchor[k] = fp
+				stance_slip[k] = 0.0
+			if on:
+				stance_slip[k] = maxf(stance_slip[k], Vector2(fp.x - anchor[k].x, fp.z - anchor[k].z).length())
+			if not on and anchor[k] != null:
+				if got_up_at >= 0.0:
+					up_slip += stance_slip[k]
+				else:
+					slip += stance_slip[k]
+					slip_max = maxf(slip_max, stance_slip[k])
+				anchor[k] = null
+		var hp := _hips_body()
+		if impact_t < 0.0 and hp.y < 0.3:
+			impact_t = t
+			impact_v = (hips_last.y - hp.y) / STEP
+			impact_at = hp
+		if impact_t >= 0.0 and t - impact_t < 2.0:
+			after_slide = maxf(after_slide, Vector2(hp.x - impact_at.x, hp.z - impact_at.z).length())
+		hips_last = hp
+		if args.has("trace"):
+			var mf: PackedVector3Array = mm.get_foot_positions()
+			var fast := ""
+			var fast_v := 0.0
+			for b in pa.get_node("../FellowPhysicalBones").get_children():
+				if b is PhysicalBone3D and b.linear_velocity.length() > fast_v:
+					fast_v = b.linear_velocity.length()
+					fast = b.name
+			print("tracev %.3f %d %s %.2f" % [t, s, fast, fast_v])
+			var lf: Vector3 = feet[0].global_position
+			var rf: Vector3 = feet[1].global_position
+			var line := "trace %.3f %d L %.3f %.3f %.3f R %.3f %.3f %.3f H %.3f %.3f %.3f" % [t, s, lf.x, lf.y, lf.z, rf.x, rf.y, rf.z, hp.x, hp.y, hp.z]
+			line += " ML %.3f %.3f %.3f MR %.3f %.3f %.3f" % [mf[0].x, mf[0].y, mf[0].z, mf[1].x, mf[1].y, mf[1].z]
+			line += " %s %d" % [mm.get_current_clip(), mm.get_current_frame()]
+			if args.has("trace_feet"):
+				var ms: Dictionary = mm.get_stats()
+				line += " lk %s %s" % [ms["left_locked"], ms["right_locked"]]
+			print(line)
 		if s != last:
 			states.append([STATES[s], snappedf(t, 0.01)])
 			last = s
@@ -113,15 +174,31 @@ func _trial(impulse: Vector3, at: Vector3, seconds: float) -> Dictionary:
 	r["states"] = states
 	r["travel_m"] = snappedf(travel, 0.01)
 	r["joint_gap_max_mm"] = snappedf(gap * 1000.0, 0.1)
+	for k in 2:
+		if anchor[k] != null:
+			if got_up_at >= 0.0:
+				up_slip += stance_slip[k]
+			else:
+				slip += stance_slip[k]
+				slip_max = maxf(slip_max, stance_slip[k])
+	r["feet_slip_cm"] = snappedf(slip * 100.0, 0.1)
+	r["feet_slip_max_cm"] = snappedf(slip_max * 100.0, 0.1)
+	if impact_t >= 0.0:
+		r["hips_down_s"] = snappedf(impact_t, 0.01)
+		r["hips_down_speed_m_s"] = snappedf(impact_v, 0.01)
+		r["hips_slide_after_m"] = snappedf(after_slide, 0.01)
 	var st: Dictionary = pa.get_balance_stats()
 	if events.has("fell"):
-		r["fall"] = {"landed": FACES[int(st["landed_face"])], "lying_after_s": snappedf(float(st["fall_seconds"]), 0.01)}
+		r["fall"] = {"landed": FACES[int(st["landed_face"])], "lying_after_s": snappedf(float(st["fall_seconds"]), 0.01),
+			"limp_after_s": snappedf(float(st["fall_limp_seconds"]), 0.01), "limp_hips_m": snappedf(float(st["fall_limp_hips_m"]), 0.01),
+			"limp_lean_deg": snappedf(float(st["fall_limp_lean_deg"]), 0.1), "kneeling": st["fall_kneeling"]}
 		if events.has("got_up"):
 			r["get_up"] = {"clip": st["get_up_clip"], "start_fit_m": snappedf(float(st["get_up_match_error_m"]), 0.001),
 				"blend_speed_max_m_s": snappedf(float(st["get_up_blend_speed_max_m_s"]), 0.01),
 				"seconds": snappedf(float(st["get_up_seconds"]), 0.01),
 				"hips_height_m": snappedf(_hips_body().y, 0.001),
-				"tracking_after_mm": snappedf(1000.0 * err_sum / maxf(err_n, 1), 0.1)}
+				"tracking_after_mm": snappedf(1000.0 * err_sum / maxf(err_n, 1), 0.1),
+				"feet_slip_after_cm": snappedf(up_slip * 100.0, 0.1)}
 	r["events"] = events.duplicate()
 	return r
 
@@ -162,6 +239,8 @@ func _run() -> void:
 	if not pa.is_built():
 		pa.build()
 	await _reset(Vector3.ZERO, Vector3(0, 0, 1))
+	for f in ["Body_LeftFoot", "Body_RightFoot"]:
+		foot_y0.append((pa.get_node("../FellowPhysicalBones/" + f) as Node3D).global_position.y)
 	var sim: Node = pa.get_node("../FellowPhysicalBones")
 	var by_bone := {}
 	for b in sim.get_children():

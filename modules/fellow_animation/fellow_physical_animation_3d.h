@@ -93,14 +93,15 @@ private:
 
 	// Milestone 183 (decision 0325): balance — a hit's capture point (where the centre of mass must be stood over to
 	// stop: its offset plus its velocity over sqrt(g / h)) beyond `step_threshold` staggers the character (its motion
-	// matcher pushed there), beyond `fall_threshold` topples it, stiff, about its feet until it goes limp; lying still,
-	// it gets up with the motion matcher's database's clip (tagged `get_up_tag`) whose first pose fits the body's best,
-	// blended from the ragdoll's pose, and walks on.
+	// matcher pushed there), beyond `fall_threshold` makes it fall (milestone 184, decision 0326: its legs give way, its
+	// knees bending over its feet, as it leans about them and its arms reach towards the ground) until it goes limp with
+	// its hips near the ground; lying still, it gets up with the motion matcher's database's clip (tagged `get_up_tag`)
+	// whose first pose fits the body's best, blended from the ragdoll's pose, and walks on.
 	bool balance = false;
 	NodePath motion_matcher_path;
 	float step_threshold = 0.12f; // m
 	float fall_threshold = 0.7f; // m
-	float topple_angle = Math::deg_to_rad(40.0f); // the stiff fall's angle where the body goes limp
+	float topple_angle = Math::deg_to_rad(60.0f); // the fall's lean where the body goes limp (if its hips are still up)
 	StringName get_up_tag = "get_up";
 	bool auto_get_up = true;
 	float get_up_delay = 1.0f; // s lying still
@@ -113,14 +114,46 @@ private:
 	float still_time = 0.0f;
 	float stagger_end = 0.0f; // s: the stagger's push
 	int landed_face = FACE_UP;
-	// The stiff fall: the pose when it began, turned about the feet by an inverted pendulum's angle.
+	// The fall: the pose when it began. Milestone 184 (decision 0326): the legs give way — the hips sink (their speed
+	// rising to `FALL_SINK_SPEED` after a reaction's time) and lean about the feet as an inverted pendulum, the upper
+	// body with them; the knees bent by IK over the feet, which stay where they stand; the arms reaching towards the
+	// ground it falls to. Without the legs' roles (no motion matcher's database), milestone 183's stiff fall: the pose
+	// turned about the feet.
 	LocalVector<Transform3D> fall_targets;
+	LocalVector<int8_t> fall_part; // per body: FALL_UPPER, FALL_LEG + side, FALL_FOOT + side, FALL_ARM + arm
+	int fall_leg[2][3] = { { -1, -1, -1 }, { -1, -1, -1 } }; // per side: the thigh's, the shin's and the foot's body
+	int fall_arm[2] = { -1, -1 }; // per arm: its upper arm's body (it and the bodies below reach)
+	Vector3 fall_hand[2]; // per arm: its far end when the fall began (world)
+	Vector3 fall_hips; // the hips' bone when it began (world)
+	Vector3 fall_forward; // the way the character faced
+	bool fall_buckles = false; // the legs found: the legs give way (else the stiff fall)
+	bool fall_kneeling = false; // the knees down to the ground (falling forward): limp
 	Vector3 fall_pivot;
 	Vector3 fall_axis;
 	Vector3 fall_direction;
 	float fall_angle = 0.0f;
+	float fall_angle0 = 0.0f;
 	float fall_rate = 0.0f;
-	float fall_height = 1.0f;
+	float fall_height = 1.0f; // buckling: the hips' bone's distance from the feet; stiff: the centre of mass's height
+	float fall_ground = 0.0f;
+	float fall_sink = 0.0f; // m the hips have sunk
+	float fall_sink_speed = 0.0f;
+	float stat_fall_limp_time = 0.0f; // s from the fall's start to going limp
+	float stat_fall_limp_height = 0.0f; // the hips' target over the ground then
+	float stat_fall_limp_angle = 0.0f; // the lean then (radians)
+	bool stat_fall_kneeling = false;
+	enum {
+		FALL_UPPER = -1,
+		FALL_LEG = 0,
+		FALL_FOOT = 2,
+		FALL_ARM = 4,
+	};
+	static constexpr float FALL_REACTION = 0.12f; // s before the legs give way
+	static constexpr float FALL_SINK_SPEED = 2.0f; // m/s: the hips' sinking at most
+	static constexpr float FALL_SINK_RISE = 0.22f; // s: the sinking speed's rise (its time constant)
+	static constexpr float FALL_LIMP_HEIGHT = 0.38f; // m: the hips' bone over the ground where it goes limp
+	static constexpr float FALL_REACH_DELAY = 0.1f; // s before the arms reach out
+	static constexpr float FALL_REACH_TIME = 0.35f; // s they take
 	// The get-up clips found in the database: their range, the frames played (from just before the body rises to
 	// standing), the face they start on.
 	struct GetUpClip {
@@ -141,6 +174,7 @@ private:
 	LocalVector<Transform3D> handover_from; // the clip's last targets (world)
 	bool handing_over = false;
 	float handover_time = 0.0f;
+	int fall_hips_body = -1;
 	// Statistics (get_balance_stats()).
 	int64_t stat_hits = 0;
 	int64_t stat_staggers = 0;
@@ -177,6 +211,10 @@ private:
 	void _set_state(State p_state);
 	void _centre_of_mass(Vector3 &r_position, Vector3 &r_velocity, Vector3 &r_target, float &r_feet_y) const;
 	void _fall(const Vector3 &p_direction, float p_speed);
+	void _fall_parts();
+	void _fall_pose();
+	Vector3 _fall_hips_at(float p_sink, float p_angle) const;
+	bool _fall_leg(int p_side, const Vector3 &p_hips, const Basis &p_lean, Transform3D &r_thigh, Transform3D &r_shin, Vector3 &r_foot) const;
 	void _update_balance(float p_dt);
 	bool _scan_get_up_clips();
 	void _clip_pose(const FellowMotionDatabase *p_db, int p_frame);

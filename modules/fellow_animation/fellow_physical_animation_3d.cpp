@@ -444,10 +444,14 @@ void FellowPhysicalAnimation3D::_process_modification(double p_delta) {
 	}
 	// Milestone 183 (decision 0325): the balance's states put their own targets in place of the animation's.
 	if (state == STATE_FALLING && state_strength > 0.0f && fall_targets.size() == bodies.size()) {
-		// The stiff fall: the pose it began in, turned about the feet.
-		const Basis r(fall_axis, fall_angle);
-		for (uint32_t i = 0; i < bodies.size(); i++) {
-			bodies[i].target = Transform3D(r * fall_targets[i].basis, fall_pivot + r.xform(fall_targets[i].origin - fall_pivot));
+		if (fall_buckles) {
+			_fall_pose();
+		} else {
+			// The stiff fall (milestone 183): the pose it began in, turned about the feet.
+			const Basis r(fall_axis, fall_angle);
+			for (uint32_t i = 0; i < bodies.size(); i++) {
+				bodies[i].target = Transform3D(r * fall_targets[i].basis, fall_pivot + r.xform(fall_targets[i].origin - fall_pivot));
+			}
 		}
 	} else if (state == STATE_GETTING_UP && gu_clip >= 0) {
 		FellowMotionMatcher3D *mm = _get_matcher();
@@ -469,7 +473,8 @@ void FellowPhysicalAnimation3D::_process_modification(double p_delta) {
 			}
 		}
 	} else if (handing_over && handover_from.size() == bodies.size()) {
-		// From the clip's last pose to the motion matcher's.
+		// From the clip's last pose to the motion matcher's (since milestone 184 the same pose at first: it plays on from
+		// the clip's last frame).
 		const float x = CLAMP(handover_time / handover_blend, 0.0f, 1.0f);
 		const float w = x * x * (3.0f - 2.0f * x);
 		for (uint32_t i = 0; i < bodies.size(); i++) {
@@ -618,7 +623,9 @@ void FellowPhysicalAnimation3D::apply_hit(const Vector3 &p_position, const Vecto
 			e.node->apply_central_impulse(p_impulse * ((1.0f - local) * e.node->get_mass() / MAX(mass, 1e-3f)));
 		}
 		if (falls) {
-			_fall(capture / c, dv.length());
+			// The fall begins as fast as the centre of mass would still be moving after the farthest step (the capture
+			// point beyond a step's reach); the whole push's speed toppled it in a third of a second.
+			_fall(capture / c, omega * (c - fall_threshold));
 			return;
 		}
 		if (c > step_threshold) {
@@ -717,9 +724,11 @@ void FellowPhysicalAnimation3D::_centre_of_mass(Vector3 &r_position, Vector3 &r_
 }
 
 void FellowPhysicalAnimation3D::_fall(const Vector3 &p_direction, float p_speed) {
-	// A stiff fall: the pose the body stands in now, turned about its feet the way it was pushed as an inverted
-	// pendulum falls (its angle's rate from the push's speed over its height, then gravity's), the drive holding the
-	// body to it; past `topple_angle` it goes limp and lands a ragdoll. The motion matcher stops.
+	// A fall the way it was pushed. Milestone 184 (decision 0326): the legs give way — the hips sink and the body leans
+	// about the feet as an inverted pendulum (its angle's rate from the speed over its height, then gravity's), the
+	// knees bending over the feet, the arms reaching towards the ground — the drive holding the bodies to that, until the
+	// hips are near the ground (or the lean is past `topple_angle`): then it goes limp and lands a ragdoll. Without the
+	// legs' roles, milestone 183's stiff fall (the pose turned about the feet). The motion matcher stops.
 	Vector3 dir(p_direction.x, 0.0f, p_direction.z);
 	if (dir.length() < 1e-4f) {
 		dir = Vector3(0, 0, 1);
@@ -741,15 +750,25 @@ void FellowPhysicalAnimation3D::_fall(const Vector3 &p_direction, float p_speed)
 	}
 	fall_pivot = pivot_mass > 0.0f ? pivot / pivot_mass : Vector3(com.x, feet_y, com.z);
 	fall_pivot.y = feet_y;
-	// Pushed the way of the fall the feet would trip over: the pivot at their edge on that side.
-	fall_pivot += dir * 0.08f;
 	fall_axis = Vector3(0, 1, 0).cross(dir).normalized();
 	fall_direction = dir;
-	fall_height = MAX(com.y - feet_y, 0.3f);
-	fall_angle = 0.02f;
+	fall_ground = feet_y;
+	fall_angle0 = 0.02f;
+	fall_angle = fall_angle0;
+	fall_sink = 0.0f;
+	fall_sink_speed = 0.0f;
+	_fall_parts();
+	fall_kneeling = false;
+	if (fall_buckles) {
+		fall_height = MAX(float(fall_hips.distance_to(fall_pivot)), 0.3f);
+	} else {
+		// Pushed the way of the fall the feet would trip over: the pivot at their edge on that side.
+		fall_pivot += dir * 0.08f;
+		fall_height = MAX(com.y - feet_y, 0.3f);
+	}
 	fall_rate = MAX(p_speed, 0.3f) / fall_height;
-	// The whole body topples alike: no part given way (a part held weaker than its neighbours is pulled from its joint
-	// as they are driven).
+	// The whole body falls alike: no part given way (a part held weaker than its neighbours is pulled from its joint as
+	// they are driven).
 	for (Body &b : bodies) {
 		b.weakness = 0.0f;
 	}
@@ -760,6 +779,249 @@ void FellowPhysicalAnimation3D::_fall(const Vector3 &p_direction, float p_speed)
 		mm->push(Vector3(), 1e6f); // standing still until it gets up
 	}
 	emit_signal(SNAME("fell"), dir);
+}
+
+void FellowPhysicalAnimation3D::_fall_parts() {
+	// Which body does what as the legs give way: the legs (the database's roles: thigh, shin, foot) bend over the feet,
+	// the feet (and what hangs below them) stay; the arms — the branches off the trunk (the topmost bone's bodies down to
+	// the hips) that hold no leg, from their second body when they have three or more (the first is a collarbone) —
+	// reach; the rest lean and sink with the hips.
+	fall_part.resize(bodies.size());
+	for (uint32_t i = 0; i < bodies.size(); i++) {
+		fall_part[i] = FALL_UPPER;
+	}
+	fall_buckles = false;
+	fall_arm[0] = fall_arm[1] = -1;
+	Skeleton3D *skeleton = get_skeleton();
+	FellowMotionMatcher3D *mm = _get_matcher();
+	const Ref<FellowMotionDatabase> db = mm ? mm->get_database() : Ref<FellowMotionDatabase>();
+	if (!skeleton || db.is_null()) {
+		return;
+	}
+	auto body_of_bone = [&](int p_bone) {
+		for (uint32_t i = 0; i < bodies.size(); i++) {
+			if (bodies[i].bone == p_bone) {
+				return int(i);
+			}
+		}
+		return -1;
+	};
+	auto body_of_role = [&](FellowMotionDatabase::BoneRole p_role) {
+		const int b = db->get_bone_role(p_role);
+		return b < 0 ? -1 : body_of_bone(skeleton->find_bone(db->get_bone_name(b)));
+	};
+	auto under = [&](int p_body, int p_ancestor) {
+		for (int p = p_body; p >= 0; p = bodies[p].parent) {
+			if (p == p_ancestor) {
+				return true;
+			}
+		}
+		return false;
+	};
+	const FellowMotionDatabase::BoneRole roles[2][3] = {
+		{ FellowMotionDatabase::ROLE_LEFT_UPPER_LEG, FellowMotionDatabase::ROLE_LEFT_LOWER_LEG, FellowMotionDatabase::ROLE_LEFT_FOOT },
+		{ FellowMotionDatabase::ROLE_RIGHT_UPPER_LEG, FellowMotionDatabase::ROLE_RIGHT_LOWER_LEG, FellowMotionDatabase::ROLE_RIGHT_FOOT },
+	};
+	bool legs = true;
+	for (int s = 0; s < 2; s++) {
+		for (int k = 0; k < 3; k++) {
+			fall_leg[s][k] = body_of_role(roles[s][k]);
+			legs = legs && fall_leg[s][k] >= 0;
+		}
+	}
+	int hips = body_of_role(FellowMotionDatabase::ROLE_HIPS);
+	for (uint32_t i = 0; hips < 0 && i < bodies.size(); i++) {
+		if (bodies[i].parent < 0) {
+			hips = i;
+		}
+	}
+	fall_hips_body = hips;
+	if (!legs || hips < 0 || !under(fall_leg[0][1], fall_leg[0][0]) || !under(fall_leg[0][2], fall_leg[0][1]) ||
+			!under(fall_leg[1][1], fall_leg[1][0]) || !under(fall_leg[1][2], fall_leg[1][1])) {
+		return;
+	}
+	fall_buckles = true;
+	fall_hips = (fall_targets[hips] * bodies[hips].offset.affine_inverse()).origin;
+	for (uint32_t i = 0; i < bodies.size(); i++) {
+		for (int s = 0; s < 2; s++) {
+			if (under(i, fall_leg[s][2])) {
+				fall_part[i] = FALL_FOOT + s;
+			} else if (int(i) == fall_leg[s][0] || int(i) == fall_leg[s][1]) {
+				fall_part[i] = FALL_LEG + s;
+			}
+		}
+	}
+	// The way it faced: the motion matcher's character's, else from the hips to the knees' side.
+	fall_forward = Vector3(0, 0, 1);
+	if (mm) {
+		fall_forward = mm->get_character_rotation().xform(Vector3(0, 0, 1));
+	}
+	fall_forward.y = 0.0f;
+	fall_forward = fall_forward.length() > 1e-4f ? fall_forward.normalized() : Vector3(0, 0, 1);
+	// The trunk and the arms.
+	int top = -1;
+	for (int b = _top_bone(); b >= 0 && top < 0; b = skeleton->get_bone_parent(b)) {
+		top = body_of_bone(b);
+	}
+	LocalVector<bool> trunk;
+	trunk.resize(bodies.size());
+	for (uint32_t i = 0; i < bodies.size(); i++) {
+		trunk[i] = false;
+	}
+	for (int p = top; p >= 0; p = bodies[p].parent) {
+		trunk[p] = true;
+	}
+	int arms = 0;
+	for (uint32_t r = 0; r < bodies.size() && arms < 2; r++) {
+		if (trunk[r] || bodies[r].parent < 0 || !trunk[bodies[r].parent] || fall_part[r] != FALL_UPPER ||
+				under(fall_leg[0][0], r) || under(fall_leg[1][0], r)) {
+			continue;
+		}
+		// The branch: its bodies, how deep it goes.
+		int child = -1;
+		int deepest = r;
+		int depth_max = 0;
+		for (uint32_t i = 0; i < bodies.size(); i++) {
+			if (bodies[i].parent == int(r) && child < 0) {
+				child = i;
+			}
+			int depth = 0;
+			for (int p = i; p >= 0 && p != int(r); p = bodies[p].parent) {
+				depth++;
+			}
+			if (under(i, r) && depth > depth_max) {
+				depth_max = depth;
+				deepest = i;
+			}
+		}
+		const int pivot = (depth_max >= 2 && child >= 0) ? child : int(r);
+		if (pivot == deepest) {
+			continue; // (a lone body: a stump, not an arm)
+		}
+		fall_arm[arms] = pivot;
+		for (uint32_t i = 0; i < bodies.size(); i++) {
+			if (under(i, pivot)) {
+				fall_part[i] = FALL_ARM + arms;
+			}
+		}
+		// Its far end: the deepest body's capsule's end away from the shoulder.
+		const Vector3 shoulder = (fall_targets[pivot] * bodies[pivot].offset.affine_inverse()).origin;
+		const Transform3D &t = fall_targets[deepest];
+		const Vector3 e0 = t.xform(Vector3(0, 0, -bodies[deepest].length * 0.5f));
+		const Vector3 e1 = t.xform(Vector3(0, 0, bodies[deepest].length * 0.5f));
+		fall_hand[arms] = e0.distance_to(shoulder) > e1.distance_to(shoulder) ? e0 : e1;
+		arms++;
+	}
+}
+
+Vector3 FellowPhysicalAnimation3D::_fall_hips_at(float p_sink, float p_angle) const {
+	// The hips on the line from the feet: leant by the angle about them, nearer them by as much as they have sunk.
+	const Basis lean(fall_axis, p_angle - fall_angle0);
+	return fall_pivot + lean.xform(fall_hips - fall_pivot) * ((fall_height - p_sink) / fall_height);
+}
+
+bool FellowPhysicalAnimation3D::_fall_leg(int p_side, const Vector3 &p_hips, const Basis &p_lean, Transform3D &r_thigh, Transform3D &r_shin, Vector3 &r_foot) const {
+	// One leg between the hips (moved and leant) and its foot, which stays where it stands (unless out of reach): the
+	// thigh and the shin turned so that the knee bends forward (two-bone IK). False if the knee would be within 7 cm of
+	// the ground that way — kneeling: then the knee is on the ground (as far from the hips, the same way) and the foot
+	// drawn to the shin's end, as near its place as it can be.
+	const Vector3 up(0, 1, 0);
+	const int th = fall_leg[p_side][0];
+	const int sh = fall_leg[p_side][1];
+	const int ft = fall_leg[p_side][2];
+	const Transform3D thigh = fall_targets[th] * bodies[th].offset.affine_inverse();
+	const Transform3D shin = fall_targets[sh] * bodies[sh].offset.affine_inverse();
+	const Vector3 a0 = thigh.origin;
+	const Vector3 b0 = shin.origin;
+	const Vector3 c0 = (fall_targets[ft] * bodies[ft].offset.affine_inverse()).origin;
+	const Vector3 a1 = p_hips + p_lean.xform(a0 - fall_hips);
+	const float la = MAX((b0 - a0).length(), 1e-3f);
+	const float lb = MAX((c0 - b0).length(), 1e-3f);
+	Vector3 c1 = c0;
+	Vector3 ac = c1 - a1;
+	const float reach = (la + lb) * 0.999f;
+	if (ac.length() > reach) {
+		c1 = a1 + ac.normalized() * reach; // (out of reach: the foot comes along)
+		ac = c1 - a1;
+	}
+	const float d = CLAMP(float(ac.length()), Math::abs(la - lb) + 1e-3f, reach);
+	const Vector3 u = ac.length() > 1e-6f ? ac.normalized() : -up;
+	const float ca = CLAMP((la * la + d * d - lb * lb) / (2.0f * la * d), -1.0f, 1.0f);
+	const float sa = Math::sqrt(MAX(1.0f - ca * ca, 0.0f));
+	Vector3 w = fall_forward - u * fall_forward.dot(u);
+	w = w.length() > 1e-4f ? w.normalized() : Vector3();
+	Vector3 b1 = a1 + (u * ca + w * sa) * la;
+	const float knee_y = fall_ground + 0.07f;
+	const bool clear = b1.y >= knee_y || a1.y - knee_y > la;
+	if (!clear) {
+		Vector3 h = b1 - a1;
+		h.y = 0.0f;
+		h = h.length() > 1e-4f ? h.normalized() : fall_forward;
+		b1 = a1 + h * Math::sqrt(MAX(la * la - (a1.y - knee_y) * (a1.y - knee_y), 0.0f)) + up * (knee_y - a1.y);
+		const Vector3 bc = c0 - b1;
+		c1 = b1 + (bc.length() > 1e-4f ? bc.normalized() : -up) * lb;
+		c1.y = MAX(c1.y, c0.y);
+	}
+	r_thigh = Transform3D(Basis(Quaternion((b0 - a0).normalized(), (b1 - a1).normalized())) * thigh.basis, a1) * bodies[th].offset;
+	r_shin = Transform3D(Basis(Quaternion((c0 - b0).normalized(), (c1 - b1).normalized())) * shin.basis, b1) * bodies[sh].offset;
+	r_foot = c1 - c0;
+	return clear;
+}
+
+void FellowPhysicalAnimation3D::_fall_pose() {
+	// The targets as the legs give way (see _fall()): the upper body leant by the angle and moved with the hips (on the
+	// line from the feet, shortened as they sink); the legs between them and the feet (_fall_leg()); the arms turned
+	// about their shoulders towards the ground ahead of the fall.
+	const Vector3 up(0, 1, 0);
+	const Vector3 hips = _fall_hips_at(fall_sink, fall_angle);
+	const Basis lean(fall_axis, fall_angle - fall_angle0);
+	for (uint32_t i = 0; i < bodies.size(); i++) {
+		const int part = fall_part[i];
+		if (part == FALL_UPPER || part >= FALL_ARM) {
+			bodies[i].target = Transform3D(lean * fall_targets[i].basis, hips + lean.xform(fall_targets[i].origin - fall_hips));
+		} else if (part >= FALL_FOOT) {
+			bodies[i].target = fall_targets[i];
+		}
+	}
+	for (int s = 0; s < 2; s++) {
+		Vector3 foot;
+		_fall_leg(s, hips, lean, bodies[fall_leg[s][0]].target, bodies[fall_leg[s][1]].target, foot);
+		if (foot.length_squared() > 1e-10f) {
+			for (uint32_t i = 0; i < bodies.size(); i++) {
+				if (fall_part[i] == FALL_FOOT + s) {
+					bodies[i].target.origin += foot;
+				}
+			}
+		}
+	}
+	// The arms reach out after a moment (a protective response's latency), towards the ground ahead of the fall and a
+	// little to their own side.
+	const float x = CLAMP((state_time - FALL_REACH_DELAY) / FALL_REACH_TIME, 0.0f, 1.0f);
+	const float w = x * x * (3.0f - 2.0f * x);
+	for (int a = 0; a < 2 && w > 0.0f; a++) {
+		const int pivot = fall_arm[a];
+		if (pivot < 0) {
+			continue;
+		}
+		const Vector3 shoulder = (bodies[pivot].target * bodies[pivot].offset.affine_inverse()).origin;
+		const Vector3 hand = hips + lean.xform(fall_hand[a] - fall_hips);
+		Vector3 side = shoulder - hips;
+		side -= up * side.dot(up) + fall_direction * side.dot(fall_direction);
+		side = side.length() > 1e-4f ? side.normalized() : Vector3();
+		const Vector3 reach = (fall_direction * 0.55f - up * 0.8f + side * 0.3f).normalized();
+		const Vector3 now = hand - shoulder;
+		if (now.length() < 1e-4f) {
+			continue;
+		}
+		const Quaternion q = Quaternion().slerp(Quaternion(now.normalized(), reach), w);
+		const Basis qb(q);
+		for (uint32_t i = 0; i < bodies.size(); i++) {
+			if (fall_part[i] == FALL_ARM + a) {
+				const Transform3D t = bodies[i].target;
+				bodies[i].target = Transform3D(qb * t.basis, shoulder + q.xform(t.origin - shoulder));
+			}
+		}
+	}
 }
 
 void FellowPhysicalAnimation3D::knock_down(const Vector3 &p_velocity) {
@@ -1045,11 +1307,43 @@ void FellowPhysicalAnimation3D::_update_balance(float p_dt) {
 		} break;
 		case STATE_FALLING: {
 			if (state_strength > 0.0f) {
-				// The stiff fall: an inverted pendulum (angle'' = g / h sin angle) until it goes limp.
-				fall_rate += 9.81f / fall_height * Math::sin(fall_angle) * p_dt;
-				fall_angle += fall_rate * p_dt;
-				if (fall_angle >= topple_angle) {
+				bool limp_now = false;
+				if (fall_buckles) {
+					// The legs give way after a reaction's time: the hips sink, their speed rising towards
+					// FALL_SINK_SPEED; the lean an inverted pendulum about the feet as long as the hips are high
+					// (angle'' = g / l sin angle, l shortening as they sink). Limp with the hips near the ground.
+					if (state_time > FALL_REACTION) {
+						fall_sink_speed = FALL_SINK_SPEED * (1.0f - Math::exp(-(state_time - FALL_REACTION) / FALL_SINK_RISE));
+					}
+					// Falling forward the knees reach the ground (kneeling): it goes limp there, the ragdoll landing on them
+					// and falling on over them.
+					const float sink = MIN(fall_sink + fall_sink_speed * p_dt, fall_height - 0.1f);
+					{
+						const Vector3 hips = _fall_hips_at(sink, fall_angle);
+						const Basis lean(fall_axis, fall_angle - fall_angle0);
+						Transform3D thigh, shin;
+						Vector3 foot;
+						fall_kneeling = !_fall_leg(0, hips, lean, thigh, shin, foot) || !_fall_leg(1, hips, lean, thigh, shin, foot);
+					}
+					if (!fall_kneeling) {
+						fall_sink = sink;
+					}
+					const float l = fall_height - fall_sink;
+					fall_rate += 9.81f / l * Math::sin(fall_angle) * p_dt;
+					fall_angle += fall_rate * p_dt;
+					limp_now = fall_kneeling || _fall_hips_at(fall_sink, fall_angle).y - fall_ground < FALL_LIMP_HEIGHT || fall_angle >= topple_angle;
+				} else {
+					// The stiff fall: an inverted pendulum (angle'' = g / h sin angle) until it goes limp.
+					fall_rate += 9.81f / fall_height * Math::sin(fall_angle) * p_dt;
+					fall_angle += fall_rate * p_dt;
+					limp_now = fall_angle >= topple_angle;
+				}
+				if (limp_now) {
 					state_strength = 0.0f;
+					stat_fall_limp_time = state_time;
+					stat_fall_limp_height = fall_buckles ? _fall_hips_at(fall_sink, fall_angle).y - fall_ground : 0.0f;
+					stat_fall_kneeling = fall_kneeling;
+					stat_fall_limp_angle = fall_angle;
 				}
 				break;
 			}
@@ -1110,9 +1404,11 @@ void FellowPhysicalAnimation3D::_update_balance(float p_dt) {
 			gu_frame += double(p_dt) * db->get_sample_rate();
 			const GetUpClip &clip = get_up_clips[gu_clip];
 			if (gu_frame >= clip.stop) {
-				// Standing: the motion matcher put where the clip ends, facing its way; its pose blended in.
-				const Transform3D root = gu_anchor * Transform3D(Basis(db->get_root_rotation(clip.stop)), db->get_root_position(clip.stop));
-				mm->teleport(Vector3(root.origin.x, gu_anchor.origin.y, root.origin.z), root.basis.xform(Vector3(0, 0, 1)));
+				// Standing: the motion matcher playing on from the clip's last frame, put where the clip is played (its root
+				// the anchor: the database has the hips relative to the root, under them). Milestone 184: it was put where the
+				// clip's root ends with a pose of its own — the root's path added a second time — and the body slid up to
+				// 60 cm over the blend. Its next search finds what follows.
+				mm->play_from(clip.stop, gu_anchor.origin, gu_anchor.basis.xform(Vector3(0, 0, 1)));
 				handover_from.resize(bodies.size());
 				for (uint32_t i = 0; i < bodies.size(); i++) {
 					handover_from[i] = bodies[i].target;
@@ -1139,6 +1435,11 @@ Dictionary FellowPhysicalAnimation3D::get_balance_stats() const {
 	d["capture_offset_m"] = stat_capture_offset;
 	d["landed_face"] = landed_face;
 	d["fall_seconds"] = stat_fall_seconds;
+	d["fall_buckles"] = fall_buckles;
+	d["fall_limp_seconds"] = stat_fall_limp_time;
+	d["fall_limp_hips_m"] = stat_fall_limp_height;
+	d["fall_limp_lean_deg"] = Math::rad_to_deg(stat_fall_limp_angle);
+	d["fall_kneeling"] = stat_fall_kneeling;
 	d["get_up_clip"] = stat_get_up_clip;
 	d["get_up_match_error_m"] = stat_match_error;
 	d["get_up_blend_speed_max_m_s"] = stat_blend_speed_max;

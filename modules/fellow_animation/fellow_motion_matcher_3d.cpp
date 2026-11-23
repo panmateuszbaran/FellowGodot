@@ -188,6 +188,43 @@ void FellowMotionMatcher3D::push(const Vector3 &p_velocity, float p_duration) {
 	force_search = true;
 }
 
+// Milestone 184 (decision 0326): the character put at `p_position` facing `p_facing` showing the database's frame
+// `p_frame` as it is (no blend from the pose before): a clip played by someone else (a get-up) handed back where it ends.
+// It goes on from there: its next search (by the trajectory alone) finds what follows, blended in as any transition, the
+// feet held where they stand (foot locking) until the new pose's are further than `unlock_radius`.
+void FellowMotionMatcher3D::play_from(int p_frame, const Vector3 &p_position, const Vector3 &p_facing) {
+	ERR_FAIL_COND_MSG(database.is_null() || !database->is_valid(), "FellowMotionMatcher3D.play_from(): no database.");
+	ERR_FAIL_INDEX(p_frame, database->get_frame_count());
+	if (!started) {
+		_start();
+		if (!started) {
+			return;
+		}
+	}
+	teleport(p_position, p_facing);
+	search_trajectory_next = true;
+	frame_time = p_frame;
+	range = database->get_range_of(p_frame);
+	const int bones = database->get_bone_count();
+	for (int b = 0; b < bones; b++) {
+		offset_positions[b] = Vector3();
+		offset_velocities[b] = Vector3();
+		offset_rotations[b] = Quaternion();
+		offset_angular_velocities[b] = Vector3();
+	}
+	offset_root_velocity = Vector3();
+	offset_root_velocity_rate = Vector3();
+	offset_yaw_rate = 0.0f;
+	offset_yaw_rate_rate = 0.0f;
+	Vector3 root_velocity;
+	float yaw_rate = 0.0f;
+	_sample(frame_time, anim_positions, anim_rotations, &anim_velocities, &anim_angular_velocities, &root_velocity, &yaw_rate);
+	for (int b = 0; b < bones; b++) {
+		out_positions[b] = anim_positions[b];
+		out_rotations[b] = anim_rotations[b];
+	}
+}
+
 void FellowMotionMatcher3D::reset() {
 	started = false;
 	pose_ready = false;
@@ -553,14 +590,44 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 			ground_align_weight[s] = CLAMP(goal + d, 0.0f, 1.0f);
 		}
 
-		const bool lock = foot_locking && contact;
+		// Milestone 184 (decision 0326): a foot let go of because its animation is a stride away steps there before it is
+		// held again — held again at once (its contact on), it was let go of again the next update, a little nearer each
+		// time: it crept 14-21 cm over the ground through a standing character's transitions and a stagger's last steps.
+		const bool stepping = foot_step_lift > 0.0f && foot.step_from > 0.0f && foot.step_holds;
+		const bool lock = foot_locking && contact && !stepping;
 		if (lock && !foot.locked) {
+			foot.step_from = 0.0f;
 			foot.locked = true;
 			foot.lock_position = animated + foot.offset; // Where the foot is shown now.
 		}
 		if (foot.locked && (!lock || foot.lock_position.distance_to(animated) > unlock_radius)) {
 			foot.locked = false; // Blend back from the locked position to the animation.
 			foot.offset = foot.lock_position - animated;
+			// (Let go of because its animation is a stride away while still on the ground, it is not held again until it
+			// has stepped there; lifted by its animation, the arc is on top of its own lift until it lands.)
+			foot.step_from = Vector2(foot.offset.x, foot.offset.z).length();
+			foot.step_from = foot.step_from > 0.04f ? foot.step_from : 0.0f;
+			foot.step_holds = lock;
+		}
+		// Milestone 184 (decision 0326): a foot the animation drags along low while the character stands (a shuffle: a
+		// clip's own, or a transition's blend between two stances; contact off, as it moves) is lifted by its speed (0.12 s
+		// of it, at most half of foot_step_lift), so that it steps; it springs back down as it lands.
+		foot.raised = 0.0f;
+		float lift_goal = 0.0f;
+		if (contact) {
+			foot.ground_y = animated.y;
+			foot.has_ground = true;
+		} else if (foot_step_lift > 0.0f && foot.has_ground && foot.has_last && p_dt > 0.0f) {
+			const Vector3 moved = animated - foot.last_animated;
+			const float speed = Vector2(moved.x, moved.z).length() / p_dt;
+			const float low = 1.0f - CLAMP((animated.y - foot.ground_y) / 0.04f, 0.0f, 1.0f);
+			const float still = 1.0f - CLAMP((Vector2(char_velocity.x, char_velocity.z).length() - 0.3f) / 0.4f, 0.0f, 1.0f);
+			lift_goal = MIN(speed * 0.12f, foot_step_lift * 0.5f) * low * still;
+		}
+		{
+			float x = foot.lift - lift_goal;
+			decay_spring_damper_exact(x, foot.lift_velocity, 0.05f, p_dt);
+			foot.lift = MAX(lift_goal + x, 0.0f);
 		}
 		Vector3 &target = targets[s];
 		if (foot.locked) {
@@ -571,7 +638,20 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 		} else {
 			decay_spring_damper_exact(foot.offset, foot.offset_velocity, inertialization_halflife, p_dt);
 			target = animated + foot.offset;
+			// Milestone 184: a foot let go of on the ground, its animation a stride away, steps there, lifted on an arc (a
+			// parabola over the way gone, up to 40 % of it high, at most foot_step_lift) — blended straight back it slid
+			// over the ground.
+			if (foot.step_from > 0.0f && foot_step_lift > 0.0f) {
+				const float x = CLAMP(1.0f - Vector2(foot.offset.x, foot.offset.z).length() / foot.step_from, 0.0f, 1.0f);
+				foot.raised = MIN(foot.step_from * 0.4f, foot_step_lift) * 4.0f * x * (1.0f - x);
+				target.y += foot.raised;
+				if (x > 0.97f) {
+					foot.step_from = 0.0f;
+				}
+			}
 		}
+		target.y += foot.lift;
+		foot.raised += foot.lift;
 
 		animated_of[s] = animated;
 		shown_of[s] = shown;
@@ -623,7 +703,7 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 		const Vector3 shown = shown_of[s];
 		const Vector3 target = targets[s];
 		Vector3 output = animated;
-		if (foot_ik && (warped || foot.locked || foot.offset.length_squared() > 1e-8f || (place && !animated.is_equal_approx(shown)) || (place && ground_align_weight[s] > 1e-3f))) {
+		if (foot_ik && (warped || foot.locked || foot.offset.length_squared() > 1e-8f || foot.lift > 1e-4f || (place && !animated.is_equal_approx(shown)) || (place && ground_align_weight[s] > 1e-3f))) {
 			// Two-bone IK (D. Holden, "Simple Two Joint IK"), in the character's space.
 			const Vector3 t = character_inv.xform(target);
 			const Vector3 a = gp[upper];
@@ -704,6 +784,9 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 			foot_slide_distance += slide;
 			if (foot.locked) {
 				foot_slide_locked += slide;
+			}
+			if (foot.raised >= 0.01f) {
+				foot_slide_raised += slide;
 			}
 			foot_contact_time += p_dt;
 		}
@@ -904,7 +987,15 @@ void FellowMotionMatcher3D::_update(float p_dt, int p_lod) {
 		_build_query(query);
 		const int current = CLAMP(int(Math::round(frame_time)), database->get_range_start(range), stop - 1);
 		const uint64_t s0 = OS::get_singleton()->get_ticks_usec();
-		const FellowMotionDatabase::SearchResult result = database->search(query, current, !end_of_range && tags_ok, tags_required_mask, tags_excluded_mask, transition_cost_bias, int(transition_jump_threshold * rate));
+		FellowMotionDatabase::SearchResult result;
+		if (search_trajectory_next) {
+			// After play_from(): by the trajectory only — the pose handed over (a get-up's end, a wide stance with the
+			// hips low) matched a crouch better than standing still.
+			result.frame = database->search_trajectory(query, tags_required_mask, tags_excluded_mask);
+			search_trajectory_next = false;
+		} else {
+			result = database->search(query, current, !end_of_range && tags_ok, tags_required_mask, tags_excluded_mask, transition_cost_bias, int(transition_jump_threshold * rate));
+		}
 		const uint64_t us = OS::get_singleton()->get_ticks_usec() - s0;
 		searches++;
 		search_usec += us;
@@ -1018,6 +1109,9 @@ void FellowMotionMatcher3D::_update(float p_dt, int p_lod) {
 			foot.offset = Vector3();
 			foot.offset_velocity = Vector3();
 			foot.has_last = false;
+			foot.step_from = 0.0f;
+			foot.lift = 0.0f;
+			foot.lift_velocity = 0.0f;
 		}
 	}
 	pose_ready = true;
@@ -1162,6 +1256,7 @@ Dictionary FellowMotionMatcher3D::get_stats() const {
 	d["foot_slide_distance"] = foot_slide_distance;
 	d["foot_contact_time"] = foot_contact_time;
 	d["foot_slide_locked"] = foot_slide_locked;
+	d["foot_slide_raised"] = foot_slide_raised;
 	d["foot_slide_speed"] = foot_contact_time > 0.0 ? foot_slide_distance / foot_contact_time : 0.0;
 	d["hips_drop_mm"] = hips_drop * 1000.0f;
 	d["hips_drop_min_mm"] = hips_drop_min * 1000.0f;
@@ -1250,6 +1345,7 @@ void FellowMotionMatcher3D::reset_stats() {
 	foot_slide_distance = 0.0;
 	hips_drop_min = 0.0f;
 	foot_slide_locked = 0.0;
+	foot_slide_raised = 0.0;
 	foot_contact_time = 0.0;
 	trajectory_error_sum = 0.0;
 	trajectory_time = 0.0;
@@ -1350,6 +1446,9 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_clamp_distance"), &FellowMotionMatcher3D::get_clamp_distance);
 	ClassDB::bind_method(D_METHOD("set_unlock_radius", "radius"), &FellowMotionMatcher3D::set_unlock_radius);
 	ClassDB::bind_method(D_METHOD("get_unlock_radius"), &FellowMotionMatcher3D::get_unlock_radius);
+	ClassDB::bind_method(D_METHOD("play_from", "frame", "position", "facing"), &FellowMotionMatcher3D::play_from);
+	ClassDB::bind_method(D_METHOD("set_foot_step_lift", "height"), &FellowMotionMatcher3D::set_foot_step_lift);
+	ClassDB::bind_method(D_METHOD("get_foot_step_lift"), &FellowMotionMatcher3D::get_foot_step_lift);
 	ClassDB::bind_method(D_METHOD("set_tags_required", "tags"), &FellowMotionMatcher3D::set_tags_required);
 	ClassDB::bind_method(D_METHOD("get_tags_required"), &FellowMotionMatcher3D::get_tags_required);
 	ClassDB::bind_method(D_METHOD("set_tags_excluded", "tags"), &FellowMotionMatcher3D::set_tags_excluded);
@@ -1436,6 +1535,7 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "foot_locking"), "set_foot_locking", "is_foot_locking");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "foot_ik"), "set_foot_ik", "is_foot_ik");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "unlock_radius", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:m"), "set_unlock_radius", "get_unlock_radius");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "foot_step_lift", PROPERTY_HINT_RANGE, "0,0.3,0.005,suffix:m"), "set_foot_step_lift", "get_foot_step_lift");
 	ADD_GROUP("Warping", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "orientation_warping"), "set_orientation_warping", "is_orientation_warping");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "orientation_warping_max_angle", PROPERTY_HINT_RANGE, "0,150,0.1,radians_as_degrees"), "set_orientation_warping_max_angle", "get_orientation_warping_max_angle");

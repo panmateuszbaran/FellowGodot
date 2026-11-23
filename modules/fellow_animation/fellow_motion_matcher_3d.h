@@ -53,6 +53,13 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 		Vector3 last_toe; // World, where the toe was shown (the ground under the foot: its ankle's and its toe's).
 		bool last_contact = false;
 		bool has_last = false;
+		float step_from = 0.0f; // Milestone 184: the way left to go (horizontal) when it was let go of, stepped on an arc.
+		bool step_holds = false; // let go of on the ground: not held again until the step is done
+		float raised = 0.0f; // the step's arc and the lift this update
+		float lift = 0.0f; // Milestone 184: a shuffle's lift
+		float lift_velocity = 0.0f;
+		float ground_y = 0.0f; // the animated foot's height when last in contact
+		bool has_ground = false;
 	};
 
 	// Updated from the worker threads of advance_group().
@@ -92,6 +99,7 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 	float clamp_distance = 0.15f;
 	float clamp_angle = Math::PI * 0.5f;
 	float unlock_radius = 0.2f;
+	float foot_step_lift = 0.08f; // Milestone 184 (decision 0326): a foot that would slide over the ground steps (0: it slides).
 	float force_search_velocity_change = 0.1f; // m/s of desired velocity that triggers a search.
 	bool inertialization = true;
 	bool synchronization = true;
@@ -196,6 +204,7 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 	int range = 0;
 	float search_timer = 0.0f;
 	bool force_search = true;
+	bool search_trajectory_next = false; // milestone 184: after play_from()
 	Vector3 searched_velocity;
 	int lod = 0;
 	int lod_skip = 0;
@@ -242,6 +251,7 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 	uint64_t search_usec_max = 0;
 	double foot_slide_distance = 0.0;
 	double foot_slide_locked = 0.0; // Of which while locked (the IK not reaching).
+	double foot_slide_raised = 0.0; // Milestone 184: of which with the foot raised 1 cm or more (stepping, not sliding).
 	double foot_contact_time = 0.0;
 	double trajectory_error_sum = 0.0;
 	// Popping: per frame, the largest second difference of the hips' and the legs' joint positions in the character's
@@ -314,6 +324,8 @@ public:
 	float get_clamp_distance() const { return clamp_distance; }
 	void set_unlock_radius(float p_radius) { unlock_radius = MAX(p_radius, 0.0f); }
 	float get_unlock_radius() const { return unlock_radius; }
+	void set_foot_step_lift(float p_height) { foot_step_lift = MAX(p_height, 0.0f); }
+	float get_foot_step_lift() const { return foot_step_lift; }
 	void set_inertialization(bool p_enable) { inertialization = p_enable; }
 	bool is_inertialization() const { return inertialization; }
 	void set_synchronization(bool p_enable) { synchronization = p_enable; }
@@ -368,6 +380,8 @@ public:
 	Vector3 get_simulation_position() const { return sim_position; }
 	Vector3 get_simulation_velocity() const { return sim_velocity; }
 	Vector3 get_character_position() const { return char_position; }
+	Quaternion get_character_rotation() const { return char_rotation; } // (world; milestone 184's falls face by it)
+	void play_from(int p_frame, const Vector3 &p_position, const Vector3 &p_facing);
 	int get_current_frame() const;
 	String get_current_clip() const;
 	int get_lod() const { return lod; }

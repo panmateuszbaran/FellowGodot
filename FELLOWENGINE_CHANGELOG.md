@@ -9,6 +9,26 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 184 — falls that buckle, feet that step (2026-11-23)
+
+- The owner: milestone 183's character "sometimes slides unnaturally, and the falls are very sudden". Measured: the hips
+  hit the ground 0.37 s after a push at 3.6-4.3 m/s (as fast as dropped from where they stood), the feet dragged 46-95 cm
+  as the plank landed, the body slid 37-65 cm after getting up, a standing or staggering foot crept 14-21 cm.
+- `FellowPhysicalAnimation3D`'s fall buckles (decision 0326) where the motion matcher's database knows the legs: after
+  0.12 s the hips sink along the line from the feet as it leans about them like an inverted pendulum, the knees bent
+  forward by IK over feet that stay, the arms reaching towards the ground; limp with the hips 0.38 m up, the knees at the
+  ground or past `topple_angle` (now 60°). It starts with the speed left after the farthest step, not the push's.
+  The hips now land 0.60-0.62 s after the push at 2.61-2.74 m/s (people: about 0.7 s, 2.75 ± 0.42 m/s), the feet
+  slipping 5-10 cm (46-95); falling back it sits and rolls onto its back, forward it drops to its knees.
+- `FellowMotionMatcher3D.play_from(frame, position, facing)` (new): getting up hands the clip's last frame over where the
+  clip is played — the hips stay, the feet step into the new stance (their slip 4-33 cm, from 74-101).
+- `FellowMotionMatcher3D.foot_step_lift` (new, on, 0.08 m): a foot lock let go of on the ground waits for its step
+  (lifted on an arc) instead of creeping back in a ratchet; a foot dragged low while standing is lifted by its speed.
+  Matching Lab's crowd: the feet move over the ground 41 % less (0.0625 → 0.0366 m/s; the rest of the motion in
+  contact is now steps, `get_stats()`'s `foot_slide_raised`). Staggers' feet slip 1-19 cm (up to 56).
+- `balance_check.gd` measures the feet's slip, the fall's timing and the hips' landing speed (`--trace` per frame);
+  Matching Lab's `--matching_step_lift`.
+
 ## Milestone 183 — balance, falls and getting up (2026-11-23)
 
 - `FellowPhysicalAnimation3D.balance` (new, off; decision 0325) with `motion_matcher_path`: at a hit the capture point

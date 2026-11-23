@@ -49,7 +49,7 @@
 		<method name="get_balance_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				Milestone 183 (decision 0325), with [member balance]: [code]state[/code], [code]hits[/code], [code]staggers[/code], [code]falls[/code], [code]get_ups[/code], the last hit's [code]capture_offset_m[/code], [code]landed_face[/code], [code]fall_seconds[/code] (from the fall to lying still), the last get-up's [code]get_up_clip[/code], [code]get_up_match_error_m[/code] (the mean distance of its first pose's bones from the bodies', after the fit), [code]get_up_blend_speed_max_m_s[/code] and [code]get_up_seconds[/code], and [code]get_up_clips[/code] (the clips found: [code]{name, face, frames}[/code]).
+				Milestone 183 (decision 0325), with [member balance]: [code]state[/code], [code]hits[/code], [code]staggers[/code], [code]falls[/code], [code]get_ups[/code], the last hit's [code]capture_offset_m[/code], [code]landed_face[/code], [code]fall_seconds[/code] (from the fall to lying still), the last fall's [code]fall_buckles[/code] (the legs gave way; [code]false[/code]: the stiff fall, the legs' roles not found), [code]fall_limp_seconds[/code], [code]fall_limp_hips_m[/code] and [code]fall_limp_lean_deg[/code] (when it went limp, the hips' height over the ground and the lean then) and [code]fall_kneeling[/code] (it went limp as its knees reached the ground), the last get-up's [code]get_up_clip[/code], [code]get_up_match_error_m[/code] (the mean distance of its first pose's bones from the bodies', after the fit), [code]get_up_blend_speed_max_m_s[/code] and [code]get_up_seconds[/code], and [code]get_up_clips[/code] (the clips found: [code]{name, face, frames}[/code]).
 			</description>
 		</method>
 		<method name="get_body_bones" qualifiers="const">
@@ -121,7 +121,7 @@
 			<return type="void" />
 			<param index="0" name="velocity" type="Vector3" />
 			<description>
-				Knocks the body down the way of [param velocity] (its horizontal part), as fast: the fall [member balance] starts beyond [member fall_threshold].
+				Knocks the body down the way of [param velocity] (its horizontal part), leaning as fast: the fall [member balance] starts beyond [member fall_threshold] (there with the speed the centre of mass keeps after the farthest step).
 			</description>
 		</method>
 		<method name="reset_bodies">
@@ -142,7 +142,7 @@
 			Gets up on its own after lying still [member get_up_delay] seconds ([method get_up]).
 		</member>
 		<member name="balance" type="bool" setter="set_balance" getter="is_balance" default="false">
-			Milestone 183 (decision 0325): a hit's capture point decides what follows — where the centre of mass would have to be stood over to stop (its offset from the animation's plus the hit's velocity for the whole body, over [code]sqrt(g / h)[/code]). Under [member step_threshold] the drive takes the hit back where it stands; beyond it the character staggers (the [member motion_matcher_path]'s [method FellowMotionMatcher3D.push] that way, about as far as the capture point); beyond [member fall_threshold] it falls — stiff, the pose it stood in turned about its feet as an inverted pendulum falls, then limp past [member topple_angle]. Lying still, it gets up ([member auto_get_up], [method get_up]) and walks on. The impulse of a hit is spread over the body by mass (the struck part as much more as kicks it 1.5 m/s faster). Off: milestone 166's node.
+			Milestone 183 (decision 0325): a hit's capture point decides what follows — where the centre of mass would have to be stood over to stop (its offset from the animation's plus the hit's velocity for the whole body, over [code]sqrt(g / h)[/code]). Under [member step_threshold] the drive takes the hit back where it stands; beyond it the character staggers (the [member motion_matcher_path]'s [method FellowMotionMatcher3D.push] that way, about as far as the capture point); beyond [member fall_threshold] it falls. Milestone 184 (decision 0326): after a reaction's time (0.12 s) the legs give way — the hips sink (at up to 2 m/s) and lean about the feet as an inverted pendulum, the upper body with them, the knees bending forward over the feet, which stay where they stand (two-bone IK; the legs' roles from the motion matcher's database), the arms reaching towards the ground it falls to — until the hips are 0.38 m over the ground, the knees reach it (falling forward) or the lean passes [member topple_angle]: then it goes limp (about 0.6 s after the push, the hips landing at 2.6-2.8 m/s). Without the legs' roles: milestone 183's stiff fall (the pose turned about the feet, limp past [member topple_angle]). Lying still, it gets up ([member auto_get_up], [method get_up]) and walks on. The impulse of a hit is spread over the body by mass (the struck part as much more as kicks it 1.5 m/s faster). Off: milestone 166's node.
 		</member>
 		<member name="collision_layer" type="int" setter="set_collision_layer" getter="get_collision_layer" default="32768">
 			The bodies' physics layers (when they are built).
@@ -192,8 +192,8 @@
 		<member name="swing_limit" type="float" setter="set_swing_limit" getter="get_swing_limit" default="0.87266463">
 			A limp body's cone joint: how far it swings from the pose it went limp in (radians).
 		</member>
-		<member name="topple_angle" type="float" setter="set_topple_angle" getter="get_topple_angle" default="0.6981317">
-			How far the body topples stiff (about its feet, driven) before it goes limp.
+		<member name="topple_angle" type="float" setter="set_topple_angle" getter="get_topple_angle" default="1.0471976">
+			How far the body leans in a fall (driven) before it goes limp if its hips are still up (milestone 184: 60°; milestone 183's stiff fall went limp at 40°).
 		</member>
 		<member name="total_mass" type="float" setter="set_total_mass" getter="get_total_mass" default="70.0">
 			The bodies' mass together (kilograms; when they are built).
@@ -236,7 +236,7 @@
 			Staggering: the motion matcher pushed the way of the hit.
 		</constant>
 		<constant name="STATE_FALLING" value="2" enum="State">
-			Falling: stiff, then limp.
+			Falling: driven as the legs give way (stiff without the legs' roles), then limp.
 		</constant>
 		<constant name="STATE_DOWN" value="3" enum="State">
 			Lying still, limp.

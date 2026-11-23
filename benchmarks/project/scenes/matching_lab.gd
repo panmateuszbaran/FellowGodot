@@ -316,6 +316,9 @@ func _build_crowd() -> void:
 			mm.stride_warping = args["matching_stride"] == "1"
 		if args.has("matching_lean"):
 			mm.lean_amount = float(args["matching_lean"])
+		# Milestone 184: --matching_step_lift=<m> (0: feet blended back or dragged by the animation slide).
+		if args.has("matching_step_lift"):
+			mm.foot_step_lift = float(args["matching_step_lift"])
 		# Milestone 165: --matching_orient=0|1 (orientation warping), --matching_strafe=1 (every character faces the
 		# square's centre while it walks to its waypoints: a third-person game's aiming).
 		if args.has("matching_orient"):
@@ -425,6 +428,7 @@ func sample_extra() -> Dictionary:
 		d["matching_" + k] = g.get(k, 0)
 	var slide := 0.0
 	var slide_locked := 0.0
+	var slide_raised := 0.0
 	var contact := 0.0
 	var traj := 0.0
 	# Milestone 164: the body's lean against balance's (atan(a / g)), and the stride's warping.
@@ -440,6 +444,7 @@ func sample_extra() -> Dictionary:
 		var s: Dictionary = mm.get_stats()
 		slide += float(s["foot_slide_distance"])
 		slide_locked += float(s["foot_slide_locked"])
+		slide_raised += float(s.get("foot_slide_raised", 0.0))
 		contact += float(s["foot_contact_time"])
 		traj += float(s["trajectory_error"])
 		if s.has("lean_samples"):
@@ -465,6 +470,7 @@ func sample_extra() -> Dictionary:
 		d["matching_orientation_mean_deg"] = rad_to_deg(orient / _matchers.size())
 	d["matching_foot_slide_speed"] = slide / maxf(contact, 1e-6)
 	d["matching_foot_slide_locked_speed"] = slide_locked / maxf(contact, 1e-6)
+	d["matching_foot_slide_raised_speed"] = slide_raised / maxf(contact, 1e-6) # milestone 184: of it stepping (raised)
 	d["matching_foot_contact_time"] = contact
 	d["matching_trajectory_error"] = traj / _matchers.size()
 	d["matching_wall_usec_per_step"] = float(matcher_wall_usec) / maxi(matcher_steps, 1)

@@ -737,6 +737,17 @@ its search) that starts on the face it lies on and fits it best, blended from wh
 `fell`, `landed`, `got_up`. With balance a hit is spread over the body by mass. Decision 0325; `bench/balance_check.gd`,
 `bench/balance_video.gd` (CMU subjects 139 and 140: `benchmarks/scripts/get_cmu_locomotion.sh`).
 
+Milestone 184 (decision 0326), with balance: a fall buckles where the motion matcher's database knows the legs — after
+0.12 s the hips sink along the line from the feet (up to 2 m/s) as it leans about them, the knees bent forward over the
+feet by IK, the arms reaching towards the ground — and goes limp with the hips 0.38 m up, the knees at the ground or
+past `topple_angle` (now 60°); without the legs' roles, the stiff fall. `get_balance_stats()` adds `fall_buckles`,
+`fall_limp_seconds`, `fall_limp_hips_m`, `fall_limp_lean_deg`, `fall_kneeling`. Getting up hands the clip's last frame
+to the motion matcher where the clip is played (`FellowMotionMatcher3D.play_from(frame, position, facing)`, new: the
+frame shown as it is, the next search by the trajectory alone). `FellowMotionMatcher3D.foot_step_lift` (on, 0.08 m; 0:
+milestone 183's feet): a foot lock let go of on the ground waits until the foot has stepped where its animation is,
+lifted on an arc; a foot let go of as it lifts gets the arc on top; a foot dragged low while the character stands is
+lifted by its speed; `get_stats()`'s `foot_slide_raised` (stepping). Matching Lab's `--matching_step_lift`.
+
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
 Module `fellow_world`; nothing changes without the node (decision 0187). `FellowVehicleEffects3D` (a `Node3D`, a child

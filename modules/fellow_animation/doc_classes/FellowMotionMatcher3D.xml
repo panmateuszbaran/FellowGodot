@@ -81,13 +81,22 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				This matcher's searches, transitions, search microseconds, foot sliding while in contact ([code]foot_slide_distance[/code], [code]foot_slide_locked[/code], [code]foot_contact_time[/code], [code]foot_slide_speed[/code]), [code]trajectory_error[/code] (the mean distance between the character and the simulation), popping ([code]pop_p50_mm[/code], [code]pop_p99_mm[/code], [code]pop_p999_mm[/code], [code]pop_max_mm[/code]: per frame the largest second difference of the hips' and legs' joints), the clip, frame and LOD. With [member ground_adaptation]: [code]hips_drop_mm[/code] (how far the hips are lowered now) and [code]hips_drop_min_mm[/code] (the lowest since [method reset_stats]), [code]ground_offsets_mm[/code] (each foot's ground over the root's, as a [Vector2]: left, right), and [code]toe_positions[/code] (where the toes were shown, global).
+				This matcher's searches, transitions, search microseconds, foot sliding while in contact ([code]foot_slide_distance[/code], [code]foot_slide_locked[/code], [code]foot_slide_raised[/code] (of it with the foot raised 1 cm or more by [member foot_step_lift]: stepping), [code]foot_contact_time[/code], [code]foot_slide_speed[/code]), [code]trajectory_error[/code] (the mean distance between the character and the simulation), popping ([code]pop_p50_mm[/code], [code]pop_p99_mm[/code], [code]pop_p999_mm[/code], [code]pop_max_mm[/code]: per frame the largest second difference of the hips' and legs' joints), the clip, frame and LOD. With [member ground_adaptation]: [code]hips_drop_mm[/code] (how far the hips are lowered now) and [code]hips_drop_min_mm[/code] (the lowest since [method reset_stats]), [code]ground_offsets_mm[/code] (each foot's ground over the root's, as a [Vector2]: left, right), and [code]toe_positions[/code] (where the toes were shown, global).
 			</description>
 		</method>
 		<method name="is_pushed" qualifiers="const">
 			<return type="bool" />
 			<description>
 				Milestone 183: a [method push] is under way.
+			</description>
+		</method>
+		<method name="play_from">
+			<return type="void" />
+			<param index="0" name="frame" type="int" />
+			<param index="1" name="position" type="Vector3" />
+			<param index="2" name="facing" type="Vector3" />
+			<description>
+				Milestone 184 (decision 0326): puts the character at [param position] facing [param facing] (as [method teleport]) showing the database's [param frame] as it is, without a blend from the pose before — a clip played by something else (a get-up of [FellowPhysicalAnimation3D]'s balance) handed back where it ends. It goes on from there: its next search, by the trajectory alone, finds what follows, blended in as any transition, the feet held where they stand ([member foot_locking]) until the new pose's are further than [member unlock_radius] and step there ([member foot_step_lift]).
 			</description>
 		</method>
 		<method name="push">
@@ -149,6 +158,9 @@
 		</member>
 		<member name="foot_locking" type="bool" setter="set_foot_locking" getter="is_foot_locking" default="true">
 			A foot in contact (the database's contacts) stays where it landed until it lifts or the animation pulls it [member unlock_radius] away.
+		</member>
+		<member name="foot_step_lift" type="float" setter="set_foot_step_lift" getter="get_foot_step_lift" default="0.08">
+			Milestone 184 (decision 0326): feet that would slide over the ground step instead (with [member foot_ik]). A foot held by [member foot_locking] and let go of because its animation is [member unlock_radius] away while still on the ground is not held again until it has stepped there, lifted on an arc (a parabola over the way, 40 % of it high, at most this); held again at once, it crept along the ground. A foot let go of more than 4 cm from its animation as it lifts gets the same arc on top of its own. A foot the animation drags along low while the character stands (a shuffle: a clip's, or a transition's blend between two stances) is lifted by 0.12 s of its speed, at most half of this. 0: milestone 183's feet.
 		</member>
 		<member name="ground_adaptation" type="bool" setter="set_ground_adaptation" getter="is_ground_adaptation" default="false">
 			Fits the character to uneven ground (milestone 56): rays straight down against the physics world (the bodies of [member ground_collision_mask]) under the root and under each foot's heel and toe, cast on the main thread before each update. The root follows the ground's height under it (eased), each foot is placed on the highest ground under it — its height over the root's ground added to the animated foot's — by the leg's two-bone IK (onto higher ground four times as fast as down: a foot landing on a step does not sink into it), the hips are lowered as far as the lower foot must reach down (so that the leg over higher ground bends instead of the other overstretching), and a foot that is down turns to the ground's slope ([member ground_alignment], at most 35 degrees). On flat ground the pose is the one without it. Needs [member foot_ik] for the feet.
