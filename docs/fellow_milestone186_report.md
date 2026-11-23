@@ -27,7 +27,8 @@ Two of milestone 184's and 185's open items (decision 0328):
 falls of 200 N·s at the chest from every side: the fall begins 0.02 → 0.40 s after the push, after one step (0 → 1 foot
 lifted; the stepping foot 0.45-0.63 m); the hips at 0.3 m 0.60-0.73 → 1.02-1.23 s after the push (0.62-0.83 s after the
 fall begins); the feet's slip 4.1-18.8 → 5.1-20.8 cm (all), the joints' largest gap 16-27 → 17-31 mm; the limp trunk
-bends further (42-56 → 64-94°, within its limits: it lands from a wider stance). Staggers (20-160 N·s): as before.
+bends further (42-56 → 64-94°, within its limits: it lands from a wider stance). Staggers (20-160 N·s): as far as before,
+the feet's slip within 7 mm. With balance off (`physical_check.gd`), milestone 185's numbers; the drive 11.7 µs a step.
 
 A foot caught 8 cm under a 3 cm slab: 54 / 62 / 74 mm from its place after 0.25 / 0.5 / 1 s → 54 / 0.5 / 0.4 mm.
 

@@ -62,7 +62,11 @@ chest (the capture point 0.86 m: within twice `fall_threshold`):
 
 * The stepping foot lands on the ground (its body 0.068-0.078 m up, standing 0.067) and stays there as the legs give
   way; before the feet were flattened it stayed 4-5 cm up.
-* Staggers (20-160 N·s) as before, to the millimetre.
+* Staggers (20-160 N·s): as far as before, the joints' gaps the same, the feet's slip within 7 mm of before.
+* With `fall_step_time` 0 (the fall where it stands, now with the feet turned flat): the hips at 0.3 m after
+  0.60-0.73 s at 0.70-2.49 m/s, the joints' gaps 16-27 mm, the trunk's bend 39-56° — milestone 185's.
+* With balance off, `physical_check.gd`: milestone 185's numbers (the bodies 3.4 mm from the walk, the chest and the
+  head knocked 58 and 134 mm, the ragdoll 30 mm into the floor). The drive 11.7 µs a step (12.8).
 * A foot caught 8 cm under a 3 cm slab, standing: 54 / 62 / 74 mm from its place after 0.25 / 0.5 / 1 s →
   **54 / 0.5 / 0.4 mm** (put back once).
 
