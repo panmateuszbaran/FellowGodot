@@ -725,6 +725,18 @@ physics step): the bones as bodies built at run time on a `PhysicalBoneSimulator
 recovering with `recovery_halflife` 0.3 s; `strength` 0 is a ragdoll (Jolt Physics); `simulate`, `build()`,
 `reset_bodies()`, `get_stats()`. Decision 0307; `bench/physical_check.gd`, `bench/physical_video.gd`.
 
+Milestone 183, opt-in: `balance` (off) with `motion_matcher_path` (the `FellowMotionMatcher3D` it steers): a hit's
+capture point (the centre of mass's offset from the animation's plus the hit's velocity for the whole body over
+√(g / h)) under `step_threshold` (0.12 m) is taken back where it stands; beyond it the motion matcher is pushed that
+way (`FellowMotionMatcher3D.push(velocity, duration)`, `is_pushed()`: a stagger); beyond `fall_threshold` (0.7 m) the
+body falls, stiff about its feet until `topple_angle` (40°), then limp. Lying still, after `get_up_delay` (1 s, with
+`auto_get_up`; or `get_up()`), it plays the motion matcher's database's clip tagged `get_up_tag` ("get_up"; left out of
+its search) that starts on the face it lies on and fits it best, blended from where it lies over `get_up_blend`
+(0.5 s), and walks on. `knock_down(velocity)`, `get_state()` (`STATE_STANDING`, `_STAGGERING`, `_FALLING`, `_DOWN`,
+`_GETTING_UP`), `get_landed_face()` (`FACE_UP`, `_DOWN`, `_SIDE`), `get_balance_stats()`; the signals `staggered`,
+`fell`, `landed`, `got_up`. With balance a hit is spread over the body by mass. Decision 0325; `bench/balance_check.gd`,
+`bench/balance_video.gd` (CMU subjects 139 and 140: `benchmarks/scripts/get_cmu_locomotion.sh`).
+
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
 Module `fellow_world`; nothing changes without the node (decision 0187). `FellowVehicleEffects3D` (a `Node3D`, a child

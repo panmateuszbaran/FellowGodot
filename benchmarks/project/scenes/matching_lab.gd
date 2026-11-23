@@ -110,11 +110,16 @@ func _load_database() -> bool:
 	var t1 := Time.get_ticks_usec()
 	var skel: Skeleton3D = ClassDB.class_call_static("FellowMotionDatabase", "create_skeleton", bvh_skeleton)
 	database = ClassDB.instantiate("FellowMotionDatabase")
-	# Tags by subject (milestone 56): "s016", "s035", "s069"; mirrored clips also "mirrored".
+	# Tags by subject (milestone 56): "s016", "s035", "s069"; mirrored clips also "mirrored". Milestone 183: subjects 139
+	# and 140's clips (getting up from the ground, with --matching_subjects=016,035,069,139,140) also "get_up".
 	var tags := {}
 	for a in anims:
 		var clip: String = a.resource_name
-		tags[clip] = PackedStringArray(["s" + clip.get_slice("_", 0).pad_zeros(3)])
+		var subject := clip.get_slice("_", 0).pad_zeros(3)
+		var t := PackedStringArray(["s" + subject])
+		if subject == "139" or subject == "140":
+			t.append("get_up")
+		tags[clip] = t
 	var opts := {"tags": tags}
 	if str(args.get("matching_mirror", "0")) == "1":
 		opts["mirror"] = true

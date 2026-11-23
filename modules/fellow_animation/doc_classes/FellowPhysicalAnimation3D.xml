@@ -46,6 +46,12 @@
 				Removes the bodies and their simulator.
 			</description>
 		</method>
+		<method name="get_balance_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Milestone 183 (decision 0325), with [member balance]: [code]state[/code], [code]hits[/code], [code]staggers[/code], [code]falls[/code], [code]get_ups[/code], the last hit's [code]capture_offset_m[/code], [code]landed_face[/code], [code]fall_seconds[/code] (from the fall to lying still), the last get-up's [code]get_up_clip[/code], [code]get_up_match_error_m[/code] (the mean distance of its first pose's bones from the bodies', after the fit), [code]get_up_blend_speed_max_m_s[/code] and [code]get_up_seconds[/code], and [code]get_up_clips[/code] (the clips found: [code]{name, face, frames}[/code]).
+			</description>
+		</method>
 		<method name="get_body_bones" qualifiers="const">
 			<return type="PackedStringArray" />
 			<description>
@@ -76,6 +82,18 @@
 				Each body's weakness from hits (0 to 1).
 			</description>
 		</method>
+		<method name="get_landed_face" qualifiers="const">
+			<return type="int" />
+			<description>
+				The face the body last landed on (a [enum Face]).
+			</description>
+		</method>
+		<method name="get_state" qualifiers="const">
+			<return type="int" enum="FellowPhysicalAnimation3D.State" />
+			<description>
+				Where the balance is ([member balance]): standing, staggering, falling, down or getting up.
+			</description>
+		</method>
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
@@ -87,10 +105,23 @@
 				- [code]bodies[/code], [code]weakness_max[/code].
 			</description>
 		</method>
+		<method name="get_up">
+			<return type="bool" />
+			<description>
+				Gets up now from lying (down, or limp after a fall): the motion matcher's database's clip tagged [member get_up_tag] that starts on the face the body lies on and whose first pose fits it best — each turned about the vertical and moved over the ground to fit the bodies (least squares, by mass) — played from the bodies' places, blended over [member get_up_blend]; when it stands the motion matcher is put where the clip ends. Returns [code]false[/code] if it is not lying or there is no such clip. With [member auto_get_up] it is called after [member get_up_delay].
+			</description>
+		</method>
 		<method name="is_built" qualifiers="const">
 			<return type="bool" />
 			<description>
 				Whether the bodies have been built.
+			</description>
+		</method>
+		<method name="knock_down">
+			<return type="void" />
+			<param index="0" name="velocity" type="Vector3" />
+			<description>
+				Knocks the body down the way of [param velocity] (its horizontal part), as fast: the fall [member balance] starts beyond [member fall_threshold].
 			</description>
 		</method>
 		<method name="reset_bodies">
@@ -107,17 +138,38 @@
 		</method>
 	</methods>
 	<members>
+		<member name="auto_get_up" type="bool" setter="set_auto_get_up" getter="is_auto_get_up" default="true">
+			Gets up on its own after lying still [member get_up_delay] seconds ([method get_up]).
+		</member>
+		<member name="balance" type="bool" setter="set_balance" getter="is_balance" default="false">
+			Milestone 183 (decision 0325): a hit's capture point decides what follows — where the centre of mass would have to be stood over to stop (its offset from the animation's plus the hit's velocity for the whole body, over [code]sqrt(g / h)[/code]). Under [member step_threshold] the drive takes the hit back where it stands; beyond it the character staggers (the [member motion_matcher_path]'s [method FellowMotionMatcher3D.push] that way, about as far as the capture point); beyond [member fall_threshold] it falls — stiff, the pose it stood in turned about its feet as an inverted pendulum falls, then limp past [member topple_angle]. Lying still, it gets up ([member auto_get_up], [method get_up]) and walks on. The impulse of a hit is spread over the body by mass (the struck part as much more as kicks it 1.5 m/s faster). Off: milestone 166's node.
+		</member>
 		<member name="collision_layer" type="int" setter="set_collision_layer" getter="get_collision_layer" default="32768">
 			The bodies' physics layers (when they are built).
 		</member>
 		<member name="collision_mask" type="int" setter="set_collision_mask" getter="get_collision_mask" default="1">
 			The physics layers the bodies meet (when they are built). Not their own: they do not meet one another.
 		</member>
+		<member name="fall_threshold" type="float" setter="set_fall_threshold" getter="get_fall_threshold" default="0.7">
+			The capture point's offset beyond which a hit makes the body fall (a step's reach).
+		</member>
+		<member name="get_up_blend" type="float" setter="set_get_up_blend" getter="get_get_up_blend" default="0.5">
+			How long the bodies take from where they lie into the get-up clip's first pose.
+		</member>
+		<member name="get_up_delay" type="float" setter="set_get_up_delay" getter="get_get_up_delay" default="1.0">
+			How long the body lies still before getting up on its own.
+		</member>
+		<member name="get_up_tag" type="StringName" setter="set_get_up_tag" getter="get_get_up_tag" default="&amp;&quot;get_up&quot;">
+			The tag of the motion matcher's database's get-up clips (CMU's subjects 139 and 140: [code]benchmarks/scripts/get_cmu_locomotion.sh[/code]). The node adds it to the motion matcher's [member FellowMotionMatcher3D.tags_excluded] (their still lying frames would match standing still). Each clip is played from a tenth of a second before its first bone moves 5 cm to 0.6 s after its hips reach standing height; the face it starts on is found from its first frame.
+		</member>
 		<member name="hit_weakening" type="float" setter="set_hit_weakening" getter="get_hit_weakening" default="0.85">
 			How far a hit weakens the struck body (its neighbours half as much a link, two links).
 		</member>
 		<member name="min_bone_length" type="float" setter="set_min_bone_length" getter="get_min_bone_length" default="0.08">
 			A bone at least this long gets a capsule (when the bodies are built).
+		</member>
+		<member name="motion_matcher_path" type="NodePath" setter="set_motion_matcher_path" getter="get_motion_matcher_path" default="NodePath(&quot;&quot;)">
+			The [FellowMotionMatcher3D] animating the skeleton: pushed when the body staggers, stopped while it is down, its database's get-up clips played, and put where a get-up ends.
 		</member>
 		<member name="position_gain" type="float" setter="set_position_gain" getter="get_position_gain" default="0.5">
 			The share of a body's distance from its bone the drive takes back each physics step, beyond following the animation's motion.
@@ -131,11 +183,17 @@
 		<member name="simulate" type="bool" setter="set_simulate" getter="is_simulating" default="true">
 			Whether the bodies are simulated and driven. Off, the simulator stops and the animation shows; on again, the bodies start where the animation is.
 		</member>
+		<member name="step_threshold" type="float" setter="set_step_threshold" getter="get_step_threshold" default="0.12">
+			The capture point's offset beyond which a hit makes the body stagger (about a foot's support).
+		</member>
 		<member name="strength" type="float" setter="set_strength" getter="get_strength" default="1.0">
 			How hard the bodies are driven: 1, they follow the animation as far as they can; under 0.5, the joints are made cones about the pose at that moment; 0, a ragdoll.
 		</member>
 		<member name="swing_limit" type="float" setter="set_swing_limit" getter="get_swing_limit" default="0.87266463">
 			A limp body's cone joint: how far it swings from the pose it went limp in (radians).
+		</member>
+		<member name="topple_angle" type="float" setter="set_topple_angle" getter="get_topple_angle" default="0.6981317">
+			How far the body topples stiff (about its feet, driven) before it goes limp.
 		</member>
 		<member name="total_mass" type="float" setter="set_total_mass" getter="get_total_mass" default="70.0">
 			The bodies' mass together (kilograms; when they are built).
@@ -144,4 +202,56 @@
 			A limp body's cone joint: how far it twists (radians).
 		</member>
 	</members>
+	<signals>
+		<signal name="fell">
+			<param index="0" name="direction" type="Vector3" />
+			<description>
+				The body began to fall the way of [param direction].
+			</description>
+		</signal>
+		<signal name="got_up">
+			<description>
+				The body has got up; the motion matcher animates it again.
+			</description>
+		</signal>
+		<signal name="landed">
+			<param index="0" name="face" type="int" />
+			<description>
+				The body lies still after a fall on [param face] (a [enum Face]).
+			</description>
+		</signal>
+		<signal name="staggered">
+			<param index="0" name="direction" type="Vector3" />
+			<param index="1" name="distance" type="float" />
+			<description>
+				A hit made the body stagger the way of [param direction], its capture point [param distance] metres off.
+			</description>
+		</signal>
+	</signals>
+	<constants>
+		<constant name="STATE_STANDING" value="0" enum="State">
+			Standing (or walking): the animation as it is.
+		</constant>
+		<constant name="STATE_STAGGERING" value="1" enum="State">
+			Staggering: the motion matcher pushed the way of the hit.
+		</constant>
+		<constant name="STATE_FALLING" value="2" enum="State">
+			Falling: stiff, then limp.
+		</constant>
+		<constant name="STATE_DOWN" value="3" enum="State">
+			Lying still, limp.
+		</constant>
+		<constant name="STATE_GETTING_UP" value="4" enum="State">
+			Playing a get-up clip.
+		</constant>
+		<constant name="FACE_UP" value="0" enum="Face">
+			On its back.
+		</constant>
+		<constant name="FACE_DOWN" value="1" enum="Face">
+			On its face.
+		</constant>
+		<constant name="FACE_SIDE" value="2" enum="Face">
+			On a side.
+		</constant>
+	</constants>
 </class>

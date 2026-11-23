@@ -84,6 +84,20 @@
 				This matcher's searches, transitions, search microseconds, foot sliding while in contact ([code]foot_slide_distance[/code], [code]foot_slide_locked[/code], [code]foot_contact_time[/code], [code]foot_slide_speed[/code]), [code]trajectory_error[/code] (the mean distance between the character and the simulation), popping ([code]pop_p50_mm[/code], [code]pop_p99_mm[/code], [code]pop_p999_mm[/code], [code]pop_max_mm[/code]: per frame the largest second difference of the hips' and legs' joints), the clip, frame and LOD. With [member ground_adaptation]: [code]hips_drop_mm[/code] (how far the hips are lowered now) and [code]hips_drop_min_mm[/code] (the lowest since [method reset_stats]), [code]ground_offsets_mm[/code] (each foot's ground over the root's, as a [Vector2]: left, right), and [code]toe_positions[/code] (where the toes were shown, global).
 			</description>
 		</method>
+		<method name="is_pushed" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Milestone 183: a [method push] is under way.
+			</description>
+		</method>
+		<method name="push">
+			<return type="void" />
+			<param index="0" name="velocity" type="Vector3" />
+			<param index="1" name="duration" type="float" />
+			<description>
+				Milestone 183 (decision 0325): the character pushed off its course — a stagger. For [param duration] seconds the desired velocity is [param velocity] (its horizontal part), decaying to nothing, the facing held where it is (its back and side steps if the push is so); then [member desired_velocity] and [member desired_facing] again. [method teleport] ends it. [FellowPhysicalAnimation3D]'s balance calls it.
+			</description>
+		</method>
 		<method name="reset">
 			<return type="void" />
 			<description>

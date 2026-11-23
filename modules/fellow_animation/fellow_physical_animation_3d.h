@@ -28,7 +28,6 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-
 #pragma once
 
 #include "core/templates/local_vector.h"
@@ -37,6 +36,8 @@
 
 class PhysicalBone3D;
 class PhysicalBoneSimulator3D;
+class FellowMotionMatcher3D;
+class FellowMotionDatabase;
 
 // FellowEngine (milestone 166, decision 0307): physical animation. The skeleton's bones as rigid bodies (built from
 // its rest pose, on the stock PhysicalBoneSimulator3D), each driven every physics step towards where the animation
@@ -48,6 +49,20 @@ class FellowPhysicalAnimation3D : public SkeletonModifier3D {
 	GDCLASS(FellowPhysicalAnimation3D, SkeletonModifier3D);
 
 public:
+	// Milestone 183 (decision 0325): balance, falls and getting up.
+	enum State {
+		STATE_STANDING,
+		STATE_STAGGERING,
+		STATE_FALLING,
+		STATE_DOWN,
+		STATE_GETTING_UP,
+	};
+	enum Face {
+		FACE_UP, // on its back
+		FACE_DOWN,
+		FACE_SIDE,
+	};
+
 	struct Body {
 		int bone = -1;
 		PhysicalBone3D *node = nullptr;
@@ -76,6 +91,68 @@ private:
 	float swing_limit = Math::deg_to_rad(50.0f);
 	float twist_limit = Math::deg_to_rad(30.0f);
 
+	// Milestone 183 (decision 0325): balance — a hit's capture point (where the centre of mass must be stood over to
+	// stop: its offset plus its velocity over sqrt(g / h)) beyond `step_threshold` staggers the character (its motion
+	// matcher pushed there), beyond `fall_threshold` topples it, stiff, about its feet until it goes limp; lying still,
+	// it gets up with the motion matcher's database's clip (tagged `get_up_tag`) whose first pose fits the body's best,
+	// blended from the ragdoll's pose, and walks on.
+	bool balance = false;
+	NodePath motion_matcher_path;
+	float step_threshold = 0.12f; // m
+	float fall_threshold = 0.7f; // m
+	float topple_angle = Math::deg_to_rad(40.0f); // the stiff fall's angle where the body goes limp
+	StringName get_up_tag = "get_up";
+	bool auto_get_up = true;
+	float get_up_delay = 1.0f; // s lying still
+	float get_up_blend = 0.5f; // s
+	float handover_blend = 0.4f; // s: from the clip's last pose to the motion matcher's
+
+	State state = STATE_STANDING;
+	float state_time = 0.0f;
+	float state_strength = 1.0f; // the state's share of the strength
+	float still_time = 0.0f;
+	float stagger_end = 0.0f; // s: the stagger's push
+	int landed_face = FACE_UP;
+	// The stiff fall: the pose when it began, turned about the feet by an inverted pendulum's angle.
+	LocalVector<Transform3D> fall_targets;
+	Vector3 fall_pivot;
+	Vector3 fall_axis;
+	Vector3 fall_direction;
+	float fall_angle = 0.0f;
+	float fall_rate = 0.0f;
+	float fall_height = 1.0f;
+	// The get-up clips found in the database: their range, the frames played (from just before the body rises to
+	// standing), the face they start on.
+	struct GetUpClip {
+		int range = -1;
+		int start = 0;
+		int stop = 0;
+		int face = FACE_UP;
+		String name;
+	};
+	LocalVector<GetUpClip> get_up_clips;
+	ObjectID scanned_database;
+	LocalVector<int> db_bone_of; // per skeleton bone: the database's bone, or -1
+	LocalVector<Transform3D> clip_globals; // scratch: a clip frame's bones (skeleton space)
+	int gu_clip = -1;
+	double gu_frame = 0.0;
+	Transform3D gu_anchor; // the clip's space in the world
+	LocalVector<Transform3D> gu_snapshot; // the bodies when it began (world)
+	LocalVector<Transform3D> handover_from; // the clip's last targets (world)
+	bool handing_over = false;
+	float handover_time = 0.0f;
+	// Statistics (get_balance_stats()).
+	int64_t stat_hits = 0;
+	int64_t stat_staggers = 0;
+	int64_t stat_falls = 0;
+	int64_t stat_get_ups = 0;
+	float stat_capture_offset = 0.0f;
+	float stat_match_error = 0.0f;
+	float stat_blend_speed_max = 0.0f;
+	String stat_get_up_clip;
+	float stat_get_up_seconds = 0.0f;
+	float stat_fall_seconds = 0.0f;
+
 	LocalVector<Body> bodies;
 	PhysicalBoneSimulator3D *simulator = nullptr;
 	ObjectID simulator_id;
@@ -96,6 +173,15 @@ private:
 	uint64_t drive_steps = 0;
 
 	void _drive(double p_delta);
+	FellowMotionMatcher3D *_get_matcher() const;
+	void _set_state(State p_state);
+	void _centre_of_mass(Vector3 &r_position, Vector3 &r_velocity, Vector3 &r_target, float &r_feet_y) const;
+	void _fall(const Vector3 &p_direction, float p_speed);
+	void _update_balance(float p_dt);
+	bool _scan_get_up_clips();
+	void _clip_pose(const FellowMotionDatabase *p_db, int p_frame);
+	int _face_of(const Vector3 &p_hips, const Vector3 &p_top, const Vector3 &p_left, const Vector3 &p_right) const;
+	int _top_bone() const;
 	void _auto_build();
 	void _rebuild_joints();
 	void _apply_simulate();
@@ -148,5 +234,36 @@ public:
 	void set_twist_limit(float p_radians) { twist_limit = CLAMP(p_radians, 0.0f, Math::PI); }
 	float get_twist_limit() const { return twist_limit; }
 
+	// Milestone 183 (decision 0325).
+	void set_balance(bool p_balance) { balance = p_balance; }
+	bool is_balance() const { return balance; }
+	void set_motion_matcher_path(const NodePath &p_path) { motion_matcher_path = p_path; }
+	NodePath get_motion_matcher_path() const { return motion_matcher_path; }
+	void set_step_threshold(float p_metres) { step_threshold = MAX(p_metres, 0.0f); }
+	float get_step_threshold() const { return step_threshold; }
+	void set_fall_threshold(float p_metres) { fall_threshold = MAX(p_metres, 0.0f); }
+	float get_fall_threshold() const { return fall_threshold; }
+	void set_topple_angle(float p_radians) { topple_angle = CLAMP(p_radians, 0.0f, Math::PI * 0.5f); }
+	float get_topple_angle() const { return topple_angle; }
+	void set_get_up_tag(const StringName &p_tag) {
+		get_up_tag = p_tag;
+		scanned_database = ObjectID();
+	}
+	StringName get_get_up_tag() const { return get_up_tag; }
+	void set_auto_get_up(bool p_auto) { auto_get_up = p_auto; }
+	bool is_auto_get_up() const { return auto_get_up; }
+	void set_get_up_delay(float p_seconds) { get_up_delay = MAX(p_seconds, 0.0f); }
+	float get_get_up_delay() const { return get_up_delay; }
+	void set_get_up_blend(float p_seconds) { get_up_blend = MAX(p_seconds, 0.01f); }
+	float get_get_up_blend() const { return get_up_blend; }
+	State get_state() const { return state; }
+	int get_landed_face() const { return landed_face; }
+	void knock_down(const Vector3 &p_velocity);
+	bool get_up();
+	Dictionary get_balance_stats() const;
+
 	FellowPhysicalAnimation3D();
 };
+
+VARIANT_ENUM_CAST(FellowPhysicalAnimation3D::State);
+VARIANT_ENUM_CAST(FellowPhysicalAnimation3D::Face);

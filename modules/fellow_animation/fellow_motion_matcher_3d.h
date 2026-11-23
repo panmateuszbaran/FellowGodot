@@ -75,6 +75,14 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 	NodePath root_path;
 	Vector3 desired_velocity;
 	Vector3 desired_facing;
+	// Milestone 183 (decision 0325): a push's velocity and facing, asked for over its time instead of the game's; the
+	// ones the update uses.
+	Vector3 push_velocity;
+	Vector3 push_facing;
+	float push_time = 0.0f;
+	float push_duration = 0.0f;
+	Vector3 eff_velocity;
+	Vector3 eff_facing;
 	float search_interval = 0.1f;
 	float inertialization_halflife = 0.1f;
 	float velocity_halflife = 0.27f;
@@ -278,6 +286,8 @@ public:
 	static void advance_group(const TypedArray<FellowMotionMatcher3D> &p_matchers, double p_delta);
 	void reset();
 	void teleport(const Vector3 &p_position, const Vector3 &p_facing);
+	void push(const Vector3 &p_velocity, float p_duration);
+	bool is_pushed() const { return push_time < push_duration; }
 
 	void set_database(const Ref<FellowMotionDatabase> &p_database);
 	Ref<FellowMotionDatabase> get_database() const { return database; }

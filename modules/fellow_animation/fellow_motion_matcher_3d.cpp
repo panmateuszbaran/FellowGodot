@@ -174,6 +174,18 @@ void FellowMotionMatcher3D::teleport(const Vector3 &p_position, const Vector3 &p
 	warp = Warp();
 	stat_lean_init = false;
 	force_search = true;
+	push_time = push_duration = 0.0f;
+}
+
+// Milestone 183 (decision 0325): the character pushed off its course — a stagger: for `p_duration` seconds its desired
+// velocity is `p_velocity`, decaying to nothing, its facing held where it is (the steps backwards or sideways if the push
+// is so); then the game's desired velocity again.
+void FellowMotionMatcher3D::push(const Vector3 &p_velocity, float p_duration) {
+	push_velocity = Vector3(p_velocity.x, 0.0f, p_velocity.z);
+	push_duration = MAX(p_duration, 0.0f);
+	push_time = 0.0f;
+	push_facing = forward_of(char_rotation);
+	force_search = true;
 }
 
 void FellowMotionMatcher3D::reset() {
@@ -263,7 +275,7 @@ void FellowMotionMatcher3D::_build_query(float *r_query) const {
 	for (int d = 0; d < 15; d++) {
 		r_query[d] = features[d]; // The current pose's features, normalised.
 	}
-	Vector3 facing = desired_facing.length() > 1e-3f ? desired_facing : (desired_velocity.length() > 0.1f ? desired_velocity : forward_of(sim_rotation));
+	Vector3 facing = eff_facing.length() > 1e-3f ? eff_facing : (eff_velocity.length() > 0.1f ? eff_velocity : forward_of(sim_rotation));
 	facing.y = 0.0f;
 	const Quaternion desired_rotation = yaw_rotation(facing.length() > 1e-6f ? facing.normalized() : Vector3(0, 0, 1));
 	const Quaternion char_inv = char_rotation.inverse();
@@ -271,7 +283,7 @@ void FellowMotionMatcher3D::_build_query(float *r_query) const {
 	for (int k = 0; k < FellowMotionDatabase::TRAJECTORY_POINTS; k++) {
 		const float t = database->get_trajectory_frame(k) / rate;
 		Vector3 p = sim_position, v = sim_velocity, a = sim_acceleration;
-		simulation_position_update(p, v, a, desired_velocity, velocity_halflife, t);
+		simulation_position_update(p, v, a, eff_velocity, velocity_halflife, t);
 		Quaternion q = sim_rotation;
 		Vector3 w = sim_angular_velocity;
 		simulation_rotation_update(q, w, desired_rotation, rotation_halflife, t);
@@ -861,12 +873,24 @@ void FellowMotionMatcher3D::_update(float p_dt, int p_lod) {
 	const float rate = database->get_sample_rate();
 	const int bones = database->get_bone_count();
 
+	// Milestone 183 (decision 0325): a push (a stagger) asks for its velocity, decaying to nothing over its time, the
+	// facing held; then the game's again.
+	if (push_time < push_duration) {
+		const float w = 1.0f - push_time / push_duration;
+		eff_velocity = push_velocity * w;
+		eff_facing = push_facing;
+		push_time += dt;
+	} else {
+		eff_velocity = desired_velocity;
+		eff_facing = desired_facing;
+	}
+
 	// Search.
 	transitioned_this_frame = false;
 	search_timer -= dt;
 	const int stop = database->get_range_stop(range);
 	const bool end_of_range = int(frame_time) + 1 >= stop - 1;
-	if ((desired_velocity - searched_velocity).length() > force_search_velocity_change) {
+	if ((eff_velocity - searched_velocity).length() > force_search_velocity_change) {
 		force_search = true;
 	}
 	_update_tag_masks();
@@ -899,7 +923,7 @@ void FellowMotionMatcher3D::_update(float p_dt, int p_lod) {
 		}
 		search_timer = search_interval * (lod == 0 ? 1.0f : (lod == 1 ? 2.0f : 4.0f));
 		force_search = false;
-		searched_velocity = desired_velocity;
+		searched_velocity = eff_velocity;
 	}
 
 	// Playback.
@@ -926,10 +950,10 @@ void FellowMotionMatcher3D::_update(float p_dt, int p_lod) {
 	decay_spring_damper_exact(offset_yaw_rate, offset_yaw_rate_rate, inertialization_halflife, dt);
 
 	// The simulation.
-	Vector3 facing = desired_facing.length() > 1e-3f ? desired_facing : (desired_velocity.length() > 0.1f ? desired_velocity : forward_of(sim_rotation));
+	Vector3 facing = eff_facing.length() > 1e-3f ? eff_facing : (eff_velocity.length() > 0.1f ? eff_velocity : forward_of(sim_rotation));
 	facing.y = 0.0f;
 	const Quaternion desired_rotation = yaw_rotation(facing.length() > 1e-6f ? facing.normalized() : Vector3(0, 0, 1));
-	simulation_position_update(sim_position, sim_velocity, sim_acceleration, desired_velocity, velocity_halflife, dt);
+	simulation_position_update(sim_position, sim_velocity, sim_acceleration, eff_velocity, velocity_halflife, dt);
 	simulation_rotation_update(sim_rotation, sim_angular_velocity, desired_rotation, rotation_halflife, dt);
 
 	// The character: the animation's root motion, pulled towards the simulation.
@@ -1309,6 +1333,8 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_desired_velocity", "velocity"), &FellowMotionMatcher3D::set_desired_velocity);
 	ClassDB::bind_method(D_METHOD("get_desired_velocity"), &FellowMotionMatcher3D::get_desired_velocity);
 	ClassDB::bind_method(D_METHOD("set_desired_facing", "facing"), &FellowMotionMatcher3D::set_desired_facing);
+	ClassDB::bind_method(D_METHOD("push", "velocity", "duration"), &FellowMotionMatcher3D::push);
+	ClassDB::bind_method(D_METHOD("is_pushed"), &FellowMotionMatcher3D::is_pushed);
 	ClassDB::bind_method(D_METHOD("get_desired_facing"), &FellowMotionMatcher3D::get_desired_facing);
 	ClassDB::bind_method(D_METHOD("set_search_interval", "seconds"), &FellowMotionMatcher3D::set_search_interval);
 	ClassDB::bind_method(D_METHOD("get_search_interval"), &FellowMotionMatcher3D::get_search_interval);

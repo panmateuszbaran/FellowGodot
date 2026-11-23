@@ -9,6 +9,24 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 183 — balance, falls and getting up (2026-11-23)
+
+- `FellowPhysicalAnimation3D.balance` (new, off; decision 0325) with `motion_matcher_path`: at a hit the capture point
+  (Pratt 2006) decides — under `step_threshold` (0.12 m) the drive takes it back, beyond it a stagger (the motion
+  matcher pushed that way, as far as the capture point), beyond `fall_threshold` (0.7 m) a fall: stiff about the feet as
+  an inverted pendulum until `topple_angle`, then limp. Lying still, it gets up with the database's clip tagged
+  `get_up_tag` that starts on the face it lies on and fits its pose best (a least-squares fit from above), blended from
+  the ragdoll, and the motion matcher takes over where the clip ends. `knock_down()`, `get_up()`, `get_state()`,
+  `get_landed_face()`, `get_balance_stats()`; signals `staggered`, `fell`, `landed`, `got_up`.
+- `FellowMotionMatcher3D.push(velocity, duration)`, `is_pushed()`: a stagger's velocity, decaying, the facing held.
+- With balance a hit spreads over the body by mass (the struck part up to 1.5 m/s more); the joints made anew put the
+  bodies back on their joints first.
+- Jolt, CMU's walks with subjects 139 and 140's nine get-up clips: pushes of 40-160 N·s stagger 0.1-0.64 m, 200 N·s
+  falls; from every side it lands on its back or face, lies still within 0.9-1.3 s, picks a clip whose start fits within
+  7-12 cm and stands in 3-5.4 s, the bodies 2 mm from the animation after. Off, milestone 166's numbers.
+- `bench/balance_check.gd`, `bench/balance_video.gd`; Matching Lab tags subjects 139 and 140 `get_up`;
+  `get_cmu_locomotion.sh` fetches their trials.
+
 ## Milestone 182 — realistic clouds (2026-11-23)
 
 - `rendering/fellow/post/clouds/realism` (new, on; decision 0324): the clouds no longer soft, smooth blobs — their
