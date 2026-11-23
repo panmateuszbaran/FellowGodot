@@ -3568,6 +3568,9 @@
 		<member name="rendering/fellow/post/clouds/interleaved" type="bool" setter="" getter="" default="true">
 			A quarter of the clouds' pixels traced per frame, the rest from the history: about a quarter of the cost. Decision 0115.
 		</member>
+		<member name="rendering/fellow/post/clouds/realism" type="bool" setter="" getter="" default="true">
+			The clouds' realism (decision 0324; with [code]post/clouds/detail[/code]): their edges' noise warped and eroded by two finer octaves (cauliflower of 40-150 m, turbulence of 10-40 m) where they are thin and as far as they are a pixel or more; the light march's first samples within a hundred metres with them; the sky's light through the cloud above; less of the sun diffused deep into them (their shaded sides lit by the sky); and the aerial perspective from the atmosphere's tables (the air between the camera and the clouds dims, blues and veils them) instead of a fade. Off: decision 0310's clouds.
+		</member>
 		<member name="rendering/fellow/post/clouds/shadows" type="float" setter="" getter="" default="1.0">
 			The clouds' shadows on the scene's surfaces (a map of the sun through the layer, 16 km around the camera). 0: none. Decision 0133.
 		</member>

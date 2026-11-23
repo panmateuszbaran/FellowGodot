@@ -36,7 +36,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	vec4 shape; // shape scale (1 / km), detail scale (1 / km), wind x, wind z (km / s)
 	vec4 misc; // max distance (km), fade distance (km), history blend, frame
 	ivec4 sizes; // trace w, h; screen w, h
-	ivec4 flags; // x: 1 the atmosphere's tables are bound (the sun through the atmosphere, the sky's light); y: 1 interleaved; w: 1 the detail (decision 0310)
+	ivec4 flags; // x: 1 the atmosphere's tables are bound (the sun through the atmosphere, the sky's light); y: 1 interleaved; w: 1 the detail (decision 0310), 2 its realism too (decision 0324)
 	// (each frame one pixel of every 2 x 2 block traced, decision 0115); z: this frame's pixel in the block (0-3)
 	vec4 flash; // a lightning flash (decision 0131): its position relative to the camera (m), the radius it lights (m)
 	vec4 flash_color; // its light (colour * energy); w: 1 when there is one
@@ -199,16 +199,37 @@ float ray_sphere_near(vec3 o, vec3 d, float r) {
 	return -b - sqrt(disc);
 }
 
+// The weather field at q (km) spread to about [0, 1]: decision 0109's Perlin-Worley noise (about 16 km across its
+// period; its mean 0.70, its deviation 0.14). Decision 0324 (the realism): two finer octaves of the shape noise's
+// Worley channels added (at 4 and 16 times its frequency, weighted 0.35 and 0.16), so that the clouds' outlines are
+// rough at more scales instead of round (real clouds' are fractal, Lovejoy 1982).
+float weather_field(vec3 q) {
+	vec3 wq = vec3(q.x, 0.0, q.z) * params.shape.x * WEATHER_SCALE;
+	float w = textureLod(shape_noise, wq, 0.0).r;
+	float wn = (w - 0.70) * (1.0 / (0.14 * 3.46)) + 0.5;
+	if (params.flags.w == 2) {
+		float o2 = textureLod(shape_noise, wq * 4.0 + vec3(0.37, 0.5, 0.11), 0.0).g;
+		float o3 = textureLod(shape_noise, wq * 16.0 + vec3(0.13, 0.25, 0.71), 0.0).b;
+		wn = (wn + (o2 - 0.47) * 0.35 + (o3 - 0.47) * 0.16) * (1.0 / 1.06);
+	}
+	return clamp(wn, 0.0, 1.0);
+}
+
 // The clouds' local coverage over p's ground point (the weather field; 0 in the clear, 1 in a cloud's middle).
 float cloud_cover_at(vec3 p) {
 	vec3 q = field_position(p) + vec3(params.shape.z, 0.0, params.shape.w) * params.sun_direction.w;
-	float w = textureLod(shape_noise, vec3(q.x, 0.0, q.z) * params.shape.x * WEATHER_SCALE, 0.0).r;
-	float wn = clamp((w - 0.70) * (1.0 / (0.14 * 3.46)) + 0.5, 0.0, 1.0);
-	return clamp((wn - (1.0 - params.layer.z)) * 2.0, 0.0, 1.0);
+	return clamp((weather_field(q) - (1.0 - params.layer.z)) * 2.0, 0.0, 1.0);
 }
 
-// Density at p (km, planet-centred); p_detail: with the eroded edges (the light samples skip them).
-float cloud_density(vec3 p, bool p_detail) {
+// The detail noise's octaves' sum stretched to about [0, 1] (decision 0310: its mean 0.48, its deviation 0.12).
+float detail_fbm(vec3 p_uvw) {
+	vec3 dn = textureLod(detail_noise, p_uvw, 0.0).rgb;
+	return clamp((dn.r * 0.625 + dn.g * 0.25 + dn.b * 0.125 - 0.48) * (1.0 / (0.117 * 3.46)) + 0.5, 0.0, 1.0);
+}
+
+// Density at p (km, planet-centred); p_detail: with the eroded edges (the light samples skip them). p_distance (km, from
+// the camera): decision 0324's finer octaves only as far as they are more than a pixel or two.
+float cloud_density_lod(vec3 p, bool p_detail, float p_distance, bool p_sharp) {
 	float r = length(p);
 	float h = (r - PLANET_RADIUS - params.layer.x) / params.layer.y; // 0 at the bottom, 1 at the top
 	if (h < 0.0 || h > 1.0) {
@@ -219,13 +240,20 @@ float cloud_density(vec3 p, bool p_detail) {
 	// The weather: where the clouds stand, a 2D field (the shape noise's Perlin-Worley, about 16 km across its period)
 	// spread to about [0, 1] (its mean 0.70 and deviation 0.14); the clouds cover where it exceeds 1 - coverage, the
 	// more the further (local coverage, from 0 at their rims to 1 in their middles).
-	float w = textureLod(shape_noise, vec3(q.x, 0.0, q.z) * params.shape.x * WEATHER_SCALE, 0.0).r;
-	float wn = clamp((w - 0.70) * (1.0 / (0.14 * 3.46)) + 0.5, 0.0, 1.0);
-	float local_coverage = clamp((wn - (1.0 - params.layer.z)) * 2.0, 0.0, 1.0);
+	float local_coverage = clamp((weather_field(q) - (1.0 - params.layer.z)) * 2.0, 0.0, 1.0);
 	if (local_coverage <= 0.0) {
 		return 0.0;
 	}
-	vec4 s = textureLod(shape_noise, q * params.shape.x, 0.0);
+	vec3 qs = q;
+	vec3 warp_field = vec3(0.0);
+	if (params.flags.w == 2) {
+		// Decision 0324: the shapes' coordinates warped by a smooth field (the detail noise over 10 km; typically
+		// ±200 m across, ±70 m up): the noise's round cells into irregular, sheared outlines. (The edges' warp below is
+		// the same field.)
+		warp_field = textureLod(detail_noise, q * (0.1 * params.shape.y) + vec3(0.71, 0.23, 0.37), 0.0).rgb - 0.48;
+		qs += warp_field * vec3(1.6, 0.6, 1.6);
+	}
+	vec4 s = textureLod(shape_noise, qs * params.shape.x, 0.0);
 	float fbm = s.g * 0.625 + s.b * 0.25 + s.a * 0.125;
 	float base = remap(s.r, -(1.0 - fbm), 1.0, 0.0, 1.0);
 	// Flat bottoms; the tops rounded and the higher the denser the clouds stand (cumulus).
@@ -235,11 +263,44 @@ float cloud_density(vec3 p, bool p_detail) {
 	if (c <= 0.0) {
 		return 0.0;
 	}
+	// Decision 0324: a cloud's boundary sharp (its water appears within metres of its edge, the air outside dry): the
+	// density ramp at the edges made this much steeper (three times at the bottoms, the wisps, eight at the tops), the
+	// inside even. The ramp had spread the edge over 100-200 m of thin cloud — a soft, cottony halo, 40 pixels wide on
+	// a cloud overhead.
+	float sharp = params.flags.w == 2 && p_sharp ? mix(3.0, 8.0, clamp(h * 4.0, 0.0, 1.0)) : 1.0;
+	if (!p_detail && params.flags.w == 2) {
+		return min(c * sharp, 1.0) * params.layer.w;
+	}
 	if (p_detail) {
 		// The edges eroded by the detail noise (wispy at the bottoms, billowy at the tops).
 		// Decision 0310: with the detail, the noise's features 150-600 m (a 2.5 km period): at 60-250 m they were a pixel
 		// or less on clouds 5 to 15 km away.
-		vec3 dn = textureLod(detail_noise, q * params.shape.y * (params.flags.w != 0 ? 0.4 : 1.0), 0.0).rgb;
+		vec3 qd = q * params.shape.y * (params.flags.w != 0 ? 0.4 : 1.0);
+		if (params.flags.w == 2) {
+			// Decision 0324: the clouds' realism. The edges' noise warped by the shapes' field (typically ±50 m at the
+			// bottoms, ±25 m at the tops: ragged, wispy bases), eroded by its billows of 150-600 m (decision 0310's), then
+			// bumped in and out by two finer octaves — cauliflower of 40-150 m, turbulence of 10-40 m — where the cloud
+			// is thin (its edges; in and out, so that the clouds cover as much), as far as they are a pixel or more. A
+			// cloud's visible surface is its outer few tens of metres (at density 1 the light goes 25 m into it): eroded
+			// at 150 m and coarser it was smooth, rounded, dough-like, and read as a small near thing.
+			vec3 warp = warp_field.gbr;
+			qd += warp * mix(0.16, 0.08, clamp(h * 3.0, 0.0, 1.0));
+			float tops = clamp(h * 4.0, 0.0, 1.0);
+			float f1 = detail_fbm(qd);
+			c = remap(c, mix(f1, 1.0 - f1, tops) * 0.45, 1.0, 0.0, 1.0);
+			float w2 = smoothstep(25.0, 12.0, p_distance);
+			if (c > 0.0 && w2 > 0.0) {
+				float f2 = detail_fbm(qd * 4.0 + warp * 0.5);
+				c += (mix(f2, 1.0 - f2, tops) - 0.5) * 0.5 * w2 * (1.0 - smoothstep(0.3, 0.7, c));
+			}
+			float w3 = smoothstep(6.0, 3.0, p_distance);
+			if (c > 0.0 && w3 > 0.0) {
+				float f3 = detail_fbm(qd * 16.0 - warp);
+				c += (mix(f3, 1.0 - f3, tops) - 0.5) * 0.3 * w3 * (1.0 - smoothstep(0.15, 0.45, c));
+			}
+			return clamp(c * sharp, 0.0, 1.0) * params.layer.w;
+		}
+		vec3 dn = textureLod(detail_noise, qd, 0.0).rgb;
 		float dfbm = dn.r * 0.625 + dn.g * 0.25 + dn.b * 0.125;
 		float depth = 0.3;
 		if (params.flags.w != 0) {
@@ -252,6 +313,10 @@ float cloud_density(vec3 p, bool p_detail) {
 		c = remap(c, erosion * depth, 1.0, 0.0, 1.0);
 	}
 	return max(c, 0.0) * params.layer.w;
+}
+
+float cloud_density(vec3 p, bool p_detail) {
+	return cloud_density_lod(p, p_detail, 1e4, true);
 }
 #endif
 
@@ -356,6 +421,75 @@ void integrate_sample(vec3 p, float p_density, float dt, vec3 sun, float cos_the
 	T *= step_t;
 }
 
+// Decision 0324: a sample's light with the clouds' realism. The light march's first samples within 120 m with the
+// finer octaves and the sharp edges (8, 16, 32, 64 m: the billows and cauliflower shade one another), on to 2 km
+// (the shapes' smooth density); the cloud above (three samples to the layer's top) for the light diffused down
+// through it; the single scattering, the multiple scattering by diffusion, the sky's and the ground's light.
+void integrate_sample_real(vec3 p, float p_density, float dt, float p_distance, vec3 sun, float cos_theta, bool atmosphere, vec3 sky_top, float r_bottom, inout vec3 L, inout float T) {
+	float sigma = p_density * EXTINCTION;
+	float od = 0.0;
+	float od_near = 0.0; // within 120 m: the billow the sample is on, between it and the sun
+	float ls = 0.008;
+	float lt = 0.0;
+	for (int j = 0; j < 8; j++) {
+		lt += ls;
+		// (the far ones the shapes' smooth density: summed, the sharp edges' steps had drawn contours)
+		od += cloud_density_lod(p + sun * (lt - ls * 0.5), j < 4, p_distance, j < 4) * EXTINCTION * ls;
+		if (j == 3) {
+			od_near = od;
+		}
+		ls *= 2.0;
+	}
+	// The cloud above the sample (three samples to the layer's top, the shapes): its optical depth.
+	vec3 up = normalize(p);
+	float hf = clamp((length(p) - r_bottom) / params.layer.y, 0.0, 1.0);
+	float above = (1.0 - hf) * params.layer.y;
+	float od_up = (cloud_density_lod(p + up * (above * 0.15), false, 1e4, false) + cloud_density_lod(p + up * (above * 0.45), false, 1e4, false) + cloud_density_lod(p + up * (above * 0.8), false, 1e4, false)) * EXTINCTION * above * (1.0 / 3.0);
+	// The light diffused down through it (two-stream diffusion: 1 / (1 + 3/4 (1 - g) tau), g 0.85): the sun's on the
+	// layer's top and the sky's — a base under a thin part lighter than under a thick one.
+	float diffuse = 1.0 / (1.0 + 0.1125 * od_up);
+	vec3 sun_at_p = params.sun_color.rgb;
+	if (atmosphere) {
+		float rp = length(p);
+		sun_at_p *= textureLod(atmosphere_transmittance, transmittance_uv(rp, dot(p / rp, sun)), 0.0).rgb;
+	}
+	// The single scattering (the dual-lobe phase: the silver lining towards the sun), darkened where the cloud is thin
+	// looking away from the sun (decision 0310's powder term).
+	float powder = mix(1.0, 1.0 - exp(-sigma * 0.12), 0.5 - 0.5 * cos_theta);
+	vec3 sun_light = sun_at_p * (mix(hg(0.8, cos_theta), hg(-0.3, cos_theta), 0.5) * exp(-od) * powder);
+	// The multiple scattering: a thick cloud gives back most of the light it takes (its albedo over 0.8), the light
+	// diffused into it falling off as 1 / (1 + 3/4 (1 - g) tau) (two-stream diffusion), not exponentially — along the
+	// sun's path or down from the layer's top, whichever brings more. A cloud's sunlit side is as bright as white paper
+	// in the sun (radiance 0.8 E / pi), its shaded side lit by what diffuses through it and by the sky. It builds up
+	// only where the cloud is thick enough (a thin wisp has its single scattering). Wrenninge's octaves (decision
+	// 0109's four, each 0.6 of the energy) had given a sunlit side a third of that: grey, dough-like (milestone 168 had
+	// brightened the whole sky four times for it).
+	// A billow's side turned from the sun gets less of it than one facing it (a surface's cosine, which a volume has
+	// no normal for): the cloud the sun's light crosses within 120 m of the sample — none on a side facing the sun,
+	// some on one it grazes, the billow itself on one turned away — dims it, down to a third.
+	float buildup = 1.0 - exp(-sigma * 0.03 - od);
+	float facing = 0.35 + 0.65 * exp(-0.25 * od_near);
+	sun_light += sun_at_p * ((0.8 / 3.14159265) * buildup * facing * max(1.0 / (1.0 + 0.1125 * od), max(sun.y, 0.0) * diffuse));
+	vec3 ground = sun_at_p * (params.ambient_color.w * max(sun.y, 0.0));
+	vec3 ambient = (sky_top * diffuse + ground * (1.0 - hf) * 0.7) * (1.0 / (4.0 * 3.14159265));
+	vec3 S = (sun_light + ambient) * sigma;
+	float step_t = exp(-sigma * dt);
+	L += T * (S - S * step_t) / max(sigma, 1e-5);
+	T *= step_t;
+}
+
+// Decision 0324: the sky's in-scattered light per unit of the sun's illuminance in direction d (the atmosphere's
+// sky-view table, as the sky shader reads it) and the air's transmittance from the camera at r_o along d.
+vec3 sky_view_radiance(vec3 d, vec3 sun, float r_o) {
+	float beta = acos(clamp(sqrt(max(0.0, r_o * r_o - PLANET_RADIUS * PLANET_RADIUS)) / r_o, -1.0, 1.0));
+	float horizon_zenith = 3.14159265 - beta;
+	float zenith = acos(clamp(d.y, -1.0, 1.0));
+	float v = zenith < horizon_zenith ? (1.0 - sqrt(max(0.0, 1.0 - zenith / horizon_zenith))) * 0.5 : 0.5 + sqrt(clamp((zenith - horizon_zenith) / beta, 0.0, 1.0)) * 0.5;
+	float az = atan(d.z, d.x) - atan(sun.z, sun.x);
+	az = mod(az + 3.14159265, 2.0 * 3.14159265) - 3.14159265;
+	return textureLod(atmosphere_sky_view, vec2(az / (2.0 * 3.14159265) + 0.5, v), 0.0).rgb;
+}
+
 ivec2 interleave_offset() {
 	// The 2 x 2 block's pixels in a diagonal order (0, 0), (1, 1), (1, 0), (0, 1).
 	int k = params.flags.z & 3;
@@ -393,6 +527,11 @@ void main() {
 	vec2 uv = (vec2(pos) + 0.5) / vec2(params.sizes.xy);
 	vec4 wp = params.inv_view_projection * vec4(uv * 2.0 - 1.0, 0.5, 1.0);
 	vec3 d = normalize(wp.xyz / wp.w);
+	// Decision 0324: the finer octaves' reach scales with the trace's pixels (the angle between neighbouring rays,
+	// against 0.0019 rad: 640 pixels across 70 degrees) — at 512 x 288 their 10-40 m were noise at 6 km, at 4K they
+	// reach three times as far.
+	vec4 wp_right = params.inv_view_projection * vec4((uv + vec2(1.0 / float(params.sizes.x), 0.0)) * 2.0 - 1.0, 0.5, 1.0);
+	float lod_scale = max(length(normalize(wp_right.xyz / wp_right.w) - d), 1e-6) * (1.0 / 0.0019);
 	float cam_h = max(params.camera_position.y - params.camera_position.w, 0.0) * 0.001;
 	vec3 o = vec3(0.0, PLANET_RADIUS + cam_h, 0.0); // the camera on top (params.field: its x, z)
 	float r_bottom = PLANET_RADIUS + params.layer.x;
@@ -467,6 +606,8 @@ void main() {
 	vec3 L = vec3(0.0);
 	float T = 1.0;
 	float first_hit = -1.0;
+	float depth_sum = 0.0; // decision 0324: the clouds' mean distance, weighted by the light each sample hides
+	float depth_weight = 0.0;
 	if (params.flags.w != 0) {
 		// Decision 0310: coarse steps (the shape alone) through the clear air; on meeting a cloud, back a coarse step and
 		// on in fine steps with the detail (25 m near the camera, longer with the distance); coarse again after eight
@@ -492,8 +633,10 @@ void main() {
 				t += dt_coarse;
 				continue;
 			}
-			float dt = min(0.025 + t * 0.004, dt_coarse);
-			float density = cloud_density(p, true);
+			bool real = params.flags.w == 2;
+			// Decision 0324: finer steps for the finer octaves (12 m near the camera, 21 m at 3 km).
+			float dt = min(real ? 0.012 + t * 0.003 : 0.025 + t * 0.004, dt_coarse);
+			float density = cloud_density_lod(p, true, real ? t * lod_scale : 1e4, true);
 			if (density <= 0.0) {
 				empty++;
 				if (empty > 8) {
@@ -506,7 +649,14 @@ void main() {
 			if (first_hit < 0.0) {
 				first_hit = t;
 			}
-			integrate_sample(p, density, dt, sun, cos_theta, atmosphere, sky_top, r_bottom, true, L, T);
+			if (real) {
+				float T_before = T;
+				integrate_sample_real(p, density, dt, t * lod_scale, sun, cos_theta, atmosphere, sky_top, r_bottom, L, T);
+				depth_sum += (T_before - T) * t;
+				depth_weight += T_before - T;
+			} else {
+				integrate_sample(p, density, dt, sun, cos_theta, atmosphere, sky_top, r_bottom, true, L, T);
+			}
 			if (T < 0.01) {
 				T = 0.0;
 				break;
@@ -533,8 +683,35 @@ void main() {
 			}
 		}
 	}
-	// Distant clouds fade into the sky (a stand-in for the aerial perspective over tens of kilometres).
-	if (first_hit > 0.0) {
+	if (params.flags.w == 2 && atmosphere && depth_weight > 0.0) {
+		// Decision 0324: the aerial perspective — the air between the camera and the clouds (at their mean distance)
+		// dims and blues their light and lays its own in-scattered light over them: a share of the sky's in-scattering
+		// along the ray (to the atmosphere's top), as much as the air's optical depth to the clouds is of the whole ray's
+		// (a source even along the optical depth). The sky behind is already the whole ray's; the composite puts the
+		// clouds over it by their transmittance, so the share in front of them is added back where they hide the sky.
+		vec3 pc = o + d * (depth_sum / depth_weight);
+		float rc = length(pc);
+		float mu_c = dot(pc / rc, d);
+		vec3 t_air;
+		vec3 front;
+		if (d.y >= 0.0 || ray_sphere_near(o, d, PLANET_RADIUS) < 0.0) {
+			vec3 t_inf = textureLod(atmosphere_transmittance, transmittance_uv(r_o, d.y), 0.0).rgb;
+			vec3 t_beyond = textureLod(atmosphere_transmittance, transmittance_uv(rc, mu_c), 0.0).rgb;
+			t_air = clamp(t_inf / max(t_beyond, vec3(1e-4)), 0.0, 1.0);
+			front = sky_view_radiance(d, sun, r_o) * clamp((1.0 - t_air) / max(1.0 - t_inf, vec3(1e-4)), 0.0, 1.0);
+		} else {
+			// Looking down on them (the ray goes on to the ground: the table's transmittances of the reversed ray, as
+			// Bruneton's), the air's own light that of the horizon's sky above them (a long path's, the source itself).
+			vec3 t_cam = textureLod(atmosphere_transmittance, transmittance_uv(r_o, -d.y), 0.0).rgb;
+			vec3 t_cloud = textureLod(atmosphere_transmittance, transmittance_uv(rc, -mu_c), 0.0).rgb;
+			t_air = clamp(t_cloud / max(t_cam, vec3(1e-4)), 0.0, 1.0);
+			vec3 h = normalize(vec3(d.x, 0.0, d.z) + vec3(0.0, 1e-3, 0.0));
+			vec3 t_h = textureLod(atmosphere_transmittance, transmittance_uv(r_o, h.y), 0.0).rgb;
+			front = sky_view_radiance(h, sun, r_o) / max(1.0 - t_h, vec3(0.05)) * (1.0 - t_air);
+		}
+		L = L * t_air + front * params.sun_color.rgb * (1.0 - T);
+	} else if (first_hit > 0.0) {
+		// Distant clouds fade into the sky (a stand-in for the aerial perspective over tens of kilometres).
 		float fade = exp(-first_hit / params.misc.y);
 		L *= fade;
 		T = mix(1.0, T, fade);
@@ -644,7 +821,44 @@ void main() {
 		return; // a surface in front of the sky (the clouds are kilometres away)
 	}
 	vec2 uv = (vec2(pos) + 0.5) / vec2(params.sizes.zw);
-	vec4 c = textureLod(clouds_tex, uv, 0.0);
+	vec4 c;
+	if (params.flags.w == 2) {
+		// Decision 0324: the half-resolution clouds upsampled by Catmull-Rom (nine bilinear taps), clamped to their
+		// 2 x 2 texels (no ringing): bilinear had blurred their edges over three or four pixels — soft, near, out of
+		// focus.
+		vec2 size = vec2(params.sizes.xy);
+		vec2 st = uv * size - 0.5;
+		vec2 f = fract(st);
+		vec2 b = floor(st) + 0.5;
+		vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+		vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+		vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+		vec2 w3 = f * f * (-0.5 + 0.5 * f);
+		vec2 w12 = w1 + w2;
+		vec2 o12 = w2 / w12;
+		vec2 t0 = (b - 1.0) / size;
+		vec2 t3 = (b + 2.0) / size;
+		vec2 t12 = (b + o12) / size;
+		c = vec4(0.0);
+		c += textureLod(clouds_tex, vec2(t0.x, t0.y), 0.0) * w0.x * w0.y;
+		c += textureLod(clouds_tex, vec2(t12.x, t0.y), 0.0) * w12.x * w0.y;
+		c += textureLod(clouds_tex, vec2(t3.x, t0.y), 0.0) * w3.x * w0.y;
+		c += textureLod(clouds_tex, vec2(t0.x, t12.y), 0.0) * w0.x * w12.y;
+		c += textureLod(clouds_tex, vec2(t12.x, t12.y), 0.0) * w12.x * w12.y;
+		c += textureLod(clouds_tex, vec2(t3.x, t12.y), 0.0) * w3.x * w12.y;
+		c += textureLod(clouds_tex, vec2(t0.x, t3.y), 0.0) * w0.x * w3.y;
+		c += textureLod(clouds_tex, vec2(t12.x, t3.y), 0.0) * w12.x * w3.y;
+		c += textureLod(clouds_tex, vec2(t3.x, t3.y), 0.0) * w3.x * w3.y;
+		ivec2 i0 = clamp(ivec2(b - 0.5), ivec2(0), params.sizes.xy - 1);
+		ivec2 i1 = clamp(i0 + 1, ivec2(0), params.sizes.xy - 1);
+		vec4 a00 = texelFetch(clouds_tex, i0, 0);
+		vec4 a10 = texelFetch(clouds_tex, ivec2(i1.x, i0.y), 0);
+		vec4 a01 = texelFetch(clouds_tex, ivec2(i0.x, i1.y), 0);
+		vec4 a11 = texelFetch(clouds_tex, i1, 0);
+		c = clamp(c, min(min(a00, a10), min(a01, a11)), max(max(a00, a10), max(a01, a11)));
+	} else {
+		c = textureLod(clouds_tex, uv, 0.0);
+	}
 	vec4 col = imageLoad(color_image, pos);
 	col.rgb = col.rgb * c.a + c.rgb;
 	if (params.flash_color.w > 0.0 && c.a < 1.0) {

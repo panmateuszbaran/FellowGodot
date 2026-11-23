@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 182 — realistic clouds (2026-11-23)
+
+- `rendering/fellow/post/clouds/realism` (new, on; decision 0324): the clouds no longer soft, smooth blobs — their
+  edges sharp (the density ramp at a rim eight times steeper at the tops), detailed down to 10 m (the detail noise
+  warped; two finer octaves bumping the edges in and out as far as they are a pixel or more), their outlines rough (the
+  weather field's finer octaves, the shapes warped); lit as thick clouds are (multiple scattering by two-stream
+  diffusion: a sunlit side 0.8 E / π, a billow turned from the sun dimmed, the sky's light diffused through the cloud
+  above); hazed with distance by the atmosphere's tables (the aerial perspective, not a fade); upsampled by
+  Catmull-Rom. Off: decision 0310's clouds.
+- Lavapipe, the showcase's sky: the clouds overhead with edges 2.6 times as steep, twice the texture, brighter than the
+  sky behind them (dimmer before), the same cover; about a level of change from frame to frame; three times decision
+  0310's cost on lavapipe (the RTX not measured yet).
+- `showcase/tools/sky_look.gd` (the showcase's sky in seven views, from the ground and from 20 km up) and
+  `benchmarks/tools/sky/sky_metrics.py` (the clouds' cover, edges, texture, luminance, outlines' fractal dimension).
+
 ## Milestone 181 — footsteps (2026-11-23)
 
 - `FellowFootsteps3D` (new, a `SkeletonModifier3D` last on a character's skeleton; decision 0323): footsteps from the

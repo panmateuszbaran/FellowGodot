@@ -70,6 +70,7 @@ public:
 		bool history_valid = false;
 		bool interleaved = true; // decision 0115: a quarter of the pixels traced per frame
 		bool detail = true; // decision 0310: fine steps inside the clouds, deeper erosion, the powder term
+		bool realism = true; // decision 0324 (with the detail): finer octaves, the sky's light, the aerial perspective
 		// A lightning flash (decision 0131): the clouds around it glow.
 		bool flash = false;
 		Vector3 flash_position; // world (m)
@@ -93,6 +94,7 @@ public:
 		float shape_scale = 0.16;
 		float detail_scale = 1.0;
 		bool detail = true; // decision 0310: the shadows' clouds eroded as the drawn ones
+		bool realism = true; // decision 0324: their edges warped as the drawn ones' (not the finer octaves)
 		Vector2 wind = Vector2(0.01, 0.003); // km / s
 	};
 	static constexpr int SHADOW_SIZE = 512;

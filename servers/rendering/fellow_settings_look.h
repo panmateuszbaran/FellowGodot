@@ -89,6 +89,11 @@ inline bool clouds_interleaved() {
 inline bool clouds_detail() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/post/clouds/detail");
 }
+// Decision 0324 (with the detail): the clouds' realism — finer octaves at their edges, warped; the sky's light through
+// them; the aerial perspective from the atmosphere's tables.
+inline bool clouds_realism() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/post/clouds/realism");
+}
 // post/clouds/* (decision 0109): volumetric clouds over the sky (a visual feature, off by default).
 inline bool clouds_enabled() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/post/clouds/enabled");
