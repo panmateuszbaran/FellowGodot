@@ -39,9 +39,11 @@
 #include "core/config/engine.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "core/os/os.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/main/viewport.h"
 #include "scene/resources/3d/world_3d.h"
+#include "servers/audio/audio_server.h"
 #include "servers/physics_3d/physics_server_3d.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/effects/fellow_gas.h"
@@ -796,7 +798,7 @@ void FellowGasVolume3D::_notification(int p_what) {
 				return;
 			}
 			for (int i = 0; i < substeps; i++) {
-				_queue_step(i == substeps - 1 && fire_light);
+				_queue_step(i == substeps - 1 && (fire_light || sound_enabled)); // the fire's emission: its light, its sound
 			}
 			// The gas moved: drawn (milestone 52; the editor draws only on a change) — while something emits or burns,
 			// and the 20 s after, as the smoke clears; an empty box asks for nothing.
@@ -818,9 +820,132 @@ void FellowGasVolume3D::_notification(int p_what) {
 				return;
 			}
 			_update_fire_light();
+			_sound_update(get_process_delta_time());
 			_send_render();
 		} break;
 	}
+}
+
+// Milestone 179 (decision 0321): the flames heard where they burn — their heat release from the simulated fire's
+// emission (its flames' volume: the emission summed over the cells, over the fire's intensity), its flicker with it.
+void FellowGasVolume3D::_sound_update(double p_dt) {
+	const bool want = sound_enabled && configured && !sleeping && is_visible_in_tree() && !Engine::get_singleton()->is_editor_hint() && AudioServer::get_singleton();
+	float power = 0.0f;
+	float fire_size = 0.5f;
+	if (want) {
+		fellow_fire_from_flames(fire_power / MAX(fire_intensity, 1e-4f), power, fire_size);
+	}
+	sound_power = power;
+	sound_size = fire_size;
+	const Node3D *listener = want ? fellow_sound_listener(this) : nullptr;
+	sound_distance = listener ? float(listener->get_global_position().distance_to(fire_light_position)) : -1.0f;
+	if (!want || power < 0.002f || sound_distance > sound_max_distance * 1.1f) {
+		// Out (or too far to hear): the voice stops two seconds later.
+		if (sound_voice.is_playing()) {
+			if (FellowFireSynth *synth = (FellowFireSynth *)sound_voice.get_source()) {
+				synth->post(FellowFireSynth::Params());
+			}
+			sound_quiet_for += p_dt;
+			if (sound_quiet_for > 2.0) {
+				sound_voice.stop();
+			}
+		}
+		return;
+	}
+	sound_quiet_for = 0.0;
+	FellowFireSynth *synth = (FellowFireSynth *)sound_voice.start_3d(this, &FellowFireSynth::make, sound_bus, sound_volume_db, sound_unit_size, sound_max_distance);
+	if (!synth) {
+		return;
+	}
+	sound_voice.place(fire_light_position);
+	FellowFireSynth::Params p;
+	p.power = power;
+	p.size = fire_size;
+	synth->post(p);
+}
+
+void FellowGasVolume3D::set_sound_volume_db(float p_db) {
+	sound_volume_db = p_db;
+	sound_voice.set_volume_db(p_db);
+}
+
+void FellowGasVolume3D::set_sound_bus(const StringName &p_bus) {
+	sound_bus = p_bus;
+	sound_voice.set_bus(p_bus);
+}
+
+void FellowGasVolume3D::set_sound_unit_size(float p_size) {
+	sound_unit_size = MAX(p_size, 0.1f);
+	sound_voice.set_unit_size(sound_unit_size);
+}
+
+void FellowGasVolume3D::set_sound_max_distance(float p_distance) {
+	sound_max_distance = MAX(p_distance, 1.0f);
+	sound_voice.set_max_distance(sound_max_distance);
+}
+
+Dictionary FellowGasVolume3D::get_sound_stats() {
+	Dictionary d;
+	uint64_t frames = 0, usec = 0;
+	sound_voice.get_mix_stats(frames, usec);
+	const float rate = AudioServer::get_singleton() ? AudioServer::get_singleton()->get_mix_rate() : 48000.0f;
+	d["playing"] = sound_voice.is_playing();
+	d["power"] = sound_power;
+	d["size"] = sound_size;
+	d["distance"] = sound_distance;
+	if (FellowFireSynth *synth = (FellowFireSynth *)sound_voice.get_source()) {
+		d["flares"] = (int64_t)synth->get_stats().flares;
+	}
+	d["mixed_seconds"] = double(frames) / rate;
+	d["mix_usec_per_second"] = frames > 0 ? double(usec) / (double(frames) / rate) : 0.0;
+	return d;
+}
+
+// A fire's sound offline (tests): keys by time, {time, power, size, crackle, embers} (each kept until changed). The
+// samples interleaved stereo (the same in both channels), its counts and the synthesis's time.
+Dictionary FellowGasVolume3D::debug_render_sound(const Array &p_keys, float p_seconds, float p_rate, int p_seed) const {
+	PackedFloat32Array out;
+	const int total = int(MAX(0.0f, p_seconds) * p_rate);
+	out.resize(total * 2);
+	FellowFireSynth synth;
+	synth.set_rate(p_rate);
+	synth.set_seed(uint64_t(p_seed) * 0x9e3779b97f4a7c15ull + 0xf17e);
+	LocalVector<float> l, r;
+	float *w = out.ptrw();
+	int pos = 0;
+	uint64_t usec = 0;
+	FellowFireSynth::Params fp;
+	for (int k = 0; k <= p_keys.size() && pos < total; k++) {
+		const Dictionary key = k < p_keys.size() ? Dictionary(p_keys[k]) : Dictionary();
+		const int at = k < p_keys.size() ? CLAMP(int(float(key.get("time", 0.0)) * p_rate), pos, total) : total;
+		while (pos < at) {
+			const int n = MIN(1024, at - pos);
+			l.resize(n);
+			r.resize(n);
+			const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+			synth.render(l.ptr(), r.ptr(), n);
+			usec += OS::get_singleton()->get_ticks_usec() - t0;
+			for (int i = 0; i < n; i++) {
+				w[(pos + i) * 2] = l[i];
+				w[(pos + i) * 2 + 1] = r[i];
+			}
+			pos += n;
+		}
+		fp.power = key.get("power", fp.power);
+		fp.size = key.get("size", fp.size);
+		fp.crackle = key.get("crackle", fp.crackle);
+		fp.embers = key.get("embers", fp.embers);
+		synth.post(fp);
+	}
+	const FellowFireSynth::Stats st = synth.get_stats();
+	Dictionary d;
+	d["samples"] = out;
+	d["cracks"] = (int64_t)st.cracks;
+	d["pops"] = (int64_t)st.pops;
+	d["ticks"] = (int64_t)st.ticks;
+	d["flares"] = (int64_t)st.flares;
+	d["usec_per_second"] = total > 0 ? double(usec) / (double(total) / p_rate) : 0.0;
+	return d;
 }
 
 void FellowGasVolume3D::_bind_methods() {
@@ -939,6 +1064,18 @@ void FellowGasVolume3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_vram_bytes"), &FellowGasVolume3D::get_vram_bytes);
 	ClassDB::bind_method(D_METHOD("get_steps_simulated"), &FellowGasVolume3D::get_steps_simulated);
 	ClassDB::bind_method(D_METHOD("get_fire_power"), &FellowGasVolume3D::get_fire_power);
+	ClassDB::bind_method(D_METHOD("set_sound_enabled", "enabled"), &FellowGasVolume3D::set_sound_enabled);
+	ClassDB::bind_method(D_METHOD("is_sound_enabled"), &FellowGasVolume3D::is_sound_enabled);
+	ClassDB::bind_method(D_METHOD("set_sound_volume_db", "db"), &FellowGasVolume3D::set_sound_volume_db);
+	ClassDB::bind_method(D_METHOD("get_sound_volume_db"), &FellowGasVolume3D::get_sound_volume_db);
+	ClassDB::bind_method(D_METHOD("set_sound_bus", "bus"), &FellowGasVolume3D::set_sound_bus);
+	ClassDB::bind_method(D_METHOD("get_sound_bus"), &FellowGasVolume3D::get_sound_bus);
+	ClassDB::bind_method(D_METHOD("set_sound_unit_size", "metres"), &FellowGasVolume3D::set_sound_unit_size);
+	ClassDB::bind_method(D_METHOD("get_sound_unit_size"), &FellowGasVolume3D::get_sound_unit_size);
+	ClassDB::bind_method(D_METHOD("set_sound_max_distance", "metres"), &FellowGasVolume3D::set_sound_max_distance);
+	ClassDB::bind_method(D_METHOD("get_sound_max_distance"), &FellowGasVolume3D::get_sound_max_distance);
+	ClassDB::bind_method(D_METHOD("get_sound_stats"), &FellowGasVolume3D::get_sound_stats);
+	ClassDB::bind_method(D_METHOD("debug_render_sound", "keys", "seconds", "rate", "seed"), &FellowGasVolume3D::debug_render_sound, DEFVAL(48000.0f), DEFVAL(1));
 	ClassDB::bind_method(D_METHOD("get_fire_light_node"), &FellowGasVolume3D::get_fire_light_node);
 	ClassDB::bind_method(D_METHOD("request_debug_data", "what"), &FellowGasVolume3D::request_debug_data);
 	ClassDB::bind_method(D_METHOD("is_debug_data_ready"), &FellowGasVolume3D::is_debug_data_ready);
@@ -1002,6 +1139,13 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fire_light_range", PROPERTY_HINT_RANGE, "0,100,0.01,or_greater,suffix:m"), "set_fire_light_range", "get_fire_light_range");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "fire_light_shadows"), "set_fire_light_shadows", "is_fire_light_shadows");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fire_light_smoothing", PROPERTY_HINT_RANGE, "0,2,0.01,suffix:s"), "set_fire_light_smoothing", "get_fire_light_smoothing");
+
+	ADD_GROUP("Sound", "sound_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sound_enabled"), "set_sound_enabled", "is_sound_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_volume_db", PROPERTY_HINT_RANGE, "-60,24,0.1,suffix:dB"), "set_sound_volume_db", "get_sound_volume_db");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "sound_bus"), "set_sound_bus", "get_sound_bus");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_unit_size", PROPERTY_HINT_RANGE, "0.1,50,0.1,or_greater,suffix:m"), "set_sound_unit_size", "get_sound_unit_size");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_max_distance", PROPERTY_HINT_RANGE, "1,500,1,or_greater,suffix:m"), "set_sound_max_distance", "get_sound_max_distance");
 
 	ADD_GROUP("Velocity Texture", "velocity_texture_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "velocity_texture_enabled"), "set_velocity_texture_enabled", "is_velocity_texture_enabled");

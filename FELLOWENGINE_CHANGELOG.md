@@ -9,6 +9,23 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 179 — fire's sound: the flames' roar, the wood's crackle (2026-11-23)
+
+- A fire is heard where it burns (decision 0321), synthesised on the audio thread with no samples and placed by an
+  `AudioStreamPlayer3D` its node owns while it sounds (decision 0320's voice, placed): `FellowGasVolume3D` and
+  `FellowBurnable3D` `sound_enabled` (on), `sound_volume_db`, `sound_bus`, `sound_unit_size`, `sound_max_distance`,
+  `get_sound_stats()`; `FellowBurnable3D.sound_crackle`, `get_fuel_release()`;
+  `FellowGasVolume3D.debug_render_sound(keys, seconds[, rate, seed])`.
+- The flames (the gas volume): the heat release from the simulated fire (its emission, the flames' volume, about 1.2
+  MW a cubic metre; read back also with the fire light off) — a roar peaking at 160 / sqrt(D) Hz with the heat's root
+  as its amplitude, puffing at 1.5 / sqrt(D) Hz with the simulation's own flicker, the flames' flutter and hiss, a
+  low whoomp when the fire grows fast.
+- The wood (each burning object): cracks where it pyrolyses — a snap and a short ring, energies a power law, runs of
+  them, pops of sap — at a rate with the area of its front; the embers' ticks while its char glows.
+- `benchmarks/tools/world_sound/fire_sound.gd` + `fire_sound.py` (offline: the roar's peak and puffing against their
+  predictions, loudness against heat, the cracks' rate and power law, a flare) and `fire_demo.gd` (Burn Lab's campfire
+  with Movie Maker; `--timing`, `--silent`, `--probe`).
+
 ## Milestone 178 — the weather's sound: rain, wind, thunder (2026-11-23)
 
 - `FellowRain3D`, `FellowWind3D` and `FellowLightning3D` are heard (decision 0320), synthesised on the audio thread with

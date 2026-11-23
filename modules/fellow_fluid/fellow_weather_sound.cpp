@@ -34,6 +34,7 @@
 
 #include "core/os/os.h"
 #include "scene/3d/audio_listener_3d.h"
+#include "scene/3d/audio_stream_player_3d.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/audio/audio_stream_player.h"
 #include "scene/main/viewport.h"
@@ -120,44 +121,103 @@ FellowSynthSource *FellowAmbientVoice::start(Node *p_owner, FellowSynthStream::F
 	if (!AudioServer::get_singleton() || !p_owner || !p_owner->is_inside_tree()) {
 		return nullptr;
 	}
+	AudioStreamPlayer *p = Object::cast_to<AudioStreamPlayer>(player);
 	if (!player) {
 		Ref<FellowSynthStream> stream;
 		stream.instantiate();
 		stream->set_factory(p_factory);
-		player = memnew(AudioStreamPlayer);
-		player->set_name("Sound");
-		player->set_stream(stream);
-		player->set_bus(p_bus);
-		player->set_volume_db(p_volume_db);
-		p_owner->add_child(player, false, Node::INTERNAL_MODE_FRONT);
+		p = memnew(AudioStreamPlayer);
+		p->set_name("Sound");
+		p->set_stream(stream);
+		p->set_bus(p_bus);
+		p->set_volume_db(p_volume_db);
+		p_owner->add_child(p, false, Node::INTERNAL_MODE_FRONT);
+		player = p;
 	}
-	if (!player->is_playing() || playback.is_null()) {
-		player->play();
-		playback = player->get_stream_playback();
+	if (p && (!p->is_playing() || playback.is_null())) {
+		p->play();
+		playback = p->get_stream_playback();
 	}
 	return playback.is_valid() ? playback->get_source() : nullptr;
 }
 
+FellowSynthSource *FellowAmbientVoice::start_3d(Node *p_owner, FellowSynthStream::Factory p_factory, const StringName &p_bus, float p_volume_db, float p_unit_size, float p_max_distance) {
+	if (!AudioServer::get_singleton() || !p_owner || !p_owner->is_inside_tree()) {
+		return nullptr;
+	}
+	AudioStreamPlayer3D *p = Object::cast_to<AudioStreamPlayer3D>(player);
+	if (!player) {
+		Ref<FellowSynthStream> stream;
+		stream.instantiate();
+		stream->set_factory(p_factory);
+		p = memnew(AudioStreamPlayer3D);
+		p->set_name("Sound");
+		p->set_stream(stream);
+		p->set_bus(p_bus);
+		p->set_volume_db(p_volume_db);
+		p->set_unit_size(p_unit_size);
+		p->set_max_distance(p_max_distance);
+		p->set_as_top_level(true);
+		p_owner->add_child(p, false, Node::INTERNAL_MODE_FRONT);
+		player = p;
+	}
+	if (p && (!p->is_playing() || playback.is_null())) {
+		p->play();
+		playback = p->get_stream_playback();
+	}
+	return playback.is_valid() ? playback->get_source() : nullptr;
+}
+
+void FellowAmbientVoice::place(const Vector3 &p_position) {
+	if (AudioStreamPlayer3D *p = Object::cast_to<AudioStreamPlayer3D>(player)) {
+		p->set_global_position(p_position);
+	}
+}
+
+void FellowAmbientVoice::set_unit_size(float p_size) {
+	if (AudioStreamPlayer3D *p = Object::cast_to<AudioStreamPlayer3D>(player)) {
+		p->set_unit_size(p_size);
+	}
+}
+
+void FellowAmbientVoice::set_max_distance(float p_distance) {
+	if (AudioStreamPlayer3D *p = Object::cast_to<AudioStreamPlayer3D>(player)) {
+		p->set_max_distance(p_distance);
+	}
+}
+
 void FellowAmbientVoice::stop() {
-	if (player) {
-		player->stop();
+	if (AudioStreamPlayer *p = Object::cast_to<AudioStreamPlayer>(player)) {
+		p->stop();
+	} else if (AudioStreamPlayer3D *p3 = Object::cast_to<AudioStreamPlayer3D>(player)) {
+		p3->stop();
 	}
 	playback.unref();
 }
 
 bool FellowAmbientVoice::is_playing() const {
-	return player && player->is_playing() && playback.is_valid();
+	bool playing = false;
+	if (const AudioStreamPlayer *p = Object::cast_to<AudioStreamPlayer>(player)) {
+		playing = p->is_playing();
+	} else if (const AudioStreamPlayer3D *p3 = Object::cast_to<AudioStreamPlayer3D>(player)) {
+		playing = p3->is_playing();
+	}
+	return playing && playback.is_valid();
 }
 
 void FellowAmbientVoice::set_volume_db(float p_db) {
-	if (player) {
-		player->set_volume_db(p_db);
+	if (AudioStreamPlayer *p = Object::cast_to<AudioStreamPlayer>(player)) {
+		p->set_volume_db(p_db);
+	} else if (AudioStreamPlayer3D *p3 = Object::cast_to<AudioStreamPlayer3D>(player)) {
+		p3->set_volume_db(p_db);
 	}
 }
 
 void FellowAmbientVoice::set_bus(const StringName &p_bus) {
-	if (player) {
-		player->set_bus(p_bus);
+	if (AudioStreamPlayer *p = Object::cast_to<AudioStreamPlayer>(player)) {
+		p->set_bus(p_bus);
+	} else if (AudioStreamPlayer3D *p3 = Object::cast_to<AudioStreamPlayer3D>(player)) {
+		p3->set_bus(p_bus);
 	}
 }
 
@@ -179,6 +239,183 @@ Node3D *fellow_sound_listener(Node *p_node) {
 		listener = vp->get_camera_3d();
 	}
 	return listener;
+}
+
+// Fire.
+
+static const float FIRE_LEVEL = 1.0f;
+
+void FellowFireSynth::post(const Params &p_params) {
+	MutexLock lock(mutex);
+	target = p_params;
+}
+
+FellowFireSynth::Stats FellowFireSynth::get_stats() {
+	MutexLock lock(mutex);
+	return stats;
+}
+
+void FellowFireSynth::_crack(int p_delay, float p_amp, float p_fc, float p_q, float p_decay_s, float p_snap_s) {
+	if (cracks.size() >= 96) {
+		return;
+	}
+	Crack c;
+	c.delay = MAX(0, p_delay);
+	c.snap = MAX(1, int(p_snap_s * rate));
+	c.amp = p_amp;
+	c.decay = Math::exp(-1.0f / MAX(1.0f, p_decay_s * rate));
+	c.filter.set(p_fc, p_q, rate);
+	cracks.push_back(c);
+}
+
+void FellowFireSynth::render(float *r_left, float *r_right, int p_frames) {
+	Params t;
+	{
+		MutexLock lock(mutex);
+		t = target;
+	}
+	if (first) {
+		cur = t;
+		slow_power = t.power;
+		first = false;
+	}
+	Stats added;
+	for (int b0 = 0; b0 < p_frames; b0 += BLOCK) {
+		const int n = MIN(BLOCK, p_frames - b0);
+		const float dt = float(n) / rate;
+		// The flames follow the simulation's fire within 0.12 s (its own flicker comes through), the rest slower.
+		const float kp = 1.0f - Math::exp(-dt / 0.12f);
+		const float ks = 1.0f - Math::exp(-dt / 0.4f);
+		cur.power += (MAX(0.0f, t.power) - cur.power) * kp;
+		cur.size += (t.size - cur.size) * ks;
+		cur.crackle += (MAX(0.0f, t.crackle) - cur.crackle) * ks;
+		cur.embers += (CLAMP(t.embers, 0.0f, 1.0f) - cur.embers) * ks;
+		cur.gain = t.gain;
+		slow_power += (MAX(0.0f, t.power) - slow_power) * (1.0f - Math::exp(-dt / 0.5f));
+		const float power = MIN(cur.power, 200.0f);
+		const float size = CLAMP(cur.size, 0.05f, 30.0f);
+		const float g = FIRE_LEVEL * cur.gain;
+		// A flare: the fire growing much faster than it was (a gas catching, fuel thrown on) — the flame's volume
+		// expanding at once, a low "whoomp".
+		flare_cooldown -= dt;
+		const float rise = MAX(0.0f, t.power) - slow_power;
+		if (rise > 0.4f + 0.5f * slow_power && flare_cooldown <= 0.0f) {
+			flare_amp = g * 0.12f * Math::sqrt(MIN(rise, 50.0f));
+			flare_t = 0.0f;
+			flare_cooldown = 1.5f;
+			added.flares++;
+		}
+		// The flames puff at about 1.5 / sqrt(D) Hz, the rate wandering with their flutter.
+		const float sq = Math::sqrt(size);
+		puff_phase += float(Math::TAU) * (1.5f / sq) * (0.85f + 0.3f * flutter) * dt;
+		if (puff_phase > float(Math::TAU)) {
+			puff_phase -= float(Math::TAU);
+		}
+		const float puff = 0.78f + 0.22f * Math::sin(puff_phase);
+		if (rng.randf() < 12.0f * dt) {
+			flutter_target = rng.randf();
+		}
+		flutter += (flutter_target - flutter) * (1.0f - Math::exp(-dt / 0.03f));
+		const float peak = CLAMP(160.0f / sq, 40.0f, 700.0f);
+		// Pink noise between two-pole high- and low-passes at 1 and 1.5 times the peak: it peaks at 0.94 of it, 2.7
+		// octaves wide (to -6 dB).
+		roar_hp1.set(peak, rate);
+		roar_hp2.a = roar_hp1.a;
+		roar_lp1.set(peak * 1.5f, rate);
+		roar_lp2.a = roar_lp1.a;
+		lick.set(600.0f + 500.0f * flutter, 1.2f, rate);
+		hiss.set(3000.0f, rate);
+		hiss_lp.set(9000.0f, rate);
+		flare_lp1.set(90.0f, rate);
+		flare_lp2.a = flare_lp1.a;
+		const float sp = Math::sqrt(power);
+		const float a_roar = g * 0.75f * sp * puff;
+		const float a_lick = g * 0.0085f * sp * (0.25f + 0.75f * flutter) * puff;
+		const float a_hiss = g * (0.0012f * sp + 0.0015f * cur.embers);
+		// Crackles: a snap and a ring; energies Pareto (1.4), the amplitude their root; a run of them one time in seven;
+		// a pop of sap now and then.
+		spawn += cur.crackle * dt;
+		while (spawn >= 1.0f) {
+			spawn -= 1.0f;
+			const float energy = MIN(100.0f, Math::pow(1.0f - 0.9999f * rng.randf(), -1.0f / 1.4f));
+			const float amp = g * 0.034f * Math::sqrt(energy);
+			const int at = int(rng.randf() * n);
+			if (rng.randf() < 0.07f) {
+				_crack(at, amp * 1.6f, 220.0f + 420.0f * rng.randf(), 3.0f, 0.015f + 0.025f * rng.randf(), 0.0008f);
+				added.pops++;
+			} else {
+				_crack(at, amp, 1500.0f + 5500.0f * rng.randf(), 1.5f + 2.5f * rng.randf(), 0.0015f + 0.0045f * rng.randf(), 0.00015f + 0.00035f * rng.randf());
+				added.cracks++;
+				if (rng.randf() < 0.15f) {
+					const int runs = 1 + int(rng.rand() % 4);
+					int when = at;
+					for (int r = 0; r < runs; r++) {
+						when += int((0.008f + 0.042f * rng.randf()) * rate);
+						_crack(when, amp * (0.2f + 0.5f * rng.randf()), 1800.0f + 5000.0f * rng.randf(), 2.0f, 0.0015f + 0.003f * rng.randf(), 0.0002f);
+						added.cracks++;
+					}
+				}
+			}
+		}
+		// The embers: a tick now and then as the char cools and splits.
+		tick_spawn += cur.embers * 3.0f * dt;
+		while (tick_spawn >= 1.0f) {
+			tick_spawn -= 1.0f;
+			_crack(int(rng.randf() * n), g * 0.006f * (0.3f + 0.7f * rng.randf()), 3000.0f + 5000.0f * rng.randf(), 4.0f, 0.0015f, 0.0001f);
+			added.ticks++;
+		}
+		float *L = r_left + b0;
+		float a_flare = 0.0f;
+		if (flare_t < 1.5f) {
+			a_flare = flare_amp * 6.0f * (1.0f - Math::exp(-flare_t / 0.03f)) * Math::exp(-flare_t / 0.25f);
+			flare_t += dt;
+		}
+		for (int i = 0; i < n; i++) {
+			const float w = _noise();
+			const float p = pink.next(w);
+			const float fl = flare_lp2.lp(flare_lp1.lp(p));
+			L[i] = a_roar * roar_lp2.lp(roar_lp1.lp(roar_hp2.hp(roar_hp1.hp(p)))) + a_lick * lick.bp(p) + a_hiss * hiss_lp.lp(hiss.hp(w)) + a_flare * fl;
+		}
+		for (uint32_t c = 0; c < cracks.size();) {
+			Crack &cr = cracks[c];
+			if (cr.delay >= n) {
+				cr.delay -= n;
+				c++;
+				continue;
+			}
+			for (int i = cr.delay; i < n; i++) {
+				const float e = _noise();
+				float x = cr.filter.bp(e * cr.env) * cr.amp;
+				if (cr.snap > 0) {
+					x += e * cr.amp * 2.0f;
+					cr.snap--;
+				}
+				cr.env *= cr.decay;
+				L[i] += x;
+			}
+			cr.delay = 0;
+			if (cr.env < 1e-4f && cr.snap <= 0) {
+				cracks.remove_at_unordered(c);
+				continue;
+			}
+			c++;
+		}
+		for (int i = 0; i < n; i++) {
+			L[i] = soft_limit(L[i]);
+			r_right[b0 + i] = L[i];
+		}
+	}
+	MutexLock lock(mutex);
+	stats.cracks += added.cracks;
+	stats.pops += added.pops;
+	stats.ticks += added.ticks;
+	stats.flares += added.flares;
+}
+
+void fellow_fire_from_flames(float p_volume, float &r_power, float &r_size) {
+	const float v = MAX(0.0f, p_volume);
+	r_power = v * 1.2e6f / 5.0e4f;
+	r_size = CLAMP(Math::pow(v / 0.65f, 1.0f / 3.0f), 0.05f, 30.0f);
 }
 
 // Rain.

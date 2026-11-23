@@ -11,6 +11,16 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="debug_render_sound" qualifiers="const">
+			<return type="Dictionary" />
+			<param index="0" name="keys" type="Array" />
+			<param index="1" name="seconds" type="float" />
+			<param index="2" name="rate" type="float" default="48000.0" />
+			<param index="3" name="seed" type="int" default="1" />
+			<description>
+				A fire's sound synthesised offline at [param rate] for [param seconds] (the synthesis of this node's flames and of [FellowBurnable3D]'s crackle together): [param keys] (by time, each value kept until a later key changes it) are dictionaries [code]{time, power, size, crackle, embers}[/code] — the flames' heat release over a campfire's (50 kW), the fire's width in metres, cracks a second, the embers' glow (0 to 1). Returns [code]samples[/code] (interleaved stereo, the same in both channels), the counts [code]cracks[/code], [code]pops[/code], [code]ticks[/code], [code]flares[/code] and [code]usec_per_second[/code] (the synthesis's time a second of sound). For tests and tuning ([code]benchmarks/tools/world_sound/fire_sound.gd[/code]).
+			</description>
+		</method>
 		<method name="get_cell_size" qualifiers="const">
 			<return type="float" />
 			<description>
@@ -39,6 +49,12 @@
 			<return type="Vector3i" />
 			<description>
 				The grid's cells along X, Y and Z (from [member size] and [member resolution]).
+			</description>
+		</method>
+		<method name="get_sound_stats">
+			<return type="Dictionary" />
+			<description>
+				The flames' sound: [code]playing[/code], the heat release heard ([code]power[/code], over a campfire's), the fire's width ([code skip-lint]size[/code], metres), the listener's [code]distance[/code] from the fire (-1: no listener), the [code]flares[/code] synthesised, [code]mixed_seconds[/code] and [code]mix_usec_per_second[/code] (the audio thread's time a second of sound).
 			</description>
 		</method>
 		<method name="get_steps_simulated" qualifiers="const">
@@ -188,11 +204,11 @@
 		<member name="size" type="Vector3" setter="set_size" getter="get_size" default="Vector3(2, 4, 2)">
 			The box in metres, its floor centred on the node.
 		</member>
-		<member name="smoke_color" type="Color" setter="set_smoke_color" getter="get_smoke_color" default="Color(0.75, 0.75, 0.75, 1)">
-			The smoke's scattering colour.
-		</member>
 		<member name="sleep_distance" type="float" setter="set_sleep_distance" getter="get_sleep_distance" default="0.0">
 			While the viewport's camera is farther than this from the box, the gas is not stepped: it keeps its state (still drawn, frozen) and goes on when the camera comes back; the [FellowBurnable3D]s burning in it wait with it. 0: never asleep. A volume far from where the player is costs nothing on the GPU (Frontier Lab's campfire was the largest pass of the frame from kilometres away, decision 0176).
+		</member>
+		<member name="smoke_color" type="Color" setter="set_smoke_color" getter="get_smoke_color" default="Color(0.75, 0.75, 0.75, 1)">
+			The smoke's scattering colour.
 		</member>
 		<member name="smoke_density" type="float" setter="set_smoke_density" getter="get_smoke_density" default="4.0">
 			The smoke's extinction per metre at a smoke density of 1.
@@ -205,6 +221,21 @@
 		</member>
 		<member name="soot" type="float" setter="set_soot" getter="get_soot" default="0.6">
 			The smoke a unit of burning fuel leaves.
+		</member>
+		<member name="sound_bus" type="StringName" setter="set_sound_bus" getter="get_sound_bus" default="&amp;&quot;Master&quot;">
+			The audio bus the flames' sound plays on.
+		</member>
+		<member name="sound_enabled" type="bool" setter="set_sound_enabled" getter="is_sound_enabled" default="true">
+			The flames are heard where they burn (milestone 179, [code]docs/decisions/0321-fire-sound.md[/code]): synthesised on the audio thread, no samples, placed at the fire's centre (its emission's) by an [AudioStreamPlayer3D] the node owns while it sounds. Their heat release comes from the simulated fire (the flames' volume: [method get_fire_power] over [member fire_intensity], about 1.2 MW a cubic metre), its flicker with it: the roar of turbulent combustion (broadband, peaking at about 160 / sqrt(D) Hz for a fire D metres across), the flames puffing at about 1.5 / sqrt(D) Hz, their flutter and the hot gas's hiss, a low "whoomp" when the fire grows fast (a gas catching). The crackle of burning wood is [FellowBurnable3D]'s. Reading the fire's emission back from the GPU while this is on (also with [member fire_light] off). Not in the editor.
+		</member>
+		<member name="sound_max_distance" type="float" setter="set_sound_max_distance" getter="get_sound_max_distance" default="80.0">
+			Beyond this distance from the listener the flames are not heard (their voice stops).
+		</member>
+		<member name="sound_unit_size" type="float" setter="set_sound_unit_size" getter="get_sound_unit_size" default="3.0">
+			The distance (metres) at which the flames are heard at the level synthesised (a campfire's roar about -33 dBFS); nearer louder, farther quieter ([member AudioStreamPlayer3D.unit_size]).
+		</member>
+		<member name="sound_volume_db" type="float" setter="set_sound_volume_db" getter="get_sound_volume_db" default="0.0">
+			The flames' sound's volume.
 		</member>
 		<member name="space" type="int" setter="set_space" getter="get_space" enum="FellowGasVolume3D.Space" default="0">
 			Local: the gas moves and turns with the node. World: the gas stays in the world and the (axis-aligned) box follows the node by whole cells (a carried torch).

@@ -40,6 +40,12 @@
 				The triangles of the mesh drawn while burning (the original's, subdivided with [member subdivide]).
 			</description>
 		</method>
+		<method name="get_fuel_release" qualifiers="const">
+			<return type="float" />
+			<description>
+				The volatiles the object releases now (the gas's fuel), kg/(m³ s) of burning time summed over its voxels (read back every few ticks): times a voxel's volume in cubic metres and [member burn_speed], kilograms a second.
+			</description>
+		</method>
 		<method name="get_initial_fill" qualifiers="const">
 			<return type="PackedFloat32Array" />
 			<description>
@@ -56,6 +62,12 @@
 			<return type="float" />
 			<description>
 				The hottest voxel's temperature in kelvin.
+			</description>
+		</method>
+		<method name="get_sound_stats">
+			<return type="Dictionary" />
+			<description>
+				The wood's sound: [code]playing[/code], what it pyrolyses ([code]pyrolysis_g_per_s[/code], grams a second of the game's time; [code]pyrolysing_m2[/code], the area of its front), the cracks a second asked of the synthesis ([code]crack_rate[/code]), the [code]embers[/code]' glow (0 to 1), the counts synthesised ([code]cracks[/code], [code]pops[/code], [code]ticks[/code]), [code]mixed_seconds[/code] and [code]mix_usec_per_second[/code].
 			</description>
 		</method>
 		<method name="get_steps_simulated" qualifiers="const">
@@ -210,6 +222,24 @@
 		</member>
 		<member name="smoke" type="float" setter="set_smoke" getter="get_smoke" default="0.05">
 			Smoke released with the volatiles, per unit of fuel.
+		</member>
+		<member name="sound_bus" type="StringName" setter="set_sound_bus" getter="get_sound_bus" default="&amp;&quot;Master&quot;">
+			The audio bus the wood's sound plays on.
+		</member>
+		<member name="sound_crackle" type="float" setter="set_sound_crackle" getter="get_sound_crackle" default="1.0">
+			How much the wood crackles for the area pyrolysing (1: 15 cracks a second for each square metre, about 10 for a log of 15 cm by 1 m in full flame; resinous or damp wood more, seasoned hardwood less; 0: none).
+		</member>
+		<member name="sound_enabled" type="bool" setter="set_sound_enabled" getter="is_sound_enabled" default="true">
+			The wood is heard as it burns (milestone 179, [code]docs/decisions/0321-fire-sound.md[/code]): synthesised on the audio thread, no samples, placed at the object's centre by an [AudioStreamPlayer3D] the node owns while it sounds. Cracks as it pyrolyses (pockets of steam and gas bursting: a snap and a short ring, their energies a power law, often in runs; now and then a lower pop of sap), at a rate with the area pyrolysing (the voxels releasing volatiles; [member sound_crackle]); the embers' ticks while its char glows. The flames' roar is the [FellowGasVolume3D]'s. Not in the editor.
+		</member>
+		<member name="sound_max_distance" type="float" setter="set_sound_max_distance" getter="get_sound_max_distance" default="40.0">
+			Beyond this distance from the listener the wood is not heard (its voice stops).
+		</member>
+		<member name="sound_unit_size" type="float" setter="set_sound_unit_size" getter="get_sound_unit_size" default="2.0">
+			The distance (metres) at which the wood is heard at the level synthesised; nearer louder, farther quieter ([member AudioStreamPlayer3D.unit_size]).
+		</member>
+		<member name="sound_volume_db" type="float" setter="set_sound_volume_db" getter="get_sound_volume_db" default="0.0">
+			The wood's sound's volume.
 		</member>
 		<member name="specific_heat" type="float" setter="set_specific_heat" getter="get_specific_heat" default="1700.0">
 			The wood's specific heat (J/(kg K)).

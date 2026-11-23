@@ -300,6 +300,26 @@ through the cloud) and heard from its first arrival (distance / 343 s). Methods:
 `FellowLightning3D.debug_render_thunder(distance, azimuth_degrees, seconds[, rate, seed])`. Measured with
 `benchmarks/tools/world_sound/weather_sound.gd` + `weather_sound.py`; a storm with `storm_demo.gd` (Movie Maker).
 
+### Fire's sound (milestone 179)
+
+Decision 0321: a fire heard where it burns, synthesised on the audio thread, no samples, each source placed by an
+`AudioStreamPlayer3D` its node owns while it sounds; not in the editor.
+
+| node | property | default | meaning |
+|---|---|---|---|
+| `FellowGasVolume3D` / `FellowBurnable3D` | `sound_enabled` | true | the flames' roar (the gas volume's fire) / the wood's crackle and embers (the burning object) |
+| the same | `sound_volume_db` | 0 dB | its volume |
+| the same | `sound_bus` | Master | its bus |
+| the same | `sound_unit_size` | 3 m / 2 m | the distance heard at the level synthesised (`AudioStreamPlayer3D.unit_size`) |
+| the same | `sound_max_distance` | 80 m / 40 m | not heard beyond it (the voice stops) |
+| `FellowBurnable3D` | `sound_crackle` | 1.0 | cracks for the area pyrolysing (1: 15 a second a square metre; resinous or damp wood more) |
+
+The flames' heat release comes from the simulated fire (its emission, read back also with `fire_light` off, over
+`fire_intensity`: the flames' volume, about 1.2 MW a cubic metre): the roar peaks at about 160 / sqrt(D) Hz, puffs at
+1.5 / sqrt(D) Hz, flares when the fire grows fast. Methods: `get_sound_stats()`; `FellowBurnable3D.get_fuel_release()`;
+`FellowGasVolume3D.debug_render_sound(keys, seconds[, rate, seed])` (the flames and the crackle offline). Measured with
+`benchmarks/tools/world_sound/fire_sound.gd` + `fire_sound.py`; a campfire with `fire_demo.gd` (Movie Maker).
+
 ## Rain and wet surfaces (milestone 25)
 
 A `FellowRain3D` node (module `fellow_fluid`; one active at a time) makes it rain around the camera and wets the

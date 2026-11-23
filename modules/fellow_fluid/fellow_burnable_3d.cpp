@@ -44,6 +44,7 @@
 #include "scene/main/scene_tree.h"
 #include "scene/resources/3d/world_3d.h"
 #include "scene/resources/shader.h"
+#include "servers/audio/audio_server.h"
 #include "servers/physics_3d/physics_server_3d.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/effects/fellow_gas.h"
@@ -2260,8 +2261,103 @@ void FellowBurnable3D::_notification(int p_what) {
 			if (configured) {
 				_read_totals();
 			}
+			_sound_update(get_process_delta_time());
 		} break;
 	}
+}
+
+// Milestone 179 (decision 0321): the wood heard as it burns — cracks where it pyrolyses (pockets of steam and gas
+// bursting at the front), their rate with the front's area (the voxels releasing volatiles, a voxel's face each: the
+// burning runs burn_speed times faster than wood's, so its mass rate would crackle as fast), the embers' ticks as the
+// char glows; placed at the object's centre. The flames' roar is the gas volume's.
+static const float BURN_CRACKS_PER_M2 = 15.0f; // cracks a second for each square metre pyrolysing (sound_crackle 1)
+
+void FellowBurnable3D::_sound_update(double p_dt) {
+	MeshInstance3D *target = configured ? Object::cast_to<MeshInstance3D>(ObjectDB::get_instance(target_id)) : nullptr;
+	const bool want = sound_enabled && target && is_visible_in_tree() && !Engine::get_singleton()->is_editor_hint() && AudioServer::get_singleton();
+	sound_pyrolysis = 0.0f;
+	sound_area = 0.0f;
+	sound_rate = 0.0f;
+	sound_embers = 0.0f;
+	Vector3 centre;
+	if (want) {
+		const Transform3D m = target->get_global_transform();
+		const float scale = Math::pow(Math::abs(m.basis.determinant()), real_t(1.0) / real_t(3.0));
+		const float h = voxel * scale;
+		centre = m.xform(origin + Vector3(res) * voxel * 0.5f);
+		// The volatiles summed over the voxels (kg/(m^3 s) of burning time) to kg a second of the game's.
+		sound_pyrolysis = MAX(0.0f, fuel_release) * h * h * h * burn_speed;
+		const float wood = CLAMP(wood_fraction / 0.02f, 0.0f, 1.0f);
+		sound_area = float(burning_voxels) * h * h;
+		sound_rate = MIN(60.0f, sound_crackle * BURN_CRACKS_PER_M2 * sound_area * wood);
+		const float glow = CLAMP((max_temperature - (glow_temperature - 150.0f)) / 300.0f, 0.0f, 1.0f);
+		sound_embers = CLAMP(char_fraction / 0.05f, 0.0f, 1.0f) * glow * MIN(sound_crackle, 1.0f);
+	}
+	const Node3D *listener = want ? fellow_sound_listener(this) : nullptr;
+	const float distance = listener ? float(listener->get_global_position().distance_to(centre)) : 0.0f;
+	if (!want || (sound_rate < 0.05f && sound_embers < 0.01f) || distance > sound_max_distance * 1.1f) {
+		if (sound_voice.is_playing()) {
+			if (FellowFireSynth *synth = (FellowFireSynth *)sound_voice.get_source()) {
+				synth->post(FellowFireSynth::Params());
+			}
+			sound_quiet_for += p_dt;
+			if (sound_quiet_for > 2.0) {
+				sound_voice.stop();
+			}
+		}
+		return;
+	}
+	sound_quiet_for = 0.0;
+	FellowFireSynth *synth = (FellowFireSynth *)sound_voice.start_3d(this, &FellowFireSynth::make, sound_bus, sound_volume_db, sound_unit_size, sound_max_distance);
+	if (!synth) {
+		return;
+	}
+	sound_voice.place(centre);
+	FellowFireSynth::Params p;
+	p.crackle = sound_rate;
+	p.embers = sound_embers;
+	synth->post(p);
+}
+
+void FellowBurnable3D::set_sound_volume_db(float p_db) {
+	sound_volume_db = p_db;
+	sound_voice.set_volume_db(p_db);
+}
+
+void FellowBurnable3D::set_sound_bus(const StringName &p_bus) {
+	sound_bus = p_bus;
+	sound_voice.set_bus(p_bus);
+}
+
+void FellowBurnable3D::set_sound_unit_size(float p_size) {
+	sound_unit_size = MAX(p_size, 0.1f);
+	sound_voice.set_unit_size(sound_unit_size);
+}
+
+void FellowBurnable3D::set_sound_max_distance(float p_distance) {
+	sound_max_distance = MAX(p_distance, 1.0f);
+	sound_voice.set_max_distance(sound_max_distance);
+}
+
+Dictionary FellowBurnable3D::get_sound_stats() {
+	Dictionary d;
+	uint64_t frames = 0, usec = 0;
+	sound_voice.get_mix_stats(frames, usec);
+	const float rate = AudioServer::get_singleton() ? AudioServer::get_singleton()->get_mix_rate() : 48000.0f;
+	d["playing"] = sound_voice.is_playing();
+	d["pyrolysis_g_per_s"] = sound_pyrolysis * 1000.0f;
+	d["pyrolysing_m2"] = sound_area;
+	d["crack_rate"] = sound_rate;
+	d["embers"] = sound_embers;
+	if (FellowFireSynth *synth = (FellowFireSynth *)sound_voice.get_source()) {
+		const FellowFireSynth::Stats st = synth->get_stats();
+		d["cracks"] = (int64_t)st.cracks;
+		d["pops"] = (int64_t)st.pops;
+		d["ticks"] = (int64_t)st.ticks;
+	}
+	d["mixed_seconds"] = double(frames) / rate;
+	d["mix_usec_per_second"] = frames > 0 ? double(usec) / (double(frames) / rate) : 0.0;
+	return d;
 }
 
 void FellowBurnable3D::_bind_methods() {
@@ -2277,6 +2373,20 @@ void FellowBurnable3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_draw_burning"), &FellowBurnable3D::is_draw_burning);
 	ClassDB::bind_method(D_METHOD("set_simulation_enabled", "enable"), &FellowBurnable3D::set_simulation_enabled);
 	ClassDB::bind_method(D_METHOD("is_simulation_enabled"), &FellowBurnable3D::is_simulation_enabled);
+	ClassDB::bind_method(D_METHOD("set_sound_enabled", "enabled"), &FellowBurnable3D::set_sound_enabled);
+	ClassDB::bind_method(D_METHOD("is_sound_enabled"), &FellowBurnable3D::is_sound_enabled);
+	ClassDB::bind_method(D_METHOD("set_sound_volume_db", "db"), &FellowBurnable3D::set_sound_volume_db);
+	ClassDB::bind_method(D_METHOD("get_sound_volume_db"), &FellowBurnable3D::get_sound_volume_db);
+	ClassDB::bind_method(D_METHOD("set_sound_bus", "bus"), &FellowBurnable3D::set_sound_bus);
+	ClassDB::bind_method(D_METHOD("get_sound_bus"), &FellowBurnable3D::get_sound_bus);
+	ClassDB::bind_method(D_METHOD("set_sound_crackle", "crackle"), &FellowBurnable3D::set_sound_crackle);
+	ClassDB::bind_method(D_METHOD("get_sound_crackle"), &FellowBurnable3D::get_sound_crackle);
+	ClassDB::bind_method(D_METHOD("set_sound_unit_size", "metres"), &FellowBurnable3D::set_sound_unit_size);
+	ClassDB::bind_method(D_METHOD("get_sound_unit_size"), &FellowBurnable3D::get_sound_unit_size);
+	ClassDB::bind_method(D_METHOD("set_sound_max_distance", "metres"), &FellowBurnable3D::set_sound_max_distance);
+	ClassDB::bind_method(D_METHOD("get_sound_max_distance"), &FellowBurnable3D::get_sound_max_distance);
+	ClassDB::bind_method(D_METHOD("get_sound_stats"), &FellowBurnable3D::get_sound_stats);
+	ClassDB::bind_method(D_METHOD("get_fuel_release"), &FellowBurnable3D::get_fuel_release);
 	ClassDB::bind_method(D_METHOD("set_burn_speed", "speed"), &FellowBurnable3D::set_burn_speed);
 	ClassDB::bind_method(D_METHOD("get_burn_speed"), &FellowBurnable3D::get_burn_speed);
 	ClassDB::bind_method(D_METHOD("set_density", "density"), &FellowBurnable3D::set_density);
@@ -2375,6 +2485,14 @@ void FellowBurnable3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "ash_color", PROPERTY_HINT_COLOR_NO_ALPHA), "set_ash_color", "get_ash_color");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "glow_intensity", PROPERTY_HINT_RANGE, "0,50,0.01,or_greater"), "set_glow_intensity", "get_glow_intensity");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "crack_scale", PROPERTY_HINT_RANGE, "0.001,1,0.001,suffix:m"), "set_crack_scale", "get_crack_scale");
+
+	ADD_GROUP("Sound", "sound_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sound_enabled"), "set_sound_enabled", "is_sound_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_volume_db", PROPERTY_HINT_RANGE, "-60,24,0.1,suffix:dB"), "set_sound_volume_db", "get_sound_volume_db");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "sound_bus"), "set_sound_bus", "get_sound_bus");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_crackle", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater"), "set_sound_crackle", "get_sound_crackle");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_unit_size", PROPERTY_HINT_RANGE, "0.1,50,0.1,or_greater,suffix:m"), "set_sound_unit_size", "get_sound_unit_size");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sound_max_distance", PROPERTY_HINT_RANGE, "1,500,1,or_greater,suffix:m"), "set_sound_max_distance", "get_sound_max_distance");
 
 	ADD_SIGNAL(MethodInfo("ignited"));
 	ADD_SIGNAL(MethodInfo("burned_out"));

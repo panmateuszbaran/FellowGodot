@@ -98,14 +98,19 @@ public:
 	virtual bool is_monophonic() const override { return true; }
 };
 
-// A node's sound heard everywhere (not placed): a player made when first needed, playing its synthesis.
+// A node's sound: a player made when first needed, playing its synthesis — heard everywhere (start()), or placed in
+// the scene (start_3d(): an AudioStreamPlayer3D, moved with place()).
 class FellowAmbientVoice {
-	AudioStreamPlayer *player = nullptr;
+	Node *player = nullptr;
 	Ref<FellowSynthPlayback> playback;
 
 public:
 	// The source (null if the voice could not start).
 	FellowSynthSource *start(Node *p_owner, FellowSynthStream::Factory p_factory, const StringName &p_bus, float p_volume_db);
+	FellowSynthSource *start_3d(Node *p_owner, FellowSynthStream::Factory p_factory, const StringName &p_bus, float p_volume_db, float p_unit_size, float p_max_distance);
+	void place(const Vector3 &p_position);
+	void set_unit_size(float p_size);
+	void set_max_distance(float p_distance);
 	void stop();
 	bool is_playing() const;
 	void set_volume_db(float p_db);
@@ -160,6 +165,70 @@ struct FellowOnePole {
 	}
 	_FORCE_INLINE_ float hp(float p_x) { return p_x - lp(p_x); }
 };
+
+// Fire (milestone 179, decision 0321), heard where it burns (one channel: a placed voice pans it):
+// * the roar of turbulent combustion — a flame is a monopole source, its sound the rate of change of its heat release
+//   (Strahle; Bragg): broadband, peaking lower for a larger fire (about 160 / sqrt(D) Hz), the flames puffing at about
+//   1.5 / sqrt(D) Hz (pool fires, Cetegen and Ahmed); a flare's "whoomp" when the fire grows fast (a gas lit);
+// * the flames fluttering (a band of noise about 0.6-1.1 kHz, a dozen changes a second) and the hot gas's hiss;
+// * the wood's crackle — pockets of steam and gas bursting as it pyrolyses: a snap and a short ring, their energies a
+//   power law (crackling noise), often in runs; now and then a pop of sap, lower and longer;
+// * the embers' ticks as the char glows and cools.
+class FellowFireSynth : public FellowSynthSource {
+public:
+	struct Params {
+		float power = 0.0f; // the flames' heat release over a campfire's (50 kW)
+		float size = 0.5f; // m across the fire
+		float crackle = 0.0f; // cracks a second (the wood pyrolysing)
+		float embers = 0.0f; // glowing char, 0..1
+		float gain = 1.0f;
+	};
+	struct Stats {
+		uint64_t cracks = 0;
+		uint64_t pops = 0;
+		uint64_t ticks = 0;
+		uint64_t flares = 0;
+	};
+	void post(const Params &p_params);
+	virtual void render(float *r_left, float *r_right, int p_frames) override;
+	Stats get_stats();
+	void set_seed(uint64_t p_seed) { rng = RandomPCG(p_seed); }
+	static FellowSynthSource *make() { return memnew(FellowFireSynth); }
+
+private:
+	struct Crack {
+		int delay = 0;
+		int snap = 0; // samples of the burst's broadband snap
+		float amp = 0.0f;
+		float env = 1.0f;
+		float decay = 0.9f;
+		FellowSVF filter;
+	};
+	Params target;
+	Params cur;
+	bool first = true;
+	LocalVector<Crack> cracks;
+	RandomPCG rng = RandomPCG(0xf17e);
+	FellowPink pink;
+	FellowOnePole roar_hp1, roar_hp2, roar_lp1, roar_lp2, hiss, hiss_lp, flare_lp1, flare_lp2;
+	FellowSVF lick;
+	float slow_power = 0.0f; // the power over 0.5 s (a flare: the posted power well over it)
+	float puff_phase = 0.0f;
+	float flutter = 0.5f;
+	float flutter_target = 0.5f;
+	float spawn = 0.0f;
+	float tick_spawn = 0.0f;
+	float flare_amp = 0.0f;
+	float flare_t = 1e9f; // s since the flare
+	float flare_cooldown = 0.0f;
+	Stats stats;
+	float _noise() { return rng.randf() * 2.0f - 1.0f; }
+	void _crack(int p_delay, float p_amp, float p_fc, float p_q, float p_decay_s, float p_snap_s);
+};
+
+// A fire's heat release from its flames' volume (m^3; turbulent flames release about 1.2 MW in each, Orloff and de
+// Ris), over a campfire's (50 kW); its size, a flame about 2.5 times as tall as it is wide.
+void fellow_fire_from_flames(float p_volume, float &r_power, float &r_size);
 
 // Rain: a bed of distant drops (filtered noise), the near ones each its own — on water a bubble (drops of 0.8-1.1 mm
 // entrain one ringing at 13-21 kHz; larger ones lower bubbles) and a tick, on the ground a filtered click — and over a

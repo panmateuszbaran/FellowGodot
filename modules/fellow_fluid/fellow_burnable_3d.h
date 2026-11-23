@@ -31,6 +31,7 @@
 #pragma once
 
 #include "fellow_gas_volume_3d.h"
+#include "fellow_weather_sound.h"
 
 #include "core/templates/hash_map.h"
 #include "scene/3d/node_3d.h"
@@ -136,6 +137,20 @@ private:
 	LocalVector<ObjectID> disabled_shapes; // the body's shapes this node disabled (collapsed)
 	bool froze_body = false;
 	uint64_t ticks = 0;
+	// Milestone 179 (decision 0321): the wood's crackle as it pyrolyses, the embers' ticks (placed at the object).
+	bool sound_enabled = true;
+	float sound_volume_db = 0.0f;
+	StringName sound_bus = SNAME("Master");
+	float sound_crackle = 1.0f;
+	float sound_unit_size = 2.0f;
+	float sound_max_distance = 40.0f;
+	FellowAmbientVoice sound_voice;
+	double sound_quiet_for = 0.0;
+	float sound_pyrolysis = 0.0f; // kg/s (real time)
+	float sound_area = 0.0f; // m^2 pyrolysing
+	float sound_rate = 0.0f; // cracks a second
+	float sound_embers = 0.0f;
+	void _sound_update(double p_dt);
 	LocalVector<Vector4> pending_ignitions; // centre (voxels), radius (voxels)
 	LocalVector<float> pending_ignition_temperatures; // K above ambient
 
@@ -251,6 +266,21 @@ public:
 	// Heats the material within `radius` metres of a point (global) to at least `temperature` kelvin.
 	void ignite(const Vector3 &p_position, float p_radius, float p_temperature = 900.0f);
 	void reset_burning();
+
+	void set_sound_enabled(bool p_enabled) { sound_enabled = p_enabled; }
+	bool is_sound_enabled() const { return sound_enabled; }
+	void set_sound_volume_db(float p_db);
+	float get_sound_volume_db() const { return sound_volume_db; }
+	void set_sound_bus(const StringName &p_bus);
+	StringName get_sound_bus() const { return sound_bus; }
+	void set_sound_crackle(float p_value) { sound_crackle = CLAMP(p_value, 0.0f, 10.0f); }
+	float get_sound_crackle() const { return sound_crackle; }
+	void set_sound_unit_size(float p_size);
+	float get_sound_unit_size() const { return sound_unit_size; }
+	void set_sound_max_distance(float p_distance);
+	float get_sound_max_distance() const { return sound_max_distance; }
+	Dictionary get_sound_stats();
+	float get_fuel_release() const { return fuel_release; } // the volatiles released, kg/(m^3 s) summed over the voxels
 
 	float get_wood_fraction() const { return wood_fraction; } // of the initial volume
 	float get_char_fraction() const { return char_fraction; }

@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include "fellow_weather_sound.h"
+
 #include "core/object/ref_counted.h"
 #include "core/os/mutex.h"
 #include "scene/3d/light_3d.h"
@@ -172,6 +174,18 @@ private:
 	float shown_range_m = 0.0f;
 	bool shown_valid = false;
 	float fire_power = 0.0f;
+	// Milestone 179 (decision 0321): the flames' sound, placed at the fire.
+	bool sound_enabled = true;
+	float sound_volume_db = 0.0f;
+	StringName sound_bus = SNAME("Master");
+	float sound_unit_size = 3.0f;
+	float sound_max_distance = 80.0f;
+	FellowAmbientVoice sound_voice;
+	double sound_quiet_for = 0.0;
+	float sound_power = 0.0f;
+	float sound_size = 0.0f;
+	float sound_distance = -1.0f;
+	void _sound_update(double p_dt);
 	int redraw_ticks = 0; // milestone 52: physics ticks left asking for frames after the last emission
 
 	void _update_grid();
@@ -324,6 +338,19 @@ public:
 	int64_t get_vram_bytes() const;
 	int64_t get_steps_simulated() const { return int64_t(ticks); }
 	float get_fire_power() const { return fire_power; }
+
+	void set_sound_enabled(bool p_enabled) { sound_enabled = p_enabled; }
+	bool is_sound_enabled() const { return sound_enabled; }
+	void set_sound_volume_db(float p_db);
+	float get_sound_volume_db() const { return sound_volume_db; }
+	void set_sound_bus(const StringName &p_bus);
+	StringName get_sound_bus() const { return sound_bus; }
+	void set_sound_unit_size(float p_size);
+	float get_sound_unit_size() const { return sound_unit_size; }
+	void set_sound_max_distance(float p_distance);
+	float get_sound_max_distance() const { return sound_max_distance; }
+	Dictionary get_sound_stats();
+	Dictionary debug_render_sound(const Array &p_keys, float p_seconds, float p_rate = 48000.0f, int p_seed = 1) const;
 	OmniLight3D *get_fire_light_node() const { return light; }
 
 	// Tests: the GPU state (0 scalars, 1 velocity, 2 pressure, 3 the divergence's right-hand side now, 4 the solid
