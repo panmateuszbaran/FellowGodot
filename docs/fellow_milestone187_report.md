@@ -16,6 +16,8 @@ by its speed as it moves (at most 4 cm): it steps. Standing, pushed at the chest
 ground, 60 N·s 13.4 → 2.2, 80 N·s 11.7 → 5.7; after getting up 7-29 → 7-16 cm; Matching Lab's crowd's feet in
 contact move over the ground 21 % less. Walking and falls as before.
 
+![a 20 N·s nudge, the stepping foot seen from the side: milestone 186's arcs 4.6 cm up and slides the last 20 cm along the ground; milestone 187's steps, 8.9 cm up, and lands](showcase/staggers_m187.png)
+
 ## 1. Measurements
 
 `benchmarks/project/bench/balance_check.gd` (Jolt, 60 Hz), the guard off (milestone 186, to the digit) → on: the
