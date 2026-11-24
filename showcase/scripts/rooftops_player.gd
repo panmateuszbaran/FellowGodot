@@ -115,6 +115,10 @@ func _use_mocap() -> void:
 	ap.remove_animation_library(&"")
 	ap.add_animation_library(&"", lib)
 	_mocap = true
+	# Milestone 194: a move from hold to hold plays its clip over the move's time, from the clip's own length.
+	for a in mocap.get_animation_list():
+		if String(a).begins_with("hang_leap") and _one_shots.has(String(a)):
+			_one_shots[String(a)] = mocap.get_animation(a).length
 	var info = JSON.parse_string(FileAccess.get_file_as_string(MOCAP_DIR.path_join("clips.json")))
 	var gaits: Dictionary = info.get("gaits", {}) if info is Dictionary else {}
 	var table: Array = []
@@ -144,6 +148,17 @@ func _variant(p_node: StringName, p_clip: StringName) -> void:
 	var want := p_clip if ap.has_animation(p_clip) else p_node
 	if n and n.animation != want:
 		n.animation = want
+
+
+## Milestone 194: a blend space's point's clip swapped for a variant of it where the library has one.
+func _variant_point(p_space: StringName, p_point: int, p_clip: StringName) -> void:
+	var space := (tree.tree_root as AnimationNodeBlendTree).get_node(p_space) as AnimationNodeBlendSpace1D
+	var ap := tree.get_node(tree.anim_player) as AnimationPlayer
+	if space == null or p_point >= space.get_blend_point_count() or not ap.has_animation(p_clip):
+		return
+	var n := space.get_blend_point_node(p_point) as AnimationNodeAnimation
+	if n and n.animation != p_clip:
+		n.animation = p_clip
 
 
 ## A move from hold to hold: its clip (the hands and feet are put on the stone by the pose's IK over it).
@@ -382,8 +397,12 @@ func _traverse(_delta: float) -> void:
 			traversal.hang_jump()
 		elif want_drop:
 			traversal.release()
-		var along := absf(wish.dot(global_basis.x))
+		var side := wish.dot(global_basis.x)
+		var along := absf(side)
 		tree.set("parameters/hang/blend_position", clampf(along * 1.5, 0.0, 1.0))
+		# Milestone 194: the mocap's shimmy has a side (the model faces the body's −Z: its left is the body's −X).
+		if _mocap and along > 0.1:
+			_variant_point(&"hang", 1, &"hang_shimmy_l" if side < 0.0 else &"hang_shimmy_r")
 		if _one_shot <= 0.0:
 			_set_state("hang")
 	elif traversal.is_climbing():

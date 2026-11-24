@@ -78,16 +78,26 @@ CLIPS = [
 	("land", ["falling to landing", "landing"], "land"),
 	("land_hard", ["hard landing"], "land"),
 	("roll", ["falling to roll", "stand to roll", "running forward roll", "roll"], "land"),
-	("hang_idle", ["braced hang", "hanging idle"], "loop"),
+	("hang_idle", ["braced hang", "hanging idle"], "loop_tail"),  # Mixamo's catches the ledge first
 	("hang_shimmy_l", ["left braced hang shimmy", "braced hang shimmy left"], "loop"),
 	("hang_shimmy_r", ["right braced hang shimmy", "braced hang shimmy right", "braced hang shimmy"], "loop"),
-	("hang_leap_up", ["braced hang hop up"], "once"),
-	("hang_leap_l", ["braced hang hop left"], "once"),
-	("hang_leap_r", ["braced hang hop right"], "once"),
-	("hang_climb", ["braced hang to crouch", "climbing to top"], "once"),
+	("hang_leap_up", ["braced hang hop up"], "anchored"),
+	("hang_leap_l", ["braced hang hop left"], "anchored"),
+	("hang_leap_r", ["braced hang hop right"], "anchored"),
 	("climb_move", ["climbing up wall", "climbing"], "loop"),
-	("vault", ["vault", "jump over", "running over obstacle"], "once"),
+	("start_walk", ["start walking"], "travel"),
+	("stop_walk", ["stop walking"], "travel"),
+	("stop_run", ["run to stop"], "travel"),
 ]
+# The hips where the mannequin's own clips of these hold them (y back from the wall, z up from the root, m): the player's
+# traversal puts the body against the wall and the hands on the ledge from them (Mixamo's hang hangs 0.13 m higher, its
+# climb 0.77 m).
+HIPS_AT = {"hang_idle": (0.13, 0.915), "hang_shimmy_l": (0.13, 0.915), "hang_shimmy_r": (0.13, 0.915),
+		"hang_leap_up": (0.13, 0.915), "hang_leap_l": (0.13, 0.915), "hang_leap_r": (0.13, 0.915),
+		"climb_move": (-0.08, 0.885)}
+# kind "loop_tail": a loop from 40 % of the clip on. "anchored": the hips held where they start (the player's traversal
+# moves the body from hold to hold; the limbs move about the hips as Mixamo's). "travel": in place, the hips' travel
+# forward recorded (clips.json: m/s every 60th of a second) for the player to move the body by.
 
 
 def strip(name):
@@ -290,11 +300,12 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
 		info["gaits"][name] = {"period": period, "speed": v, "stride": v * period, "repeat": corr}
 		play = period  # a second of the clip is a stride
 		info["clips"][name] = {"kind": kind, "period": period, "repeat": corr}
-	elif kind == "loop":
+	elif kind in ("loop", "loop_tail"):
 		loop = True
-		seam = min(SEAM, src.length * 0.25)
-		length = src.length - seam
-		info["clips"][name] = {"kind": kind, "seam": seam}
+		start = src.length * 0.4 if kind == "loop_tail" else 0.0
+		seam = min(SEAM, (src.length - start) * 0.25)
+		length = src.length - start - seam
+		info["clips"][name] = {"kind": kind, "seam": seam, "from": start}
 	elif kind == "takeoff":
 		t, t_land = flight(track)
 		start = max(0.0, t - 0.12)
@@ -308,6 +319,12 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
 		start = max(0.0, t - 0.05)
 		length = src.length - start
 		info["clips"][name] = {"kind": kind, "touchdown": t, "from": start}
+	elif kind == "anchored":
+		# A hop's wind-up, flight and catch (its first fifth and last quarter hang still): the traversal plays it over the
+		# move's time, which the whole clip would have sped up three times (the head at 2,300°/s).
+		start = src.length * 0.2
+		length = src.length * 0.55
+		info["clips"][name] = {"kind": kind, "from": start}
 	else:
 		info["clips"][name] = {"kind": kind}
 	# The flight's height taken out (the player's body rises and falls; the clip's hips stay at their takeoff's or
@@ -334,16 +351,38 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
 		den = sum((x - tm) ** 2 for x in ts) or 1.0
 		mx = sum(h[1].x for h in hips) / len(hips)
 		my = sum(h[1].y for h in hips) / len(hips)
+		mz = sum(h[1].z for h in hips) / len(hips)
 		bx = sum((h[0] - tm) * (h[1].x - mx) for h in hips) / den
 		by = sum((h[0] - tm) * (h[1].y - my) for h in hips) / den
+		bz = sum((h[0] - tm) * (h[1].z - mz) for h in hips) / den if kind != "gait" else 0.0  # the gaits as milestone 192's
+
+		info["clips"][name]["drift"] = [round(bx, 3), round(by, 3), round(bz, 3)]
 
 		def centre_at(t):
-			return Vector((mx + bx * (t - tm), my + by * (t - tm), 0.0))
+			# (the height's drift too: a climb up a wall in place)
+			return Vector((mx + bx * (t - tm), my + by * (t - tm), bz * (t - tm)))
+	elif kind == "anchored":
+		h0 = min(hips, key=lambda h: abs(h[0] - start))[1]
+
+		def centre_at(t):
+			h = min(hips, key=lambda x: abs(x[0] - t))[1]
+			return Vector((h.x, h.y, h.z - h0.z))
 	else:
 
 		def centre_at(t):
 			near = [h[1] for h in hips if abs(h[0] - t) <= 0.25] or [min(hips, key=lambda h: abs(h[0] - t))[1]]
 			return Vector((sum(h.x for h in near) / len(near), sum(h.y for h in near) / len(near), lift(t) if lift else 0.0))
+	if name in HIPS_AT:
+		# The hips' mean over the cut moved to the mannequin's own (the same offset to every joint).
+		ty, tz = HIPS_AT[name]
+		ts = [start + length * k / 16.0 for k in range(17)]
+		hy = sum(src.sample(t)["Hips"].translation.y - centre_at(t).y for t in ts) / len(ts)
+		hz = sum(src.sample(t)["Hips"].translation.z - centre_at(t).z for t in ts) / len(ts)
+		off = Vector((0.0, hy - ty / scale, hz - tz / scale))
+		base_centre = centre_at
+
+		def centre_at(t):
+			return base_centre(t) + off
 	out_len = 1.0 if kind == "gait" else length
 	n = max(2, int(round(out_len * FPS)))
 	frames = []
@@ -356,10 +395,10 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
 				t -= length
 		retarget(rig, src, min(t, src.length), scale, ankle_dz, centre_at(t))
 		snap = rig.snapshot()
-		if seam > 0.0 and t < seam:
+		if seam > 0.0 and t < start + seam:
 			# The loop's start: from where its end goes on (t + length) into the clip's own (t).
 			retarget(rig, src, min(t + length, src.length), scale, ankle_dz, centre_at(t + length))
-			snap = blend_snapshots(rig.snapshot(), snap, smooth_step(t / seam))
+			snap = blend_snapshots(rig.snapshot(), snap, smooth_step((t - start) / seam))
 		frames.append(snap)
 	debug = os.environ.get("MIXAMO_DEBUG")
 	if debug:
@@ -377,6 +416,20 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
 		with open(os.path.join(debug, name + ".json"), "w") as f:
 			json.dump({"map": MAP, "parent": rig.parent, "frames": dump}, f)
 	write_action(rig, name, frames, loop)
+	if kind == "travel":
+		# The body's speed forward (−Y, scaled) as the hips' third-of-a-second average moves (at Mixamo's samples, a
+		# central difference over a tenth of a second), every 60th of a second.
+		ys = [a[3].y for a in track]
+		step = 1.0 / SRC_FPS
+		w = max(1, int(round(0.17 / step)))
+		avg = [sum(ys[max(0, i - w) : i + w + 1]) / len(ys[max(0, i - w) : i + w + 1]) for i in range(len(ys))]
+		vel = [-(avg[min(len(avg) - 1, i + 2)] - avg[max(0, i - 2)]) / ((min(len(avg) - 1, i + 2) - max(0, i - 2)) * step) * scale for i in range(len(avg))]
+		travel = []
+		for i in range(n + 1):
+			f = (start + min(out_len, i / FPS)) / step
+			k = min(len(vel) - 2, int(f))
+			travel.append(round(vel[k] + (vel[k + 1] - vel[k]) * (f - k), 3))
+		info["clips"][name]["travel"] = travel
 	info["clips"][name].update({"length": out_len, "loop": loop, "source_length": src.length})
 	return play
 

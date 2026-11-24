@@ -9,6 +9,15 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 194 — Mixamo's hangs and climbs on the rooftops' character (2026-11-24)
+
+- The showcase's character hangs, shimmies (a clip for each side), hops from hold to hold and climbs walls with
+  Mixamo's motion capture (decision 0336): the hang without its catch, the hops cut to their action with the hips held
+  (the traversal moves the body), the climb in place, the hips moved to where the mannequin's own clips hold them
+  (Mixamo's hang hung 13 cm higher, its climb 77 cm). `anim_quality.py`: 30 of 38 gates, every hang and climb gate
+  passing. Mixamo's start, stop, climb-up, run-up and vault downloaded, not played yet (too slow for a player; root
+  motion to move onto the root bone).
+
 ## Milestone 192 — Mixamo's motion capture on the rooftops' character (2026-11-24)
 
 - The showcase's character plays motion capture (decision 0335; the owner: "the jump and many other animations look very
