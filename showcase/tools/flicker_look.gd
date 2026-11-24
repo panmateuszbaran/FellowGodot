@@ -4,7 +4,9 @@ extends SceneTree
 ## (<dir>/f%04d.png) for tools' frame-to-frame differences. --set=<setting>=<value> (repeatable) changes a project
 ## setting first (e.g. --set=rendering/fellow/shadows/directional_cache=false); --plain_glass=1 puts a plain material on
 ## the windows' glass (its shader is long to compile on lavapipe); --sun=<property>=<value> (repeatable) sets one of the
-## Sun's properties (e.g. --sun=light_angular_distance=0.5).
+## Sun's properties (e.g. --sun=light_angular_distance=0.5); --shader_param=<shader>:<parameter>=<value> (repeatable)
+## sets a parameter of every material of the scene whose shader is <shader>.gdshader (e.g.
+## --shader_param=facade_pbr:filtered_relief=false).
 ##
 ##   godot --path showcase --rendering-driver vulkan --resolution 640x360 --fixed-fps 60 -s res://tools/flicker_look.gd \
 ##       -- --out=<dir> [--view=east] [--still=30] [--moving=60] [--settle=20] [--configs=base,no_contact,...]
@@ -30,6 +32,7 @@ func _init() -> void:
 	var plain_glass := false
 	var configs := PackedStringArray()
 	var sun_props := {}
+	var shader_params := []
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			out = a.get_slice("=", 1)
@@ -46,6 +49,10 @@ func _init() -> void:
 		elif a.begins_with("--sun="):
 			var kv := a.substr(6)
 			sun_props[kv.get_slice("=", 0)] = str_to_var(kv.get_slice("=", 1))
+		elif a.begins_with("--shader_param="):
+			var spec := a.substr(15)
+			var kv := spec.get_slice(":", 1)
+			shader_params.append([spec.get_slice(":", 0), kv.get_slice("=", 0), str_to_var(kv.get_slice("=", 1))])
 		elif a == "--plain_glass=1":
 			plain_glass = true
 		elif a.begins_with("--set="):
@@ -80,6 +87,9 @@ func _init() -> void:
 		sun.set(k, sun_props[k])
 	root.add_child(sc)
 	await process_frame
+	# After the scene's _ready (rooftops.gd puts the photographic materials on the meshes there).
+	if not shader_params.is_empty():
+		_set_shader_params(sc, shader_params)
 	var player: Node3D = sc.get_node_or_null("Player")
 	if player:
 		player.visible = false
@@ -131,3 +141,38 @@ func _configure(p_config: String, p_env: Environment, p_off: bool) -> void:
 		"no_sdfgi":
 			if p_env:
 				p_env.sdfgi_enabled = not p_off
+
+
+## Every ShaderMaterial of the scene's meshes whose shader is <shader>.gdshader given each [shader, parameter, value].
+func _set_shader_params(p_scene: Node, p_params: Array) -> void:
+	var seen := {}
+	var stack: Array[Node] = [p_scene]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		stack.append_array(n.get_children())
+		var meshes: Array[Mesh] = []
+		var mats: Array[Material] = []
+		var gi := n as GeometryInstance3D
+		if gi and gi.material_override:
+			mats.append(gi.material_override)
+		var mi := n as MeshInstance3D
+		if mi and mi.mesh:
+			meshes.append(mi.mesh)
+			for i in mi.get_surface_override_material_count():
+				if mi.get_surface_override_material(i):
+					mats.append(mi.get_surface_override_material(i))
+		var mmi := n as MultiMeshInstance3D
+		if mmi and mmi.multimesh and mmi.multimesh.mesh:
+			meshes.append(mmi.multimesh.mesh)
+		for m in meshes:
+			for i in m.get_surface_count():
+				if m.surface_get_material(i):
+					mats.append(m.surface_get_material(i))
+		for mat in mats:
+			var sm := mat as ShaderMaterial
+			if sm == null or seen.has(sm) or sm.shader == null:
+				continue
+			seen[sm] = true
+			for p in p_params:
+				if sm.shader.resource_path.get_file() == str(p[0]) + ".gdshader":
+					sm.set_shader_parameter(p[1], p[2])

@@ -51,6 +51,8 @@ uniform float soften_lod = 5.0;
 // and the relief faded out where its texels are finer than the pixels (its level 1.5-3.5: an 8th of a texel per pixel),
 // the textures read with the surface's own gradients (not the parallax's, which jump from pixel to pixel). Read at
 // level 0 the far walls' joints and their darkening had changed from one TAA-jittered frame to the next.
+// Off: as before (decision 0331's measurements).
+uniform bool filtered_relief = true;
 float pom_depth(vec2 uv, float lod) {
 	return 1.0 - smoothstep(height_lo, height_hi, textureLod(height_tex, uv, lod).r);
 }
@@ -73,8 +75,8 @@ void fragment() {
 	float pdepth = 0.0;
 	vec2 gdx = dFdx(uv_a);
 	vec2 gdy = dFdy(uv_a);
-	float hlod = max(textureQueryLod(height_tex, uv_a).y, 0.0);
-	float pfade = 1.0 - smoothstep(1.5, 3.5, hlod);
+	float hlod = filtered_relief ? max(textureQueryLod(height_tex, uv_a).y, 0.0) : 0.0;
+	float pfade = filtered_relief ? 1.0 - smoothstep(1.5, 3.5, hlod) : 1.0;
 	float cdepth = 0.0;
 	if (parallax_depth > 0.0 && !anti_tile) {
 		cdepth = pom_depth(uv_a, hlod);
@@ -108,6 +110,10 @@ void fragment() {
 		uv_a = hit;
 		// The joints' darkening: the relief's depth where it is seen, the height map's mean where it has faded.
 		cdepth = mix(cdepth, pdepth, pfade);
+	}
+	if (!filtered_relief) {
+		gdx = dFdx(uv_a);
+		gdy = dFdy(uv_a);
 	}
 	vec3 col = textureGrad(albedo_tex, uv_a, gdx, gdy).rgb;
 	if (albedo_soften > 0.0) {
