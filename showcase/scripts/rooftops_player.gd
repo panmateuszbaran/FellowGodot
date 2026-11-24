@@ -63,6 +63,15 @@ var _climb_speed := 0.0
 var _dive_time := 0.0
 var _land_kind := ""
 var _crawling := false
+var _edge_push := 0.0 ## milestone 191: how long the body has been pushing at an edge the guard holds it at
+## Milestone 191 (the owner: the control "not satisfying"): a jump pressed a moment before landing is kept until then
+## (JUMP_BUFFER), and one pressed a moment after walking off an edge still jumps (COYOTE_TIME).
+const JUMP_BUFFER := 0.15
+const COYOTE_TIME := 0.12
+var _jump_buffer := 0.0
+var _since_floor := 0.0
+var _walked_off := false
+var _shot_name := ""
 
 
 func _ready() -> void:
@@ -134,6 +143,8 @@ func _read_input() -> void:
 	want_sprint = Input.is_action_pressed("run")
 	want_walk = Input.is_action_pressed("walk")
 	want_jump = want_jump or Input.is_action_just_pressed("jump")
+	if Input.is_action_just_pressed("jump"):
+		_jump_buffer = JUMP_BUFFER
 	want_drop = want_drop or Input.is_action_just_pressed("drop")
 	want_perch = want_perch or Input.is_action_just_pressed("interact")
 
@@ -186,6 +197,9 @@ func _move(delta: float, speed_goal: float) -> void:
 	var goal := wish.limit_length(1.0) * speed_goal
 	if on_floor and mode != Mode.ROLL:
 		var rate := acceleration if goal.length() > h.length() else deceleration
+		# Milestone 191: turning back at speed brakes hard first (a plant and a turn, not a slow arc backwards).
+		if h.length() > 2.5 and goal.length() > 0.5 and h.normalized().dot(goal.normalized()) < -0.3:
+			rate = deceleration * 1.6
 		h = h.move_toward(goal, rate * delta)
 	elif mode == Mode.ROLL:
 		h = h.move_toward(goal.normalized() * maxf(h.length() * 0.98, 3.0) if goal.length() > 0.1 else h * 0.97, 8.0 * delta)
@@ -193,8 +207,21 @@ func _move(delta: float, speed_goal: float) -> void:
 		h = h.move_toward(goal.limit_length(maxf(h.length(), 2.0)), air_control * delta)
 	# Milestone 154: walking or running (not free-running), the body does not go over a drop — the part of its speed
 	# that would carry it over an edge is taken away and it slides along the edge (Assassin's Creed's low profile).
+	# Milestone 191 (the owner: off the fountain only with a jump): a drop under EDGE_DROP is walked off; at a deeper one
+	# the body goes over after pushing at it for EDGE_COMMIT, or at once with the drop key.
+	var over_edge := false
 	if on_floor and mode == Mode.GROUND and not want_sprint and h.length() > 0.05:
-		h = _edge_guard(h)
+		var held := _edge_guard(h)
+		if held.length() < h.length() * 0.5 and goal.length() > speed_goal * 0.5:
+			_edge_push += delta
+		else:
+			_edge_push = 0.0
+		if want_drop or _edge_push >= EDGE_COMMIT:
+			over_edge = held.length() < h.length() * 0.5
+		else:
+			h = held
+	else:
+		_edge_push = 0.0
 	velocity.x = h.x
 	velocity.z = h.z
 	if not on_floor:
@@ -211,13 +238,21 @@ func _move(delta: float, speed_goal: float) -> void:
 	# Free-running at a wall: a jump for the first hold (caught in the air by the traversal's grab).
 	if want_sprint and on_floor and _one_shot <= 0.0 and mode == Mode.GROUND and _wall_ahead(1.1):
 		want_jump = true
-	if want_jump and on_floor and _one_shot <= 0.0:
+	_jump_buffer = maxf(_jump_buffer - delta, 0.0)
+	_since_floor = 0.0 if on_floor else _since_floor + delta
+	var jump_asked := want_jump or _jump_buffer > 0.0
+	var can_jump := on_floor or (mode == Mode.AIR and _walked_off and _since_floor < COYOTE_TIME and velocity.y <= 0.5)
+	# A landing's settle can be cut short by the next jump (not a roll).
+	var settled := _one_shot <= 0.0 or (_shot_name == "land" and _one_shot < ONE_SHOTS["land"] - 0.1)
+	if jump_asked and can_jump and settled:
+		_jump_buffer = 0.0
+		_walked_off = false
 		velocity.y = jump_velocity
 		mode = Mode.AIR
 		_air_top = global_position.y
 		# Milestone 153: at a wall, the arms reaching up for the hold.
 		_play("jump_wall" if want_sprint and _wall_ahead(1.1) else "jump")
-	if want_drop and on_floor and h.length() > 2.0 and mode == Mode.GROUND:
+	if want_drop and on_floor and h.length() > 2.0 and mode == Mode.GROUND and not over_edge:
 		mode = Mode.ROLL
 		_play("roll")
 	move_and_slide()
@@ -227,6 +262,7 @@ func _move(delta: float, speed_goal: float) -> void:
 			if not on_floor:
 				mode = Mode.AIR
 				_air_top = global_position.y
+				_walked_off = velocity.y <= 0.5 # off an edge, not a jump
 			elif _one_shot <= 0.0:
 				_set_state("crawl" if _crawling else "loco")
 		Mode.AIR:
@@ -306,7 +342,8 @@ func _traverse(_delta: float) -> void:
 ## body with no ground) and h loses its part along it: the body stops at the edge, or goes along it if h was slanting.
 ## Only when the way h goes has no ground: a beam or a ridge is walked along, whatever lies either side of it.
 const EDGE_LOOK := 0.42
-const EDGE_DROP := 0.7
+const EDGE_DROP := 1.3 # milestone 191: 0.7 had held the body on the fountain's rim (0.75 m)
+const EDGE_COMMIT := 0.35 # s
 
 func _edge_guard(h: Vector3) -> Vector3:
 	var dir := Vector3(h.x, 0.0, h.z).normalized()
@@ -569,6 +606,7 @@ func _set_state(s: String) -> void:
 
 
 func _play(s: String) -> void:
+	_shot_name = s
 	state = ""
 	_set_state(s)
 	_one_shot = ONE_SHOTS.get(s, 0.0)

@@ -11,12 +11,15 @@ extends SceneTree
 ## no_soft (its soft filter), no_contact (contact shadows), no_cache (the directional shadow cache), no_ssao (SSAO and
 ## SSIL), no_sdfgi, no_gather (SDFGI's screen gather), no_weathering (FellowWeathering3D), no_relief (the facades'
 ## parallax), no_people (the crowd). --hide_player=1 hides the character's mesh (the camera follows it all the same).
+## --velocity=1 also saves each frame's motion vectors (<dir>/v%04d.bin: width and height as two int32, then RG16F per
+## pixel; velocity_dump.gd) for reproj_flicker.py.
 
 var _out := "user://play_look"
 var _skip := 120
 var _frames := 180
 var _config := "base"
 var _hide_player := false
+var _velocity: CompositorEffect = null
 
 
 func _init() -> void:
@@ -31,6 +34,8 @@ func _init() -> void:
 			_config = a.get_slice("=", 1)
 		elif a == "--hide_player=1":
 			_hide_player = true
+		elif a == "--velocity=1":
+			_velocity = (load("res://tools/velocity_dump.gd") as GDScript).new()
 		elif a.begins_with("--set="):
 			var kv := a.substr(6)
 			var value = str_to_var(kv.get_slice("=", 1))
@@ -54,6 +59,14 @@ func _init() -> void:
 	for n in sc.find_children("*", "WorldEnvironment", true, false):
 		env = (n as WorldEnvironment).environment
 	_configure(sc, env)
+	if _velocity:
+		for n in sc.find_children("*", "WorldEnvironment", true, false):
+			var we := n as WorldEnvironment
+			var comp: Compositor = we.compositor if we.compositor else Compositor.new()
+			var effects := comp.compositor_effects
+			effects.append(_velocity)
+			comp.compositor_effects = effects
+			we.compositor = comp
 	if _hide_player:
 		var model := sc.get_node_or_null("Player/Model") as Node3D
 		if model:
@@ -63,6 +76,13 @@ func _init() -> void:
 		if i >= _skip:
 			await RenderingServer.frame_post_draw
 			root.get_texture().get_image().save_png("%s/f%04d.png" % [_out, i - _skip])
+			if _velocity:
+				var f := FileAccess.open("%s/v%04d.bin" % [_out, i - _skip], FileAccess.WRITE)
+				var sz: Vector2i = _velocity.get("size")
+				f.store_32(sz.x)
+				f.store_32(sz.y)
+				f.store_buffer(_velocity.get("bytes"))
+				f.close()
 	print("play_look: %s %d frames" % [_config, _frames])
 	quit()
 

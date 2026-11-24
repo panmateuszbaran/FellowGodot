@@ -4,6 +4,11 @@ extends Node3D
 ## way it runs, drawn back and widened as it sprints, closer and tipped up while it climbs, kept out of the walls by a
 ## sphere cast (in fast, out slowly), turning behind the character by itself when the mouse leaves it alone; and two
 ## shots of its own — the swirl round a viewpoint ("synchronizing") and the follow of a leap of faith.
+##
+## Milestone 191 (the owner: the camera "not interesting", the control "not satisfying"): it leans a little into a
+## turn taken at speed, falls back as the character speeds up and closes in as it slows, dips on a landing by the fall's
+## speed and springs back, levels its pitch towards the horizon while running untouched, and turns with a gamepad's
+## right stick (eased, its response squared).
 
 @export var target_path := NodePath("../Player")
 @export var height := 1.55
@@ -13,6 +18,10 @@ extends Node3D
 @export var follow_time := 0.09 ## the pivot's lag across (s)
 @export var follow_time_up := 0.22 ## and up and down
 @export var auto_yaw := true
+@export var turn_lean := 1.0 ## the roll into a turn at speed (up to 2.5 degrees at 1)
+@export var landing_dip := 1.0 ## the dip on a landing (up to 22 cm at 1)
+@export var speed_lag := 1.0 ## falling back as the character speeds up (up to 0.45 m at 1)
+@export var stick_speed := 2.8 ## rad/s at a full right stick
 
 var yaw := 0.0
 var pitch := -0.22
@@ -30,6 +39,15 @@ var _target: Node3D
 var _lead := Vector3()
 var _last_target := Vector3()
 var _shake := 0.0
+var _roll := 0.0
+var _last_heading := 0.0
+var _last_vy := 0.0
+var _dip := 0.0
+var _dip_vel := [0.0]
+var _accel := 0.0
+var _last_speed := 0.0
+var _lag := 0.0
+var _stick := Vector2()
 
 @onready var cam: Camera3D = $Camera3D
 
@@ -105,9 +123,32 @@ func _process(delta: float) -> void:
 		climbing = trav.is_climbing() or trav.is_hanging() or trav.is_active()
 	_idle_mouse += delta
 	_shot_time += delta
+	# The right stick: eased, squared (fine aim near the centre).
+	var st := Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
+	st = Vector2() if st.length() < 0.15 else st.normalized() * pow((st.length() - 0.15) / 0.85, 2.0)
+	_stick = _stick.lerp(st, 1.0 - exp(-14.0 * delta))
+	if _stick.length() > 0.01:
+		yaw -= _stick.x * stick_speed * delta
+		pitch = clampf(pitch - _stick.y * stick_speed * 0.6 * delta, -1.2, 0.75)
+		_idle_mouse = 0.0
+	# A landing: the vertical speed's fall stopped — the pivot dips by it and springs back.
+	var vert := tvel.y
+	if _last_vy < -3.5 and vert > -1.0 and not climbing:
+		_dip = maxf(_dip, clampf(-_last_vy * 0.03, 0.0, 0.22) * landing_dip)
+	_last_vy = lerpf(_last_vy, vert, 0.6)
+	_dip = _damp(_dip, 0.0, _dip_vel, 0.16, delta)
+	# Leaning into a turn at speed; falling back as it speeds up.
+	var heading := atan2(hvel.x, hvel.z)
+	var turn_rate := wrapf(heading - _last_heading, -PI, PI) / maxf(delta, 1e-4) if speed > 2.0 else 0.0
+	_last_heading = heading
+	var roll_goal := clampf(turn_rate * speed * 0.0035, -0.044, 0.044) * turn_lean if not climbing and _shot == "" else 0.0
+	_roll = lerpf(_roll, roll_goal, 1.0 - exp(-4.0 * delta))
+	_accel = lerpf(_accel, (speed - _last_speed) / maxf(delta, 1e-4), 1.0 - exp(-6.0 * delta))
+	_last_speed = speed
+	_lag = lerpf(_lag, clampf(_accel * 0.06, -0.3, 0.45) * speed_lag, 1.0 - exp(-3.0 * delta))
 	# The pivot: over the character, a little ahead of where it runs.
 	_lead = _lead.lerp(hvel.limit_length(7.0) * 0.12, 1.0 - exp(-2.5 * delta))
-	var goal := tpos + Vector3.UP * height + _lead
+	var goal := tpos + Vector3.UP * height + _lead + Vector3.DOWN * _dip
 	var vx := [_pivot_vel.x]
 	var vy := [_pivot_vel.y]
 	var vz := [_pivot_vel.z]
@@ -120,7 +161,10 @@ func _process(delta: float) -> void:
 		var behind := atan2(-hvel.x, -hvel.z)
 		yaw = lerp_angle(yaw, behind, 1.0 - exp(-0.9 * delta * clampf(speed / 4.0, 0.3, 1.5)))
 	var sprint := clampf((speed - 4.6) / 2.4, 0.0, 1.0)
-	_dist_goal = distance + 1.3 * sprint - (0.5 if climbing else 0.0)
+	# Untouched while running on the ground: the pitch levels towards the horizon (lower while sprinting).
+	if _shot == "" and _idle_mouse > 2.0 and speed > 1.5 and not climbing:
+		pitch = lerpf(pitch, lerpf(-0.2, -0.1, sprint), 1.0 - exp(-0.7 * delta))
+	_dist_goal = distance + 1.3 * sprint - (0.5 if climbing else 0.0) + _lag
 	var fov_goal := 62.0 + 9.0 * sprint
 	var p := pitch
 	if climbing and _idle_mouse > 1.0:
@@ -152,7 +196,7 @@ func _process(delta: float) -> void:
 			_fov = lerpf(_fov, 74.0, 1.0 - exp(-2.0 * delta))
 			cam.fov = _fov
 			return
-	var basis := Basis.from_euler(Vector3(p, yaw, 0.0))
+	var basis := Basis.from_euler(Vector3(p, yaw, 0.0)) * Basis(Vector3(0.0, 0.0, 1.0), _roll)
 	var right := basis.x
 	var pivot := _pivot + right * shoulder * (1.0 - 0.5 * sprint)
 	# Out of the walls: a sphere cast from the pivot back to the camera's place.
