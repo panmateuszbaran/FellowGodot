@@ -10,7 +10,8 @@ extends SceneTree
 ## --config: base (nothing off), no_taa, taa_m188 (TAA v2 as before milestone 189), no_shadow (the sun's shadows),
 ## no_soft (its soft filter), no_contact (contact shadows), no_cache (the directional shadow cache), no_ssao (SSAO and
 ## SSIL), no_sdfgi, no_gather (SDFGI's screen gather), no_weathering (FellowWeathering3D), no_relief (the facades'
-## parallax), no_people (the crowd). --hide_player=1 hides the character's mesh (the camera follows it all the same).
+## parallax), no_people (the crowd), no_lod (every mesh at its finest level of detail), no_shadow_lod (the shadows'
+## casters at theirs: the directional shadow cache's texel LOD off). --hide_player=1 hides the character's mesh (the camera follows it all the same).
 ## --velocity=1 also saves each frame's motion vectors (<dir>/v%04d.bin: width and height as two int32, then RG16F per
 ## pixel; velocity_dump.gd) for reproj_flicker.py.
 
@@ -113,6 +114,10 @@ func _configure(p_scene: Node, p_env: Environment) -> void:
 				p_env.sdfgi_enabled = false
 		"no_gather":
 			ProjectSettings.set_setting("rendering/fellow/sdfgi/screen_gather", false)
+		"no_lod":
+			root.mesh_lod_threshold = 0.0
+		"no_shadow_lod":
+			ProjectSettings.set_setting("rendering/fellow/shadows/directional_cache_texel_lod", 0.0)
 		"no_relief":
 			_set_shader_param(p_scene, "facade_pbr", "parallax_depth", 0.0)
 

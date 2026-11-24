@@ -68,6 +68,7 @@ var _edge_push := 0.0 ## milestone 191: how long the body has been pushing at an
 ## (JUMP_BUFFER), and one pressed a moment after walking off an edge still jumps (COYOTE_TIME).
 const JUMP_BUFFER := 0.15
 const COYOTE_TIME := 0.12
+const FALL_GRAVITY := 1.45
 var _jump_buffer := 0.0
 var _since_floor := 0.0
 var _walked_off := false
@@ -225,7 +226,10 @@ func _move(delta: float, speed_goal: float) -> void:
 	velocity.x = h.x
 	velocity.z = h.z
 	if not on_floor:
-		velocity.y -= gravity * delta
+		# Milestone 191: falling (past a jump's top, or off an edge) pulls harder than rising — a jump's arc snappier,
+		# a fall less floaty (as games do); not a jump at a wall, which climbs to its hold.
+		var g := gravity * (FALL_GRAVITY if velocity.y < 0.0 and state != "jump_wall" else 1.0)
+		velocity.y -= g * delta
 	if wish.length() > 0.1 and mode != Mode.ROLL:
 		var target := atan2(-wish.x, -wish.z)
 		var rate := turn_speed if on_floor else turn_speed * 0.3
