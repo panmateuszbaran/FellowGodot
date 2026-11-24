@@ -63,7 +63,7 @@ private:
 		float fellow_stability; // rendering/fellow/postfx/taa_v2_stability (decision 0331)
 
 		float fellow_stability_contrast; // rendering/fellow/postfx/taa_v2_stability_contrast
-		float fellow_pad0;
+		float fellow_soften_untrusted; // rendering/fellow/postfx/taa_v2_soften_untrusted
 		float fellow_pad1;
 		float fellow_pad2;
 	};

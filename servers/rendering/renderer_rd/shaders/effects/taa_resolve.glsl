@@ -74,7 +74,7 @@ layout(push_constant, std430) uniform Params {
 	float fellow_stability;
 
 	float fellow_stability_contrast;
-	float fellow_pad0;
+	float fellow_soften_untrusted;
 	float fellow_pad1;
 	float fellow_pad2;
 }
@@ -530,7 +530,11 @@ vec3 temporal_antialiasing_v2(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 p
 		// pull the history towards the neighbourhood mean (what stock's collapsing clip box does everywhere).
 		float motion = smoothstep(0.25, 1.0, length(velocity_closest * params.resolution)); // pixels per frame
 		float high_contrast = smoothstep(0.5 * params.fellow_soften_contrast, params.fellow_soften_contrast, contrast);
-		history_tm = mix(history_tm, mean_tm, params.fellow_motion_soften * motion * high_contrast);
+		// Milestone 189 (decision 0331, fellow_soften_untrusted): only as far as the history was not trusted (clipped: a
+		// leaf's edge passing, a fence's gap) — a facade's detail reprojected where it was, inside the neighbourhood's box,
+		// is not pulled to this frame's aliased 3x3 mean every frame.
+		float untrusted = 1.0 - trust * params.fellow_soften_untrusted;
+		history_tm = mix(history_tm, mean_tm, params.fellow_motion_soften * motion * high_contrast * untrusted);
 	}
 
 	// Feedback (history weight) between 0.88 and 0.9375 depending on how much the clipped history still

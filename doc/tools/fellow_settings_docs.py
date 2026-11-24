@@ -175,6 +175,7 @@ D = {
     "postfx/taa_v2_stability": "TAA v2: where the history lies inside the neighbourhood's colour box, the more the frame disagrees with it the more history is kept, as stock Godot's resolve does: the jitter's flicker on detail finer than a pixel (shutters' slats, a rough stone's sunlit grains) averaged out instead of followed. 0: off. Decision 0331.",
     "postfx/taa_v2_velocity_dilation": "TAA v2 takes the nearest neighbour's velocity (reverse-Z dilation): edges move with their objects.",
     "postfx/taa_v2_stability_contrast": "TAA v2's stability: how strongly a frame's disagreement with the history (the tonemapped lumas' difference) keeps the history; 1: stock's.",
+    "postfx/taa_v2_soften_untrusted": "TAA v2's motion softening only where the history was clipped (not trusted): a moving surface's detail reprojected where it was is not pulled to the frame's aliased 3x3 mean. 0: everywhere (as before), 1: only there. Decision 0331.",
     "postfx/taa_v2_motion_soften": "TAA v2: how much moving pixels soften towards the current frame.",
     "postfx/taa_v2_soften_contrast": "TAA v2: the contrast from which motion softening applies.",
     "postfx/taa_camera_motion_vectors": "Measured and rejected (within noise, not exact): static geometry's motion vectors from the depth buffer. Decision 0013.",
