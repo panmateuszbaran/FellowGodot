@@ -2,10 +2,13 @@
 """Temporal metrics of several build variants of one temporal session against the accumulated ground truth.
 
   python benchmarks/tools/temporal_sweep.py <session> <variant,variant,...> [--out <dir>] [--md out.md]
+      [--ref-session <session> --ref-build <build>]
 
 Runs benchmarks/tools/temporal.py for every (variant, sequence) whose frames exist and prints one table per metric
 (rows = sequences, columns = variants). Ground-truth sessions: godot-4.7.2_reference (PBR lab sequences) and
-godot-4.7.2_reference_ext (Sponza / Bistro sequences), both from the milestone-1 baseline.
+godot-4.7.2_reference_ext (Sponza / Bistro sequences), both from the milestone-1 baseline; --ref-session (and
+--ref-build, the build directory in it) takes every sequence's ground truth from another session instead (milestone
+189: references accumulated again on the machine, as the baseline's are not in the repository).
 """
 
 import argparse
@@ -29,13 +32,15 @@ def main() -> int:
     ap.add_argument("variants")
     ap.add_argument("--out", default=None)
     ap.add_argument("--md", default=None)
+    ap.add_argument("--ref-session", default=None)
+    ap.add_argument("--ref-build", default="stock")
     a = ap.parse_args()
     variants = a.variants.split(",")
     out = a.out or os.path.join(RAW, a.session + "_analysis")
     os.makedirs(out, exist_ok=True)
     table = {}
     for sc, seq, refs in SEQS:
-        ref_dir = os.path.join(RAW, refs, "stock", sc)
+        ref_dir = os.path.join(RAW, a.ref_session or refs, a.ref_build, sc)
         for v in variants:
             test = os.path.join(RAW, a.session, v, sc)
             if not os.path.isdir(test) or not any(f"_seq-{seq}_" in f for f in os.listdir(test)):
