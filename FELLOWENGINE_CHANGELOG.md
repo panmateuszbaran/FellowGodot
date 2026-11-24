@@ -9,6 +9,39 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 189 — TAA that holds still (2026-11-24)
+
+- The owner saw a lot of shadows flickering on the rooftops' buildings. Measured on the RTX at 1920x1080 with every
+  shadow and lighting feature off in turn (soft shadows, the sun's size, contact shadows, the shadow cache, SSAO and
+  SSIL, SDFGI and its screen gather): none of them. TAA v2 was: with TAA off a still view flickered less (2.2 % of the
+  buildings' pixels by more than 3 levels, against 7.6 %); its feedback followed the jitter's sub-pixel aliasing
+  (shutters' slats, rough stone, the joints' dark) and its motion softening pulled moving pixels to the frame's 3x3 mean.
+- `postfx/taa_v2_stability` (new, 1.0; decision 0331): where the history is inside the neighbourhood's colour box, the
+  more the frame disagrees with it (the tonemapped lumas' difference, stock's measure: `taa_v2_stability_contrast` 1)
+  the more history is kept; `postfx/taa_v2_soften_untrusted` (new, 1.0): the motion softening only where the history
+  was clipped. The rooftops: still 6.7 / 7.6 → 1.8 / 1.9 % (east / north), moving (motion-compensated) 8.0 / 9.6 →
+  1.6 / 1.9 % — as steady as stock's TAA still (1.7 / 1.9 %), steadier moving (2.2 / 2.5 %), sharper than both moving.
+  PBR Lab against its ground truth (references accumulated again): less flicker than milestone 188 where the camera pans
+  and around a moving object, 0.1-1.5 dB further from the truth (foliage strafed the most).
+- The showcase's facades: the parallax's height map read at the pixel's level of detail, faded where finer than it, the
+  textures with the surface's gradients (`facade_pbr.gdshader`'s `filtered_relief`) — no flicker of its own measured.
+- `showcase/tools/flicker_look.gd` (frames still and moving, a feature off per sequence, `--set`, `--sun`,
+  `--shader_param`), `benchmarks/tools/flicker/flicker_metrics.py` (flicker, motion-compensated flicker, sharpness),
+  `temporal_sweep.py --ref-session`.
+
+## Milestone 188 — rooms behind the windows (2026-11-24)
+
+- `FellowInteriorMaterial3D` (new, `fellow_world`; decision 0330): windows' glass with a room behind each window,
+  interior mapping — walls with paper, panelling, pictures, doors, bookcases, wardrobes; cotto, boards, parquet or stone
+  floors with rugs; beamed ceilings; furniture on two planes; a hanging lamp; drapes or nets; lit by the day through the
+  window (and lamps in a share of the rooms), seen through Fresnel's law, grime, the sky's reflection and old panes.
+  Each window its own room from its glass's UV2; every pattern filtered over the pixel's footprint. One shader for
+  every instance, baked with the project's.
+- The rooftops' windows (68 house meshes, `tools/window_uv2.gd`, `tools/rooftops_windows.gd`): rooms instead of dark
+  glass; no curtains behind a shop's arch or a door. The RTX at 1080p: no measurable cost (5.3-8.2 ms against 5.4-8.5
+  in four views), no added flicker.
+- The regression suite's `base/interiors`; `windows_look.gd`, `interior_look.gd` (`--timing=1`).
+
 ## Milestone 187 — feet that step, not skate (2026-11-23)
 
 - A stagger's feet still skated: a foot let go of to step where its animation had gone kept its contact on, and since

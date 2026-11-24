@@ -1580,11 +1580,15 @@ no measurable cost against the dark glass it replaced.
 
 `postfx/taa_resolve_v2` (on) is a look change from milestone 1 (TAA with reverse-Z dilation and YCoCg variance
 clipping, decision 0001). From milestone 189 (decision 0331) it keeps its history where it is trusted (inside the
-neighbourhood's colour box) the more the jittered frame disagrees with it, `postfx/taa_v2_stability` (1.0; 0: milestone
-188's resolve), and no longer pulls a moving pixel's history towards the frame's 3x3 mean, `postfx/taa_v2_motion_soften`
-0.35 → 0: the jitter's flicker on detail finer than a pixel (shutters' slats, rough stone, joints) averaged instead of
-followed — the rooftops on the RTX, the buildings' pixels flickering by more than 3 levels 7.6 → 0.7 % with the camera
-still and 9.6 → 1.9 % (motion-compensated) moving, steadier than stock's TAA (1.9 % and 2.5 %).
+neighbourhood's colour box) the more the jittered frame disagrees with it, by the tonemapped lumas' difference as stock's
+resolve does — `postfx/taa_v2_stability` (1.0; 0: milestone 188's resolve), `postfx/taa_v2_stability_contrast` (1.0:
+stock's measure; more, steadier and further from the truth) — and softens a moving pixel's history towards the frame's
+3x3 mean only where the history was clipped, `postfx/taa_v2_soften_untrusted` (1.0; 0: everywhere, as before): the
+jitter's flicker on detail finer than a pixel (shutters' slats, rough stone, joints) averaged instead of followed. The
+rooftops on the RTX: the buildings' pixels flickering by more than 3 levels 6.7-7.6 → 1.8-1.9 % with the camera still
+and 8.0-9.6 → 1.6-1.9 % (motion-compensated) moving, as steady as stock's TAA still and steadier moving, sharper than
+both moving; PBR Lab against its ground truth within 0.1 dB of milestone 188 where the camera pans, 0.2-1.5 dB further
+elsewhere (most where foliage is strafed).
 
 ## Fast physics mode (off by default; not stock's results)
 
