@@ -95,6 +95,13 @@ private:
 	// Milestone 156 (decision 0296): no joint turned faster than this (degrees a second) from this node's last pose (0:
 	// off).
 	float max_joint_speed = 0.0f;
+	// Milestone 196 (decision 0338): a hand off its hold, between holds, reached for its target by this share of the IK —
+	// the animation's own arm (motion capture's) carries it through the move; eased in and out with the grip.
+	float hand_flight_weight = 1.0f;
+	// Milestone 196 (decision 0338): hanging from one ledge, the hands along its edge where the animation's are (their
+	// height and depth the edge's): a shimmy's hands step as its clip's do.
+	float hand_slide = 0.0f;
+	float hand_flight[2] = { 1.0f, 1.0f }; // the grips eased (1: holding)
 	LocalVector<Quaternion> speed_rot;
 	bool speed_valid = false;
 
@@ -131,6 +138,7 @@ private:
 	void _pose(double p_delta);
 	void _two_bone(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_end, const Vector3 &p_target, const Vector3 &p_pole, float p_weight);
 	void _snapshot(Skeleton3D *p_skeleton);
+	void _clear_wall(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_foot, const Vector3 &p_wall, const Vector3 &p_out, const Vector3 &p_side, float p_meter, float p_weight);
 	void _limit_speed(Skeleton3D *p_skeleton, double p_delta);
 
 protected:
@@ -155,6 +163,10 @@ public:
 	void set_clip_blend(float p_seconds) { clip_blend = MAX(0.0f, p_seconds); }
 	void set_pole_follow(float p_amount) { pole_follow = MAX(0.0f, p_amount); }
 	void set_max_joint_speed(float p_degrees_per_second) { max_joint_speed = MAX(0.0f, p_degrees_per_second); }
+	void set_hand_flight_weight(float p_weight) { hand_flight_weight = CLAMP(p_weight, 0.0f, 1.0f); }
+	void set_hand_slide(float p_amount) { hand_slide = CLAMP(p_amount, 0.0f, 1.0f); }
+	float get_hand_slide() const { return hand_slide; }
+	float get_hand_flight_weight() const { return hand_flight_weight; }
 	float get_max_joint_speed() const { return max_joint_speed; }
 	float get_pole_follow() const { return pole_follow; }
 	float get_clip_blend() const { return clip_blend; }

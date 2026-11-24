@@ -1204,7 +1204,12 @@ from its last pose); `FellowTraversal3D`, a mantle with a clip's root motion: he
 over the top, then let go over 18 % of the mantle (milestone 195, decision 0337: until the feet are within a fifth of
 the rise of the top, at most 0.3 m, the hold eased in and let go at no more than 2 m/s over the clip's own speed; a
 braced foot as far out as the stone standing out above it, its ankle 0.15 m off the stone, also through moves between
-holds); `FellowFootLock3D`: a foot let go is never eased back from further
+holds); motion-captured climbing (milestone 196, decision 0338), on `FellowTraversalPose3D`: `hand_flight_weight` (1:
+the IK's arc throughout; below 1, a hand off its hold between holds is reached for by that share of the IK, the clip's
+arm carrying it, the grip eased in and out over 0.1 s), `hand_slide` (0: off; hanging from one ledge, each hand's
+target slid along the edge to the animation's hand — a shimmy's hands step as its clip's), and always, hanging and
+between holds, the knees and the balls of the feet kept off the stone the feet brace on (the leg turned about its hip-
+to-ankle line, the foot pitched about its ankle; `FellowTraversal3D` gives the stone in its pose hints); `FellowFootLock3D`: a foot let go is never eased back from further
 from the hip than the leg reaches; `release_extension` (milestone 172; 1.0: off): let go when holding the foot needs more
 than this share of the leg's length. Let go without jumps (milestone 173, decision 0315): a held point out of
 the leg's reach is let go from where the foot is shown and brought within reach the shorter way (towards the animated

@@ -24,11 +24,16 @@ var _mocap := false
 const MOCAP_DIR := "res://rooftops/mocap"
 const MOCAP_GAITS := ["gait_walk", "gait_jog", "gait_run", "gait_sprint"]
 # Milestone 195 (the owner, playing): the mannequin's own clips kept for these — Mixamo's "Falling Idle" is a skydiver's,
-# face down (the character fell on its face after every jump and turned upright on landing); the hangs and the climb
-# (milestone 194's) twitched when idle, were not smooth and put more limbs through the walls (anim_quality.gd: 17 % of
-# the frames from hold to hold against 12 %) — their poses are the traversal's IK's to keep on the stone.
-const MOCAP_KEEP_OWN := ["fall", "hang_idle", "hang_shimmy_l", "hang_shimmy_r", "hang_leap_up", "hang_leap_l", "hang_leap_r",
-		"climb_move"]
+# face down (the character fell on its face after every jump and turned upright on landing). Milestone 196: the hangs
+# and the moves from hold to hold Mixamo's again (milestone 195 had kept the mannequin's: Mixamo's hang had bobbed — a
+# loop cut from a catch —, its moves fought the IK); the climb up a free wall (ladders too) the mannequin's.
+const MOCAP_KEEP_OWN := ["fall", "climb_move"]
+# Milestone 196: between holds a hand off its hold is reached for by this share of the IK (FellowTraversalPose3D's
+# hand_flight_weight): Mixamo's arm carries it, the IK puts it on the hold as it takes it.
+const MOCAP_HAND_FLIGHT := 0.3
+# Milestone 196: Mixamo's shimmy goes this fast along the ledge (m/s, at the mannequin's scale); played at the body's pace.
+const SHIMMY_CLIP_SPEED := 0.45
+const MOCAP_SHIMMY_SPEED := 0.6
 # FellowTraversal3D's Transfer values.
 const TRANSFER_JUMP_ALONG := 2
 const TRANSFER_JUMP_UP := 3
@@ -114,8 +119,10 @@ func _use_mocap() -> void:
 		return
 	# The player's own copy of the library (the crowd's NPCs share the mannequin's).
 	var lib := ap.get_animation_library(&"").duplicate() as AnimationLibrary
+	# (tools: `-- --mocap_all=1` plays every clip of the library, these too)
+	var keep: Array = [] if "--mocap_all=1" in OS.get_cmdline_user_args() else MOCAP_KEEP_OWN
 	for a in mocap.get_animation_list():
-		if String(a) in MOCAP_KEEP_OWN:
+		if String(a) in keep:
 			continue
 		if lib.has_animation(a):
 			lib.remove_animation(a)
@@ -125,8 +132,19 @@ func _use_mocap() -> void:
 	_mocap = true
 	# Milestone 194: a move from hold to hold plays its clip over the move's time, from the clip's own length.
 	for a in mocap.get_animation_list():
-		if String(a).begins_with("hang_leap") and _one_shots.has(String(a)) and not String(a) in MOCAP_KEEP_OWN:
+		if String(a).begins_with("hang_") and _one_shots.has(String(a)) and not String(a) in keep:
 			_one_shots[String(a)] = mocap.get_animation(a).length
+	_mocap_tree(mocap, keep)
+	var pose := get_node_or_null("Model/Mannequin/Skeleton3D/TraversalPose")
+	if pose:
+		var flight := MOCAP_HAND_FLIGHT
+		for arg in OS.get_cmdline_user_args():
+			if arg.begins_with("--hand_flight="): # (tools)
+				flight = float(arg.get_slice("=", 1))
+		pose.set("hand_flight_weight", flight)
+		pose.set("hand_slide", 1.0) # (a shimmy's hands step as Mixamo's do, on the edge)
+	# (the shimmy along a ledge near the pace Mixamo's was captured at: 1 m/s had played it at twice its rate)
+	traversal.set("shimmy_speed", MOCAP_SHIMMY_SPEED)
 	var info = JSON.parse_string(FileAccess.get_file_as_string(MOCAP_DIR.path_join("clips.json")))
 	var gaits: Dictionary = info.get("gaits", {}) if info is Dictionary else {}
 	var table: Array = []
@@ -144,6 +162,37 @@ func _use_mocap() -> void:
 					gait.set_blend_point_position(i, row[0])
 			_gaits.append([row[0], row[1]])
 	print("rooftops_player: mocap clips ", mocap.get_animation_list().size(), " gaits ", _gaits)
+
+
+## Milestone 196: the player's own copy of the animation tree, with the mocap's catch of a hold (a state of its own) and
+## the hang's blend played at a rate (ts_hang: the shimmy at the body's pace along the ledge).
+func _mocap_tree(mocap: AnimationLibrary, keep: Array) -> void:
+	var bt := (tree.tree_root as AnimationNodeBlendTree).duplicate(true) as AnimationNodeBlendTree
+	var tr := bt.get_node(&"state") as AnimationNodeTransition
+	if mocap.has_animation(&"hang_catch") and not "hang_catch" in keep and not bt.has_node(&"hang_catch"):
+		tr.add_input("hang_catch")
+		var i := tr.get_input_count() - 1
+		tr.set_input_reset(i, true)
+		var a := AnimationNodeAnimation.new()
+		a.animation = &"hang_catch"
+		bt.add_node(&"hang_catch", a, Vector2(0, 3000))
+		bt.connect_node(&"state", i, &"hang_catch")
+		_one_shots["hang_catch"] = mocap.get_animation(&"hang_catch").length
+	if not bt.has_node(&"ts_hang"):
+		for i in tr.get_input_count():
+			if tr.get_input_name(i) == "hang":
+				bt.disconnect_node(&"state", i)
+				bt.add_node(&"ts_hang", AnimationNodeTimeScale.new(), Vector2(200, 200))
+				bt.connect_node(&"ts_hang", 0, &"hang")
+				bt.connect_node(&"state", i, &"ts_hang")
+	tree.tree_root = bt
+	traversal.connect("hang_started", _on_hang_started)
+
+
+## Milestone 196: a hold caught from the air (a jump at a wall, a leap): the mocap's catch, the body's weight taken.
+func _on_hang_started(_ledge: Dictionary) -> void:
+	if _one_shots.has("hang_catch") and mode == Mode.AIR:
+		_play("hang_catch")
 
 
 ## Milestone 192: a state's clip swapped for a variant of it where the library has one (the mocap's jump from a run, its
@@ -411,6 +460,10 @@ func _traverse(_delta: float) -> void:
 		# Milestone 194: the mocap's shimmy has a side (the model faces the body's −Z: its left is the body's −X).
 		if _mocap and along > 0.1:
 			_variant_point(&"hang", 1, &"hang_shimmy_l" if side < 0.0 else &"hang_shimmy_r")
+		if _mocap:
+			# Milestone 196: the shimmy at the body's pace along the ledge (the hang at rest at its own).
+			var pace := clampf(_climb_speed / SHIMMY_CLIP_SPEED, 0.4, 2.5) if along > 0.1 else 1.0
+			tree.set("parameters/ts_hang/scale", lerpf(1.0, pace, clampf(along * 1.5, 0.0, 1.0)))
 		if _one_shot <= 0.0:
 			_set_state("hang")
 	elif traversal.is_climbing():

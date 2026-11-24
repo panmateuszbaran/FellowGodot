@@ -117,6 +117,13 @@ public:
 		double clip_time = 0.0;
 		StringName clip_root_bone;
 		Vector3 clip_root_offset; // the root bone's displacement since the clip's start (taken out of its pose)
+		// Milestone 196 (decision 0338), hanging: the stone a braced foot is on (its outermost point within the shin's
+		// reach above the foot; its face square to inward), where found (1): the knee and the toes kept off it.
+		Vector3 wall[2];
+		float wall_weight[2] = { 0.0f, 0.0f };
+		// Milestone 196 (decision 0338): hanging from one ledge (1; not between holds), the hands on its edge — the
+		// pose may slide them along it as the animation's go (FellowTraversalPose3D's hand_slide).
+		float slide = 0.0f;
 	};
 
 	// Every traversal's work since the last reset (get_global_stats()).
@@ -304,7 +311,7 @@ private:
 	void _draw_debug();
 	Vector3 _hang_feet_at(const Vector3 &p_edge, const Vector3 &p_inward) const;
 	Vector3 _hang_feet_of(const Ledge &p_ledge) const { return _hang_feet_at(p_ledge.edge, p_ledge.inward) - p_ledge.inward * p_ledge.out; }
-	Vector3 _hang_foot(int p_side, const Vector3 &p_feet, const Vector3 &p_inward, float p_y, const Vector3 &p_fallback) const;
+	Vector3 _hang_foot(int p_side, const Vector3 &p_feet, const Vector3 &p_inward, float p_y, const Vector3 &p_fallback, Vector3 *r_wall = nullptr, float *r_found = nullptr) const;
 	bool _probe_edge(const Vector3 &p_edge, const Vector3 &p_inward, float p_along, Ledge &r_ledge) const;
 	bool _start_hang(const Ledge &p_ledge, bool p_step = true);
 	void _step_hang(double p_delta);

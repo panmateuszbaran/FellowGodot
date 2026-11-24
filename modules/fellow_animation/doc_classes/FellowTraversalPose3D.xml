@@ -58,8 +58,14 @@
 		<member name="foot_ik" type="bool" setter="set_foot_ik" getter="is_foot_ik" default="true">
 			The feet placed on the wall's face and the top.
 		</member>
+		<member name="hand_flight_weight" type="float" setter="set_hand_flight_weight" getter="get_hand_flight_weight" default="1.0">
+			Hanging and moving from hold to hold: a hand off its hold (the traversal's grip on it 0) is reached for its target by this share of the IK, the grip eased in and out over a tenth of a second — below [code]1[/code] the animation's own arm (a motion-captured move's) carries the hand through the move and the IK pulls it onto the hold as it takes it. [code]1[/code]: the IK's arc throughout, as before (milestone 196, decision 0338).
+		</member>
 		<member name="hand_ik" type="bool" setter="set_hand_ik" getter="is_hand_ik" default="true">
 			The hands placed on the edge (and the hips lowered for them to reach it).
+		</member>
+		<member name="hand_slide" type="float" setter="set_hand_slide" getter="get_hand_slide" default="0.0">
+			Hanging from one ledge (not between holds): each hand's target slid along the edge by this share of the way to where the animation's hand is — its height and depth the edge's —, so a shimmy's hands step as its clip's do rather than as the traversal's stepping (a motion-captured shimmy at the body's pace leaves its hands where it took hold). [code]0[/code]: the traversal's targets (milestone 196, decision 0338).
 		</member>
 		<member name="hang_fit" type="bool" setter="set_hang_fit" getter="is_hang_fit" default="false">
 			Hanging or moving from hold to hold, the body moved — up to 0.75 m, eased over 0.1 s — until the shoulders are within the arms' reach of the holds the hands grip (the traversal's [code]hand_grips[/code]): the hands on the stone whatever the clip's pose and the capsule's place, and a hand that takes a hold pulls the body up to it. A hand moving to its next hold reaches for it as far as the arm goes. A clip played from a hang (a mantle) starts where the fitted body was, the move eased out. [code]false[/code]: the body where the clip and the capsule put it (milestone 153, decision 0291).

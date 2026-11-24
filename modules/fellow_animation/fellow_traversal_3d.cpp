@@ -969,7 +969,10 @@ Vector3 FellowTraversal3D::_hang_feet_at(const Vector3 &p_edge, const Vector3 &p
 // Milestone 151 (decision 0282): a hanging foot's place (p_side 0: the left), braced (hang_brace_height): on the wall's
 // face found in front of the body at p_y, the foot's height (under a ledge that stands out, the wall is further in than
 // the edge); p_fallback where no wall is found within reach (an opening, a gap), or not braced.
-Vector3 FellowTraversal3D::_hang_foot(int p_side, const Vector3 &p_feet, const Vector3 &p_inward, float p_y, const Vector3 &p_fallback) const {
+Vector3 FellowTraversal3D::_hang_foot(int p_side, const Vector3 &p_feet, const Vector3 &p_inward, float p_y, const Vector3 &p_fallback, Vector3 *r_wall, float *r_found) const {
+	if (r_found) {
+		*r_found = 0.0f;
+	}
 	CollisionObject3D *body = _get_body();
 	if (hang_brace_height <= 0.0f || !body || body->get_world_3d().is_null()) {
 		return p_fallback;
@@ -999,6 +1002,12 @@ Vector3 FellowTraversal3D::_hang_foot(int p_side, const Vector3 &p_feet, const V
 		if (space->intersect_ray(qk, rk) && flat(rk.normal).length() >= 0.6f && (rk.position - at).dot(p_inward) < 0.0f) {
 			at -= p_inward * (at - rk.position).dot(p_inward);
 		}
+	}
+	if (r_wall) {
+		*r_wall = at;
+	}
+	if (r_found) {
+		*r_found = 1.0f;
 	}
 	return at - p_inward * HANG_FOOT_OUT; // the ankle: the ball of the foot on the stone
 }
@@ -1652,6 +1661,7 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 	const bool jump = transfer.how == TRANSFER_JUMP_ALONG || transfer.how == TRANSFER_JUMP_UP || transfer.how == TRANSFER_JUMP_DOWN || transfer.how == TRANSFER_JUMP_DIAGONAL || transfer.how == TRANSFER_JUMP_BACK || transfer.how == TRANSFER_JUMP_CORNER;
 	hints.active = true;
 	hints.kind = KIND_HANG;
+	hints.slide = 0.0f;
 	hints.inward = inward;
 	hints.left = left;
 	const Vector3 to_hands[2] = {
@@ -1670,7 +1680,7 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 		hints.hand_grip[h] = (jump || transfer.how == TRANSFER_DROP) ? ((u < 0.08f || u > 0.92f) ? 1.0f : 0.0f) : 1.0f;
 		// Milestone 195 (decision 0337): on the stone found there, as the hang's own (it had been the face's plane at the
 		// capsule's side: the ankle on the wall, the ball of the foot and the toes in it).
-		hints.foot[h] = _hang_foot(h, feet, inward, face.y, face + left * (h == 0 ? 0.14f : -0.14f));
+		hints.foot[h] = _hang_foot(h, feet, inward, face.y, face + left * (h == 0 ? 0.14f : -0.14f), &hints.wall[h], &hints.wall_weight[h]);
 		hints.foot_weight[h] = jump ? 0.3f : (transfer.how == TRANSFER_DROP ? 0.8f * smooth(MAX(0.0f, u - 0.4f) / 0.6f) : 0.8f);
 		hints.foot_follow[h] = 1.0f;
 	}
@@ -1704,10 +1714,10 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 			hints.hand_grip[h] = (k <= 0.0f || k >= 1.0f) ? 1.0f : 0.0f;
 			// (milestone 195: on the stone found at each end, as the hang's: the ankle out from it, not on its plane)
 			if (on_wall > 0.0f) {
-				hints.foot[h] = _hang_foot(h, transfer.to_feet, transfer.to.inward, to_face.y, to_face + to_left * (h == 0 ? 0.14f : -0.14f));
+				hints.foot[h] = _hang_foot(h, transfer.to_feet, transfer.to.inward, to_face.y, to_face + to_left * (h == 0 ? 0.14f : -0.14f), &hints.wall[h], &hints.wall_weight[h]);
 				hints.foot_weight[h] = 0.85f * on_wall;
 			} else {
-				hints.foot[h] = _hang_foot(h, transfer.from_feet, transfer.from_inward, from_face.y, from_face + from_left * (h == 0 ? 0.14f : -0.14f));
+				hints.foot[h] = _hang_foot(h, transfer.from_feet, transfer.from_inward, from_face.y, from_face + from_left * (h == 0 ? 0.14f : -0.14f), &hints.wall[h], &hints.wall_weight[h]);
 				hints.foot_weight[h] = 0.85f * (1.0f - off_wall);
 			}
 		}
@@ -1730,7 +1740,7 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 			const float f1 = lead ? 0.95f : 0.68f;
 			const float j = smooth(CLAMP((u - f0) / (f1 - f0), 0.0f, 1.0f));
 			const float y = Math::lerp(transfer.from_feet.y, transfer.to_feet.y, j) + brace;
-			const Vector3 wall = _hang_foot(h, feet, inward, y, Vector3(face.x, y, face.z) + left * (h == 0 ? 0.14f : -0.14f));
+			const Vector3 wall = _hang_foot(h, feet, inward, y, Vector3(face.x, y, face.z) + left * (h == 0 ? 0.14f : -0.14f), &hints.wall[h], &hints.wall_weight[h]);
 			hints.foot[h] = wall - inward * (0.14f * Math::sin(j * float(Math::PI)));
 			hints.foot_weight[h] = 0.85f;
 		}
@@ -1764,7 +1774,7 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 			const Vector3 base = transfer.from_feet.lerp(transfer.to_feet, j);
 			const Vector3 at = base + inward * (radius + 0.02f);
 			const float y = base.y + brace;
-			const Vector3 wall = _hang_foot(h, base, inward, y, Vector3(at.x, y, at.z) + left * (h == 0 ? 0.14f : -0.14f));
+			const Vector3 wall = _hang_foot(h, base, inward, y, Vector3(at.x, y, at.z) + left * (h == 0 ? 0.14f : -0.14f), &hints.wall[h], &hints.wall_weight[h]);
 			hints.foot[h] = wall - inward * (0.12f * Math::sin(j * float(Math::PI)));
 			hints.foot_weight[h] = 0.85f;
 		}
@@ -1991,6 +2001,7 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 	// The pose: both hands on the edge, stepping along it as the body moves; the feet against the wall.
 	hints.active = true;
 	hints.kind = KIND_HANG;
+	hints.slide = 1.0f; // (milestone 196: the hands may slide along the edge)
 	hints.progress = 0.0f;
 	hints.inward = ledge.inward;
 	hints.left = left;
@@ -2013,10 +2024,11 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 	const Vector3 face = ledge.edge - ledge.inward * 0.06f;
 	for (int s = 0; s < 2; s++) {
 		hints.foot[s] = Vector3(face.x, hang_feet.y + 0.35f, face.z) + left * (s == 0 ? 0.14f : -0.14f);
+		hints.wall_weight[s] = 0.0f;
 		if (hang_brace_height > 0.0f) {
 			// Milestone 151: braced on the wall under the ledge.
 			const float y = hang_feet.y + hang_brace_height;
-			hints.foot[s] = _hang_foot(s, hang_feet, ledge.inward, y, Vector3(face.x, y, face.z) + left * (s == 0 ? 0.14f : -0.14f));
+			hints.foot[s] = _hang_foot(s, hang_feet, ledge.inward, y, Vector3(face.x, y, face.z) + left * (s == 0 ? 0.14f : -0.14f), &hints.wall[s], &hints.wall_weight[s]);
 		}
 		hints.foot_weight[s] = 0.8f * w;
 		hints.foot_follow[s] = 1.0f;

@@ -78,13 +78,23 @@ CLIPS = [
 	("land", ["falling to landing", "landing"], "land"),
 	("land_hard", ["hard landing"], "land"),
 	("roll", ["falling to roll", "stand to roll", "running forward roll", "roll"], "land"),
-	("hang_idle", ["braced hang", "hanging idle"], "loop_tail"),  # Mixamo's catches the ledge first
+	# Milestone 196: Mixamo's "Braced Hang" is a jump up into the hang and its settling (1.3 s), not a hang at rest —
+	# milestone 194's loop of its last 60 % bobbed the hips 17 cm every 0.6 s. The hang at rest: its settled moment,
+	# swayed forth and back over four seconds; the catch: from the hands on the ledge to settled.
+	("hang_idle", ["braced hang"], "settle", {"from": 1.0, "to": 1.133, "length": 4.0}),
+	("hang_catch", ["braced hang"], "span", {"from": 0.47, "to": 1.3}),
 	("hang_shimmy_l", ["left braced hang shimmy", "braced hang shimmy left"], "loop"),
 	("hang_shimmy_r", ["right braced hang shimmy", "braced hang shimmy right", "braced hang shimmy"], "loop"),
 	("hang_leap_up", ["braced hang hop up"], "anchored"),
 	("hang_leap_l", ["braced hang hop left"], "anchored"),
 	("hang_leap_r", ["braced hang hop right"], "anchored"),
 	("climb_move", ["climbing up wall", "climbing"], "loop"),
+	# Milestone 196: hand over hand from hold to hold — a half of Mixamo's climbing cycle each (the left hand up with the
+	# right foot, then the right with the left), and across from Mixamo's shimmies (a step each).
+	("hang_reach_l", ["climbing up wall"], "anchored", {"from": 0.0, "to": 0.933}),
+	("hang_reach_r", ["climbing up wall"], "anchored", {"from": 0.933, "to": 2.0}),
+	("hang_across_l", ["left braced hang shimmy"], "anchored", {"from": 0.0, "to": 1.167}),
+	("hang_across_r", ["right braced hang shimmy"], "anchored", {"from": 0.0, "to": 1.167}),
 	("start_walk", ["start walking"], "travel"),
 	("stop_walk", ["stop walking"], "travel"),
 	("stop_run", ["run to stop"], "travel"),
@@ -92,10 +102,12 @@ CLIPS = [
 # The hips where the mannequin's own clips of these hold them (y back from the wall, z up from the root, m): the player's
 # traversal puts the body against the wall and the hands on the ledge from them (Mixamo's hang hangs 0.13 m higher, its
 # climb 0.77 m).
-HIPS_AT = {"hang_idle": (0.13, 0.915), "hang_shimmy_l": (0.13, 0.915), "hang_shimmy_r": (0.13, 0.915),
+HIPS_AT = {"hang_idle": (0.13, 0.915), "hang_catch": (0.13, 0.915), "hang_shimmy_l": (0.13, 0.915), "hang_shimmy_r": (0.13, 0.915),
 		"hang_leap_up": (0.13, 0.915), "hang_leap_l": (0.13, 0.915), "hang_leap_r": (0.13, 0.915),
-		"climb_move": (-0.08, 0.885)}
-# kind "loop_tail": a loop from 40 % of the clip on. "anchored": the hips held where they start (the player's traversal
+		"climb_move": (-0.08, 0.885), "hang_reach_l": (0.13, 0.915), "hang_reach_r": (0.13, 0.915),
+		"hang_across_l": (0.13, 0.915), "hang_across_r": (0.13, 0.915)}
+# kind "settle": a loop of `length` s swaying from `from` to `to` s of the source and back (a cosine: still at either end).
+# "span": once, from `from` to `to` s, the hips' sway kept about their mean. "loop_tail": a loop from 40 % of the clip on. "anchored": the hips held where they start (the player's traversal
 # moves the body from hold to hold; the limbs move about the hips as Mixamo's). "travel": in place, the hips' travel
 # forward recorded (clips.json: m/s every 60th of a second) for the player to move the body by.
 
@@ -282,11 +294,17 @@ def smooth_step(x):
 SEAM = 0.4  # s: a loop that is not a cycle (an idle, a fall) has its end crossfaded into its start
 
 
-def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
+def bake_clip(rig, src, name, kind, scale, ankle_dz, info, opt=None):
+	opt = opt or {}
 	track = ankle_track(src, 1.0 / SRC_FPS)
 	start, length, loop, play = 0.0, src.length, False, 1.0
 	seam = 0.0
-	if kind == "gait":
+	if kind in ("settle", "span"):
+		start = opt["from"]
+		length = min(src.length, opt["to"]) - start
+		loop = kind == "settle"
+		info["clips"][name] = {"kind": kind, "from": start, "to": start + length}
+	elif kind == "gait":
 		# Mixamo's in-place gaits loop as they are: one cycle (two steps), or several (a shorter period repeating).
 		period, corr = src.length, 1.0
 		if src.length > 1.6:
@@ -321,9 +339,10 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
 		info["clips"][name] = {"kind": kind, "touchdown": t, "from": start}
 	elif kind == "anchored":
 		# A hop's wind-up, flight and catch (its first fifth and last quarter hang still): the traversal plays it over the
-		# move's time, which the whole clip would have sped up three times (the head at 2,300°/s).
-		start = src.length * 0.2
-		length = src.length * 0.55
+		# move's time, which the whole clip would have sped up three times (the head at 2,300°/s). Milestone 196: or the
+		# span given (`from`, `to`: a half of a climbing cycle, a shimmy's step).
+		start = opt.get("from", src.length * 0.2)
+		length = (min(src.length, opt["to"]) - start) if "to" in opt else src.length * 0.55
 		info["clips"][name] = {"kind": kind, "from": start}
 	else:
 		info["clips"][name] = {"kind": kind}
@@ -345,7 +364,14 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
 	# straight line through its hips), a one-shot's travel (a clip Mixamo has no "in place" for, a roll's) as its hips'
 	# average over half a second about each moment — their sway kept.
 	hips = [(a[0], a[3]) for a in track if start - 0.3 <= a[0] <= start + length + 0.3]
-	if loop:
+	if kind in ("settle", "span"):
+		inside = [h[1] for h in hips if start <= h[0] <= start + length] or [hips[0][1]]
+		cx = sum(h.x for h in inside) / len(inside)
+		cy = sum(h.y for h in inside) / len(inside)
+
+		def centre_at(t):
+			return Vector((cx, cy, 0.0))
+	elif loop:
 		ts = [h[0] for h in hips]
 		tm = sum(ts) / len(ts)
 		den = sum((x - tm) ** 2 for x in ts) or 1.0
@@ -383,13 +409,15 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
 
 		def centre_at(t):
 			return base_centre(t) + off
-	out_len = 1.0 if kind == "gait" else length
+	out_len = 1.0 if kind == "gait" else (opt["length"] if kind == "settle" else length)
 	n = max(2, int(round(out_len * FPS)))
 	frames = []
 	for i in range(n if loop else n + 1):
 		u = min(out_len, i / FPS) / out_len
 		t = start + u * length
-		if loop:
+		if kind == "settle":
+			t = start + length * (0.5 - 0.5 * math.cos(2.0 * math.pi * u))
+		elif loop:
 			t = start + math.fmod(u * length, length)
 			if t > src.length:
 				t -= length
@@ -449,7 +477,9 @@ def main():
 	rig = Rig(arm)
 	info = {"gaits": {}, "clips": {}, "files": {}}
 	end = 1
-	for name, choices, kind in CLIPS:
+	for entry in CLIPS:
+		name, choices, kind = entry[:3]
+		opt = entry[3] if len(entry) > 3 else None
 		path = next((files[c] for c in choices if c in files), None)
 		if path is None:
 			continue
@@ -458,7 +488,7 @@ def main():
 		# The scale: the hips' heights at rest; the ankles' rest heights matched.
 		scale = rig.head["Hips"].z / src.rest["Hips"].translation.z
 		ankle_dz = rig.head["LeftFoot"].z - src.rest["LeftFoot"].translation.z * scale
-		bake_clip(rig, src, name, kind, scale, ankle_dz, info)
+		bake_clip(rig, src, name, kind, scale, ankle_dz, info, opt)
 		info["files"][name] = os.path.basename(path)
 		act = bpy.data.actions.get(name)
 		end = max(end, int(act.frame_range[1]))

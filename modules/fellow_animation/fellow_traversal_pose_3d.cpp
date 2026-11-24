@@ -468,6 +468,16 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 	// and the spring's, the torso leaning back against the spring's.
 	Vector3 limb_target[4] = { h.hand[0], h.hand[1], h.foot[0], h.foot[1] };
 	float limb_w[4] = { h.hand_weight[0], h.hand_weight[1], h.foot_weight[0], h.foot_weight[1] };
+	// Milestone 196 (decision 0338): between holds, a hand off its hold reached for by hand_flight_weight of the IK (the
+	// clip's arm carries it), the grip eased in and out over a tenth of a second.
+	if (hand_flight_weight < 1.0f) {
+		const float k = 1.0f - Math::exp(-float(p_delta) / 0.1f);
+		for (int s = 0; s < 2; s++) {
+			const float grip = h.kind == FellowTraversal3D::KIND_HANG ? h.hand_grip[s] : 1.0f;
+			hand_flight[s] = Math::lerp(hand_flight[s], grip, k);
+			limb_w[s] *= Math::lerp(hand_flight_weight, 1.0f, hand_flight[s]);
+		}
+	}
 	if (limb_smoothing > 0.0f) {
 		const float k = limbs_valid ? 1.0f - Math::exp(-float(p_delta) / limb_smoothing) : 1.0f;
 		for (int i = 0; i < 4; i++) {
@@ -615,6 +625,18 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 			}
 		}
 	}
+	// Milestone 196 (decision 0338): hanging and between holds, the knees and the toes kept off the stone the feet brace on
+	// — whatever the feet's weights (a leap's legs swing free of the IK, not through the wall).
+	if (h.kind == FellowTraversal3D::KIND_HANG) {
+		for (int s = 0; s < 2; s++) {
+			const int upper = bones[s == 0 ? ROLE_LEFT_UPPER_LEG : ROLE_RIGHT_UPPER_LEG];
+			const int lower = bones[s == 0 ? ROLE_LEFT_LOWER_LEG : ROLE_RIGHT_LOWER_LEG];
+			const int foot = bones[s == 0 ? ROLE_LEFT_FOOT : ROLE_RIGHT_FOOT];
+			if (upper >= 0 && lower >= 0 && foot >= 0 && h.wall_weight[s] > 0.0f) {
+				_clear_wall(skeleton, upper, lower, foot, to_skeleton.xform(h.wall[s]), -inward, left * (s == 0 ? 1.0f : -1.0f), meter, weight * h.wall_weight[s]);
+			}
+		}
+	}
 	if (hand_ik) {
 		for (int s = 0; s < 2; s++) {
 			const int upper = bones[s == 0 ? ROLE_LEFT_UPPER_ARM : ROLE_RIGHT_UPPER_ARM];
@@ -627,9 +649,86 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 			// The elbow out to the side, down and back.
 			const Vector3 shoulder = skeleton->get_bone_global_pose(upper).origin;
 			const Vector3 side = left * (s == 0 ? 1.0f : -1.0f);
-			_two_bone(skeleton, upper, lower, hand, to_skeleton.xform(limb_target[s]), shoulder + (side * 0.6f - up * 0.4f - inward * 0.3f), hw * weight);
+			Vector3 target = to_skeleton.xform(limb_target[s]);
+			// Milestone 196 (decision 0338): hanging from one ledge, along its edge where the animation's hand is.
+			if (hand_slide > 0.0f && h.kind == FellowTraversal3D::KIND_HANG && h.slide > 0.0f && hand >= 0 && left != Vector3()) {
+				const Vector3 animated = skeleton->get_bone_global_pose(hand).origin;
+				target += left * ((animated - target).dot(left) * hand_slide * h.slide);
+			}
+			_two_bone(skeleton, upper, lower, hand, target, shoulder + (side * 0.6f - up * 0.4f - inward * 0.3f), hw * weight);
 		}
 	}
+}
+
+// Milestone 196 (decision 0338): a braced leg kept off the stone its foot is on (p_wall: a point on it, p_out: out of it;
+// skeleton space). The knee: where it is within KNEE_CLEAR of the stone or behind it, the leg turned about the line from
+// the hip to the ankle (the foot stays) the least way that clears it, to the side first (a climber's knee turns out). The
+// toes: where the ball of the foot is behind the stone, the foot pitched about the ankle until it is on it.
+void FellowTraversalPose3D::_clear_wall(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_foot, const Vector3 &p_wall, const Vector3 &p_out, const Vector3 &p_side, float p_meter, float p_weight) {
+	if (p_weight <= 0.0f) {
+		return;
+	}
+	const float clear = 0.04f * p_meter;
+	const Vector3 hip = p_skeleton->get_bone_global_pose(p_upper).origin;
+	const Vector3 knee = p_skeleton->get_bone_global_pose(p_lower).origin;
+	const Vector3 ankle = p_skeleton->get_bone_global_pose(p_foot).origin;
+	const Quaternion foot_global = global_rotation(p_skeleton, p_foot);
+	const Vector3 axis = ankle - hip;
+	if ((knee - p_wall).dot(p_out) < clear && axis.length() > 1e-4f) {
+		const Vector3 a = axis.normalized();
+		const Vector3 centre = hip + a * (knee - hip).dot(a);
+		const Vector3 arm = knee - centre;
+		// The turn that clears it, the side's way first: the knee's offset from the leg's line turned by t.
+		const float out_way = (a.cross(arm)).dot(p_side) >= 0.0f ? 1.0f : -1.0f;
+		float best = 0.0f;
+		float best_d = (knee - p_wall).dot(p_out);
+		for (int k = 1; k <= 24 && best_d < clear; k++) {
+			for (int sgn = 0; sgn < 2; sgn++) {
+				const float t = Math::deg_to_rad(5.0f * k) * (sgn == 0 ? out_way : -out_way);
+				const float d = (centre + Quaternion(a, t).xform(arm) - p_wall).dot(p_out);
+				if (d > best_d + 1e-5f) {
+					best_d = d;
+					best = t;
+					if (d >= clear) {
+						break;
+					}
+				}
+			}
+		}
+		if (best != 0.0f) {
+			const Quaternion turn(a, best * p_weight);
+			const int parent = p_skeleton->get_bone_parent(p_upper);
+			const Quaternion parent_rot = global_rotation(p_skeleton, parent);
+			const Quaternion upper_global = global_rotation(p_skeleton, p_upper);
+			p_skeleton->set_bone_pose_rotation(p_upper, (parent_rot.inverse() * (turn * upper_global)).normalized());
+			// (the foot's turn in the world kept)
+			const Quaternion foot_parent = global_rotation(p_skeleton, p_skeleton->get_bone_parent(p_foot));
+			p_skeleton->set_bone_pose_rotation(p_foot, (foot_parent.inverse() * foot_global).normalized());
+		}
+	}
+	// The toes: the ball of the foot (the foot's first child) onto the stone's face.
+	const Vector<int> children = p_skeleton->get_bone_children(p_foot);
+	if (children.is_empty()) {
+		return;
+	}
+	const Vector3 ankle_now = p_skeleton->get_bone_global_pose(p_foot).origin;
+	const Vector3 ball = p_skeleton->get_bone_global_pose(children[0]).origin;
+	const Vector3 v = ball - ankle_now;
+	const float len = v.length();
+	const float behind = (ball - p_wall).dot(p_out);
+	if (len < 1e-4f || behind >= 0.0f) {
+		return;
+	}
+	const float a0 = Math::asin(CLAMP(v.dot(p_out) / len, -1.0f, 1.0f));
+	const float a1 = Math::asin(CLAMP(((p_wall - ankle_now).dot(p_out)) / len, -1.0f, 1.0f));
+	const Vector3 pitch_axis = v.cross(p_out);
+	if (pitch_axis.length() < 1e-5f || a1 <= a0) {
+		return;
+	}
+	// (turning v about v × out raises its part along out)
+	const Quaternion pitch(pitch_axis.normalized(), (a1 - a0) * p_weight);
+	const Quaternion foot_parent = global_rotation(p_skeleton, p_skeleton->get_bone_parent(p_foot));
+	p_skeleton->set_bone_pose_rotation(p_foot, (foot_parent.inverse() * (pitch * global_rotation(p_skeleton, p_foot))).normalized());
 }
 
 // Milestone 156 (decision 0296): no joint turned faster than max_joint_speed from this node's last pose — where the
@@ -722,6 +821,10 @@ void FellowTraversalPose3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_traversal_path"), &FellowTraversalPose3D::get_traversal_path);
 	ClassDB::bind_method(D_METHOD("set_blend_time", "seconds"), &FellowTraversalPose3D::set_blend_time);
 	ClassDB::bind_method(D_METHOD("get_blend_time"), &FellowTraversalPose3D::get_blend_time);
+	ClassDB::bind_method(D_METHOD("set_hand_slide", "amount"), &FellowTraversalPose3D::set_hand_slide);
+	ClassDB::bind_method(D_METHOD("get_hand_slide"), &FellowTraversalPose3D::get_hand_slide);
+	ClassDB::bind_method(D_METHOD("set_hand_flight_weight", "weight"), &FellowTraversalPose3D::set_hand_flight_weight);
+	ClassDB::bind_method(D_METHOD("get_hand_flight_weight"), &FellowTraversalPose3D::get_hand_flight_weight);
 	ClassDB::bind_method(D_METHOD("set_max_joint_speed", "degrees_per_second"), &FellowTraversalPose3D::set_max_joint_speed);
 	ClassDB::bind_method(D_METHOD("get_max_joint_speed"), &FellowTraversalPose3D::get_max_joint_speed);
 	ClassDB::bind_method(D_METHOD("set_pole_follow", "amount"), &FellowTraversalPose3D::set_pole_follow);
@@ -773,6 +876,8 @@ void FellowTraversalPose3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clip_blend", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"), "set_clip_blend", "get_clip_blend");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "pole_follow", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_pole_follow", "get_pole_follow");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_joint_speed", PROPERTY_HINT_RANGE, "0,5000,1,suffix:°/s"), "set_max_joint_speed", "get_max_joint_speed");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_flight_weight", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_hand_flight_weight", "get_hand_flight_weight");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_slide", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_hand_slide", "get_hand_slide");
 
 	BIND_ENUM_CONSTANT(ROLE_HIPS);
 	BIND_ENUM_CONSTANT(ROLE_SPINE);

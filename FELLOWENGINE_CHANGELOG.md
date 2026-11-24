@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 196 — Mixamo's hangs and moves from hold to hold, fitted to the traversal (2026-11-24)
+
+- `FellowTraversalPose3D` (decision 0338): `hand_flight_weight` (a hand off its hold between holds reached for by that
+  share of the IK: a captured arm carries it, the IK puts it on the hold), `hand_slide` (hanging from one ledge, the
+  hands along its edge where the animation's are: a shimmy's hands step as its clip's); and for every scene, hanging
+  and between holds, the knees and the balls of the feet kept off the stone the feet brace on (`FellowTraversal3D`'s
+  pose hints give it): the leg turned out about its hip-to-ankle line, the foot pitched about its ankle.
+- The showcase's rooftops: Mixamo's hangs and moves again — its "Braced Hang" (a jump into the hang and its settling,
+  milestone 194 had looped the settling's bounce: the hips 17 cm every 0.6 s) as a catch and a settled hang swayed over
+  4 s (1.8 cm); hand over hand up from its "Climbing Up Wall", across from its shimmies; the shimmy at the body's pace
+  (0.6 m/s). Hanging's fastest joint 1,750 → 814°/s, limbs through the walls hanging 0 %, from hold to hold 1.2 %
+  (Mixamo's in milestone 194: 17.4 %); 30 of 38 animation gates. `climb_look.gd` (new) films the climbing.
+
 ## Milestone 195 — From play: the fall, the step up onto the fountain, the hangs and climbs (2026-11-24)
 
 - `FellowTraversal3D` (decision 0337): a mantle with a clip's root motion lets the body over the top once its feet are
