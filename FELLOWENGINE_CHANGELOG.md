@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 193 — An epic sky for the rooftops (2026-11-24)
+
+- The showcase's rooftops (decision 0334; the owner: "more epic, as the Witcher 3's"): towering cumulus (bases at 1.5 km,
+  2.2 km tall) in place of milestone 168's stratocumulus; the sky lit by a white sun (the scene's golden Sun's colour
+  had been reddened twice, by the colour and by the atmosphere's air: the sky's blue cut to 0.57), its blue deepened in
+  the sky shader (`sky_saturation`, the scene's light from the sky unchanged), three times the sun's energy instead of
+  four; the depth fog off the sky again. The clear sky over the square 170, 176, 191 → 130, 160, 193.
+- `sky_look.gd` and `weathering_look.gd` set the Environment's and the scene's properties (`--env`, `--scene`).
+- Milestone 192 (Mixamo's motion capture for the character) waits for the owner's clips.
+
 ## Milestone 191 — Flicker under motion; the fountain, the controls and the camera (2026-11-24)
 
 - Flicker measured along the scene's motion vectors (decision 0333): `showcase/tools/velocity_dump.gd` reads them

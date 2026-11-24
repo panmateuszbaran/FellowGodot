@@ -27,6 +27,10 @@ uniform float radiance_scale = 1.0;
 // The sun's disk scaled by this (the rooftops scene: 1 / its sky_brightness, the disk as bright as the sun's own energy
 // makes it; four times as bright, its bloom had veiled the square looking towards it).
 uniform float sun_disk_energy = 1.0;
+// Milestone 193: the sky seen (not its radiance map: the scene's light stays the atmosphere's) more saturated than the
+// atmosphere's about its luminance: a golden hour's sky is pale (the sun's light reddened through five air masses, the
+// multiple scattering white), the deep blue of a painted sky (the owner: as the Witcher 3's) an artist's. 1: none.
+uniform float sky_saturation = 1.0;
 
 float star_hash(vec3 p) {
 	p = fract(p * 0.3183099 + 0.1);
@@ -78,6 +82,10 @@ void sky() {
 	float u = az / (2.0 * PI) + 0.5;
 	vec3 sun = LIGHT0_COLOR * LIGHT0_ENERGY * energy_scale;
 	vec3 col = texture(fellow_atmosphere_sky_view, vec2(u, v)).rgb * sun;
+	if (sky_saturation != 1.0 && !AT_CUBEMAP_PASS) {
+		float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+		col = max(mix(vec3(luma), col, sky_saturation), vec3(0.0));
+	}
 	// The sun's disk only where the sky is seen, not in its radiance map (AT_CUBEMAP_PASS: the ambient light and the
 	// reflections): the directional light already lights the scene, and a disk this bright and small is caught or missed
 	// by the map's filtering as it moves — the ambient light jumped by half every second or so with the day's clock

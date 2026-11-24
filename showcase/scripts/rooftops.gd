@@ -7,10 +7,12 @@ extends Node3D
 ## tools/fetch_textures.py) put in place of the procedural ones when their textures have been fetched and imported; and
 ## the mouse: captured for looking round, Esc frees it, a click takes it again.
 
-@export var cloud_coverage := 0.6
-@export var cloud_density := 2.5
-@export var cloud_altitude := 2.5 # km
-@export var cloud_thickness := 0.6 # km
+## Milestone 193 (the owner: a sky more epic, as the Witcher 3's): towering cumulus — their bases at 1.5 km, 2.2 km tall,
+## fewer (milestone 168's stratocumulus: 0.6 coverage, 2.5 km up, 0.6 km thick).
+@export var cloud_coverage := 0.45
+@export var cloud_density := 2.6
+@export var cloud_altitude := 1.5 # km
+@export var cloud_thickness := 2.2 # km
 @export var cloud_shadows := 0.0
 @export var atmosphere_mie := 0.5 # the haze's aerosols: half the default's, the sky bluer, the horizon clearer
 ## Milestone 168: the sky's and the clouds' own sun (SkySun, made here: a light that only the sky sees), this many
@@ -23,13 +25,21 @@ extends Node3D
 ## shafts as they were. Beside the reference our sky had been a dim grey under bright walls, its clouds hardly brighter
 ## than it (the clouds' multiple scattering approximated by four octaves: their sides lit by a low sun darker than a
 ## white wall's).
-@export var sky_brightness := 4.0
+@export var sky_brightness := 3.0
 ## Milestone 168: the Sun's light coloured as the SkySun's is, by the air a sun sky_sun_elevation degrees up shines
 ## through (Rayleigh's, the haze's and ozone's optical depths over the two suns' air masses; the light's luminance
 ## kept): the reference's golden light with the sky's. 1: all of it; 0: the Sun's own colour. Beside the reference our
 ## sunlit stone under the clearer air had been paler still (red / green 1.09-1.12, 1.13-1.17 with this, against its
 ## 1.23-1.27).
 @export var sun_air := 1.0
+## Milestone 193 (the owner: a sky more epic, as the Witcher 3's): the SkySun's own colour — the light the atmosphere
+## reddens through its air for the sky and the clouds, so white as the sun's is above the air. The Sun's golden colour
+## (the square's light, already the air's) had been reddened twice for the sky: its blue in-scattering by 0.57, the sky
+## grey. Its energy keeps the sky's luminance as it was.
+@export var sky_sun_color := Color(1.0, 1.0, 1.0)
+## Milestone 193: the sky seen this much more saturated than the atmosphere makes it (its shader's sky_saturation; the
+## scene's light from the sky unchanged).
+@export var sky_saturation := 1.6
 
 const SHAFTS := "rendering/fellow/post/light_shafts/"
 
@@ -75,6 +85,7 @@ func _ready() -> void:
 			var sky_mat := we.environment.sky.sky_material as ShaderMaterial
 			sky_mat.set_shader_parameter("radiance_scale", 1.0 / sky_brightness)
 			sky_mat.set_shader_parameter("sun_disk_energy", 1.0 / sky_brightness)
+			sky_mat.set_shader_parameter("sky_saturation", sky_saturation)
 		# The light shafts (decision 0116: the sky's pixels brighter than a threshold, blurred towards the sun) as before
 		# with the brighter sky: its excess over a threshold that much higher, that much weaker.
 		_shafts = Vector2(ProjectSettings.get_setting(SHAFTS + "threshold", 0.5), ProjectSettings.get_setting(SHAFTS + "intensity", 0.0))
@@ -104,8 +115,12 @@ func _follow_sun() -> void:
 	var e := deg_to_rad(sky_up)
 	var d := Vector3(flat.x * cos(e), sin(e), flat.y * cos(e))
 	_sky_sun.global_basis = Basis.looking_at(-d, Vector3.UP)
-	_sky_sun.light_color = _sun_color
-	_sky_sun.light_energy = _sun.light_energy * sky_brightness
+	_sky_sun.light_color = sky_sun_color
+	const Y := Vector3(0.2126, 0.7152, 0.0722)
+	var own := _sun_color.srgb_to_linear()
+	var sky := sky_sun_color.srgb_to_linear()
+	var keep := Vector3(own.r, own.g, own.b).dot(Y) / maxf(Vector3(sky.r, sky.g, sky.b).dot(Y), 1e-4)
+	_sky_sun.light_energy = _sun.light_energy * sky_brightness * keep
 	_sky_sun.light_angular_distance = _sun.light_angular_distance
 	_sun.light_color = _sun_color
 	if sun_air > 0.0 and sky_up < sun_up and sky_up > 0.0:

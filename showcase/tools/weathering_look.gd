@@ -7,6 +7,7 @@ extends SceneTree
 ##   godot --path showcase --rendering-driver vulkan --resolution 1280x720 -s res://tools/weathering_look.gd -- \
 ##       --out=<dir> [--views=east,north,close,foot,rustic] [--settle=40] [--off=1] [--set=<property>=<value>]...
 ##       [--mat=<material>:<parameter>=<value>]... [--debug=1] [--lite=1]
+##       [--scene=<rooftops.gd's property>=<value>]... [--env=<the Environment's property>=<value>]... (milestone 193)
 ##
 ## --off=1: the FellowWeathering3D hidden (the town as before milestone 190); --set=streaks=0.5 sets one of its
 ## properties (a number); --mat=res://rooftops/materials_photo/stone_rustic.tres:normal_strength=0.2 sets a shader
@@ -22,6 +23,9 @@ const VIEWS := {
 	"rustic": [Vector3(15.5, 1.7, 0.5), Vector3(21.0, 1.8, -3.0), 55.0],
 	"ref": [Vector3(-12.0, 1.7, 13.0), Vector3(-21.0, 6.0, 2.0), 62.0],
 	"ref2": [Vector3(-14.0, 1.7, 8.0), Vector3(-23.0, 6.5, 1.0), 62.0],
+	# Milestone 193: the square and its sky — towards the campanile, and towards the sun.
+	"sky_n": [Vector3(2.0, 1.7, 12.0), Vector3(-2.0, 14.0, -20.0), 70.0],
+	"sky_sun": [Vector3(4.0, 1.7, -6.0), Vector3(-20.0, 14.0, 13.0), 70.0],
 }
 ## --lite=1's town.
 const KEEP := ["PalazzoOcra", "Campanile", "CasaCrema", "PalazzoSiena", "CasaBianca", "CasaOcraBassa", "CasaRosa",
@@ -40,6 +44,8 @@ func _init() -> void:
 	var debug_colors := false
 	var props := {}
 	var mats := []
+	var scene_props := {}
+	var env_props := {}
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			out = a.get_slice("=", 1)
@@ -55,6 +61,12 @@ func _init() -> void:
 			debug_colors = true
 		elif a.begins_with("--mat="):
 			mats.append(a.substr(6))
+		elif a.begins_with("--scene="):
+			var kv := a.substr(8)
+			scene_props[kv.get_slice("=", 0)] = str_to_var(kv.get_slice("=", 1))
+		elif a.begins_with("--env="):
+			var kv := a.substr(6)
+			env_props[kv.get_slice("=", 0)] = str_to_var(kv.get_slice("=", 1))
 		elif a.begins_with("--set="):
 			var kv := a.substr(6)
 			props[kv.get_slice("=", 0)] = str_to_var(kv.get_slice("=", 1))
@@ -79,6 +91,11 @@ func _init() -> void:
 			if not (c.name in KEEP):
 				town.remove_child(c)
 				c.free()
+	for k in scene_props:
+		sc.set(k, scene_props[k]) # rooftops.gd's (milestone 193), before its _ready
+	for n in sc.find_children("*", "WorldEnvironment", true, false):
+		for k in env_props:
+			(n as WorldEnvironment).environment.set(k, env_props[k])
 	root.add_child(sc)
 	var w: Node3D = sc.get_node_or_null("Weathering")
 	if w:
