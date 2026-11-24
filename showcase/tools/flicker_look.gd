@@ -3,7 +3,8 @@ extends SceneTree
 ## still for --still frames and then moved along the square at a walk's speed for --moving frames, every frame saved
 ## (<dir>/f%04d.png) for tools' frame-to-frame differences. --set=<setting>=<value> (repeatable) changes a project
 ## setting first (e.g. --set=rendering/fellow/shadows/directional_cache=false); --plain_glass=1 puts a plain material on
-## the windows' glass (its shader is long to compile on lavapipe).
+## the windows' glass (its shader is long to compile on lavapipe); --sun=<property>=<value> (repeatable) sets one of the
+## Sun's properties (e.g. --sun=light_angular_distance=0.5).
 ##
 ##   godot --path showcase --rendering-driver vulkan --resolution 640x360 --fixed-fps 60 -s res://tools/flicker_look.gd \
 ##       -- --out=<dir> [--view=east] [--still=30] [--moving=60] [--settle=20] [--configs=base,no_contact,...]
@@ -28,6 +29,7 @@ func _init() -> void:
 	var settle := 20
 	var plain_glass := false
 	var configs := PackedStringArray()
+	var sun_props := {}
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			out = a.get_slice("=", 1)
@@ -41,6 +43,9 @@ func _init() -> void:
 			settle = int(a.get_slice("=", 1))
 		elif a.begins_with("--configs="):
 			configs = a.get_slice("=", 1).split(",")
+		elif a.begins_with("--sun="):
+			var kv := a.substr(6)
+			sun_props[kv.get_slice("=", 0)] = str_to_var(kv.get_slice("=", 1))
 		elif a == "--plain_glass=1":
 			plain_glass = true
 		elif a.begins_with("--set="):
@@ -70,6 +75,9 @@ func _init() -> void:
 				for i in m.get_surface_count():
 					if m.surface_get_material(i) == glass:
 						m.surface_set_material(i, plain)
+	var sun := sc.get_node_or_null("Sun") as DirectionalLight3D
+	for k in sun_props:
+		sun.set(k, sun_props[k])
 	root.add_child(sc)
 	await process_frame
 	var player: Node3D = sc.get_node_or_null("Player")
