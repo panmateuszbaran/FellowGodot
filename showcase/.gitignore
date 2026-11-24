@@ -3,3 +3,5 @@
 external/
 __pycache__/
 rooftops/textures/
+# Mixamo clips retargeted by tools/blender/mixamo_retarget.py (Mixamo's licence: used, not handed out; milestone 192).
+rooftops/mocap/

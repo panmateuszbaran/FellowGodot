@@ -16,6 +16,13 @@ enum Mode { GROUND, AIR, TRAVERSE, PERCH, DIVE, HAY, ROLL }
 const ONE_SHOTS := {"jump": 0.34, "land": 0.45, "roll": 0.8, "climb_jump": 0.5, "dive_start": 0.55, "hay_exit": 2.2,
 		"hang_reach_l": 0.75, "hang_reach_r": 0.75, "hang_leap_up": 0.6, "hang_leap_l": 0.65, "hang_leap_r": 0.65,
 		"hang_across_l": 0.8, "hang_across_r": 0.8, "jump_wall": 0.9}
+# Milestone 192: the one-shots' lengths (their mocap clips' where those are played); the gaits' speeds (m/s) and cycles (s)
+# (the blend points of the locomotion's gait).
+var _one_shots := ONE_SHOTS.duplicate()
+var _gaits: Array = [[1.6, 0.95], [3.0, 0.8], [4.4, 0.7], [7.0, 0.62]]
+var _mocap := false
+const MOCAP_DIR := "res://rooftops/mocap"
+const MOCAP_GAITS := ["gait_walk", "gait_jog", "gait_run", "gait_sprint"]
 # FellowTraversal3D's Transfer values.
 const TRANSFER_JUMP_ALONG := 2
 const TRANSFER_JUMP_UP := 3
@@ -80,11 +87,63 @@ func _ready() -> void:
 	_camera = get_node_or_null(camera_path)
 	_viewpoint = get_node_or_null(viewpoint_path)
 	facing = rotation.y
+	_use_mocap()
 	tree.active = true
 	_set_state("loco")
 	_last_pos = global_position
 	traversal.connect("climb_jumped", func(_d): _play("climb_jump"))
 	traversal.connect("hang_transfer_started", _on_transfer)
+
+
+## Milestone 192: Mixamo's motion-captured clips (tools/build_mocap_clips.gd's library, not in the repository: Mixamo's
+## licence lets a game use them, not hand them out) in place of the mannequin's own of the same names where it exists —
+## the gaits' blend points at the speeds their strides were taken at, their cycles their own.
+func _use_mocap() -> void:
+	var path := MOCAP_DIR.path_join("mocap_clips.res")
+	if not ResourceLoader.exists(path):
+		return
+	var mocap := load(path) as AnimationLibrary
+	var ap := tree.get_node(tree.anim_player) as AnimationPlayer
+	if mocap == null or ap == null:
+		return
+	# The player's own copy of the library (the crowd's NPCs share the mannequin's).
+	var lib := ap.get_animation_library(&"").duplicate() as AnimationLibrary
+	for a in mocap.get_animation_list():
+		if lib.has_animation(a):
+			lib.remove_animation(a)
+		lib.add_animation(a, mocap.get_animation(a))
+	ap.remove_animation_library(&"")
+	ap.add_animation_library(&"", lib)
+	_mocap = true
+	var info = JSON.parse_string(FileAccess.get_file_as_string(MOCAP_DIR.path_join("clips.json")))
+	var gaits: Dictionary = info.get("gaits", {}) if info is Dictionary else {}
+	var table: Array = []
+	for g in MOCAP_GAITS:
+		if gaits.has(g):
+			table.append([float(gaits[g]["speed"]), float(gaits[g]["period"]), g])
+	table.sort_custom(func(x, y): return x[0] < y[0])
+	if table.size() == MOCAP_GAITS.size() and table[0][0] > 0.5:
+		var gait := ((tree.tree_root as AnimationNodeBlendTree).get_node(&"loco") as AnimationNodeBlendTree).get_node(&"gait") as AnimationNodeBlendSpace1D
+		gait.max_space = maxf(gait.max_space, table[table.size() - 1][0] + 1.0)
+		_gaits = []
+		for row in table:
+			for i in gait.get_blend_point_count():
+				if (gait.get_blend_point_node(i) as AnimationNodeAnimation).animation == StringName(row[2]):
+					gait.set_blend_point_position(i, row[0])
+			_gaits.append([row[0], row[1]])
+	print("rooftops_player: mocap clips ", mocap.get_animation_list().size(), " gaits ", _gaits)
+
+
+## Milestone 192: a state's clip swapped for a variant of it where the library has one (the mocap's jump from a run, its
+## hard landing), its own otherwise.
+func _variant(p_node: StringName, p_clip: StringName) -> void:
+	if not _mocap:
+		return
+	var n := (tree.tree_root as AnimationNodeBlendTree).get_node(p_node) as AnimationNodeAnimation
+	var ap := tree.get_node(tree.anim_player) as AnimationPlayer
+	var want := p_clip if ap.has_animation(p_clip) else p_node
+	if n and n.animation != want:
+		n.animation = want
 
 
 ## A move from hold to hold: its clip (the hands and feet are put on the stone by the pose's IK over it).
@@ -103,7 +162,7 @@ func _on_transfer(_ledge: Dictionary, how: int, duration: float, lead: int) -> v
 	if clip.is_empty():
 		return
 	# Milestone 153: the clip played over the move's time (its wind-up included).
-	var length: float = ONE_SHOTS[clip]
+	var length: float = _one_shots[clip]
 	tree.set("parameters/ts_%s/scale" % clip, length / maxf(duration, 0.05))
 	_play(clip)
 	_one_shot = duration
@@ -247,14 +306,15 @@ func _move(delta: float, speed_goal: float) -> void:
 	var jump_asked := want_jump or _jump_buffer > 0.0
 	var can_jump := on_floor or (mode == Mode.AIR and _walked_off and _since_floor < COYOTE_TIME and velocity.y <= 0.5)
 	# A landing's settle can be cut short by the next jump (not a roll).
-	var settled := _one_shot <= 0.0 or (_shot_name == "land" and _one_shot < ONE_SHOTS["land"] - 0.1)
+	var settled: bool = _one_shot <= 0.0 or (_shot_name == "land" and _one_shot < float(_one_shots["land"]) - 0.1)
 	if jump_asked and can_jump and settled:
 		_jump_buffer = 0.0
 		_walked_off = false
 		velocity.y = jump_velocity
 		mode = Mode.AIR
 		_air_top = global_position.y
-		# Milestone 153: at a wall, the arms reaching up for the hold.
+		# Milestone 153: at a wall, the arms reaching up for the hold. Milestone 192: from a run, the mocap's running jump.
+		_variant(&"jump", &"jump_run" if Vector2(velocity.x, velocity.z).length() > 3.0 else &"jump")
 		_play("jump_wall" if want_sprint and _wall_ahead(1.1) else "jump")
 	if want_drop and on_floor and h.length() > 2.0 and mode == Mode.GROUND and not over_edge:
 		mode = Mode.ROLL
@@ -278,6 +338,7 @@ func _move(delta: float, speed_goal: float) -> void:
 					mode = Mode.ROLL
 					_play("roll")
 				elif fall > 1.2:
+					_variant(&"land", &"land_hard" if fall > 3.0 else &"land")
 					_play("land")
 				elif _one_shot <= 0.0:
 					_set_state("loco")
@@ -513,14 +574,19 @@ func _hay(_delta: float) -> void:
 
 ## Milestone 154: the gaits' cycle (s) at a speed (m/s): walk 0.95 s at 1.6, jog 0.8 at 3.0 (milestone 155), run 0.7 at
 ## 4.4, sprint 0.62 at 7.0 (mannequin_anims.py's GAITS); slower than a walk, the walk's stride over a longer cycle.
-static func _gait_cycle(v: float) -> float:
-	if v <= 1.6:
-		return 0.95 * 1.6 / maxf(v, 0.25)
-	if v <= 3.0:
-		return lerpf(0.95, 0.8, (v - 1.6) / 1.4)
-	if v <= 4.4:
-		return lerpf(0.8, 0.7, (v - 3.0) / 1.4)
-	return lerpf(0.7, 0.62, clampf((v - 4.4) / 2.6, 0.0, 1.0))
+## Milestone 192: from `_gaits` (the mocap's own speeds and cycles when it is played); faster than the fastest gait, its
+## stride over a shorter cycle.
+func _gait_cycle(v: float) -> float:
+	var first: Array = _gaits[0]
+	if v <= first[0]:
+		return first[1] * first[0] / maxf(v, 0.25)
+	for i in range(1, _gaits.size()):
+		var a: Array = _gaits[i - 1]
+		var b: Array = _gaits[i]
+		if v <= b[0]:
+			return lerpf(a[1], b[1], (v - a[0]) / (b[0] - a[0]))
+	var last: Array = _gaits[_gaits.size() - 1]
+	return last[1] if not _mocap else last[1] * last[0] / v
 
 
 ## The locomotion's blend for a ground speed: the gait (walk, run, sprint) at the cycle's rate, idle blended in below
@@ -533,7 +599,7 @@ func _loco(v: float, delta: float = 0.0) -> void:
 	var moving := clampf(v / 0.6, 0.0, 1.0)
 	_loco_v = lerpf(_loco_v, v, 1.0 - exp(-delta / 0.08)) if delta > 0.0 else v
 	_loco_move = lerpf(_loco_move, moving, 1.0 - exp(-delta / 0.15)) if delta > 0.0 else moving
-	tree.set("parameters/loco/gait/blend_position", clampf(_loco_v, 1.6, 7.0))
+	tree.set("parameters/loco/gait/blend_position", clampf(_loco_v, _gaits[0][0], _gaits[_gaits.size() - 1][0]))
 	tree.set("parameters/loco/rate/scale", 1.0 / _gait_cycle(_loco_v))
 	tree.set("parameters/loco/move/blend_amount", _loco_move)
 
@@ -613,4 +679,4 @@ func _play(s: String) -> void:
 	_shot_name = s
 	state = ""
 	_set_state(s)
-	_one_shot = ONE_SHOTS.get(s, 0.0)
+	_one_shot = _one_shots.get(s, 0.0)
