@@ -37,6 +37,7 @@ Mutex FellowInteriorMaterial3D::shader_mutex;
 RID FellowInteriorMaterial3D::shader;
 
 const char *FellowInteriorMaterial3D::get_shader_code() {
+	// MSVC takes string literals of at most 16380 bytes (C2026): the shader in adjacent pieces.
 	return R"(// FellowEngine's FellowInteriorMaterial3D (milestone 188): a room behind each window.
 shader_type spatial;
 // No direct specular: the sun's disc mirrored in old panes whitened whole windows; the sky's reflection stays.
@@ -290,7 +291,8 @@ void fragment() {
 					c *= 1.0 + 0.4 * top;
 				} else if (k < 0.52) {
 					f = min(fi_box(a, vec2(0.0, 0.1), vec2(0.95, 0.86)) + fi_box(a, vec2(0.82, 0.0), vec2(0.87, 0.1)), 1.0);
-					c = mix(vec3(0.42, 0.30, 0.20), vec3(0.22, 0.30, 0.24), step(0.5, r1));
+)"
+		   R"(					c = mix(vec3(0.42, 0.30, 0.20), vec3(0.22, 0.30, 0.24), step(0.5, r1));
 					c = mix(c, vec3(0.45, 0.14, 0.12), step(0.8, r1));
 					c *= 1.0 - 0.3 * (fi_box(a, vec2(0.0, 0.42), vec2(0.8, 0.47)) + fi_box(a, vec2(0.79, 0.1), vec2(0.82, 0.64)));
 					c *= 1.0 + 0.25 * step(0.47, hp.y) * step(hp.y, 0.6) * step(a.x, 0.79);
