@@ -71,7 +71,7 @@ layout(push_constant, std430) uniform Params {
 	float fellow_velocity_dilation;
 	float fellow_motion_soften;
 	float fellow_soften_contrast;
-	float fellow_pad;
+	float fellow_stability;
 }
 params;
 
@@ -537,6 +537,11 @@ vec3 temporal_antialiasing_v2(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 p
 	float feedback = mix(params.fellow_feedback_min, params.fellow_feedback_max, w * w);
 	// Anti-flicker (optional): where the history is trusted, do not let a luma disagreement pull the feedback down.
 	feedback = mix(feedback, params.fellow_feedback_max, params.fellow_antiflicker * trust);
+	// Stability (milestone 189, decision 0331): where the history is trusted (inside the neighbourhood's box), the more the
+	// frame disagrees with it the more history is kept, as stock Godot's resolve does (its "reduce flickering"): the
+	// jitter's sub-pixel aliasing (shutters' slats, a rough stone's sunlit grains) averaged out instead of followed. A real
+	// change moves the box and loses the trust.
+	feedback = mix(feedback, 1.0 - (1.0 - params.fellow_feedback_max) * w * w, params.fellow_stability * trust);
 	float blend_factor = 1.0 - feedback;
 
 	bool offscreen = any(lessThan(uv_reprojected, vec2(0.0))) || any(greaterThan(uv_reprojected, vec2(1.0)));

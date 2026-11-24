@@ -667,6 +667,10 @@ inline bool taa_v2_velocity_dilation() {
 inline float taa_v2_motion_soften() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_motion_soften");
 }
+// Milestone 189 (decision 0331): where the history is trusted, more of it the more the frame disagrees with it.
+inline float taa_v2_stability() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_stability");
+}
 inline float taa_v2_soften_contrast() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_soften_contrast");
 }

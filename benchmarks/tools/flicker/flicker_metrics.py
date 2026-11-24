@@ -6,7 +6,8 @@ moving steadily.
 The measure is the second temporal difference of each pixel's luminance, |I[t+1] - 2 I[t] + I[t-1]| (8-bit levels): a
 still image or one moving steadily scores about 0, a pixel that changes back and forth scores high. Averaged over the
 buildings (the upper part of the frame without the bright sky: --rows, --sky), and the share of those pixels above 3
-levels. Writes <out>/flicker.txt, <out>/flicker.json and a map per configuration (<out>/map_<config>.png: the still
+levels; and the sharpness of a still and a moving frame (the mean |I - I blurred by a pixel|: a softer image flickers
+less). Writes <out>/flicker.txt, <out>/flicker.json and a map per configuration (<out>/map_<config>.png: the still
 frames' flicker in red over the dimmed picture, half size).
 
 Under motion the second difference also counts the image's own change (a texture moving by v pixels a frame changes by
@@ -107,14 +108,20 @@ def main():
             mask &= frames[0] < a.sky
         still = second_difference(frames[: a.still])
         moving = second_difference(frames[a.still :])
+        # Sharpness: the mean |I - I blurred (sigma 1 pixel)| of a still and a moving frame (a softer image flickers less).
+        from scipy.ndimage import gaussian_filter
+
+        mid_still, mid_moving = frames[a.still // 2], frames[(a.still + n) // 2]
         r = {
+            "sharp_still": float(np.abs(mid_still - gaussian_filter(mid_still, 1.0))[mask].mean()),
+            "sharp_moving": float(np.abs(mid_moving - gaussian_filter(mid_moving, 1.0))[mask].mean()),
             "still_mean": float(still[mask].mean()),
             "still_above3": float((still[mask] > 3.0).mean() * 100.0),
             "moving_mean": float(moving[mask].mean()),
             "moving_above3": float((moving[mask] > 3.0).mean() * 100.0),
             "frames": n,
         }
-        line = "%-16s still: d2 %.3f, >3 %5.2f%% | moving: d2 %.3f, >3 %5.2f%%" % (c, r["still_mean"], r["still_above3"], r["moving_mean"], r["moving_above3"])
+        line = "%-16s still: d2 %.3f, >3 %5.2f%% | moving: d2 %.3f, >3 %5.2f%% | sharpness %.2f / %.2f" % (c, r["still_mean"], r["still_above3"], r["moving_mean"], r["moving_above3"], r["sharp_still"], r["sharp_moving"])
         if a.motion:
             res = [motion_residual(frames[t - 1], frames[t], frames[t + 1], mask) for t in range(a.still + 1, n - 1, a.motion_stride)]
             res = np.concatenate(res)
