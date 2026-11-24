@@ -18,7 +18,13 @@ extends SceneTree
 ##
 ## --configs: one sequence after another in one run, each in <dir>/<config>/ with one feature off — base (none),
 ## no_contact (FellowEngine's contact shadows), no_cache (the directional shadow cache), no_taa, no_ssao (SSAO and
-## SSIL), no_soft (the directional shadows' soft filter), no_sdfgi.
+## SSIL), no_soft (the directional shadows' soft filter), no_sdfgi, no_gather (SDFGI's screen gather), no_pixel_history
+## (the screen gather's pixels' history, milestone 191), mip0 and mip_quarter (the textures' mipmap bias +0.5 and +0.25:
+## TAA's own -0.5 cancelled, or half of it).
+##
+## --lite=1 keeps the square's buildings only (as weathering_look.gd's: the whole town outgrows lavapipe's memory in
+## the cloud); --velocity=1 also saves each frame's motion vectors (<dir>/v%04d.bin, as play_look.gd's) for
+## reproj_flicker.py.
 
 const VIEWS := {
 	# from, to, the way it moves (m a second)
@@ -27,6 +33,9 @@ const VIEWS := {
 	"walk": [Vector3(-6.0, 1.8, 6.0), Vector3(-6.0, 4.0, -18.0), Vector3(0.0, 0.0, -1.4)],
 	"ref": [Vector3(-9.0, 1.8, 15.0), Vector3(-21.0, 5.0, 2.0), Vector3(0.0, 0.0, -1.4)],
 }
+
+const KEEP := ["PalazzoOcra", "Campanile", "CasaCrema", "PalazzoSiena", "CasaBianca", "CasaOcraBassa", "CasaRosa",
+		"CasaRiferimento", "Fountain"]
 
 
 func _init() -> void:
@@ -41,6 +50,8 @@ func _init() -> void:
 	var shader_params := []
 	var speed := 0.0
 	var turn := 0.0
+	var lite := false
+	var velocity: CompositorEffect = null
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			out = a.get_slice("=", 1)
@@ -67,12 +78,28 @@ func _init() -> void:
 			turn = float(a.get_slice("=", 1))
 		elif a == "--plain_glass=1":
 			plain_glass = true
+		elif a == "--lite=1":
+			lite = true
+		elif a == "--velocity=1":
+			velocity = (load("res://tools/velocity_dump.gd") as GDScript).new()
 		elif a.begins_with("--set="):
 			var kv := a.substr(6)
 			var value = str_to_var(kv.get_slice("=", 1))
 			ProjectSettings.set_setting(kv.get_slice("=", 0), value if value != null else kv.get_slice("=", 1))
 	DirAccess.make_dir_recursive_absolute(out)
 	var sc: Node = (load("res://rooftops/rooftops.tscn") as PackedScene).instantiate()
+	if lite:
+		for n in ["Skyline", "CityHouses", "Landscape", "Trees_cypress", "Trees_olive", "Trees_pine", "Trees_broadleaf",
+				"Villas", "Trees_villa_cypress", "Birds", "Crowd", "CameraRig", "ReferenceShot", "Demo", "PipelineWarmer"]:
+			var c := sc.get_node_or_null(n)
+			if c:
+				sc.remove_child(c)
+				c.free()
+		var town := sc.get_node("Town")
+		for c in town.get_children():
+			if not (c.name in KEEP):
+				town.remove_child(c)
+				c.free()
 	if plain_glass:
 		# Every mesh's glass a plain dark material (surface overrides; the city's houses' shared meshes changed).
 		var glass: Material = load("res://rooftops/materials/glass.tres")
@@ -120,6 +147,13 @@ func _init() -> void:
 	var env: Environment = null
 	for n in sc.find_children("*", "WorldEnvironment", true, false):
 		env = (n as WorldEnvironment).environment
+		if velocity:
+			var we := n as WorldEnvironment
+			var comp: Compositor = we.compositor if we.compositor else Compositor.new()
+			var effects := comp.compositor_effects
+			effects.append(velocity)
+			comp.compositor_effects = effects
+			we.compositor = comp
 	for config in configs:
 		_configure(config, env, true)
 		var dir := out if config == "" else out.path_join(config)
@@ -133,6 +167,13 @@ func _init() -> void:
 			if i >= settle:
 				await RenderingServer.frame_post_draw
 				root.get_texture().get_image().save_png("%s/f%04d.png" % [dir, i - settle])
+				if velocity:
+					var f := FileAccess.open("%s/v%04d.bin" % [dir, i - settle], FileAccess.WRITE)
+					var sz: Vector2i = velocity.get("size")
+					f.store_32(sz.x)
+					f.store_32(sz.y)
+					f.store_buffer(velocity.get("bytes"))
+					f.close()
 		_configure(config, env, false)
 		print("flicker_look: %s %d frames" % [config, still + moving])
 	quit()
@@ -156,6 +197,13 @@ func _configure(p_config: String, p_env: Environment, p_off: bool) -> void:
 		"no_sdfgi":
 			if p_env:
 				p_env.sdfgi_enabled = not p_off
+		"no_gather":
+			ProjectSettings.set_setting("rendering/fellow/sdfgi/screen_gather", not p_off)
+		"no_pixel_history":
+			ProjectSettings.set_setting("rendering/fellow/sdfgi/screen_gather_pixel_history", 1 if p_off else 8)
+		"mip0", "mip_quarter":
+			# The textures' mipmaps as without TAA (it biases them by -0.5: sharper, more sub-pixel detail), or halfway.
+			RenderingServer.viewport_set_texture_mipmap_bias(root.get_viewport_rid(), (0.5 if p_config == "mip0" else 0.25) if p_off else 0.0)
 
 
 ## Every ShaderMaterial of the scene's meshes whose shader is <shader>.gdshader given each [shader, parameter, value].

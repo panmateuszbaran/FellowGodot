@@ -97,6 +97,14 @@ public:
 		bool history = false;
 		float max_samples = 16.0;
 		bool persistent = true; // a probe keeps its point and history while that point stays in view in its tile
+		// The pixels' own history (sdfgi/screen_gather_pixel_history; milestone 191): the resolve's result averaged over
+		// up to `pixel_history` frames where the pixel's point stayed in view (1: none). This frame's and the previous
+		// frame's result (the ambient buffer's size: rgb the light, a its frames) and its pixels' distance from the eye.
+		int pixel_history = 1;
+		bool pixel_history_valid = false; // the previous frame's result holds data
+		RID resolved[2];
+		RID resolved_distance[2];
+		Vector3 prev_eye;
 		// The rays against the ray tracing scene instead (raytracing/gi_screen_gather): the hits lit as DDGI's rays' are
 		// (the sun, its probes for the further bounces, emission); `ambient` is then DDGI's screen pass texture.
 		bool rt = false;
@@ -127,6 +135,7 @@ private:
 		MODE_TRACE_RT_ARRAY,
 		MODE_TRACE_RT_FETCH,
 		MODE_TRACE_RT_FETCH_ARRAY,
+		MODE_RESOLVE_PIXEL_HISTORY,
 		MODE_MAX,
 	};
 
@@ -138,7 +147,7 @@ private:
 		float trace[4];
 	};
 
-	struct UBO { // std140, as Params in fellow_sdf_gather.glsl (464 bytes)
+	struct UBO { // std140, as Params in fellow_sdf_gather.glsl (480 bytes)
 		float inv_projection[16];
 		float view_to_world[16];
 		float prev_world_to_clip[16];
@@ -153,6 +162,7 @@ private:
 		int32_t screen[4];
 		int32_t probes[4];
 		int32_t frame[4];
+		float temporal[4];
 	};
 
 	FellowSdfGatherShaderRD shader;

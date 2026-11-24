@@ -135,6 +135,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/sdfgi/screen_gather_filter", true); // the probes' light averaged over their neighbours on the same surface before the pixels read it
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_history", PROPERTY_HINT_RANGE, "1,64,1"), 16); // frames a probe's light is averaged over (where its surface stays in view)
 	GLOBAL_DEF("rendering/fellow/sdfgi/screen_gather_persistent", true); // a probe keeps its point and its history while that point stays in view in its tile (milestone 168)
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/sdfgi/screen_gather_pixel_history", PROPERTY_HINT_RANGE, "1,32,1"), 8); // frames a pixel's gathered light is averaged over where its surface point stays in view, followed by the camera's motion (1: none; milestone 191)
 	GLOBAL_DEF("rendering/fellow/raytracing/gi_screen_gather", false); // decision 0308: with DDGI's screen pass, the first bounce traced per screen probe (sdfgi/screen_gather_* tile, rays, history, filter), DDGI's probes for the further bounces; no sky leak then
 	GLOBAL_DEF("rendering/fellow/raytracing/gi_screen_gather_feedback", true); // the gather's rays' further bounces from the previous frame's screen probes where it saw their hits (DDGI's probes elsewhere)
 	GLOBAL_DEF("rendering/fellow/raytracing/reflections", false); // decision 0084: traced reflections in place of SSR

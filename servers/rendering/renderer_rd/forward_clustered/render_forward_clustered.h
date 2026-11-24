@@ -149,6 +149,11 @@ public:
 		Projection fellow_sdf_gather_prev_world_to_clip;
 		bool fellow_sdf_gather_history = false;
 		uint32_t fellow_sdf_gather_frame = 0;
+		// Its pixels' history (sdfgi/screen_gather_pixel_history): the size of its textures (the ambient buffer's),
+		// whether the previous frame's holds data, the previous frame's eye.
+		Size2i fellow_sdf_gather_pixel_size;
+		bool fellow_sdf_gather_pixel_valid = false;
+		Vector3 fellow_sdf_gather_prev_eye;
 		// Ray-traced reflections (decision 0084).
 		uint32_t fellow_rt_reflection_frame = 0;
 		bool fellow_rt_reflection_history = false;

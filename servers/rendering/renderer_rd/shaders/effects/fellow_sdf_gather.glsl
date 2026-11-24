@@ -27,7 +27,11 @@
 // MODE_FILTER: per probe, the probes of the 5 x 5 tiles around it on its surface (their distance from its plane, their
 // normal) averaged, for the resolve (the history keeps the unfiltered light).
 // MODE_RESOLVE: per pixel of SDFGI's ambient buffer, the probes of the 2 x 2 tiles around it weighed by their distance
-// from its plane and their normal; written in place of SDFGI's diffuse light (its reflections stay).
+// from its plane and their normal; written in place of SDFGI's diffuse light (its reflections stay). With
+// FELLOW_PIXEL_HISTORY (sdfgi/screen_gather_pixel_history, milestone 191) the result is also averaged over the frames
+// in which the pixel's surface point stayed in view, followed back by the camera's motion: under a moving camera the
+// probes the pixels read change (new tiles, new points, a probe's first frames with 16 rays), and the light of a
+// shaded wall, lit by nothing else, shimmered where the TAA's clamp lets a whole flat area's change through.
 
 #include "../oct_inc.glsl"
 #if defined(FELLOW_TRACE_RT)
@@ -49,6 +53,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	ivec4 screen; // xy the internal size, zw SDFGI's ambient buffer size
 	ivec4 probes; // xy the probe grid, z tile (pixels), w rays per probe
 	ivec4 frame; // x frame, y 1: the history is valid, z 1: persistent probes, w 1: the ray-traced hits' further bounces from the previous frame's probes
+	vec4 temporal; // xyz the previous frame's eye, w the pixels' history's largest frame count (0: the previous frame's resolve holds nothing)
 }
 params;
 
@@ -605,6 +610,51 @@ layout(set = 0, binding = 14) uniform texture2D probe_position;
 layout(set = 0, binding = 15) uniform texture2D probe_normal;
 layout(rgba16f, set = 0, binding = 16) uniform restrict image2D ambient_buffer; // SDFGI's
 
+#if defined(FELLOW_PIXEL_HISTORY)
+layout(set = 0, binding = 21) uniform texture2D prev_resolved; // the previous frame's result: rgb the light, a its frames
+layout(set = 0, binding = 22) uniform texture2D prev_resolved_distance; // r its pixel's distance from that frame's eye (0: none)
+layout(rgba16f, set = 0, binding = 23) uniform restrict writeonly image2D out_resolved;
+layout(r32f, set = 0, binding = 24) uniform restrict writeonly image2D out_resolved_distance;
+
+// The previous frame's light where this surface point was: the 2 x 2 texels around its projection then, each kept
+// where it lay at the point's distance from that frame's eye (the same surface, not one it now hides or disoccludes),
+// bilinearly weighed. a: the frames behind it, 0 where none.
+vec4 pixel_history(vec3 p_pos, vec3 p_normal) {
+	vec4 clip = params.prev_world_to_clip * vec4(p_pos, 1.0);
+	if (clip.w <= 0.0) {
+		return vec4(0.0);
+	}
+	vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
+	vec2 g = uv * vec2(params.screen.zw) - 0.5;
+	ivec2 g0 = ivec2(floor(g));
+	vec2 f = g - vec2(g0);
+	vec3 to_eye = params.temporal.xyz - p_pos;
+	float expected = length(to_eye);
+	// A texel's width on the surface along the view, as it leans away (a grazing wall's neighbours lie far apart).
+	float facing = max(abs(dot(p_normal, to_eye / max(expected, 1e-4))), 0.2);
+	float texel = params.footprint.x * float(params.screen.y) / float(params.screen.w);
+	float tolerance = expected * (0.01 + texel * 1.5 / facing) + 0.01;
+	vec4 sum = vec4(0.0);
+	float wsum = 0.0;
+	for (int i = 0; i < 4; i++) {
+		ivec2 o = ivec2(i & 1, i >> 1);
+		ivec2 q = g0 + o;
+		if (any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, params.screen.zw))) {
+			continue;
+		}
+		float d = texelFetch(sampler2D(prev_resolved_distance, linear_sampler), q, 0).r;
+		if (d <= 0.0 || abs(d - expected) > tolerance) {
+			continue;
+		}
+		vec2 b2 = mix(1.0 - f, f, vec2(o));
+		float w = b2.x * b2.y;
+		sum += texelFetch(sampler2D(prev_resolved, linear_sampler), q, 0) * w;
+		wsum += w;
+	}
+	return wsum > 0.25 ? sum / wsum : vec4(0.0);
+}
+#endif
+
 void main() {
 	ivec2 at = ivec2(gl_GlobalInvocationID.xy);
 	if (any(greaterThanEqual(at, params.screen.zw))) {
@@ -615,6 +665,10 @@ void main() {
 	vec3 pos, normal;
 	float distance;
 	if (!surface_at(pixel, pos, normal, distance)) {
+#if defined(FELLOW_PIXEL_HISTORY)
+		imageStore(out_resolved, at, vec4(0.0));
+		imageStore(out_resolved_distance, at, vec4(0.0));
+#endif
 		return;
 	}
 	int tile = params.probes.z;
@@ -643,12 +697,34 @@ void main() {
 		sum += texelFetch(sampler2D(probe_irradiance, linear_sampler), p, 0).rgb * w;
 		wsum += w;
 	}
+#if defined(FELLOW_PIXEL_HISTORY)
+	vec4 sdfgi = imageLoad(ambient_buffer, at);
+	vec3 light = sdfgi.rgb; // no probe on this surface nearby: SDFGI's own light
+	float alpha = sdfgi.a;
+	if (wsum > 1e-4) {
+		float confidence = clamp(wsum * 8.0, 0.0, 1.0);
+		light = mix(sdfgi.rgb, sum / wsum, confidence);
+		alpha = max(sdfgi.a, confidence);
+	}
+	float frames = 1.0;
+	if (params.temporal.w > 1.0) {
+		vec4 h = pixel_history(pos, normal);
+		if (h.a > 0.0) {
+			frames = min(h.a + 1.0, params.temporal.w);
+			light = mix(h.rgb, light, 1.0 / frames);
+		}
+	}
+	imageStore(out_resolved, at, vec4(light, frames));
+	imageStore(out_resolved_distance, at, vec4(distance, 0.0, 0.0, 0.0));
+	imageStore(ambient_buffer, at, vec4(light, alpha));
+#else
 	if (wsum <= 1e-4) {
 		return; // no probe on this surface nearby: SDFGI's own light stays
 	}
 	vec4 sdfgi = imageLoad(ambient_buffer, at);
 	float confidence = clamp(wsum * 8.0, 0.0, 1.0);
 	imageStore(ambient_buffer, at, vec4(mix(sdfgi.rgb, sum / wsum, confidence), max(sdfgi.a, confidence)));
+#endif
 }
 
 #endif

@@ -318,6 +318,14 @@ def keyed(keys, t, loop=False, length=None):
 # ------------------------------------------------------------------ actions
 
 
+def _new_fcurve(act, obj, dp, index, group):
+	"""An F-curve of the action: Blender 4's (act.fcurves), or Blender 4.4 and 5's layered actions (milestone 192: the
+	bpy module of Blender 5 has no Action.fcurves)."""
+	if hasattr(act, "fcurves"):
+		return act.fcurves.new(dp, index=index, action_group=group)
+	return act.fcurve_ensure_for_datablock(obj, dp, index=index, group_name=group)
+
+
 def write_action(rig, name, frames, loop):
 	"""An action from the snapshots (one a frame at FPS): rotations as quaternions (each frame on the side of the one
 	before it), locations where they move. For a loop the first frame is repeated at the end."""
@@ -346,7 +354,7 @@ def write_action(rig, name, frames, loop):
 		for path, count, series in paths:
 			dp = 'pose.bones["%s"].%s' % (bone, path)
 			for k in range(count):
-				fc = act.fcurves.new(dp, index=k, action_group=bone)
+				fc = _new_fcurve(act, obj, dp, k, bone)
 				fc.keyframe_points.add(n)
 				co = []
 				for i in range(n):

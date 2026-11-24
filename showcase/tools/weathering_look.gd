@@ -20,6 +20,8 @@ const VIEWS := {
 	"close": [Vector3(13.5, 6.4, 1.5), Vector3(17.6, 5.8, -3.5), 50.0],
 	"foot": [Vector3(-3.5, 1.6, 9.5), Vector3(-9.0, 2.6, 14.5), 60.0],
 	"rustic": [Vector3(15.5, 1.7, 0.5), Vector3(21.0, 1.8, -3.0), 55.0],
+	"ref": [Vector3(-12.0, 1.7, 13.0), Vector3(-21.0, 6.0, 2.0), 62.0],
+	"ref2": [Vector3(-14.0, 1.7, 8.0), Vector3(-23.0, 6.5, 1.0), 62.0],
 }
 ## --lite=1's town.
 const KEEP := ["PalazzoOcra", "Campanile", "CasaCrema", "PalazzoSiena", "CasaBianca", "CasaOcraBassa", "CasaRosa",

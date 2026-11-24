@@ -6,7 +6,7 @@ extends SceneTree
 ## temporal accumulation has settled.
 ## --set=<setting>=<value> (repeatable) changes a project setting first (e.g.
 ## --set=rendering/fellow/post/clouds/realism=false); --scene=<property>=<value> one of rooftops.gd's (e.g.
-## --scene=sky_brightness=2).
+## --scene=sky_brightness=2); --env=<property>=<value> one of the Environment's (milestone 191, e.g. --env=fog_sky_affect=0.3).
 ##
 ##   godot --path showcase --rendering-driver vulkan --resolution 1280x720 --fixed-fps 30 -s res://tools/sky_look.gd -- \
 ##       --out=<dir> [--views=sun,side,away,up,zenith,sat] [--settle=40]
@@ -31,6 +31,8 @@ func _init() -> void:
 	var settle := 40
 	var scene_props := {}
 	var frames := 0
+	var env_props := {}
+	var sky_props := {}
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			out = a.get_slice("=", 1)
@@ -47,6 +49,12 @@ func _init() -> void:
 		elif a.begins_with("--scene="):
 			var kv := a.substr(8)
 			scene_props[kv.get_slice("=", 0)] = str_to_var(kv.get_slice("=", 1))
+		elif a.begins_with("--skymat="):
+			var kv := a.substr(9)
+			sky_props[kv.get_slice("=", 0)] = str_to_var(kv.get_slice("=", 1))
+		elif a.begins_with("--env="):
+			var kv := a.substr(6)
+			env_props[kv.get_slice("=", 0)] = str_to_var(kv.get_slice("=", 1))
 	DirAccess.make_dir_recursive_absolute(out)
 
 	# The rooftops scene's sky, as rooftops.tscn sets it up (its square left out).
@@ -61,6 +69,8 @@ func _init() -> void:
 	var env := Environment.new()
 	var sky_mat := ShaderMaterial.new()
 	sky_mat.shader = load("res://shaders/atmosphere_sky.gdshader")
+	for k in sky_props:
+		sky_mat.set_shader_parameter(k, sky_props[k])
 	var sky := Sky.new()
 	sky.sky_material = sky_mat
 	sky.process_mode = Sky.PROCESS_MODE_REALTIME
@@ -77,6 +87,8 @@ func _init() -> void:
 	env.fog_aerial_perspective = 0.8
 	env.adjustment_enabled = true
 	env.adjustment_saturation = 0.9
+	for k in env_props:
+		env.set(k, env_props[k])
 	var we := WorldEnvironment.new()
 	we.name = "WorldEnvironment"
 	we.environment = env

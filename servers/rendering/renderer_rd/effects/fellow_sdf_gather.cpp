@@ -48,6 +48,7 @@ FellowSDFGather::FellowSDFGather() {
 	modes.push_back("\n#define MODE_TRACE\n#define FELLOW_TRACE_RT\n#define FELLOW_RADIANCE_ARRAY\n");
 	modes.push_back("\n#define MODE_TRACE\n#define FELLOW_TRACE_RT\n#define FELLOW_POSITION_FETCH\n");
 	modes.push_back("\n#define MODE_TRACE\n#define FELLOW_TRACE_RT\n#define FELLOW_POSITION_FETCH\n#define FELLOW_RADIANCE_ARRAY\n");
+	modes.push_back("\n#define MODE_RESOLVE\n#define FELLOW_PIXEL_HISTORY\n");
 	shader.initialize(modes);
 	rt_supported = RD::get_singleton()->has_feature(RD::SUPPORTS_RAY_QUERY);
 	position_fetch = rt_supported && RD::get_singleton()->fellow_ray_position_fetch_supported();
@@ -138,6 +139,11 @@ void FellowSDFGather::process(const Params &p_params) {
 	u.frame[1] = p_params.history ? 1 : 0;
 	u.frame[2] = p_params.persistent ? 1 : 0;
 	u.frame[3] = (p_params.rt && p_params.feedback) ? 1 : 0;
+	const bool pixel_history = p_params.pixel_history > 1 && p_params.resolved[0].is_valid() && p_params.resolved[1].is_valid() && p_params.resolved_distance[0].is_valid() && p_params.resolved_distance[1].is_valid();
+	u.temporal[0] = p_params.prev_eye.x;
+	u.temporal[1] = p_params.prev_eye.y;
+	u.temporal[2] = p_params.prev_eye.z;
+	u.temporal[3] = (pixel_history && p_params.pixel_history_valid) ? float(p_params.pixel_history) : 0.0f;
 	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 
 	const int cur = p_params.current & 1;
@@ -242,9 +248,19 @@ void FellowSDFGather::process(const Params &p_params) {
 		RD::Uniform u_nrm(RD::UNIFORM_TYPE_TEXTURE, 15, p_params.normal[cur]);
 		RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 16, p_params.ambient);
 		RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
-		RID shader_rd = shader.version_get_shader(shader_version, MODE_RESOLVE);
-		RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[MODE_RESOLVE]);
-		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_nr, u_sampler, u_irr, u_pos, u_nrm, u_dest), 0);
+		if (pixel_history) {
+			RD::Uniform u_prev_res(RD::UNIFORM_TYPE_TEXTURE, 21, p_params.resolved[prev]);
+			RD::Uniform u_prev_dist(RD::UNIFORM_TYPE_TEXTURE, 22, p_params.resolved_distance[prev]);
+			RD::Uniform u_out_res(RD::UNIFORM_TYPE_IMAGE, 23, p_params.resolved[cur]);
+			RD::Uniform u_out_dist(RD::UNIFORM_TYPE_IMAGE, 24, p_params.resolved_distance[cur]);
+			RID shader_rd = shader.version_get_shader(shader_version, MODE_RESOLVE_PIXEL_HISTORY);
+			RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[MODE_RESOLVE_PIXEL_HISTORY]);
+			RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_nr, u_sampler, u_irr, u_pos, u_nrm, u_dest, u_prev_res, u_prev_dist, u_out_res, u_out_dist), 0);
+		} else {
+			RID shader_rd = shader.version_get_shader(shader_version, MODE_RESOLVE);
+			RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[MODE_RESOLVE]);
+			RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_nr, u_sampler, u_irr, u_pos, u_nrm, u_dest), 0);
+		}
 		RD::get_singleton()->compute_list_dispatch_threads(list, p_params.ambient_size.x, p_params.ambient_size.y, 1);
 		RD::get_singleton()->compute_list_end();
 	}

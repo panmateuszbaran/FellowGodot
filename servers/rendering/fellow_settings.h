@@ -626,6 +626,9 @@ inline int sdfgi_screen_gather_history() {
 inline bool sdfgi_screen_gather_persistent() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/sdfgi/screen_gather_persistent");
 }
+inline int sdfgi_screen_gather_pixel_history() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/sdfgi/screen_gather_pixel_history");
+}
 // raytracing/reflections (decision 0084): where the environment enables SSR, a traced reflection per pixel up to
 // reflections_max_roughness in place of SSR (and of the probes' and the sky's specular light there).
 inline bool raytracing_reflections() {

@@ -5542,10 +5542,34 @@ void RenderForwardClustered::_fellow_screen_gather(RenderDataRD *p_render_data, 
 	params.history = rbd->fellow_sdf_gather_history;
 	params.max_samples = float(MAX(1, Fellow::sdfgi_screen_gather_history()));
 	params.persistent = Fellow::sdfgi_screen_gather_persistent();
+	// The pixels' own history (milestone 191): two results the ambient buffer's size and their pixels' distances.
+	params.pixel_history = CLAMP(Fellow::sdfgi_screen_gather_pixel_history(), 1, 64);
+	static const StringName resolved_names[2][2] = { { SNAME("resolved0"), SNAME("resolved1") }, { SNAME("resolved_distance0"), SNAME("resolved_distance1") } };
+	if (params.pixel_history > 1) {
+		const StringName pixel_scope = SNAME("fellow_sdf_gather_pixels");
+		if (rbd->fellow_sdf_gather_pixel_size != params.ambient_size || !rb->has_texture(pixel_scope, resolved_names[0][0])) {
+			rb->clear_context(pixel_scope);
+			const uint32_t usage = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
+			for (int i = 0; i < 2; i++) {
+				rb->create_texture(pixel_scope, resolved_names[0][i], RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, params.ambient_size);
+				rb->create_texture(pixel_scope, resolved_names[1][i], RD::DATA_FORMAT_R32_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, params.ambient_size);
+			}
+			rbd->fellow_sdf_gather_pixel_size = params.ambient_size;
+			rbd->fellow_sdf_gather_pixel_valid = false;
+		}
+		for (int i = 0; i < 2; i++) {
+			params.resolved[i] = rb->get_texture(pixel_scope, resolved_names[0][i]);
+			params.resolved_distance[i] = rb->get_texture(pixel_scope, resolved_names[1][i]);
+		}
+		params.pixel_history_valid = rbd->fellow_sdf_gather_pixel_valid && rbd->fellow_sdf_gather_history;
+		params.prev_eye = rbd->fellow_sdf_gather_prev_eye;
+	}
 	fellow_sdf_gather->process(params);
 	rbd->fellow_sdf_gather_prev_world_to_clip = world_to_clip;
 	rbd->fellow_sdf_gather_history = true;
 	rbd->fellow_sdf_gather_frame++;
+	rbd->fellow_sdf_gather_pixel_valid = params.pixel_history > 1;
+	rbd->fellow_sdf_gather_prev_eye = p_render_data->scene_data->cam_transform.origin;
 }
 
 // FellowEngine DDGI (docs/decisions/0083-ddgi.md): the probe volume around the camera, traced and blended.

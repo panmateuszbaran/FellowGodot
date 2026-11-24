@@ -9,6 +9,23 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 191 — Flicker under motion; the fountain, the controls and the camera (2026-11-24)
+
+- Flicker measured along the scene's motion vectors (decision 0333): `showcase/tools/velocity_dump.gd` reads them
+  back, `play_look.gd` plays a showcase demo's shot with one feature off, `benchmarks/tools/flicker/reproj_flicker.py`
+  follows each pixel to the frames before and after and measures what does not move with its surface. On the RTX over
+  the demo's run: TAA off 34 % of the pixels flicker by more than 3 levels (before milestone 189: 14.9 %; now 8.8 %);
+  the sun's shadows, their cache, filter and contact shadows, the weathering, the parallax and LOD add nothing; SDFGI's
+  screen gather is what a feature adds most (off: 7.4 %), in the shaded parts lit only by indirect light.
+- `rendering/fellow/sdfgi/screen_gather_pixel_history` (new, 8 frames): the screen gather's resolve (and the ray-traced
+  gather's) averaged per pixel over the frames its point stayed in view, followed by the camera's motion and kept only
+  where the point lay at the same distance. Lavapipe: the shaded walls' flicker 11.2 → 10.5 % (> 3 levels), 4.1 → 3.9 %
+  (> 8); the light's level unchanged. 50 MB at 1080p. On the RTX to be measured.
+- The showcase's player walks off drops under 1.3 m (the fountain's rim had held it: the edge guard stopped at 0.7 m)
+  and goes over a deeper one after pushing at it for 0.35 s; a jump buffer (0.15 s), coyote time (0.12 s), falls 1.45
+  times the gravity of rises, a hard brake when turning back at speed. Its camera leans into turns, dips on landings,
+  drops back as the body speeds up, levels itself when the mouse rests, and turns with a pad's right stick.
+
 ## Milestone 190 — Weathering (2026-11-24)
 
 - `FellowWeathering3D` (new, module `fellow_fluid`; decision 0332): years of weather on a scene's walls from their
