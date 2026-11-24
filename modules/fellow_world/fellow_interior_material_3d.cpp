@@ -378,11 +378,12 @@ void fragment() {
 			room = mix(room, sc, max(shade, flex * 0.8));
 		}
 
-		// Curtains just behind the glass: drapes drawn to either side, or a net across it.
+		// Curtains just behind the glass: drapes drawn to either side, or a net across it; none behind a shop's window or a
+		// door's glass (its vertex colour's alpha under 0.5).
 		vec2 cw = win + vec2(dx, dy) * (0.1 / dz);
 		float wc = px * (dist + 0.1 / dz) / dist;
 		float ck = fi_h31(key + seed + 301.0);
-		if (ck < curtain_share) {
+		if (ck < curtain_share && COLOR.a > 0.5) {
 			// Folds of uneven width (about 20 cm: flat beyond), softer near the floor where the cloth hangs straight.
 			float wave = sin(cw.x * (26.0 + 12.0 * r5) + fi_noise(cw * vec2(4.0, 0.4)) * 6.0) * (1.0 - smoothstep(0.03, 0.09, wc));
 			if (ck < curtain_share * 0.6) {
@@ -397,7 +398,7 @@ void fragment() {
 				room = mix(room, cc * shade * daylight * daylight_color.rgb * 1.2, drape);
 			} else {
 				// A net: sheer, its folds soft.
-				room = mix(room, vec3(0.85, 0.83, 0.78) * (0.85 + 0.15 * wave) * daylight * daylight_color.rgb * 1.2, 0.35);
+				room = mix(room, vec3(0.85, 0.83, 0.78) * (0.85 + 0.15 * wave) * daylight * daylight_color.rgb * 0.9, 0.3);
 			}
 		}
 	}

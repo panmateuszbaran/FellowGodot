@@ -3,7 +3,8 @@ extends RefCounted
 ## right of the window's middle and up from its room's floor, in the facade's frame (its side the up axis crossed with
 ## its normal, as the material has it). A window is a connected piece of the glass (its triangles sharing corners); its
 ## room's floor 0.9 m under it (a sill), less for a tall window (a door's glass, a shop's) so that it fits under the
-## room's ceiling.
+## room's ceiling; a tall window's glass (a door's, a shop's: its room's floor at its bottom) is given a vertex colour
+## whose alpha is 0 (the material draws no curtains behind it), the others white.
 ##
 ##   var arrays := WindowUV2.add(mesh.surface_get_arrays(i), 3.6)  # then add_surface_from_arrays(..., arrays)
 
@@ -46,6 +47,8 @@ static func add(p_arrays: Array, p_room_height := 3.6) -> Array:
 		windows[r]["vertices"].append(i)
 	var uv2 := PackedVector2Array()
 	uv2.resize(v.size())
+	var colors := PackedColorArray()
+	colors.resize(v.size())
 	for r in windows:
 		var w: Dictionary = windows[r]
 		var n: Vector3 = w["normal"].normalized() if w["normal"].length() > 1e-6 else Vector3(0, 0, 1)
@@ -66,8 +69,10 @@ static func add(p_arrays: Array, p_room_height := 3.6) -> Array:
 		var sill := clampf(p_room_height - 0.35 - (top - bottom), 0.0, 0.9)
 		for i in w["vertices"]:
 			uv2[i] = Vector2(v[i].dot(side) - middle, v[i].y - bottom + sill)
+			colors[i] = Color(1, 1, 1, 1.0 if sill > 0.0 else 0.0)
 	var out := p_arrays.duplicate()
 	out[Mesh.ARRAY_TEX_UV2] = uv2
+	out[Mesh.ARRAY_COLOR] = colors
 	return out
 
 

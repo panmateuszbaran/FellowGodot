@@ -12,7 +12,7 @@
 	</tutorials>
 	<members>
 		<member name="curtain_share" type="float" setter="set_curtain_share" getter="get_curtain_share" default="0.6">
-			The share of windows with curtains: of them six in ten drapes drawn to either side, four a net across the glass.
+			The share of windows with curtains: of them six in ten drapes drawn to either side, four a net across the glass. A window whose glass's vertex colour has an alpha under 0.5 (a shop's window, a door's glass) has none.
 		</member>
 		<member name="daylight" type="float" setter="set_daylight" getter="get_daylight" default="1.0">
 			How bright the rooms are by day, near the window: the light falls off into the room, to a tenth at its back wall, and less into its corners. The rooms glow with it (it is not the scene's light): lower it at dusk, to [code]0.05[/code] or so at night, when [member lamp_share] lights some.
