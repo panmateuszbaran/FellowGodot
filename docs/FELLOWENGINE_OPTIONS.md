@@ -1516,6 +1516,35 @@ Play the game through its weathers, lights and places once with `record` on, kee
 each node of an exported scene for the shaders it makes from its setup (`FellowBakeShaders::register_object_provider()`:
 a burnable's burning materials).
 
+## Rooms behind windows (milestone 188)
+
+`FellowInteriorMaterial3D` (module `fellow_world`; decision 0330) is a material for windows' glass that shows a room
+behind each window without its geometry (interior mapping): the view's ray followed into a box behind the glass —
+walls (plaster or paper, panelling, a skirting and a cornice; a painting, a door, a bookcase or a wardrobe on the back
+wall, pictures on the side walls), a floor (cotto, boards, parquet or stone, a rug), a ceiling (beams or plaster),
+furniture on two planes across the room, a hanging lamp, curtains just behind the glass (none behind a shop's window
+or a door's glass: the glass's vertex colour's alpha under 0.5) — lit by the day through the window and, in some rooms,
+their lamp, seen through glass with Fresnel's law, grime, the sky's reflection and old panes out of true. Every
+pattern is filtered over the pixel's footprint (no flicker under TAA). One shader for every instance, made once and
+baked with the project's shaders.
+
+| property | default | what it does |
+|---|---|---|
+| `rooms_from_uv2` | on | each window its own room, centred on it, from the glass's UV2 (the metres right of the window's middle and up from its room's floor); off: a grid of rooms `room_size` apart along the facade in the mesh's space, from `floor_height` |
+| `room_size` | (3.6, 3.6, 4.5) | a room's width, height and depth (m) |
+| `seed` | 0 | another set of rooms for the same windows |
+| `daylight`, `daylight_color` | 1.0, warm white | the rooms' light by day near the window (falling off to a tenth at the back wall); lower it at dusk, to about 0.05 at night |
+| `lamp_share`, `lamp_energy`, `lamp_color` | 0, 3, warm | the share of rooms whose hanging lamp is lit, and its light |
+| `curtain_share` | 0.6 | the share of windows with curtains (six in ten of them drapes, four nets) |
+| `furniture` | 1 | how furnished the rooms are (0: empty) |
+| `glass_tint`, `glass_roughness`, `grime` | pale green-grey, 0.08, 0.25 | the glass's colour, its roughness, its dirt (dimmer, rougher patches) |
+| `reflection` | 0.35 | how much of the sky's reflection the glass keeps (a street's other houses hide most of it) |
+| `pane_size` | (0, 0) | the panes' size (m): each pane's normal a little out of true; 0: flat glass |
+
+The showcase's `tools/window_uv2.gd` gives a mesh's glass its UV2 (each connected piece a window, in its facade's
+frame; a tall window's room floor at its bottom and its vertex alpha 0) — the rooftops' houses use it. The RTX at 1080p:
+no measurable cost against the dark glass it replaced.
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |
@@ -1550,7 +1579,12 @@ a burnable's burning materials).
 | Autotune | `autotune/enabled` (chooses the scene-dependent exact options by measurement), `autotune/continue_undecided` and `autotune/skip_creation_frames` (from `fellow153`: an undecided evaluation of an option that starts off is continued next when it leans on; frames that compile pipelines are not counted), `autotune/prepare_pipelines` (from `fellow158`: an evaluation that switches a pipeline bit waits until the pipelines of the materials in view with the other value are compiled, instead of drawing with the ubershader in its first frames) | 0020, 0064, 0068 |
 
 `postfx/taa_resolve_v2` (on) is a look change from milestone 1 (TAA with reverse-Z dilation and YCoCg variance
-clipping, decision 0001).
+clipping, decision 0001). From milestone 189 (decision 0331) it keeps its history where it is trusted (inside the
+neighbourhood's colour box) the more the jittered frame disagrees with it, `postfx/taa_v2_stability` (1.0; 0: milestone
+188's resolve), and no longer pulls a moving pixel's history towards the frame's 3x3 mean, `postfx/taa_v2_motion_soften`
+0.35 → 0: the jitter's flicker on detail finer than a pixel (shutters' slats, rough stone, joints) averaged instead of
+followed — the rooftops on the RTX, the buildings' pixels flickering by more than 3 levels 7.6 → 0.7 % with the camera
+still and 9.6 → 1.9 % (motion-compensated) moving, steadier than stock's TAA (1.9 % and 2.5 %).
 
 ## Fast physics mode (off by default; not stock's results)
 
