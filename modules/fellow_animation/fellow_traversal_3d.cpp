@@ -676,7 +676,15 @@ Vector3 FellowTraversal3D::_path_mantle(double p_t, const Vector3 &p_edge, const
 			const float rise = MAX(0.0f, y_top - p0.y);
 			const float y_cross = y_top - 0.01f - MIN(MANTLE_CROSS * rise, MANTLE_CROSS_MAX);
 			int last_held = -1;
-			for (int k = n - 2; k >= 0; k--) {
+			// (milestone 197: only up to the root's highest — a vault's root comes down again and steps on after its
+			// landing: a step up there had held the body at the wall through the whole vault)
+			int top_k = 0;
+			for (int k = 1; k < n; k++) {
+				if (clip_root[k].y > clip_root[top_k].y) {
+					top_k = k;
+				}
+			}
+			for (int k = MIN(n - 2, top_k); k >= 0; k--) {
 				const float yk = p0.y + clip_root[k].y * sv;
 				if (yk < y_cross && clip_root[k].y < rise_max * 0.98f && clip_root[k + 1].y >= clip_root[k].y) {
 					last_held = k;

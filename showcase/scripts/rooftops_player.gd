@@ -27,10 +27,10 @@ const MOCAP_GAITS := ["gait_walk", "gait_jog", "gait_run", "gait_sprint"]
 # face down (the character fell on its face after every jump and turned upright on landing). Milestone 196: the hangs
 # and the moves from hold to hold Mixamo's again (milestone 195 had kept the mannequin's: Mixamo's hang had bobbed — a
 # loop cut from a catch —, its moves fought the IK); the climb up a free wall (ladders too) the mannequin's.
-# Mixamo's climb up from a hang ("Braced Hang To Crouch") and vault are retargeted with their root motion but not played
-# yet: over CasaCrema's eave (a lip 0.5 m out, a roof's slope) the climb-up put the head, an arm and a shin through it in
-# half the mantle's frames (the mannequin's own: none) — it climbs a plain ledge.
-const MOCAP_KEEP_OWN := ["fall", "climb_move", "hang_climb", "vault"]
+# Mixamo's climb up from a hang ("Braced Hang To Crouch") is retargeted with its root motion but not played: over
+# CasaCrema's eave (a lip 0.5 m out, a roof's slope) it put the head, an arm and a shin through it in half the mantle's
+# frames (the mannequin's own: none), and onto a plain top it ends crouched (the stand-up a blend). Its vault is played.
+const MOCAP_KEEP_OWN := ["fall", "climb_move", "hang_climb"]
 # Milestone 196: between holds a hand off its hold is reached for by this share of the IK (FellowTraversalPose3D's
 # hand_flight_weight): Mixamo's arm carries it, the IK puts it on the hold as it takes it.
 const MOCAP_HAND_FLIGHT := 0.3

@@ -98,7 +98,9 @@ CLIPS = [
 	# Milestone 196: root motion (the traversal's clips: its path is their root's, scaled onto the ledge) — up onto the
 	# ledge from a hang (the hips where the hang holds them at the start), over an obstacle with a hand planted.
 	("hang_climb", ["braced hang to crouch"], "root", {"start_offset": (0.13, 0.915)}),
-	("vault", ["vault"], "root", {"from": 0.1, "to": 1.15}),
+	# (the vault from the hand's reach for the top to the feet's touchdown: its run-in and run-out are the player's own —
+	# whole, its 4.4 m of travel scaled onto the traversal's 1.4 m had slowed the body to 1.3 m/s over the wall)
+	("vault", ["vault"], "root", {"from": 0.33, "to": 0.93, "root": "feet"}),
 	("start_walk", ["start walking"], "travel"),
 	("stop_walk", ["stop walking"], "travel"),
 	("stop_run", ["run to stop"], "travel"),
@@ -396,8 +398,19 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info, opt=None):
 		info["clips"][name]["offsets"] = [list(off0), list(off1)]
 
 		def root_at(t):
-			h = src.sample(t)["Hips"].translation
+			ps = src.sample(t)
+			h = ps["Hips"].translation
 			want = Vector(((h.x - centre_fixed.x) * scale, (h.y - centre_fixed.y) * scale, h.z * scale))
+			if opt.get("root") == "feet":
+				# (over an obstacle: under the hips, at the lower foot's height over the line from the take-off's to the
+				# landing's — on the ground at either end, over the top as the legs swing across it)
+				def low_at(tt):
+					pp = src.sample(tt)
+					return min(pp["LeftFoot"].translation.z, pp["RightFoot"].translation.z) * scale + ankle_dz - rig.head["LeftFoot"].z
+
+				u = max(0.0, min(1.0, (t - start) / max(length, 1e-3)))
+				base = low_at(start) * (1.0 - u) + low_at(start + length) * u
+				return Vector((want.x, want.y, max(0.0, low_at(t) - base)))
 			u = smooth_step(max(0.0, min(1.0, (t - start) / max(length, 1e-3))))
 			return want - off0.lerp(off1, u)
 	elif kind in ("settle", "span"):
