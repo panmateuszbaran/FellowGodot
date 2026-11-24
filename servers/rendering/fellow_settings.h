@@ -671,6 +671,9 @@ inline float taa_v2_motion_soften() {
 inline float taa_v2_stability() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_stability");
 }
+inline float taa_v2_stability_contrast() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_stability_contrast");
+}
 inline float taa_v2_soften_contrast() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_soften_contrast");
 }

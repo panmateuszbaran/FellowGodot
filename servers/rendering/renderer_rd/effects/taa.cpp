@@ -94,6 +94,7 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	push_constant.fellow_motion_soften = Fellow::taa_v2_motion_soften();
 	push_constant.fellow_soften_contrast = MAX(0.01f, Fellow::taa_v2_soften_contrast());
 	push_constant.fellow_stability = CLAMP(Fellow::taa_v2_stability(), 0.0f, 1.0f);
+	push_constant.fellow_stability_contrast = MAX(0.0f, Fellow::taa_v2_stability_contrast());
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[p_variant]);

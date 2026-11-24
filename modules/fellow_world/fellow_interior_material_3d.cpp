@@ -286,7 +286,10 @@ void fragment() {
 		// The light: the day through the window, falling off into the room; a lamp under the ceiling.
 		vec3 lp = vec3(R.x * 0.5, R.y - 0.75, R.z * 0.5);
 		bool lamp = fi_h31(key + seed + 211.0) < lamp_share;
-		vec3 lit = daylight_color.rgb * (daylight * mix(0.1, 1.0, exp(-h.z / (0.3 * R.z))) * facing * ao);
+		// A shop's or a door's room (its glass's vertex alpha under 0.5) deeper in shade: an arch's whole room is seen, not
+		// the bright strip by a window.
+		float deep = mix(0.55, 1.0, step(0.5, COLOR.a));
+		vec3 lit = daylight_color.rgb * (daylight * deep * mix(0.1, 1.0, exp(-h.z / (0.3 * R.z))) * facing * ao);
 		if (lamp) {
 			lit += lamp_color.rgb * lamp_energy / (1.0 + 1.2 * dot(h - lp, h - lp)) * mix(0.6, 1.0, min(facing, 1.0));
 		}
@@ -359,7 +362,7 @@ void fragment() {
 				}
 			}
 			if (f > 0.0) {
-				vec3 flit = daylight_color.rgb * (daylight * mix(0.1, 1.0, exp(-zp / (0.3 * R.z))) * 0.85 * (0.6 + 0.4 * smoothstep(0.0, 0.4, hp.y)));
+				vec3 flit = daylight_color.rgb * (daylight * deep * mix(0.1, 1.0, exp(-zp / (0.3 * R.z))) * 0.85 * (0.6 + 0.4 * smoothstep(0.0, 0.4, hp.y)));
 				if (lamp) {
 					flit += lamp_color.rgb * lamp_energy / (1.0 + 1.2 * dot(hp - lp, hp - lp)) * 0.7;
 				}

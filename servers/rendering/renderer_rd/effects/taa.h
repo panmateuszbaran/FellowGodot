@@ -61,6 +61,11 @@ private:
 		float fellow_motion_soften;
 		float fellow_soften_contrast;
 		float fellow_stability; // rendering/fellow/postfx/taa_v2_stability (decision 0331)
+
+		float fellow_stability_contrast; // rendering/fellow/postfx/taa_v2_stability_contrast
+		float fellow_pad0;
+		float fellow_pad1;
+		float fellow_pad2;
 	};
 
 	// Shader variants: bit 0 = FellowEngine resolve v2, bit 1 = fused velocity write (history ping-pong).

@@ -72,6 +72,11 @@ layout(push_constant, std430) uniform Params {
 	float fellow_motion_soften;
 	float fellow_soften_contrast;
 	float fellow_stability;
+
+	float fellow_stability_contrast;
+	float fellow_pad0;
+	float fellow_pad1;
+	float fellow_pad2;
 }
 params;
 
@@ -540,8 +545,11 @@ vec3 temporal_antialiasing_v2(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 p
 	// Stability (milestone 189, decision 0331): where the history is trusted (inside the neighbourhood's box), the more the
 	// frame disagrees with it the more history is kept, as stock Godot's resolve does (its "reduce flickering"): the
 	// jitter's sub-pixel aliasing (shutters' slats, a rough stone's sunlit grains) averaged out instead of followed. A real
-	// change moves the box and loses the trust.
-	feedback = mix(feedback, 1.0 - (1.0 - params.fellow_feedback_max) * w * w, params.fellow_stability * trust);
+	// change moves the box and loses the trust. The disagreement is the tonemapped lumas' absolute difference (stock's,
+	// times fellow_stability_contrast): the relative one above weighed a sample darker than the history less than a
+	// brighter one, and the resolve drifted brighter than the truth.
+	float ws = 1.0 - clamp(abs(lum_in - lum_hist) * params.fellow_stability_contrast, 0.0, 1.0);
+	feedback = mix(feedback, 1.0 - (1.0 - params.fellow_feedback_max) * ws * ws, params.fellow_stability * trust);
 	float blend_factor = 1.0 - feedback;
 
 	bool offscreen = any(lessThan(uv_reprojected, vec2(0.0))) || any(greaterThan(uv_reprojected, vec2(1.0)));

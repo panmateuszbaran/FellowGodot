@@ -3766,6 +3766,9 @@
 		<member name="rendering/fellow/postfx/taa_v2_stability" type="float" setter="" getter="" default="0.0">
 			TAA v2: where the history lies inside the neighbourhood's colour box, the more the frame disagrees with it the more history is kept, as stock Godot's resolve does: the jitter's flicker on detail finer than a pixel (shutters' slats, a rough stone's sunlit grains) averaged out instead of followed. 0: off. Decision 0331.
 		</member>
+		<member name="rendering/fellow/postfx/taa_v2_stability_contrast" type="float" setter="" getter="" default="1.0">
+			TAA v2's stability: how strongly a frame's disagreement with the history (the tonemapped lumas' difference) keeps the history; 1: stock's.
+		</member>
 		<member name="rendering/fellow/postfx/taa_v2_velocity_dilation" type="bool" setter="" getter="" default="true">
 			TAA v2 takes the nearest neighbour's velocity (reverse-Z dilation): edges move with their objects.
 		</member>

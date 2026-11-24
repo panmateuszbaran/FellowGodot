@@ -201,6 +201,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_motion_soften", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.35);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_soften_contrast", PROPERTY_HINT_RANGE, "0.01,2,0.01"), 0.45);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_stability", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.0); // decision 0331
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_stability_contrast", PROPERTY_HINT_RANGE, "0,8,0.05"), 1.0);
 	GLOBAL_DEF("rendering/fellow/fluid/enabled", true);
 	GLOBAL_DEF("rendering/fellow/fluid/gas_rendering", true);
 	GLOBAL_DEF("rendering/fellow/fluid/gas_scene_shadows", true);
