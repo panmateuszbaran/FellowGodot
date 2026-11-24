@@ -9,6 +9,18 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 192 — Mixamo's motion capture on the rooftops' character (2026-11-24)
+
+- The showcase's character plays motion capture (decision 0335; the owner: "the jump and many other animations look very
+  unrealistic"): Mixamo's idle, walk, jog, run, sprint, standing and running jumps, fall, soft and hard landings and
+  roll, retargeted onto the mannequin by `showcase/tools/blender/mixamo_retarget.py` (world rotations from the rest
+  poses, hips by height, legs by IK to Mixamo's ankles; gaits cut to a stride from the left strike with their speeds,
+  jumps from their takeoff with the flight's height left to the physics) and made a library by
+  `showcase/tools/build_mocap_clips.gd`. The clips are the owner's (Mixamo's licence) and not in the repository
+  (`showcase/rooftops/mocap/`, ignored); without them the character plays its own.
+- `anim_quality.py`: 30 of 38 gates with the mocap (38 with the mannequin's own clips): the steady gaits' feet slide
+  under 2 cm a stance; starting and stopping slide a foot 15-70 cm — start and stop clips next.
+
 ## Milestone 193 — An epic sky for the rooftops (2026-11-24)
 
 - The showcase's rooftops (decision 0334; the owner: "more epic, as the Witcher 3's"): towering cumulus (bases at 1.5 km,

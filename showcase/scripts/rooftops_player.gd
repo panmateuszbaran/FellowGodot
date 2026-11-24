@@ -340,6 +340,8 @@ func _move(delta: float, speed_goal: float) -> void:
 				elif fall > 1.2:
 					_variant(&"land", &"land_hard" if fall > 3.0 else &"land")
 					_play("land")
+					if _mocap and fall > 3.0:
+						_one_shot = maxf(_one_shot, 0.9) # the mocap's hard landing: down on a hand, up again
 				elif _one_shot <= 0.0:
 					_set_state("loco")
 			elif _one_shot <= 0.0 and (velocity.y < 1.0 or state != "jump") and not (state == "jump_wall" and velocity.y > -3.0):

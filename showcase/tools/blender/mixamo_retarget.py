@@ -69,7 +69,7 @@ for _side in ("Left", "Right"):
 CLIPS = [
 	("idle", ["breathing idle", "idle", "happy idle"], "loop"),
 	("gait_walk", ["walking", "walk", "standard walk"], "gait"),
-	("gait_jog", ["jogging", "slow run", "jog forward"], "gait"),
+	("gait_jog", ["slow run", "jog forward", "jogging"], "gait"),  # Mixamo's "Jogging" is barely faster than its walk
 	("gait_run", ["running", "standard run", "run"], "gait"),
 	("gait_sprint", ["fast run", "sprint", "running fast"], "gait"),
 	("jump", ["jump", "standing jump"], "takeoff"),
@@ -137,7 +137,7 @@ def retarget(rig, src, t, scale, ankle_dz, centre):
 		m = MAP.get(name)
 		if name == "Hips":
 			p = pose["Hips"].translation
-			want = Vector(((p.x - centre.x) * scale, (p.y - centre.y) * scale, p.z * scale))
+			want = Vector(((p.x - centre.x) * scale, (p.y - centre.y) * scale, (p.z - centre.z) * scale))
 			base = rig.matrix("Root", cache) @ rig.rest_rel["Hips"]
 			rig.loc["Hips"] = base.to_quaternion().inverted() @ (want - base.translation)
 		if m is None or m not in pose:
@@ -150,7 +150,7 @@ def retarget(rig, src, t, scale, ankle_dz, centre):
 	# The legs: Mixamo's ankles, scaled, reached by IK; the knees towards Mixamo's; the feet and toes turned as its.
 	for side in ("Left", "Right"):
 		up, lo, ft = pose[side + "UpLeg"].translation, pose[side + "Leg"].translation, pose[side + "Foot"].translation
-		target = Vector(((ft.x - centre.x) * scale, (ft.y - centre.y) * scale, ft.z * scale + ankle_dz))
+		target = Vector(((ft.x - centre.x) * scale, (ft.y - centre.y) * scale, (ft.z - centre.z) * scale + ankle_dz))
 		mid = (up + ft) * 0.5
 		pole = lo - mid
 		if pole.length < 1e-4:
@@ -224,13 +224,24 @@ def stance_speed(track, period, t0):
 	return speeds[len(speeds) // 2] if speeds else 0.0
 
 
-def leave_ground(track):
-	"""The time both ankles first rise more than 6 cm over their lowest (a jump's takeoff), else 0."""
+def flight(track):
+	"""A jump's flight: the longest stretch with both ankles more than 8 cm over their lowest (a run's strides fly
+	for a tenth of a second, a jump for half of one) — its start and end (s), (0, 0) if none."""
 	z0 = min(min(a[1].z, a[2].z) for a in track)
+	best, cur = (0.0, 0.0), None
 	for t, la, ra, hp in track:
-		if la.z > z0 + 0.06 and ra.z > z0 + 0.06:
-			return t
-	return 0.0
+		up = la.z > z0 + 0.08 and ra.z > z0 + 0.08
+		if up and cur is None:
+			cur = t
+		if (not up or t == track[-1][0]) and cur is not None:
+			if t - cur > best[1] - best[0]:
+				best = (cur, t)
+			cur = None
+	return best
+
+
+def leave_ground(track):
+	return flight(track)[0]
 
 
 def touch_down(track):
@@ -285,10 +296,13 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
 		length = src.length - seam
 		info["clips"][name] = {"kind": kind, "seam": seam}
 	elif kind == "takeoff":
-		t = leave_ground(track)
+		t, t_land = flight(track)
 		start = max(0.0, t - 0.12)
-		length = src.length - start
-		info["clips"][name] = {"kind": kind, "takeoff": t, "from": start}
+		# To a little past the apex: the player's fall takes it from there.
+		air = [a for a in track if t <= a[0] <= max(t_land, t + 0.1)]
+		apex = max(air, key=lambda a: a[3].z)[0] if air else t
+		length = min(src.length - start, apex - start + 0.25)
+		info["clips"][name] = {"kind": kind, "takeoff": t, "apex": apex, "from": start}
 	elif kind == "land":
 		t = touch_down(track)
 		start = max(0.0, t - 0.05)
@@ -296,11 +310,40 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
 		info["clips"][name] = {"kind": kind, "touchdown": t, "from": start}
 	else:
 		info["clips"][name] = {"kind": kind}
-	# The centre the hips move about: a loop's mean, a one-shot's start (in place: the player's body moves it).
-	hips = [a[3] for a in track if start <= a[0] <= start + length]
-	centre = Vector((sum(h.x for h in hips) / len(hips), sum(h.y for h in hips) / len(hips), 0.0))
-	if not loop:
-		centre = Vector((hips[0].x, hips[0].y, 0.0))
+	# The flight's height taken out (the player's body rises and falls; the clip's hips stay at their takeoff's or
+	# their touchdown's height in the air, the legs and arms moving about them).
+	hz = {round(a[0] * SRC_FPS): a[3].z for a in track}
+
+	def hips_z(t):
+		return hz.get(round(t * SRC_FPS), track[-1][3].z)
+
+	lift = None
+	if kind == "takeoff":
+		t_off = info["clips"][name]["takeoff"]
+		lift = lambda t: max(0.0, hips_z(t) - hips_z(t_off)) if t > t_off else 0.0  # noqa: E731
+	elif kind == "land":
+		t_on = info["clips"][name]["touchdown"]
+		lift = lambda t: max(0.0, hips_z(t) - hips_z(t_on)) if t < t_on else 0.0  # noqa: E731
+	# The centre the hips move about, in place (the player's body moves the character): a loop's drift taken out (a
+	# straight line through its hips), a one-shot's travel (a clip Mixamo has no "in place" for, a roll's) as its hips'
+	# average over half a second about each moment — their sway kept.
+	hips = [(a[0], a[3]) for a in track if start - 0.3 <= a[0] <= start + length + 0.3]
+	if loop:
+		ts = [h[0] for h in hips]
+		tm = sum(ts) / len(ts)
+		den = sum((x - tm) ** 2 for x in ts) or 1.0
+		mx = sum(h[1].x for h in hips) / len(hips)
+		my = sum(h[1].y for h in hips) / len(hips)
+		bx = sum((h[0] - tm) * (h[1].x - mx) for h in hips) / den
+		by = sum((h[0] - tm) * (h[1].y - my) for h in hips) / den
+
+		def centre_at(t):
+			return Vector((mx + bx * (t - tm), my + by * (t - tm), 0.0))
+	else:
+
+		def centre_at(t):
+			near = [h[1] for h in hips if abs(h[0] - t) <= 0.25] or [min(hips, key=lambda h: abs(h[0] - t))[1]]
+			return Vector((sum(h.x for h in near) / len(near), sum(h.y for h in near) / len(near), lift(t) if lift else 0.0))
 	out_len = 1.0 if kind == "gait" else length
 	n = max(2, int(round(out_len * FPS)))
 	frames = []
@@ -311,11 +354,11 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
 			t = start + math.fmod(u * length, length)
 			if t > src.length:
 				t -= length
-		retarget(rig, src, min(t, src.length), scale, ankle_dz, centre)
+		retarget(rig, src, min(t, src.length), scale, ankle_dz, centre_at(t))
 		snap = rig.snapshot()
 		if seam > 0.0 and t < seam:
 			# The loop's start: from where its end goes on (t + length) into the clip's own (t).
-			retarget(rig, src, min(t + length, src.length), scale, ankle_dz, centre)
+			retarget(rig, src, min(t + length, src.length), scale, ankle_dz, centre_at(t + length))
 			snap = blend_snapshots(rig.snapshot(), snap, smooth_step(t / seam))
 		frames.append(snap)
 	debug = os.environ.get("MIXAMO_DEBUG")
@@ -324,9 +367,10 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info):
 		dump = []
 		for k in range(8):
 			t = start + length * k / 8.0
+			centre = centre_at(t)
 			pose = retarget(rig, src, min(t, src.length), scale, ankle_dz, centre)
 			cache = rig.fk()
-			sj = {m: [(p.translation.x - centre.x) * scale, (p.translation.y - centre.y) * scale, p.translation.z * scale] for m, p in pose.items()}
+			sj = {m: [(p.translation.x - centre.x) * scale, (p.translation.y - centre.y) * scale, (p.translation.z - centre.z) * scale] for m, p in pose.items()}
 			tj = {b: list(m.translation) for b, m in cache.items()}
 			dump.append({"t": t, "src": sj, "tgt": tj})
 		os.makedirs(debug, exist_ok=True)

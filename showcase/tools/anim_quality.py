@@ -97,6 +97,8 @@ def derive(seg):
 	rp = sorted(seg.get("right_phase", []))
 	if rp:
 		m["right_phase"] = rp[len(rp) // 2]
+	elif "right_phase" in m:
+		del m["right_phase"]  # no right contact within a left stride (too few strides): missing, not a list
 	m["curves"] = {"knee": knee, "hip": hip, "ankle": ankle}
 	return m
 
