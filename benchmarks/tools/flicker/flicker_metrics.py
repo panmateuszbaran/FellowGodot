@@ -55,8 +55,9 @@ def phase_correlation(a, b):
     return np.array(d), r[i]
 
 
-def motion_residual(a, b, c, mask, block=64, pad=24):
-    """|b - (a and c each moved halfway to b)| over the blocks mostly inside the mask (see the module's description)."""
+def motion_residual(a, b, c, mask, block=64, pad=24, acc=None):
+    """|b - (a and c each moved halfway to b)| over the blocks mostly inside the mask (see the module's description);
+    acc: [sum, count] full-size arrays the residual is added into (the motion map)."""
     from scipy.ndimage import shift as nd_shift
 
     win = np.outer(np.hanning(block), np.hanning(block))
@@ -73,7 +74,11 @@ def motion_residual(a, b, c, mask, block=64, pad=24):
             sa = nd_shift(a[y0 : y + block + pad, x0 : x + block + pad], d / 2.0, order=3, mode="nearest")
             sc = nd_shift(c[y0 : y + block + pad, x0 : x + block + pad], -d / 2.0, order=3, mode="nearest")
             pred = 0.5 * (sa + sc)[y - y0 : y - y0 + block, x - x0 : x - x0 + block]
-            out.append(np.abs(b[y : y + block, x : x + block] - pred)[8:-8, 8:-8].ravel())
+            r = np.abs(b[y : y + block, x : x + block] - pred)[8:-8, 8:-8]
+            out.append(r.ravel())
+            if acc is not None:
+                acc[0][y + 8 : y + block - 8, x + 8 : x + block - 8] += r
+                acc[1][y + 8 : y + block - 8, x + 8 : x + block - 8] += 1.0
     return np.concatenate(out) if out else np.zeros(0)
 
 
@@ -106,7 +111,7 @@ def main():
             mask = np.zeros(frames.shape[1:], bool)
             mask[: int(frames.shape[1] * a.rows), :] = True
             mask &= frames[0] < a.sky
-        still = second_difference(frames[: a.still])
+        still = second_difference(frames[: a.still]) if a.still >= 3 else np.zeros(frames.shape[1:], np.float32)
         moving = second_difference(frames[a.still :])
         # Sharpness: the mean |I - I blurred (sigma 1 pixel)| of a still and a moving frame (a softer image flickers less).
         from scipy.ndimage import gaussian_filter
@@ -123,8 +128,16 @@ def main():
         }
         line = "%-16s still: d2 %.3f, >3 %5.2f%% | moving: d2 %.3f, >3 %5.2f%% | sharpness %.2f / %.2f" % (c, r["still_mean"], r["still_above3"], r["moving_mean"], r["moving_above3"], r["sharp_still"], r["sharp_moving"])
         if a.motion:
-            res = [motion_residual(frames[t - 1], frames[t], frames[t + 1], mask) for t in range(a.still + 1, n - 1, a.motion_stride)]
+            acc = [np.zeros(frames.shape[1:], np.float32), np.zeros(frames.shape[1:], np.float32)]
+            res = [motion_residual(frames[t - 1], frames[t], frames[t + 1], mask, acc=acc) for t in range(a.still + 1, n - 1, a.motion_stride)]
             res = np.concatenate(res)
+            # The motion map: the mean residual where it was measured, in red over the dimmed middle moving frame.
+            mres = acc[0] / np.maximum(acc[1], 1.0)
+            mpic = np.asarray(Image.open(os.path.join(d, "f%04d.png" % ((a.still + n) // 2))).convert("RGB")).astype(np.float32) * 0.35
+            mpic[..., 0] = np.maximum(mpic[..., 0], np.clip(mres * 20.0, 0, 255))
+            mpic[..., 1] = np.maximum(mpic[..., 1], np.clip(mres * 6.0, 0, 255))
+            mim = Image.fromarray(mpic.astype(np.uint8))
+            mim.resize((mim.width // 2, mim.height // 2), Image.BILINEAR).save(os.path.join(a.out, "map_motion_%s.png" % c))
             r["moving_mc_mean"] = float(res.mean())
             r["moving_mc_above3"] = float((res > 3.0).mean() * 100.0)
             line += " | compensated: %.3f, >3 %5.2f%%" % (r["moving_mc_mean"], r["moving_mc_above3"])

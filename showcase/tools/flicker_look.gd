@@ -10,6 +10,11 @@ extends SceneTree
 ##
 ##   godot --path showcase --rendering-driver vulkan --resolution 640x360 --fixed-fps 60 -s res://tools/flicker_look.gd \
 ##       -- --out=<dir> [--view=east] [--still=30] [--moving=60] [--settle=20] [--configs=base,no_contact,...]
+##       [--speed=<m/s>] [--turn=<degrees/s>]
+##
+## Milestone 191: --speed moves the camera at a run's speed along the view's way (its own: a walk's 1.4 m/s), --turn
+## turns it about the vertical as it moves (as a player's camera turns); the view "ref" passes the corner of the owner's
+## reference house and the low house south of it.
 ##
 ## --configs: one sequence after another in one run, each in <dir>/<config>/ with one feature off — base (none),
 ## no_contact (FellowEngine's contact shadows), no_cache (the directional shadow cache), no_taa, no_ssao (SSAO and
@@ -20,6 +25,7 @@ const VIEWS := {
 	"east": [Vector3(2.0, 3.0, 4.0), Vector3(22.0, 6.5, 0.0), Vector3(0.0, 0.0, -1.4)],
 	"north": [Vector3(4.0, 2.2, 8.0), Vector3(-2.0, 7.0, -18.0), Vector3(-1.4, 0.0, 0.0)],
 	"walk": [Vector3(-6.0, 1.8, 6.0), Vector3(-6.0, 4.0, -18.0), Vector3(0.0, 0.0, -1.4)],
+	"ref": [Vector3(-9.0, 1.8, 15.0), Vector3(-21.0, 5.0, 2.0), Vector3(0.0, 0.0, -1.4)],
 }
 
 
@@ -33,6 +39,8 @@ func _init() -> void:
 	var configs := PackedStringArray()
 	var sun_props := {}
 	var shader_params := []
+	var speed := 0.0
+	var turn := 0.0
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			out = a.get_slice("=", 1)
@@ -53,6 +61,10 @@ func _init() -> void:
 			var spec := a.substr(15)
 			var kv := spec.get_slice(":", 1)
 			shader_params.append([spec.get_slice(":", 0), kv.get_slice("=", 0), str_to_var(kv.get_slice("=", 1))])
+		elif a.begins_with("--speed="):
+			speed = float(a.get_slice("=", 1))
+		elif a.begins_with("--turn="):
+			turn = float(a.get_slice("=", 1))
 		elif a == "--plain_glass=1":
 			plain_glass = true
 		elif a.begins_with("--set="):
@@ -100,6 +112,9 @@ func _init() -> void:
 	var p: Array = VIEWS[view]
 	var from: Vector3 = p[0]
 	var look: Vector3 = p[1] - p[0]
+	var vel: Vector3 = p[2]
+	if speed > 0.0:
+		vel = vel.normalized() * speed
 	if configs.is_empty():
 		configs = PackedStringArray([""])
 	var env: Environment = null
@@ -112,8 +127,8 @@ func _init() -> void:
 		for i in settle + still + moving:
 			var k := maxi(i - settle - still, 0)
 			cam.current = true
-			cam.global_position = from + p[2] * (k / 60.0)
-			cam.look_at(cam.global_position + look, Vector3.UP)
+			cam.global_position = from + vel * (k / 60.0)
+			cam.look_at(cam.global_position + look.rotated(Vector3.UP, deg_to_rad(turn) * (k / 60.0)), Vector3.UP)
 			await process_frame
 			if i >= settle:
 				await RenderingServer.frame_post_draw
