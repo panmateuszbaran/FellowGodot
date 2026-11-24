@@ -73,35 +73,49 @@ float fi_noise(vec2 p) {
 	f = f * f * (3.0 - 2.0 * f);
 	return mix(mix(fi_h21(i), fi_h21(i + vec2(1.0, 0.0)), f.x), mix(fi_h21(i + vec2(0.0, 1.0)), fi_h21(i + vec2(1.0, 1.0)), f.x), f.y);
 }
-float fi_box(vec2 p, vec2 lo, vec2 hi) { return step(lo.x, p.x) * step(p.x, hi.x) * step(lo.y, p.y) * step(p.y, hi.y); }
+// Every pattern below is filtered over w, the pixel's footprint where the ray meets it (metres; in a pattern's periods
+// where it repeats): a pattern finer than a pixel fades to its average instead of flickering as the view moves.
+// A step at e (x >= e), filtered.
+float fi_step(float e, float x, float w) { return clamp((x - e) / max(w, 1e-5) + 0.5, 0.0, 1.0); }
+// The integral of a pulse over [a, b] repeating every 1; a pulse train box-filtered over w (x and w in its periods).
+float fi_ramp(float x, float a, float b) { return floor(x) * (b - a) + clamp(fract(x), a, b) - a; }
+float fi_pulse(float x, float a, float b, float w) {
+	w = max(w, 1e-4);
+	return clamp((fi_ramp(x + 0.5 * w, a, b) - fi_ramp(x - 0.5 * w, a, b)) / w, 0.0, 1.0);
+}
+// Inside the box [lo, hi], filtered; inside the box [lo, hi] of a cell of a grid of cells c wide.
+float fi_box(vec2 p, vec2 lo, vec2 hi, float w) { return fi_step(lo.x, p.x, w) * fi_step(p.x, hi.x, w) * fi_step(lo.y, p.y, w) * fi_step(p.y, hi.y, w); }
+float fi_grid(vec2 p, vec2 c, vec2 lo, vec2 hi, float w) { return fi_pulse(p.x / c.x, lo.x, hi.x, w / c.x) * fi_pulse(p.y / c.y, lo.y, hi.y, w / c.y); }
+// Value noise of features 1 / f wide, fading to its mean where they are finer than the footprint.
+float fi_fnoise(vec2 p, float f, float w) { return mix(fi_noise(p), 0.5, smoothstep(0.3, 0.9, w * f)); }
 // The walls' colours: limewash creams, ochre, sage, teal, a deep red, a dusty pink, a pale blue, white.
 vec3 fi_wall(float r) {
 	vec3 c[8] = vec3[](vec3(0.82, 0.76, 0.62), vec3(0.72, 0.52, 0.26), vec3(0.42, 0.52, 0.38), vec3(0.26, 0.42, 0.45), vec3(0.55, 0.17, 0.13), vec3(0.72, 0.50, 0.45), vec3(0.55, 0.62, 0.70), vec3(0.86, 0.83, 0.76));
 	return c[int(r * 7.999)];
 }
-vec3 fi_wood(vec2 q, float shade) {
-	return mix(vec3(0.20, 0.11, 0.06), vec3(0.34, 0.20, 0.11), shade) * (0.85 + 0.3 * fi_noise(q * vec2(2.0, 24.0)));
+vec3 fi_wood(vec2 q, float shade, float w) {
+	return mix(vec3(0.20, 0.11, 0.06), vec3(0.34, 0.20, 0.11), shade) * (0.85 + 0.3 * fi_fnoise(q * vec2(2.0, 24.0), 24.0, w));
 }
 // A wall's surface at q (along it, up it): plaster or paper, a dado or panelling, a skirting, a cornice.
-vec3 fi_wall_surface(vec2 q, float h, vec3 wall, float r1, float r2) {
-	vec3 a = wall * (0.92 + 0.1 * fi_noise(q * 3.0));
+vec3 fi_wall_surface(vec2 q, float h, vec3 wall, float r1, float r2, float w) {
+	vec3 a = wall * (0.92 + 0.1 * fi_fnoise(q * 3.0, 3.0, w));
 	if (r1 > 0.62) {
-		// Damask paper.
+		// Damask paper (its motif 14 cm across: its mean beyond).
 		vec2 p = q * vec2(3.5, 2.6);
 		float m = abs(sin(p.x * 3.14159) * sin(p.y * 3.14159 + sin(p.x * 3.14159) * 0.8));
-		a = mix(a, a * 0.72, smoothstep(0.35, 0.55, m) * 0.7);
+		a = mix(a, a * 0.72, mix(smoothstep(0.35, 0.55, m), 0.4, smoothstep(0.03, 0.08, w)) * 0.7);
 	} else if (r1 > 0.45) {
-		a *= 1.0 - 0.12 * step(0.5, fract(q.x * 5.0));
+		a *= 1.0 - 0.12 * fi_pulse(q.x * 5.0, 0.5, 1.0, w * 5.0);
 	}
 	if (r2 > 0.7) {
 		// Wooden panelling to a dado rail.
-		float panel = fi_box(fract(q / vec2(0.6, 0.9)), vec2(0.1, 0.12), vec2(0.9, 0.88));
-		a = mix(a, fi_wood(q, 0.6) * (1.0 - 0.15 * panel), step(q.y, 1.0));
+		float panel = fi_grid(q, vec2(0.6, 0.9), vec2(0.1, 0.12), vec2(0.9, 0.88), w);
+		a = mix(a, fi_wood(q, 0.6, w) * (1.0 - 0.15 * panel), fi_step(q.y, 1.0, w));
 	} else if (r2 > 0.4) {
-		a = mix(a, a * 0.7, step(q.y, 0.95));
+		a = mix(a, a * 0.7, fi_step(q.y, 0.95, w));
 	}
-	a = mix(a, vec3(0.16, 0.10, 0.065), step(q.y, 0.12));
-	a = mix(a, vec3(0.86, 0.84, 0.78), step(h - 0.16, q.y));
+	a = mix(a, vec3(0.16, 0.10, 0.065), fi_step(q.y, 0.12, w));
+	a = mix(a, vec3(0.86, 0.84, 0.78), fi_step(h - 0.16, q.y, w));
 	return a;
 }
 
@@ -157,59 +171,68 @@ void fragment() {
 		vec3 h = vec3(local + vec2(dx, dy) * t, dz * t);
 		int face = t == tz ? 0 : (t == tx ? (dx > 0.0 ? 2 : 1) : (dy > 0.0 ? 4 : 3));
 
+		// The pixel's footprint: on the glass, then where the ray meets a surface (wider with the distance travelled and
+		// with the angle the ray meets it at).
+		float px = 0.7 * length(fwidth(obj_pos));
+		float dist = max(length(obj_pos - cam_obj), 1e-3);
+		float cosf = face == 0 ? rd.z : (face <= 2 ? abs(rd.x) : abs(rd.y));
+		float w = px * (dist + t) / dist / max(cosf, 0.25);
+
 		vec3 wall = fi_wall(r0);
 		vec3 alb;
 		float facing;
 		float edge;
 		if (face <= 2) {
 			vec2 q = face == 0 ? h.xy : vec2(face == 1 ? h.z : R.z - h.z, h.y);
-			alb = fi_wall_surface(q, R.y, wall, r1, r2);
+			alb = fi_wall_surface(q, R.y, wall, r1, r2, w);
 			if (face == 0) {
 				// Against the back wall: a painting, a door (open on the dark beyond, or shut), a bookcase, a wardrobe.
 				if (r3 < 0.22) {
 					vec2 c = vec2(R.x * (0.35 + 0.3 * r4), 1.7);
 					vec2 s = vec2(0.45 + 0.35 * r2, 0.32 + 0.22 * r1);
-					float pic = fi_box(q, c - s + 0.07, c + s - 0.07);
-					vec3 art = mix(vec3(0.16, 0.22, 0.14), vec3(0.62, 0.48, 0.30), smoothstep(c.y - 0.15, c.y + 0.25, q.y + 0.1 * fi_noise(q * 4.0))) * (0.7 + 0.5 * fi_noise(q * 9.0));
-					alb = mix(alb, mix(vec3(0.55, 0.40, 0.15), art, pic), fi_box(q, c - s, c + s));
+					float pic = fi_box(q, c - s + 0.07, c + s - 0.07, w);
+					vec3 art = mix(vec3(0.16, 0.22, 0.14), vec3(0.62, 0.48, 0.30), smoothstep(c.y - 0.15, c.y + 0.25, q.y + 0.1 * fi_fnoise(q * 4.0, 4.0, w))) * (0.7 + 0.5 * fi_fnoise(q * 9.0, 9.0, w));
+					alb = mix(alb, mix(vec3(0.55, 0.40, 0.15), art, pic), fi_box(q, c - s, c + s, w));
 				} else if (r3 < 0.42) {
 					float x0 = R.x * (0.15 + 0.5 * r4);
 					vec2 dq = q - vec2(x0, 0.0);
-					float door = fi_box(dq, vec2(0.0), vec2(0.95, 2.2));
-					float frame = door * (1.0 - fi_box(dq, vec2(0.07), vec2(0.88, 2.13)));
-					float panel = fi_box(fract(dq / vec2(0.44, 0.7)), vec2(0.12), vec2(0.88));
-					vec3 leaf = fi_wood(q, 0.3) * (1.0 - 0.2 * panel);
+					float door = fi_box(dq, vec2(0.0), vec2(0.95, 2.2), w);
+					float frame = door * (1.0 - fi_box(dq, vec2(0.07), vec2(0.88, 2.13), w));
+					float panel = fi_grid(dq, vec2(0.44, 0.7), vec2(0.12), vec2(0.88), w);
+					vec3 leaf = fi_wood(q, 0.3, w) * (1.0 - 0.2 * panel);
 					// Open: the next room, dark.
 					leaf = mix(leaf, vec3(0.025, 0.02, 0.015) * (1.0 + 2.0 * smoothstep(0.88, 0.5, dq.x / 0.95)), step(0.6, r5));
-					alb = mix(alb, mix(leaf, fi_wood(q, 0.8), frame), door);
+					alb = mix(alb, mix(leaf, fi_wood(q, 0.8, w), frame), door);
 				} else if (r3 < 0.64) {
 					float x0 = R.x * (0.1 + 0.4 * r4);
 					vec2 sp = vec2(q.x - x0, q.y);
-					float shelf = step(fract(sp.y / 0.38), 0.07);
+					float shelf = fi_pulse(sp.y / 0.38, 0.0, 0.07, w / 0.38);
 					float book_id = floor(sp.x / 0.045) + floor(sp.y / 0.38) * 57.0;
 					float book = step(fract(sp.y / 0.38) * 0.38, 0.22 + 0.12 * fi_h11(book_id)) * step(0.08, fi_h11(book_id + 3.0));
 					vec3 bcol = mix(vec3(0.42, 0.10, 0.07), vec3(0.10, 0.18, 0.30), fi_h11(book_id + 7.0));
 					bcol = mix(bcol, vec3(0.60, 0.48, 0.25), step(0.7, fi_h11(book_id + 11.0)));
 					bcol = mix(bcol, vec3(0.15, 0.28, 0.16), step(0.85, fi_h11(book_id + 13.0)));
 					vec3 inner = mix(vec3(0.05, 0.035, 0.025), bcol, book);
-					alb = mix(alb, mix(inner, fi_wood(q, 0.4), shelf), fi_box(q, vec2(x0, 0.0), vec2(x0 + 1.2 + 0.8 * r2, 2.2)));
+					// Books 4.5 cm wide: their mean (two thirds of a shelf's height, mostly red and blue) beyond.
+					inner = mix(inner, vec3(0.24, 0.18, 0.145), smoothstep(0.012, 0.035, w));
+					alb = mix(alb, mix(inner, fi_wood(q, 0.4, w), shelf), fi_box(q, vec2(x0, 0.0), vec2(x0 + 1.2 + 0.8 * r2, 2.2), w));
 				} else if (r3 < 0.84) {
 					float x0 = R.x * (0.1 + 0.5 * r4);
 					vec2 dq = q - vec2(x0, 0.0);
-					float body = fi_box(dq, vec2(0.0, 0.08), vec2(1.2, 2.05));
-					float top = fi_box(dq, vec2(-0.05, 2.05), vec2(1.25, 2.18));
-					float split = fi_box(dq, vec2(0.585, 0.15), vec2(0.615, 2.0));
-					float panel = fi_box(fract(dq / vec2(0.6, 0.95)), vec2(0.14, 0.1), vec2(0.86, 0.9));
-					alb = mix(alb, fi_wood(q, 0.55) * (1.0 - 0.2 * panel - 0.5 * split), max(body, top));
+					float body = fi_box(dq, vec2(0.0, 0.08), vec2(1.2, 2.05), w);
+					float top = fi_box(dq, vec2(-0.05, 2.05), vec2(1.25, 2.18), w);
+					float split = fi_box(dq, vec2(0.585, 0.15), vec2(0.615, 2.0), w);
+					float panel = fi_grid(dq, vec2(0.6, 0.95), vec2(0.14, 0.1), vec2(0.86, 0.9), w);
+					alb = mix(alb, fi_wood(q, 0.55, w) * (1.0 - 0.2 * panel - 0.5 * split), max(body, top));
 				}
 			} else {
 				// On a side wall: a framed picture or a mirror.
 				float zc = R.z * (0.35 + 0.3 * r5);
 				vec2 s = vec2(0.3 + 0.2 * r6, 0.25 + 0.15 * r4);
 				vec2 c = vec2(face == 1 ? zc : R.z - zc, 1.6);
-				float inside = fi_box(q, c - s, c + s) * step(0.35, r6);
-				float pic = fi_box(q, c - s + 0.05, c + s - 0.05);
-				vec3 art = mix(vec3(0.30, 0.26, 0.20), vec3(0.62, 0.66, 0.70), step(0.7, r5)) * (0.75 + 0.4 * fi_noise(q * 7.0));
+				float inside = fi_box(q, c - s, c + s, w) * step(0.35, r6);
+				float pic = fi_box(q, c - s + 0.05, c + s - 0.05, w);
+				vec3 art = mix(vec3(0.30, 0.26, 0.20), vec3(0.62, 0.66, 0.70), step(0.7, r5)) * (0.75 + 0.4 * fi_fnoise(q * 7.0, 7.0, w));
 				alb = mix(alb, mix(vec3(0.45, 0.33, 0.14), art, pic), inside);
 			}
 			facing = face == 0 ? 0.8 : 0.7;
@@ -219,29 +242,32 @@ void fragment() {
 			// The floor: cotto tiles, boards, a parquet's herringbone or stone; a rug.
 			vec2 q = vec2(h.x, h.z);
 			if (r1 < 0.45) {
-				vec2 f = fract(q / 0.3);
-				vec3 cotto = vec3(0.56, 0.29, 0.18) * (0.8 + 0.32 * fi_h21(floor(q / 0.3) + key.xy));
-				alb = mix(cotto, vec3(0.40, 0.34, 0.28), 1.0 - fi_box(f, vec2(0.03), vec2(0.97)));
+				float tone = mix(fi_h21(floor(q / 0.3) + key.xy), 0.5, smoothstep(0.08, 0.2, w));
+				vec3 cotto = vec3(0.56, 0.29, 0.18) * (0.8 + 0.32 * tone);
+				alb = mix(cotto, vec3(0.40, 0.34, 0.28), 1.0 - fi_grid(q, vec2(0.3), vec2(0.03), vec2(0.97), w));
 			} else if (r1 < 0.75) {
 				float b = floor(q.x / 0.14);
-				float seam = step(fract(q.x / 0.14), 0.04) + step(fract(q.y / 1.9 + fi_h11(b)), 0.01);
-				alb = mix(fi_wood(q.yx, fi_h11(b + key.x)) * 1.4, vec3(0.10, 0.06, 0.035), min(seam, 1.0));
+				float seam = fi_pulse(q.x / 0.14, 0.0, 0.04, w / 0.14) + fi_pulse(q.y / 1.9 + fi_h11(b), 0.0, 0.01, w / 1.9);
+				float tone = mix(fi_h11(b + key.x), 0.5, smoothstep(0.04, 0.1, w));
+				alb = mix(fi_wood(q.yx, tone, w) * 1.4, vec3(0.10, 0.06, 0.035), min(seam, 1.0));
 			} else if (r1 < 0.9) {
 				vec2 p = vec2(q.x + q.y, q.y - q.x) / 0.32;
 				float row = floor(p.y);
 				float alt = mod(row, 2.0);
-				float u = fract(p.x * 0.5 + alt * 0.5);
-				alb = fi_wood(q, fi_h11(floor(p.x * 0.5) + row * 7.0)) * 1.4 * mix(0.85, 1.0, step(0.5, u));
+				float tone = mix(fi_h11(floor(p.x * 0.5) + row * 7.0), 0.5, smoothstep(0.06, 0.15, w));
+				alb = fi_wood(q, tone, w) * 1.4 * mix(0.85, 1.0, fi_pulse(p.x * 0.5 + alt * 0.5, 0.5, 1.0, w * 2.2));
 			} else {
-				alb = vec3(0.72, 0.70, 0.66) * (0.85 + 0.2 * fi_noise(q * 3.0));
+				alb = vec3(0.72, 0.70, 0.66) * (0.85 + 0.2 * fi_fnoise(q * 3.0, 3.0, w));
 			}
 			vec2 lo = vec2(R.x * 0.2, R.z * 0.22);
 			vec2 hi = vec2(R.x * 0.8, R.z * 0.7);
 			vec2 rq = q - lo;
-			float border = 1.0 - fi_box(q, lo + 0.14, hi - 0.14);
+			float border = 1.0 - fi_box(q, lo + 0.14, hi - 0.14, w);
 			vec3 rug = mix(vec3(0.48, 0.10, 0.07), vec3(0.10, 0.15, 0.32), step(0.65, r3));
-			rug = mix(rug * (0.75 + 0.35 * step(0.5, fract((rq.x + rq.y) * 3.0)) * step(0.5, fract((rq.x - rq.y) * 3.0))), vec3(0.70, 0.56, 0.32), border);
-			alb = mix(alb, rug, fi_box(q, lo, hi) * step(0.4, r2));
+			float diamonds = fi_pulse((rq.x + rq.y) * 3.0, 0.5, 1.0, w * 4.2) * fi_pulse((rq.x - rq.y) * 3.0, 0.5, 1.0, w * 4.2);
+)"
+		   R"(			rug = mix(rug * (0.75 + 0.35 * diamonds), vec3(0.70, 0.56, 0.32), border);
+			alb = mix(alb, rug, fi_box(q, lo, hi, w) * step(0.4, r2));
 			facing = 1.0 + 0.6 * exp(-h.z / 0.8);
 			edge = min(min(h.x, R.x - h.x), R.z - h.z);
 		} else {
@@ -249,89 +275,13 @@ void fragment() {
 			vec2 q = vec2(h.x, h.z);
 			alb = vec3(0.86, 0.83, 0.77);
 			if (r2 < 0.55) {
-				float beam = step(fract(q.y / 0.6), 0.24);
-				alb = mix(alb * vec3(0.95, 0.85, 0.75), fi_wood(q.yx, 0.2), beam);
+				float beam = fi_pulse(q.y / 0.6, 0.0, 0.24, w / 0.6);
+				alb = mix(alb * vec3(0.95, 0.85, 0.75), fi_wood(q.yx, 0.2, w), beam);
 			}
 			facing = 0.45;
 			edge = min(min(h.x, R.x - h.x), R.z - h.z);
 		}
 		float ao = 0.5 + 0.5 * smoothstep(0.0, 0.6, edge);
-
-		// Furniture: across the middle of the room (a table and chairs, a sofa, an armchair and a side table, a desk), and
-		// in front of the back wall (a sideboard with a lamp or a vase on it, a bed's head).
-		float fkind = fi_h31(key + seed + 133.0);
-		float bkind = fi_h31(key + seed + 257.0);
-		float zm = R.z * (0.38 + 0.14 * r4);
-		float zb = R.z - 0.42;
-		float furn = 0.0;
-		vec3 fcol = vec3(0.0);
-		float fz = 0.0;
-		vec3 fh = vec3(0.0);
-		for (int layer = 0; layer < 2 && furn == 0.0; layer++) {
-			float zp = layer == 0 ? zm : zb;
-			float tp = zp / dz;
-			vec3 hp = vec3(local + vec2(dx, dy) * tp, zp);
-			if (tp >= t || hp.x <= 0.0 || hp.x >= R.x || hp.y <= 0.0) {
-				continue;
-			}
-			float cx = layer == 0 ? R.x * (0.3 + 0.4 * r2) : R.x * (0.25 + 0.5 * r5);
-			vec2 a = vec2(abs(hp.x - cx), hp.y);
-			float f = 0.0;
-			vec3 c = vec3(0.0);
-			float k = layer == 0 ? fkind / max(furniture, 1e-3) : bkind / max(furniture, 1e-3);
-			if (layer == 0) {
-				if (k < 0.3) {
-					float top = fi_box(hp.xy, vec2(cx - 0.65, 0.72), vec2(cx + 0.65, 0.79));
-					float legs = fi_box(a, vec2(0.52, 0.0), vec2(0.57, 0.75));
-					float chair = fi_box(a, vec2(0.78, 0.42), vec2(1.2, 0.48)) + fi_box(a, vec2(1.14, 0.0), vec2(1.2, 1.02)) + fi_box(a, vec2(0.78, 0.0), vec2(0.82, 0.45));
-					// A vase on the table.
-					float vase = step(length((hp.xy - vec2(cx + 0.2, 0.92)) / vec2(0.07, 0.13)), 1.0);
-					f = min(top + legs + chair + vase, 1.0);
-					c = mix(fi_wood(hp.xy, 0.4), vec3(0.75, 0.70, 0.62), vase);
-					c *= 1.0 + 0.4 * top;
-				} else if (k < 0.52) {
-					f = min(fi_box(a, vec2(0.0, 0.1), vec2(0.95, 0.86)) + fi_box(a, vec2(0.82, 0.0), vec2(0.87, 0.1)), 1.0);
-)"
-		   R"(					c = mix(vec3(0.42, 0.30, 0.20), vec3(0.22, 0.30, 0.24), step(0.5, r1));
-					c = mix(c, vec3(0.45, 0.14, 0.12), step(0.8, r1));
-					c *= 1.0 - 0.3 * (fi_box(a, vec2(0.0, 0.42), vec2(0.8, 0.47)) + fi_box(a, vec2(0.79, 0.1), vec2(0.82, 0.64)));
-					c *= 1.0 + 0.25 * step(0.47, hp.y) * step(hp.y, 0.6) * step(a.x, 0.79);
-				} else if (k < 0.68) {
-					float chair = fi_box(hp.xy - vec2(cx - 0.4, 0.0), vec2(-0.4, 0.1), vec2(0.4, 1.0));
-					float tbl = fi_box(hp.xy - vec2(cx + 0.45, 0.0), vec2(-0.25, 0.55), vec2(0.25, 0.6)) + fi_box(hp.xy - vec2(cx + 0.45, 0.0), vec2(-0.03, 0.0), vec2(0.03, 0.58));
-					float lampshade = fi_box(hp.xy - vec2(cx + 0.45, 0.0), vec2(-0.13, 0.85), vec2(0.13, 1.05)) + fi_box(hp.xy - vec2(cx + 0.45, 0.0), vec2(-0.015, 0.6), vec2(0.015, 0.86));
-					f = min(chair + tbl + lampshade, 1.0);
-					c = chair > 0.5 ? mix(vec3(0.40, 0.12, 0.10), vec3(0.20, 0.28, 0.22), step(0.5, r6)) : (lampshade > 0.5 ? vec3(0.85, 0.78, 0.6) : fi_wood(hp.xy, 0.3));
-				} else if (k < 0.8) {
-					float desk = fi_box(hp.xy, vec2(cx - 0.7, 0.74), vec2(cx + 0.7, 0.79)) + fi_box(a, vec2(0.6, 0.0), vec2(0.7, 0.76));
-					float chair = fi_box(hp.xy - vec2(cx, 0.0), vec2(-0.22, 0.44), vec2(0.22, 0.95)) * step(0.48, hp.y);
-					f = min(desk + chair, 1.0);
-					c = fi_wood(hp.xy, 0.25);
-				}
-			} else {
-				if (k < 0.35) {
-					float body = fi_box(a, vec2(0.0, 0.1), vec2(0.75, 0.95));
-					float drawers = step(fract(hp.y / 0.28), 0.04) * step(hp.y, 0.95);
-					float feet = fi_box(a, vec2(0.68, 0.0), vec2(0.74, 0.1));
-					// On it a lamp or a vase.
-					float lampshade = fi_box(hp.xy - vec2(cx - 0.35, 0.0), vec2(-0.14, 1.25), vec2(0.14, 1.45)) + fi_box(hp.xy - vec2(cx - 0.35, 0.0), vec2(-0.02, 0.95), vec2(0.02, 1.26));
-					float vase = step(length((hp.xy - vec2(cx + 0.3, 1.08)) / vec2(0.08, 0.14)), 1.0);
-					float on = step(0.5, r6);
-					f = min(body + feet + (on > 0.5 ? lampshade : vase), 1.0);
-					c = body + feet > 0.5 ? fi_wood(hp.xy, 0.5) * (1.0 - 0.5 * drawers) : vec3(0.82, 0.76, 0.6);
-				} else if (k < 0.5) {
-					float head = fi_box(a, vec2(0.0, 0.0), vec2(0.8, 1.2)) * (1.0 - step(1.05, hp.y) * step(0.7, a.x));
-					f = head;
-					c = fi_wood(hp.xy, 0.35);
-				}
-			}
-			if (f > 0.0) {
-				furn = f;
-				fcol = c;
-				fz = zp;
-				fh = hp;
-			}
-		}
 
 		// The light: the day through the window, falling off into the room; a lamp under the ceiling.
 		vec3 lp = vec3(R.x * 0.5, R.y - 0.75, R.z * 0.5);
@@ -341,35 +291,110 @@ void fragment() {
 			lit += lamp_color.rgb * lamp_energy / (1.0 + 1.2 * dot(h - lp, h - lp)) * mix(0.6, 1.0, min(facing, 1.0));
 		}
 		room = alb * lit;
-		if (furn > 0.0) {
-			vec3 flit = daylight_color.rgb * (daylight * mix(0.1, 1.0, exp(-fz / (0.3 * R.z))) * 0.85 * (0.6 + 0.4 * smoothstep(0.0, 0.4, fh.y)));
-			if (lamp) {
-				flit += lamp_color.rgb * lamp_energy / (1.0 + 1.2 * dot(fh - lp, fh - lp)) * 0.7;
+
+		// Furniture: in front of the back wall (a sideboard with a lamp or a vase on it, a bed's head), then across the
+		// middle of the room (a table and chairs, a sofa, an armchair and a side table, a desk), each over what is behind.
+		float fkind = fi_h31(key + seed + 133.0);
+		float bkind = fi_h31(key + seed + 257.0);
+		float zm = R.z * (0.38 + 0.14 * r4);
+		float zb = R.z - 0.42;
+		for (int layer = 1; layer >= 0; layer--) {
+			float zp = layer == 0 ? zm : zb;
+			float tp = zp / dz;
+			vec3 hp = vec3(local + vec2(dx, dy) * tp, zp);
+			if (tp >= t || hp.x <= 0.0 || hp.x >= R.x || hp.y <= 0.0) {
+				continue;
 			}
-			room = mix(room, fcol * flit, furn);
+			float wf = px * (dist + tp) / dist / max(rd.z, 0.25);
+			float cx = layer == 0 ? R.x * (0.3 + 0.4 * r2) : R.x * (0.25 + 0.5 * r5);
+			vec2 a = vec2(abs(hp.x - cx), hp.y);
+			float f = 0.0;
+			vec3 c = vec3(0.0);
+			float k = layer == 0 ? fkind / max(furniture, 1e-3) : bkind / max(furniture, 1e-3);
+			if (layer == 0) {
+				if (k < 0.3) {
+					float top = fi_box(hp.xy, vec2(cx - 0.65, 0.72), vec2(cx + 0.65, 0.79), wf);
+					float legs = fi_box(a, vec2(0.52, 0.0), vec2(0.57, 0.75), wf);
+					float chair = fi_box(a, vec2(0.78, 0.42), vec2(1.2, 0.48), wf) + fi_box(a, vec2(1.14, 0.0), vec2(1.2, 1.02), wf) + fi_box(a, vec2(0.78, 0.0), vec2(0.82, 0.45), wf);
+					// A vase on the table.
+					float vase = fi_step(length((hp.xy - vec2(cx + 0.2, 0.92)) / vec2(0.07, 0.13)), 1.0, wf / 0.08);
+					f = min(top + legs + chair + vase, 1.0);
+					c = mix(fi_wood(hp.xy, 0.4, wf), vec3(0.75, 0.70, 0.62), vase);
+					c *= 1.0 + 0.4 * top;
+				} else if (k < 0.52) {
+					f = min(fi_box(a, vec2(0.0, 0.1), vec2(0.95, 0.86), wf) + fi_box(a, vec2(0.82, 0.0), vec2(0.87, 0.1), wf), 1.0);
+					c = mix(vec3(0.42, 0.30, 0.20), vec3(0.22, 0.30, 0.24), step(0.5, r1));
+					c = mix(c, vec3(0.45, 0.14, 0.12), step(0.8, r1));
+					c *= 1.0 - 0.3 * (fi_box(a, vec2(0.0, 0.42), vec2(0.8, 0.47), wf) + fi_box(a, vec2(0.79, 0.1), vec2(0.82, 0.64), wf));
+					c *= 1.0 + 0.25 * fi_step(0.47, hp.y, wf) * fi_step(hp.y, 0.6, wf) * fi_step(a.x, 0.79, wf);
+				} else if (k < 0.68) {
+					float chair = fi_box(hp.xy - vec2(cx - 0.4, 0.0), vec2(-0.4, 0.1), vec2(0.4, 1.0), wf);
+					float tbl = fi_box(hp.xy - vec2(cx + 0.45, 0.0), vec2(-0.25, 0.55), vec2(0.25, 0.6), wf) + fi_box(hp.xy - vec2(cx + 0.45, 0.0), vec2(-0.03, 0.0), vec2(0.03, 0.58), wf);
+					float lampshade = fi_box(hp.xy - vec2(cx + 0.45, 0.0), vec2(-0.13, 0.85), vec2(0.13, 1.05), wf) + fi_box(hp.xy - vec2(cx + 0.45, 0.0), vec2(-0.015, 0.6), vec2(0.015, 0.86), wf);
+					f = min(chair + tbl + lampshade, 1.0);
+					vec3 cc = mix(vec3(0.40, 0.12, 0.10), vec3(0.20, 0.28, 0.22), step(0.5, r6));
+					c = mix(mix(fi_wood(hp.xy, 0.3, wf), vec3(0.85, 0.78, 0.6), min(lampshade, 1.0)), cc, min(chair, 1.0));
+				} else if (k < 0.8) {
+					float desk = fi_box(hp.xy, vec2(cx - 0.7, 0.74), vec2(cx + 0.7, 0.79), wf) + fi_box(a, vec2(0.6, 0.0), vec2(0.7, 0.76), wf);
+					float chair = fi_box(hp.xy - vec2(cx, 0.0), vec2(-0.22, 0.44), vec2(0.22, 0.95), wf) * fi_step(0.48, hp.y, wf);
+					f = min(desk + chair, 1.0);
+					c = fi_wood(hp.xy, 0.25, wf);
+				}
+			} else {
+				if (k < 0.35) {
+					float body = fi_box(a, vec2(0.0, 0.1), vec2(0.75, 0.95), wf);
+					float drawers = fi_pulse(hp.y / 0.28, 0.0, 0.04, wf / 0.28) * fi_step(hp.y, 0.95, wf);
+					float feet = fi_box(a, vec2(0.68, 0.0), vec2(0.74, 0.1), wf);
+					// On it a lamp or a vase.
+					float lampshade = fi_box(hp.xy - vec2(cx - 0.35, 0.0), vec2(-0.14, 1.25), vec2(0.14, 1.45), wf) + fi_box(hp.xy - vec2(cx - 0.35, 0.0), vec2(-0.02, 0.95), vec2(0.02, 1.26), wf);
+					float vase = fi_step(length((hp.xy - vec2(cx + 0.3, 1.08)) / vec2(0.08, 0.14)), 1.0, wf / 0.09);
+					float on = step(0.5, r6);
+					float piece = on > 0.5 ? lampshade : vase;
+					f = min(body + feet + piece, 1.0);
+					c = mix(vec3(0.82, 0.76, 0.6), fi_wood(hp.xy, 0.5, wf) * (1.0 - 0.5 * drawers), min(body + feet, 1.0));
+				} else if (k < 0.5) {
+					float head = fi_box(a, vec2(0.0, 0.0), vec2(0.8, 1.2), wf) * (1.0 - fi_step(1.05, hp.y, wf) * fi_step(0.7, a.x, wf));
+					f = head;
+					c = fi_wood(hp.xy, 0.35, wf);
+				}
+			}
+			if (f > 0.0) {
+				vec3 flit = daylight_color.rgb * (daylight * mix(0.1, 1.0, exp(-zp / (0.3 * R.z))) * 0.85 * (0.6 + 0.4 * smoothstep(0.0, 0.4, hp.y)));
+				if (lamp) {
+					flit += lamp_color.rgb * lamp_energy / (1.0 + 1.2 * dot(hp - lp, hp - lp)) * 0.7;
+				}
+				room = mix(room, c * flit, f);
+			}
 		}
 		// The hanging lamp: a shade on a flex, lit or not.
 		float tc = dot(lp - o, rd);
 		float dl = length(o + rd * tc - lp);
 		if (tc > 0.0 && tc < t) {
 			vec3 pc = o + rd * tc;
-			float shade = smoothstep(0.2, 0.17, dl) * step(pc.y, lp.y + 0.12);
-			float flex = step(abs(pc.x - lp.x), 0.012) * step(lp.y, pc.y) * smoothstep(0.3, 0.0, abs(pc.z - lp.z));
+			float wl = px * (dist + tc) / dist;
+			float shade = fi_step(dl, 0.185, max(wl, 0.03)) * fi_step(pc.y, lp.y + 0.12, wl);
+			float flex = fi_step(abs(pc.x - lp.x), 0.012, wl) * fi_step(lp.y, pc.y, wl) * smoothstep(0.3, 0.0, abs(pc.z - lp.z));
 			vec3 sc = lamp ? lamp_color.rgb * lamp_energy * 2.5 : daylight_color.rgb * daylight * 0.35 * vec3(0.8, 0.7, 0.5);
 			room = mix(room, sc, max(shade, flex * 0.8));
 		}
 
 		// Curtains just behind the glass: drapes drawn to either side, or a net across it.
 		vec2 cw = win + vec2(dx, dy) * (0.1 / dz);
+		float wc = px * (dist + 0.1 / dz) / dist;
 		float ck = fi_h31(key + seed + 301.0);
 		if (ck < curtain_share) {
-			float wave = sin(cw.x * 38.0 + fi_noise(cw * vec2(3.0, 0.5)) * 5.0);
+			// Folds of uneven width (about 20 cm: flat beyond), softer near the floor where the cloth hangs straight.
+			float wave = sin(cw.x * (26.0 + 12.0 * r5) + fi_noise(cw * vec2(4.0, 0.4)) * 6.0) * (1.0 - smoothstep(0.03, 0.09, wc));
 			if (ck < curtain_share * 0.6) {
-				float drape = step((0.25 + 0.5 * r4) * 0.5, abs(cw.x));
+				// Drapes tied back: drawn furthest open a little above the sill.
+				float open = (0.25 + 0.5 * r4) * 0.5 + 0.12 * smoothstep(0.7, 0.0, abs(cw.y - 1.55));
+				float drape = smoothstep(open - 0.015 - wc, open + 0.015 + wc, abs(cw.x));
 				vec3 cc = mix(vec3(0.50, 0.10, 0.08), vec3(0.62, 0.52, 0.30), step(0.4, r3));
 				cc = mix(cc, vec3(0.25, 0.32, 0.20), step(0.75, r3));
 				cc = mix(cc, vec3(0.78, 0.74, 0.62), step(0.9, r3));
-				room = mix(room, cc * (0.6 + 0.4 * wave) * daylight * daylight_color.rgb * 1.3, drape);
+				// Lit from the window; darker in the folds and towards the drape's outer edge.
+				float shade = (0.72 + 0.28 * wave) * (1.0 - 0.25 * smoothstep(open, open + 0.5, abs(cw.x)));
+				room = mix(room, cc * shade * daylight * daylight_color.rgb * 1.2, drape);
 			} else {
 				// A net: sheer, its folds soft.
 				room = mix(room, vec3(0.85, 0.83, 0.78) * (0.85 + 0.15 * wave) * daylight * daylight_color.rgb * 1.2, 0.35);

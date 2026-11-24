@@ -9,7 +9,14 @@ buildings (the upper part of the frame without the bright sky: --rows, --sky), a
 levels. Writes <out>/flicker.txt, <out>/flicker.json and a map per configuration (<out>/map_<config>.png: the still
 frames' flicker in red over the dimmed picture, half size).
 
+Under motion the second difference also counts the image's own change (a texture moving by v pixels a frame changes by
+about v^2 times its second derivative), so --motion measures the moving frames motion-compensated instead: in blocks of
+64 x 64 pixels the displacement between frames t-1 and t+1 (phase correlation, to a fraction of a pixel), frame t
+predicted as their mean each moved halfway, and |frame t - prediction| what does not follow the motion (flicker; the
+interpolation's own error is alike in every configuration). Every --motion_stride'th frame (SciPy).
+
     python flicker_metrics.py <root> --still 24 --out <dir> [--configs base,no_soft,...] [--rows 0.61] [--sky 225]
+        [--motion] [--motion_stride 3]
 """
 import argparse
 import json
@@ -27,6 +34,48 @@ def second_difference(frames):
     return np.abs(frames[2:] - 2.0 * frames[1:-1] + frames[:-2]).mean(axis=0)
 
 
+def phase_correlation(a, b):
+    """The displacement d (rows, columns) with a ~ b moved by d; the correlation's peak."""
+    f = np.fft.fft2(a) * np.conj(np.fft.fft2(b))
+    f /= np.abs(f) + 1e-9
+    r = np.real(np.fft.ifft2(f))
+    i = np.unravel_index(np.argmax(r), r.shape)
+    d = []
+    for ax in range(2):
+        n = r.shape[ax]
+        lo = list(i)
+        hi = list(i)
+        lo[ax] = (i[ax] - 1) % n
+        hi[ax] = (i[ax] + 1) % n
+        m1, c, p1 = r[tuple(lo)], r[i], r[tuple(hi)]
+        den = m1 - 2.0 * c + p1
+        v = i[ax] + (0.5 * (m1 - p1) / den if abs(den) > 1e-12 else 0.0)
+        d.append(v - n if v > n / 2 else v)
+    return np.array(d), r[i]
+
+
+def motion_residual(a, b, c, mask, block=64, pad=24):
+    """|b - (a and c each moved halfway to b)| over the blocks mostly inside the mask (see the module's description)."""
+    from scipy.ndimage import shift as nd_shift
+
+    win = np.outer(np.hanning(block), np.hanning(block))
+    h, w = a.shape
+    out = []
+    for y in range(0, h - block, block):
+        for x in range(0, w - block, block):
+            if mask[y : y + block, x : x + block].mean() < 0.7 or a[y : y + block, x : x + block].std() < 2.0:
+                continue
+            d, peak = phase_correlation(c[y : y + block, x : x + block] * win, a[y : y + block, x : x + block] * win)
+            if peak < 0.05 or np.abs(d).max() > 20:
+                continue
+            y0, x0 = max(0, y - pad), max(0, x - pad)
+            sa = nd_shift(a[y0 : y + block + pad, x0 : x + block + pad], d / 2.0, order=3, mode="nearest")
+            sc = nd_shift(c[y0 : y + block + pad, x0 : x + block + pad], -d / 2.0, order=3, mode="nearest")
+            pred = 0.5 * (sa + sc)[y - y0 : y - y0 + block, x - x0 : x - x0 + block]
+            out.append(np.abs(b[y : y + block, x : x + block] - pred)[8:-8, 8:-8].ravel())
+    return np.concatenate(out) if out else np.zeros(0)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root")
@@ -35,6 +84,8 @@ def main():
     ap.add_argument("--configs", default="")
     ap.add_argument("--rows", type=float, default=0.61, help="the share of the frame's rows from the top measured")
     ap.add_argument("--sky", type=float, default=225.0, help="pixels this bright in the first frame are left out")
+    ap.add_argument("--motion", action="store_true", help="the moving frames motion-compensated (SciPy)")
+    ap.add_argument("--motion_stride", type=int, default=3)
     a = ap.parse_args()
     configs = [c for c in a.configs.split(",") if c] or sorted(d for d in os.listdir(a.root) if os.path.isdir(os.path.join(a.root, d)))
     os.makedirs(a.out, exist_ok=True)
@@ -63,8 +114,15 @@ def main():
             "moving_above3": float((moving[mask] > 3.0).mean() * 100.0),
             "frames": n,
         }
+        line = "%-16s still: d2 %.3f, >3 %5.2f%% | moving: d2 %.3f, >3 %5.2f%%" % (c, r["still_mean"], r["still_above3"], r["moving_mean"], r["moving_above3"])
+        if a.motion:
+            res = [motion_residual(frames[t - 1], frames[t], frames[t + 1], mask) for t in range(a.still + 1, n - 1, a.motion_stride)]
+            res = np.concatenate(res)
+            r["moving_mc_mean"] = float(res.mean())
+            r["moving_mc_above3"] = float((res > 3.0).mean() * 100.0)
+            line += " | compensated: %.3f, >3 %5.2f%%" % (r["moving_mc_mean"], r["moving_mc_above3"])
         results[c] = r
-        lines.append("%-16s still: d2 %.3f, >3 %5.2f%% | moving: d2 %.3f, >3 %5.2f%%" % (c, r["still_mean"], r["still_above3"], r["moving_mean"], r["moving_above3"]))
+        lines.append(line)
         pic = np.asarray(Image.open(os.path.join(d, "f%04d.png" % (a.still // 2))).convert("RGB")).astype(np.float32) * 0.35
         pic[..., 0] = np.maximum(pic[..., 0], np.clip(still * 20.0, 0, 255))
         pic[..., 1] = np.maximum(pic[..., 1], np.clip(still * 6.0, 0, 255))

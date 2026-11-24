@@ -47,8 +47,12 @@ uniform float cavity = 0.55;
 uniform float albedo_soften = 0.0;
 uniform float soften_lod = 5.0;
 
-float pom_depth(vec2 uv) {
-	return 1.0 - smoothstep(height_lo, height_hi, textureLod(height_tex, uv, 0.0).r);
+// Milestone 188 (the owner: the buildings' shadows flickering): the height map read at the pixel's own level of detail,
+// and the relief faded out where its texels are finer than the pixels (its level 1.5-3.5: an 8th of a texel per pixel),
+// the textures read with the surface's own gradients (not the parallax's, which jump from pixel to pixel). Read at
+// level 0 the far walls' joints and their darkening had changed from one TAA-jittered frame to the next.
+float pom_depth(vec2 uv, float lod) {
+	return 1.0 - smoothstep(height_lo, height_hi, textureLod(height_tex, uv, lod).r);
 }
 
 varying vec3 world_pos;
@@ -67,40 +71,50 @@ void fragment() {
 	vec2 uv_a = uv_m / tex_size;
 	mat3 tbn = rt_cotangent_frame(normalize(NORMAL), VERTEX, uv_a);
 	float pdepth = 0.0;
+	vec2 gdx = dFdx(uv_a);
+	vec2 gdy = dFdy(uv_a);
+	float hlod = max(textureQueryLod(height_tex, uv_a).y, 0.0);
+	float pfade = 1.0 - smoothstep(1.5, 3.5, hlod);
+	float cdepth = 0.0;
 	if (parallax_depth > 0.0 && !anti_tile) {
+		cdepth = pom_depth(uv_a, hlod);
+	}
+	if (parallax_depth > 0.0 && !anti_tile && pfade > 0.0) {
 		// The view in the texture's frame; marched into the height field (the texture's units: depth / size).
 		vec3 v = normalize(VIEW);
 		vec3 vt = vec3(dot(v, tbn[0]), dot(v, tbn[1]), dot(v, normalize(NORMAL)));
-		float d = parallax_depth / tex_size;
+		float d = parallax_depth * pfade / tex_size;
 		float n = mix(28.0, 8.0, clamp(vt.z, 0.0, 1.0));
 		float layer = 1.0 / n;
 		vec2 step_uv = vt.xy / max(vt.z, 0.15) * d / n;
 		vec2 cur = uv_a;
 		float cur_d = 0.0;
-		float h = pom_depth(cur);
+		float h = pom_depth(cur, hlod);
 		for (int i = 0; i < 32; i++) {
 			if (cur_d >= h) {
 				break;
 			}
 			cur -= step_uv;
-			h = pom_depth(cur);
+			h = pom_depth(cur, hlod);
 			cur_d += layer;
 		}
 		vec2 prev = cur + step_uv;
 		float after = h - cur_d;
-		float before = pom_depth(prev) - cur_d + layer;
+		float before = pom_depth(prev, hlod) - cur_d + layer;
 		float w = after / min(after - before, -1e-5);
 		vec2 hit = mix(cur, prev, clamp(w, 0.0, 1.0));
 		pdepth = cur_d;
 		uv_m += (hit - uv_a) * tex_size;
 		uv_a = hit;
+		// The joints' darkening: the relief's depth where it is seen, the height map's mean where it has faded.
+		cdepth = mix(cdepth, pdepth, pfade);
 	}
-	vec3 col = texture(albedo_tex, uv_a).rgb;
+	vec3 col = textureGrad(albedo_tex, uv_a, gdx, gdy).rgb;
 	if (albedo_soften > 0.0) {
 		col = mix(col, textureLod(albedo_tex, uv_a, soften_lod).rgb, albedo_soften);
 	}
-	vec3 nrm = texture(normal_tex, uv_a).rgb;
-	vec3 arm = texture(arm_tex, uv_a).rgb;
+	vec3 nrm = textureGrad(normal_tex, uv_a, gdx, gdy).rgb;
+	vec3 arm = textureGrad(arm_tex, uv_a, gdx, gdy).rgb;
 	if (anti_tile) {
 		float ang = 1.1 + sd;
 		vec2 uv_b = rt_rotate(uv_m / (tex_size * 1.37), ang) + vec2(0.37, 0.61);
@@ -147,7 +161,7 @@ void fragment() {
 	ROUGHNESS = rough;
 	SPECULAR = specular;
 	// Deep in the relief (the joints), darker: the light that reaches it is less.
-	ao *= 1.0 - cavity * smoothstep(0.35, 1.0, pdepth);
+	ao *= 1.0 - cavity * smoothstep(0.35, 1.0, cdepth);
 	AO = ao;
 	AO_LIGHT_AFFECT = 0.25;
 	NORMAL = rt_normal_from_map(tbn, nrm, nstr);
