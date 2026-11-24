@@ -95,6 +95,10 @@ CLIPS = [
 	("hang_reach_r", ["climbing up wall"], "anchored", {"from": 0.933, "to": 2.0}),
 	("hang_across_l", ["left braced hang shimmy"], "anchored", {"from": 0.0, "to": 1.167}),
 	("hang_across_r", ["right braced hang shimmy"], "anchored", {"from": 0.0, "to": 1.167}),
+	# Milestone 196: root motion (the traversal's clips: its path is their root's, scaled onto the ledge) — up onto the
+	# ledge from a hang (the hips where the hang holds them at the start), over an obstacle with a hand planted.
+	("hang_climb", ["braced hang to crouch"], "root", {"start_offset": (0.13, 0.915)}),
+	("vault", ["vault"], "root", {"from": 0.1, "to": 1.15}),
 	("start_walk", ["start walking"], "travel"),
 	("stop_walk", ["stop walking"], "travel"),
 	("stop_run", ["run to stop"], "travel"),
@@ -150,10 +154,12 @@ class Source:
 		return {k: mw @ self.arm.pose.bones[v].matrix for k, v in self.bones.items()}
 
 
-def retarget(rig, src, t, scale, ankle_dz, centre):
-	"""The mannequin's pose at Mixamo's time t (s)."""
+def retarget(rig, src, t, scale, ankle_dz, centre, root=None):
+	"""The mannequin's pose at Mixamo's time t (s); root: the root bone's place (milestone 196: a clip's root motion)."""
 	pose = src.sample(t)
 	rig.reset()
+	if root is not None:
+		rig.loc["Root"] = rig.rest_q["Root"].inverted() @ root
 	cache = {}
 	for name in rig.names:
 		m = MAP.get(name)
@@ -304,6 +310,10 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info, opt=None):
 		length = min(src.length, opt["to"]) - start
 		loop = kind == "settle"
 		info["clips"][name] = {"kind": kind, "from": start, "to": start + length}
+	elif kind == "root":
+		start = opt.get("from", 0.0)
+		length = min(src.length, opt.get("to", src.length)) - start
+		info["clips"][name] = {"kind": kind, "from": start, "to": start + length}
 	elif kind == "gait":
 		# Mixamo's in-place gaits loop as they are: one cycle (two steps), or several (a shorter period repeating).
 		period, corr = src.length, 1.0
@@ -364,7 +374,33 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info, opt=None):
 	# straight line through its hips), a one-shot's travel (a clip Mixamo has no "in place" for, a roll's) as its hips'
 	# average over half a second about each moment — their sway kept.
 	hips = [(a[0], a[3]) for a in track if start - 0.3 <= a[0] <= start + length + 0.3]
-	if kind in ("settle", "span"):
+	root_at = None
+	if kind == "root":
+		# The root (the body's feet, where the traversal moves the body) under the hips by an offset eased from the start's
+		# (the hang's, or the pose's own: the hips over the ankles) to the end's (the pose's own): the hips' whole travel
+		# is the root's, less the change of the hips' place over the feet.
+		h0 = src.sample(start)["Hips"].translation
+		centre_fixed = Vector((h0.x, h0.y, 0.0))
+
+		def centre_at(t):
+			return centre_fixed
+
+		def own_offset(t):
+			ps = src.sample(t)
+			h = ps["Hips"].translation
+			a = (ps["LeftFoot"].translation + ps["RightFoot"].translation) * 0.5
+			return Vector((0.0, (h.y - a.y) * scale, (h.z - a.z) * scale + rig.head["LeftFoot"].z))
+
+		off0 = Vector((0.0, opt["start_offset"][0], opt["start_offset"][1])) if "start_offset" in opt else own_offset(start)
+		off1 = own_offset(start + length)
+		info["clips"][name]["offsets"] = [list(off0), list(off1)]
+
+		def root_at(t):
+			h = src.sample(t)["Hips"].translation
+			want = Vector(((h.x - centre_fixed.x) * scale, (h.y - centre_fixed.y) * scale, h.z * scale))
+			u = smooth_step(max(0.0, min(1.0, (t - start) / max(length, 1e-3))))
+			return want - off0.lerp(off1, u)
+	elif kind in ("settle", "span"):
 		inside = [h[1] for h in hips if start <= h[0] <= start + length] or [hips[0][1]]
 		cx = sum(h.x for h in inside) / len(inside)
 		cy = sum(h.y for h in inside) / len(inside)
@@ -398,7 +434,7 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info, opt=None):
 		def centre_at(t):
 			near = [h[1] for h in hips if abs(h[0] - t) <= 0.25] or [min(hips, key=lambda h: abs(h[0] - t))[1]]
 			return Vector((sum(h.x for h in near) / len(near), sum(h.y for h in near) / len(near), lift(t) if lift else 0.0))
-	if name in HIPS_AT:
+	if name in HIPS_AT and kind != "root":
 		# The hips' mean over the cut moved to the mannequin's own (the same offset to every joint).
 		ty, tz = HIPS_AT[name]
 		ts = [start + length * k / 16.0 for k in range(17)]
@@ -421,7 +457,7 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info, opt=None):
 			t = start + math.fmod(u * length, length)
 			if t > src.length:
 				t -= length
-		retarget(rig, src, min(t, src.length), scale, ankle_dz, centre_at(t))
+		retarget(rig, src, min(t, src.length), scale, ankle_dz, centre_at(t), root_at(t) if root_at else None)
 		snap = rig.snapshot()
 		if seam > 0.0 and t < start + seam:
 			# The loop's start: from where its end goes on (t + length) into the clip's own (t).

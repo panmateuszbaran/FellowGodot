@@ -27,7 +27,10 @@ const MOCAP_GAITS := ["gait_walk", "gait_jog", "gait_run", "gait_sprint"]
 # face down (the character fell on its face after every jump and turned upright on landing). Milestone 196: the hangs
 # and the moves from hold to hold Mixamo's again (milestone 195 had kept the mannequin's: Mixamo's hang had bobbed — a
 # loop cut from a catch —, its moves fought the IK); the climb up a free wall (ladders too) the mannequin's.
-const MOCAP_KEEP_OWN := ["fall", "climb_move"]
+# Mixamo's climb up from a hang ("Braced Hang To Crouch") and vault are retargeted with their root motion but not played
+# yet: over CasaCrema's eave (a lip 0.5 m out, a roof's slope) the climb-up put the head, an arm and a shin through it in
+# half the mantle's frames (the mannequin's own: none) — it climbs a plain ledge.
+const MOCAP_KEEP_OWN := ["fall", "climb_move", "hang_climb", "vault"]
 # Milestone 196: between holds a hand off its hold is reached for by this share of the IK (FellowTraversalPose3D's
 # hand_flight_weight): Mixamo's arm carries it, the IK puts it on the hold as it takes it.
 const MOCAP_HAND_FLIGHT := 0.3
@@ -145,6 +148,11 @@ func _use_mocap() -> void:
 		pose.set("hand_slide", 1.0) # (a shimmy's hands step as Mixamo's do, on the edge)
 	# (the shimmy along a ledge near the pace Mixamo's was captured at: 1 m/s had played it at twice its rate)
 	traversal.set("shimmy_speed", MOCAP_SHIMMY_SPEED)
+	# Milestone 196: the traversal's own clips with root motion — up onto a ledge from a hang, over an obstacle — Mixamo's
+	# where the library has them (their root's travel the body's path, scaled onto the ledge).
+	for slot in [["hang_clip", &"hang_climb"], ["vault_clip", &"vault"]]:
+		if mocap.has_animation(slot[1]) and not String(slot[1]) in keep:
+			traversal.set(slot[0], mocap.get_animation(slot[1]))
 	var info = JSON.parse_string(FileAccess.get_file_as_string(MOCAP_DIR.path_join("clips.json")))
 	var gaits: Dictionary = info.get("gaits", {}) if info is Dictionary else {}
 	var table: Array = []

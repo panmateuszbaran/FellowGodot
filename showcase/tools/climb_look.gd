@@ -10,6 +10,7 @@ extends SceneTree
 ##   godot --path showcase --resolution 960x540 --fixed-fps 60 -s res://tools/climb_look.gd -- --demo --demo_from=house \
 ##       --out=<dir> [--seconds=30] [--skip=0] [--every=2] [--cam=side] [--lite=1] [--mocap_all=1] [--images=0]
 ##   godot ... -s res://tools/climb_look.gd -- --program=hang --out=<dir> [--seconds=18] ...
+##   godot ... -s res://tools/climb_look.gd -- --program=course --out=<dir> [--seconds=10] ...
 ##
 ## --images=0 (headless): frames.json alone. --jpg=1: the frames as JPEG (f%04d.jpg). --program=hang (no demo): at CasaCrema's front up to its first hold, hanging
 ## still for 4 s, along the hold each way, still again, then on up from hold to hold.
@@ -101,6 +102,8 @@ func _init() -> void:
 		_player.global_position = Vector3(13.1, 0.0, -9.6)
 		_player.set("facing", 0.0)
 		_player.rotation.y = 0.0
+	elif _program == "course":
+		_course(sc)
 	var total := _skip + int(_seconds * 60.0)
 	var vp := root.get_viewport_rid()
 	for i in total:
@@ -109,6 +112,8 @@ func _init() -> void:
 		RenderingServer.viewport_set_update_mode(vp, RenderingServer.VIEWPORT_UPDATE_ALWAYS if draw else RenderingServer.VIEWPORT_UPDATE_DISABLED)
 		if _program == "hang":
 			_drive(i / 60.0)
+		elif _program == "course":
+			_drive_course(i / 60.0)
 		if _cam:
 			_place_camera(i == 0)
 			_cam.current = true
@@ -126,6 +131,68 @@ func _init() -> void:
 	f.close()
 	print("climb_look: %d frames" % total)
 	quit()
+
+
+## The "course" program (milestone 196): on the square, along +x — a low wall to vault (0.95 m high, 0.35 m thick) at
+## a sprint, then a block 3 m high and 2 m deep: a jump at it, its edge caught, up onto its top from the hang.
+const COURSE_Z := 8.0
+const COURSE_X := -2.0
+
+func _box(p_parent: Node, p_name: String, p_size: Vector3, p_at: Vector3) -> void:
+	var body := StaticBody3D.new()
+	body.name = p_name
+	p_parent.add_child(body)
+	body.global_position = p_at
+	var cs := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = p_size
+	cs.shape = shape
+	body.add_child(cs)
+	var mi := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = p_size
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.72, 0.64, 0.52)
+	mat.roughness = 0.9
+	mesh.material = mat
+	mi.mesh = mesh
+	body.add_child(mi)
+
+
+func _course(p_scene: Node) -> void:
+	# (the square's props out of the way)
+	var town := p_scene.get_node("Town")
+	for c in town.get_children():
+		var n := String(c.name)
+		if n.begins_with("Bollard") or n.begins_with("Barrel") or n.begins_with("Crate") or n.begins_with("Stall") or n == "HayCart":
+			c.queue_free()
+	_box(p_scene, "CourseVault", Vector3(0.35, 0.95, 3.0), Vector3(COURSE_X + 5.0, 0.475, COURSE_Z))
+	_box(p_scene, "CourseBlock", Vector3(2.0, 3.0, 3.0), Vector3(COURSE_X + 11.0, 1.5, COURSE_Z))
+	_player.get("traversal").set("hang_first", true) # (the block's edge caught and hung from, then climbed onto)
+	_player.set("autopilot", true)
+	_player.global_position = Vector3(COURSE_X, 0.0, COURSE_Z)
+	_player.set("facing", -PI / 2.0) # (facing +x: the model looks down its −Z)
+	_player.rotation.y = -PI / 2.0
+
+
+var _course_hung := -1.0
+
+func _drive_course(t: float) -> void:
+	var trav: Node = _player.get("traversal")
+	var go := Vector3(1.0, 0.0, 0.0)
+	if trav.is_hanging() and _course_hung < 0.0:
+		_course_hung = t
+	if _course_hung < 0.0:
+		_player.set("wish", go if t > 0.3 else Vector3())
+		_player.set("want_sprint", t > 0.3)
+	elif t < _course_hung + 1.0:
+		_player.set("wish", Vector3())
+		_player.set("want_sprint", false)
+	else:
+		# up onto the top from the hang, then still on it
+		var on_top: bool = _player.global_position.y > 2.0 and not trav.is_active()
+		_player.set("wish", Vector3() if on_top else go)
+		_player.set("want_walk", true)
 
 
 ## The "hang" program: a run at CasaCrema's front (the jump at the wall catches its first hold), then hanging still
