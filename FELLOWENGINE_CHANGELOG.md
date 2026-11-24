@@ -9,6 +9,26 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 190 — Weathering (2026-11-24)
+
+- `FellowWeathering3D` (new, module `fellow_fluid`; decision 0332): years of weather on a scene's walls from their
+  shape, with no textures and no painting — streaks hanging from every sill, hood, cornice, balcony and eave (lanes of
+  their own width, length and darkness, darker under a ledge's ends, none under a mass that shelters), damp at the walls'
+  foot to a ragged tide line with salt above it and the splashes' grime, a patina. Albedo only, in the colour passes
+  (Forward+); every pattern fades to its mean where it is finer than a pixel.
+- The ledges and the ground are found in a stack of heightfields around the camera (16 layers of 1.75 m, 64 m wide,
+  1024 texels: 64 MB), each layer its own highest surface — one heightfield sees only the cornice over a column, not the
+  sills under it. The layers follow the camera one a frame (all at once after a cut); they draw into one 2D array
+  texture (a heightfield can now draw into a layer of an array), bound at set 1's binding 55.
+- The showcase's rooftops are weathered (their buildings, the fountain, the pavements and the paving on render layer 5);
+  `showcase/tools/weathering_look.gd` looks at them with the node on and off. The editor's FellowEngine menu: **Add
+  Weathering**. The regression suite's new scene `base/weathering`; every other scene unchanged.
+- The showcase's rusticated ground floors (the owner: "more shadow than texture"): the photograph's rock-faced
+  normals (31° on average) at 0.5 under the low sun had drawn every block as its shading; at 0.22, over a colour
+  softened by 0.3 instead of 0.6, the stone's own colour shows (each other term of its relief off in turn changed
+  nothing).
+- Measured on lavapipe only (no GPU this milestone): the GPU's cost is to be measured.
+
 ## Milestone 189 — TAA that holds still (2026-11-24)
 
 - The owner saw a lot of shadows flickering on the rooftops' buildings. Measured on the RTX at 1920x1080 with every

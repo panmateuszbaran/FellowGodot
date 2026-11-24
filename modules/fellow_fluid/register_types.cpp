@@ -47,6 +47,7 @@
 #include "fellow_water_sound.h"
 #include "fellow_weather_3d.h"
 #include "fellow_weather_sound.h"
+#include "fellow_weathering_3d.h" // milestone 190
 #include "fellow_wind_3d.h"
 
 #include "core/config/engine.h"
@@ -82,6 +83,7 @@ void initialize_fellow_fluid_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowFootsteps3D); // milestone 181
 		GDREGISTER_CLASS(FellowRain3D);
 		GDREGISTER_CLASS(FellowWind3D);
+		GDREGISTER_CLASS(FellowWeathering3D); // milestone 190
 		GDREGISTER_CLASS(FellowLightning3D);
 		GDREGISTER_CLASS(FellowSnowTracker3D);
 		GDREGISTER_CLASS(FellowWeather3D);

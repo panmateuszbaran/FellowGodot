@@ -100,16 +100,86 @@ RID FellowWeather::get_tracks_texture() const {
 	return state.tracks_texture;
 }
 
-RID FellowWeather::get_occlusion_texture() const {
-	if (!state.enabled || state.occlusion_collider.is_null()) {
+static RID fellow_heightfield_texture(RID p_collider) {
+	if (p_collider.is_null()) {
 		return RID();
 	}
 	ParticlesStorage *ps = ParticlesStorage::get_singleton();
-	if (!ps || !ps->particles_collision_is_heightfield(state.occlusion_collider)) {
+	if (!ps || !ps->particles_collision_is_heightfield(p_collider)) {
 		return RID();
 	}
-	RID tex = ps->fellow_particles_collision_get_heightfield_texture(state.occlusion_collider);
+	RID tex = ps->fellow_particles_collision_get_heightfield_texture(p_collider);
 	return RD::get_singleton()->texture_is_valid(tex) ? tex : RID();
+}
+
+RID FellowWeather::get_occlusion_texture() const {
+	return state.enabled ? fellow_heightfield_texture(state.occlusion_collider) : RID();
+}
+
+RID FellowWeather::get_weathering_layers_texture() const {
+	if (!is_weathering() || weathering_array.is_null() || !RD::get_singleton()->texture_is_valid(weathering_array)) {
+		return RID();
+	}
+	return weathering_array;
+}
+
+void FellowWeather::_weathering_untarget() {
+	ParticlesStorage *ps = ParticlesStorage::get_singleton();
+	for (int i = 0; i < WEATHERING_MAX_LAYERS; i++) {
+		if (weathering_targeted[i].is_valid() && ps) {
+			ps->fellow_particles_collision_set_heightfield_target(weathering_targeted[i], RID(), 0); // a freed one is ignored
+		}
+		weathering_targeted[i] = RID();
+	}
+}
+
+void FellowWeather::set_weathering_state(const WeatheringState &p_weathering) {
+	weathering = p_weathering;
+	ubo_dirty = true;
+	const uint32_t count = MIN(weathering.layer_count, uint32_t(WEATHERING_MAX_LAYERS));
+	if (!weathering.enabled || count == 0) {
+		// Off: the layers' memory given back (64 MB at the defaults).
+		_weathering_untarget();
+		if (weathering_array.is_valid()) {
+			RD::get_singleton()->free_rid(weathering_array);
+			weathering_array = RID();
+		}
+		weathering_array_size = 0;
+		weathering_array_layers = 0;
+		return;
+	}
+	const uint32_t size = CLAMP(weathering.resolution, 16u, 16384u);
+	if (weathering_array.is_null() || weathering_array_size != size || weathering_array_layers != count) {
+		_weathering_untarget();
+		if (weathering_array.is_valid()) {
+			RD::get_singleton()->free_rid(weathering_array);
+		}
+		RD::TextureFormat tf;
+		tf.format = RD::DATA_FORMAT_D32_SFLOAT;
+		tf.width = size;
+		tf.height = size;
+		tf.array_layers = count;
+		tf.texture_type = RD::TEXTURE_TYPE_2D_ARRAY;
+		tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		weathering_array = RD::get_singleton()->texture_create(tf, RD::TextureView());
+		RD::get_singleton()->set_resource_name(weathering_array, "FellowEngine weathering layers");
+		weathering_array_size = size;
+		weathering_array_layers = count;
+	}
+	// Each heightfield drawn into its layer (drawn again when it changes: this frame, before the scene).
+	ParticlesStorage *ps = ParticlesStorage::get_singleton();
+	for (uint32_t i = 0; i < uint32_t(WEATHERING_MAX_LAYERS); i++) {
+		const RID want = i < count ? weathering.layers[i] : RID();
+		if (weathering_targeted[i] != want) {
+			if (weathering_targeted[i].is_valid() && ps) {
+				ps->fellow_particles_collision_set_heightfield_target(weathering_targeted[i], RID(), 0);
+			}
+			if (want.is_valid() && ps) {
+				ps->fellow_particles_collision_set_heightfield_target(want, weathering_array, int(i));
+			}
+			weathering_targeted[i] = want;
+		}
+	}
 }
 
 RID FellowWeather::get_ripple_texture() const {
@@ -125,7 +195,7 @@ RID FellowWeather::get_uniform_buffer() {
 		ubo_dirty = true;
 	}
 	// Rewritten every frame while enabled: the heightfield's texture appears once the scene cull has drawn it.
-	if (ubo_dirty || state.enabled || wind.enabled) {
+	if (ubo_dirty || state.enabled || wind.enabled || weathering.enabled) {
 		UBO u;
 		memset(&u, 0, sizeof(UBO));
 		u.params[0] = state.enabled ? CLAMP(state.wetness, 0.0f, 1.0f) : 0.0f;
@@ -199,6 +269,37 @@ RID FellowWeather::get_uniform_buffer() {
 		if (cloud_shadow.active) {
 			u.cloud_shadow3[1] = CLAMP(cloud_shadow.sky_cover, 0.0f, 1.0f);
 		}
+		// Weathering (decision 0332); its layers are bound at 55.
+		if (is_weathering()) {
+			const WeatheringState &we = weathering;
+			u.weathering[0] = CLAMP(we.strength, 0.0f, 1.0f);
+			u.weathering[1] = CLAMP(we.streaks, 0.0f, 1.0f);
+			u.weathering[2] = 1.0f / MAX(we.streak_length, 0.01f);
+			u.weathering[3] = CLAMP(we.damp, 0.0f, 1.0f);
+			u.weathering2[0] = MAX(we.damp_height, 0.0f);
+			u.weathering2[1] = CLAMP(we.patina, 0.0f, 1.0f);
+			u.weathering2[2] = float(we.cull_mask & 0xFFFFFu); // exact in a float
+			u.weathering2[3] = we.seed;
+			u.weathering3[0] = we.stain_color.r;
+			u.weathering3[1] = we.stain_color.g;
+			u.weathering3[2] = we.stain_color.b;
+			u.weathering4[0] = we.damp_color.r;
+			u.weathering4[1] = we.damp_color.g;
+			u.weathering4[2] = we.damp_color.b;
+			u.weathering4[3] = MAX(we.layer_overlap, 0.0f);
+			if (get_weathering_layers_texture().is_valid() && we.size_x > 0.0f && we.size_z > 0.0f && we.layer_height > 0.0f) {
+				u.weathering_occ[0] = 1.0f / we.size_x;
+				u.weathering_occ[1] = 1.0f / we.size_z;
+				for (int i = 0; i < WEATHERING_MAX_LAYERS; i++) {
+					u.weathering_centers[i / 2][(i % 2) * 2 + 0] = we.layer_center[i][0];
+					u.weathering_centers[i / 2][(i % 2) * 2 + 1] = we.layer_center[i][1];
+				}
+				u.weathering_occ2[0] = we.base;
+				u.weathering_occ2[1] = we.layer_height;
+				u.weathering_occ2[2] = float(weathering_array_layers);
+				u.weathering_occ2[3] = float(weathering_array_size) / we.size_x;
+			}
+		}
 		RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 		ubo_dirty = false;
 	}
@@ -221,6 +322,10 @@ FellowWeather::FellowWeather() {
 FellowWeather::~FellowWeather() {
 	if (ubo.is_valid() && RD::get_singleton()) {
 		RD::get_singleton()->free_rid(ubo);
+	}
+	if (weathering_array.is_valid() && RD::get_singleton()) {
+		_weathering_untarget();
+		RD::get_singleton()->free_rid(weathering_array);
 	}
 }
 

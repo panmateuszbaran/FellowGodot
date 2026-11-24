@@ -7041,6 +7041,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists();
 		// The snow's cover too (decision 0128).
 		base_specialization.fellow_wetness = weather && weather->get_state().enabled && (weather->get_state().wetness > 0.0f || weather->get_state().snow > 0.0f || weather->get_state().frost > 0.0f);
+		// Weathering (decision 0332): the same specialization (its code reads its own block's data and returns while off).
+		base_specialization.fellow_wetness = base_specialization.fellow_wetness || (weather && weather->is_weathering());
 		base_specialization.fellow_cloud_shadow = fellow_cloud_shadow_frame; // decision 0133
 		if (fellow_stable_bits) {
 			// Decision 0161: wet as soon as a node that can wet the scene exists (the weather's data is zero while dry: the
@@ -9883,6 +9885,14 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		u_cloud_shadow.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 		u_cloud_shadow.append_id(cloud_shadow.is_valid() ? cloud_shadow : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE));
 		uniforms.push_back(u_cloud_shadow);
+		// The weathering's layers (decision 0332), in the camera's passes only (the secondary passes include the ones
+		// rendering into them: binding 50's feedback loop). Black: empty.
+		RID layers = (active && p_render_data) ? weather->get_weathering_layers_texture() : RID();
+		RD::Uniform u_layers;
+		u_layers.binding = 55;
+		u_layers.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		u_layers.append_id(layers.is_valid() ? layers : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_2D_ARRAY_BLACK));
+		uniforms.push_back(u_layers);
 	}
 
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, RENDER_PASS_UNIFORM_SET, uniforms);

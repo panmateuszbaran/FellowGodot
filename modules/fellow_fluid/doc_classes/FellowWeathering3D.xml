@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowWeathering3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Years of weather on a scene's buildings, from their shape: streaks under the ledges, damp at the walls' foot, a patina (FellowEngine).
+	</brief_description>
+	<description>
+		Every opaque surface of the instances in [member cull_mask] is weathered as it is drawn (Forward+), with no textures and no painting. A patina varies the albedo's tone over metres ([member patina]). Streaks — dark lanes, each its own width, length and darkness — hang from the nearest ledge above a wall's point (a sill, a cornice, a balcony, an eave) and thin and fade down the wall over about [member streak_length] ([member streaks], [member stain_color]); there are none under a mass that rises on (a recessed window, a jetty), which shelters the wall. Damp darkens the foot of a wall up to a ragged tide line about [member damp_height] above the ground, with a broken band of salt above it and the splashes' grime in its lowest 35 cm ([member damp], [member damp_color]); the ground is the lower of what lies half a metre and a metre and a half out from the wall, so a balcony's floor over the street is not taken for it.
+		The node finds the ledges and the ground in the scene's shape seen from above in horizontal layers: a stack of [member heightfield_layers] heightfields (particle collision heightfields of its own, seen by no particles), each [member heightfield_layer_height] tall, up from the node's height, [member heightfield_size] wide around the camera; each layer holds its highest surface, so that a sill is seen under the cornice above it. Place the node just under the lowest ground. The layers are drawn again when the camera has moved a sixteenth of [member heightfield_size], one a frame (or every frame, [member heightfield_always_update]); only the instances in [member cull_mask] are drawn into them — keep characters and other moving things out of it.
+		Albedo only, multiplied (metallic surfaces less); every pattern fades to its mean where it is finer than a pixel. One node at a time is active: the last one to enter the tree. Without one, or hidden, nothing changes. [code]rendering/fellow/fluid/enabled[/code] off stops it. The Mobile and Compatibility renderers draw no weathering. Decision record [code]docs/decisions/0332-weathering.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="cull_mask" type="int" setter="set_cull_mask" getter="get_cull_mask" default="1048575">
+			The render layers ([member VisualInstance3D.layers]) of the instances that are weathered and that form the ledges and the ground in the layers.
+		</member>
+		<member name="damp" type="float" setter="set_damp" getter="get_damp" default="1.0">
+			How strong the damp at the walls' foot is (0..1).
+		</member>
+		<member name="damp_color" type="Color" setter="set_damp_color" getter="get_damp_color" default="Color(0.6, 0.6, 0.52, 1)">
+			What full damp multiplies the albedo by.
+		</member>
+		<member name="damp_height" type="float" setter="set_damp_height" getter="get_damp_height" default="0.8">
+			How high the damp rises above the ground, in metres (its tide line varies from 0.7 to 1.3 times this along the wall).
+		</member>
+		<member name="heightfield_always_update" type="bool" setter="set_heightfield_always_update" getter="is_heightfield_always_update" default="false">
+			If [code]true[/code], the layers are drawn again every frame (geometry that moves); otherwise when the camera has moved a sixteenth of [member heightfield_size] or a property changes.
+		</member>
+		<member name="heightfield_layer_height" type="float" setter="set_heightfield_layer_height" getter="get_heightfield_layer_height" default="1.75">
+			Each layer's height, in metres. A layer sees one ledge over each point, its highest: about half a storey keeps a window's sill and the hood over it in different layers.
+		</member>
+		<member name="heightfield_layers" type="int" setter="set_heightfield_layers" getter="get_heightfield_layers" default="16">
+			How many layers are stacked up from the node's height (1 to 16). Above the top one nothing is weathered but the patina.
+		</member>
+		<member name="heightfield_resolution" type="int" setter="set_heightfield_resolution" getter="get_heightfield_resolution" default="1024">
+			Each layer's texels across [member heightfield_size] (256 to 8192). A ledge narrower than about two texels is missed. Each layer takes 4 bytes a texel of video memory.
+		</member>
+		<member name="heightfield_size" type="float" setter="set_heightfield_size" getter="get_heightfield_size" default="64.0">
+			The layers' width around the camera, in metres. Beyond it walls get the patina only.
+		</member>
+		<member name="patina" type="float" setter="set_patina" getter="get_patina" default="0.5">
+			How much the albedo's tone varies over metres (0..1).
+		</member>
+		<member name="seed" type="float" setter="set_seed" getter="get_seed" default="0.0">
+			Moves every pattern: the streaks' lanes, the tide line, the patina.
+		</member>
+		<member name="stain_color" type="Color" setter="set_stain_color" getter="get_stain_color" default="Color(0.56, 0.53, 0.48, 1)">
+			What a full streak multiplies the albedo by.
+		</member>
+		<member name="streak_length" type="float" setter="set_streak_length" getter="get_streak_length" default="1.5">
+			How far below a ledge the streaks fade, in metres (each lane 0.4 to 1.6 times this).
+		</member>
+		<member name="streaks" type="float" setter="set_streaks" getter="get_streaks" default="1.0">
+			How strong the streaks are (0..1).
+		</member>
+		<member name="strength" type="float" setter="set_strength" getter="get_strength" default="1.0">
+			The whole weathering's strength (0..1); 0 draws none.
+		</member>
+	</members>
+</class>

@@ -1545,6 +1545,33 @@ The showcase's `tools/window_uv2.gd` gives a mesh's glass its UV2 (each connecte
 frame; a tall window's room floor at its bottom and its vertex alpha 0) — the rooftops' houses use it. The RTX at 1080p:
 no measurable cost against the dark glass it replaced.
 
+## Weathering (milestone 190)
+
+`FellowWeathering3D` (module `fellow_fluid`; decision 0332) weathers every opaque surface of the instances in its
+`cull_mask` as it is drawn (Forward+), from the scene's shape — no textures, no painting: a patina (the albedo's tone
+over metres); streaks hanging from the nearest ledge above a wall's point (a sill, a hood, a cornice, a balcony, an
+eave), each lane its own width, length and darkness, darker under a ledge's ends where the water runs off, none under a
+mass that rises on (a recess, a jetty); damp at a wall's foot up to a ragged tide line with salt above it and the
+splashes' grime below. It finds the ledges and the ground in a stack of heightfields around the camera — the scene seen
+from above in horizontal layers, each layer's highest surface — so a sill is seen under the cornice above it. Albedo
+only; every pattern fades to its mean where it is finer than a pixel. One node at a time; nothing changes without it.
+
+| property | default | what it does |
+|---|---|---|
+| `strength` | 1 | the whole weathering (0: none) |
+| `streaks`, `streak_length`, `stain_color` | 1, 1.5 m, (0.56, 0.53, 0.48) | the streaks' strength, how far below a ledge they fade (each lane 0.4-1.6 times it), what a full streak multiplies the albedo by |
+| `damp`, `damp_height`, `damp_color` | 1, 0.8 m, (0.6, 0.6, 0.52) | the damp's strength, its tide line's height above the ground (0.75-1.25 times it along the wall), what full damp multiplies the albedo by |
+| `patina` | 0.5 | the albedo's tone varying over metres |
+| `seed` | 0 | moves every pattern |
+| `cull_mask` | all 20 layers | the render layers weathered and drawn into the layers (keep characters and moving things out) |
+| `heightfield_size` | 64 m | the layers' width around the camera (moved a sixteenth of it at a time, one layer a frame; all at once after a cut) |
+| `heightfield_layers`, `heightfield_layer_height` | 16, 1.75 m | the stack up from the node's height: about half a storey a layer keeps a window's sill and the hood over it apart |
+| `heightfield_resolution` | 1024 | each layer's texels across `heightfield_size` (4 bytes each: 64 MB for sixteen at 1024) |
+| `heightfield_always_update` | off | the layers drawn every frame (geometry that moves) |
+
+The showcase's rooftops weather their buildings, fountain, pavements and paving (render layer 5); `tools/weathering_look.gd`
+looks at it with the node on and off.
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

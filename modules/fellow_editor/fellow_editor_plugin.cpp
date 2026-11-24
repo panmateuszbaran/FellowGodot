@@ -912,6 +912,11 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 				_fellow_make("FellowLightning3D", "Lightning", top);
 			}
 		} break;
+		case PRESET_WEATHERING: {
+			// Milestone 190 (decision 0332): the walls' streaks, damp and patina from the scene's shape, its layers from
+			// the node's height up (put it just under the ground).
+			top = Object::cast_to<Node3D>(_fellow_make("FellowWeathering3D", "Weathering", nullptr));
+		} break;
 		case PRESET_FIRE:
 		case PRESET_SMOKE: {
 			// The volume's floor is on its node: the emitter just above it (milestone 54: below it before, emitting
@@ -1504,6 +1509,7 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	add_menu->set_tooltip_text(TTR("Add a FellowEngine setup, its nodes wired up, to the selected 3D node (or the scene's root)."));
 	PopupMenu *popup = add_menu->get_popup();
 	popup->add_item(TTR("Add Weather (Rain, Wind, Lightning)"), PRESET_WEATHER);
+	popup->add_item(TTR("Add Weathering (streaks under ledges, damp at walls' foot)"), PRESET_WEATHERING);
 	popup->add_separator();
 	popup->add_item(TTR("Add Fire"), PRESET_FIRE);
 	popup->add_item(TTR("Add Smoke"), PRESET_SMOKE);

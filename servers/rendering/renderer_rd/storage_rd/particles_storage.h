@@ -421,6 +421,9 @@ private:
 		RID heightfield_fb;
 		Size2i heightfield_fb_size;
 		uint32_t heightfield_mask = (1 << 20) - 1;
+		// FellowEngine (decision 0332): drawn into this layer of a 2D array texture instead of a texture of its own.
+		RID fellow_target;
+		int fellow_target_layer = 0;
 
 		RSE::ParticlesCollisionHeightfieldResolution heightfield_resolution = RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024;
 
@@ -604,6 +607,9 @@ public:
 	RID particles_collision_get_heightfield_framebuffer(RID p_particles_collision) const;
 	// FellowEngine weather (decision 0124): the heightfield's depth texture (the scene seen from above), if drawn yet.
 	RID fellow_particles_collision_get_heightfield_texture(RID p_particles_collision) const;
+	// FellowEngine (decision 0332): a heightfield drawn into layer p_layer of a 2D array texture (a FellowWeathering3D's
+	// layers; its size the array's), drawn again; RID() gives it back a texture of its own. Ignores a freed collision.
+	void fellow_particles_collision_set_heightfield_target(RID p_particles_collision, RID p_array, int p_layer);
 	virtual uint32_t particles_collision_get_height_field_mask(RID p_particles_collision) const override;
 	virtual void particles_collision_set_height_field_mask(RID p_particles_collision, uint32_t p_heightfield_mask) override;
 	virtual uint32_t particles_collision_get_cull_mask(RID p_particles_collision) const override;

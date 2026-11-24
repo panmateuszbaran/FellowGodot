@@ -2029,6 +2029,7 @@ collision_mask = 0
 shape = SubResource("WorldBoundaryShape3D_w5sr1")
 
 [node name="Mesh" type="MeshInstance3D" parent="Ground" unique_id=109302940]
+layers = 17
 mesh = ExtResource("3_tag5u")
 
 [node name="Pavements" type="StaticBody3D" parent="." unique_id=1186336380]
@@ -2063,6 +2064,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 0.04, 18.5)
 shape = SubResource("BoxShape3D_sqxvx")
 
 [node name="Mesh" type="MeshInstance3D" parent="Pavements" unique_id=391502170]
+layers = 17
 mesh = ExtResource("4_bi26k")
 
 [node name="Town" type="Node3D" parent="." unique_id=119457167]
@@ -2409,6 +2411,7 @@ shape = SubResource("ConvexPolygonShape3D_7wm88")
 shape = SubResource("ConvexPolygonShape3D_ui0kb")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/PalazzoOcra" unique_id=1162933158]
+layers = 17
 mesh = ExtResource("5_60fmd")
 
 [node name="Campanile" type="StaticBody3D" parent="Town" unique_id=1512995970]
@@ -2558,6 +2561,7 @@ shape = SubResource("ConvexPolygonShape3D_gi0lc")
 shape = SubResource("ConvexPolygonShape3D_mc4fr")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/Campanile" unique_id=215682277]
+layers = 17
 mesh = ExtResource("6_b2igk")
 
 [node name="CasaCrema" type="StaticBody3D" parent="Town" unique_id=74044613]
@@ -2725,6 +2729,7 @@ shape = SubResource("ConvexPolygonShape3D_dneq2")
 shape = SubResource("ConvexPolygonShape3D_kgsi0")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/CasaCrema" unique_id=870305536]
+layers = 17
 mesh = ExtResource("7_g03ui")
 
 [node name="PalazzoSiena" type="StaticBody3D" parent="Town" unique_id=476445221]
@@ -3006,6 +3011,7 @@ shape = SubResource("ConvexPolygonShape3D_egmbt")
 shape = SubResource("ConvexPolygonShape3D_ojnvm")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/PalazzoSiena" unique_id=2008189944]
+layers = 17
 mesh = ExtResource("8_1j2qo")
 
 [node name="CasaBianca" type="StaticBody3D" parent="Town" unique_id=121831391]
@@ -3191,6 +3197,7 @@ shape = SubResource("ConvexPolygonShape3D_y3s23")
 shape = SubResource("ConvexPolygonShape3D_lsfvu")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/CasaBianca" unique_id=1378226490]
+layers = 17
 mesh = ExtResource("9_k0tna")
 
 [node name="CasaOcraBassa" type="StaticBody3D" parent="Town" unique_id=210934607]
@@ -3337,6 +3344,7 @@ shape = SubResource("ConvexPolygonShape3D_f1gi5")
 shape = SubResource("ConvexPolygonShape3D_fnqa0")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/CasaOcraBassa" unique_id=1705249154]
+layers = 17
 mesh = ExtResource("10_x0fwf")
 
 [node name="CasaRosa" type="StaticBody3D" parent="Town" unique_id=622715636]
@@ -3576,6 +3584,7 @@ shape = SubResource("ConvexPolygonShape3D_3q3xp")
 shape = SubResource("ConvexPolygonShape3D_ogfff")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/CasaRosa" unique_id=1738114988]
+layers = 17
 mesh = ExtResource("11_kbh3x")
 
 [node name="CasaRiferimento" type="StaticBody3D" parent="Town" unique_id=609204591]
@@ -3626,6 +3635,7 @@ shape = SubResource("ConvexPolygonShape3D_pti62")
 shape = SubResource("ConvexPolygonShape3D_bykqf")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/CasaRiferimento" unique_id=1592495171]
+layers = 17
 mesh = ExtResource("12_fu807")
 
 [node name="Near0CasaBianca" type="StaticBody3D" parent="Town" unique_id=369315171]
@@ -3811,6 +3821,7 @@ shape = SubResource("ConvexPolygonShape3D_y3s23")
 shape = SubResource("ConvexPolygonShape3D_lsfvu")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/Near0CasaBianca" unique_id=2027332828]
+layers = 17
 mesh = ExtResource("9_k0tna")
 
 [node name="Near1CasaOcraBassa" type="StaticBody3D" parent="Town" unique_id=731380229]
@@ -3957,6 +3968,7 @@ shape = SubResource("ConvexPolygonShape3D_f1gi5")
 shape = SubResource("ConvexPolygonShape3D_fnqa0")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/Near1CasaOcraBassa" unique_id=1712364462]
+layers = 17
 mesh = ExtResource("10_x0fwf")
 
 [node name="Near2CasaOcraBassa" type="StaticBody3D" parent="Town" unique_id=742512830]
@@ -4103,6 +4115,7 @@ shape = SubResource("ConvexPolygonShape3D_f1gi5")
 shape = SubResource("ConvexPolygonShape3D_fnqa0")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/Near2CasaOcraBassa" unique_id=105432303]
+layers = 17
 mesh = ExtResource("10_x0fwf")
 
 [node name="Near3CasaBianca" type="StaticBody3D" parent="Town" unique_id=983399764]
@@ -4288,6 +4301,7 @@ shape = SubResource("ConvexPolygonShape3D_y3s23")
 shape = SubResource("ConvexPolygonShape3D_lsfvu")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/Near3CasaBianca" unique_id=1974863083]
+layers = 17
 mesh = ExtResource("9_k0tna")
 
 [node name="Near4CasaCrema" type="StaticBody3D" parent="Town" unique_id=1504817399]
@@ -4455,6 +4469,7 @@ shape = SubResource("ConvexPolygonShape3D_dneq2")
 shape = SubResource("ConvexPolygonShape3D_kgsi0")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/Near4CasaCrema" unique_id=1916772812]
+layers = 17
 mesh = ExtResource("7_g03ui")
 
 [node name="Near5CasaRosa" type="StaticBody3D" parent="Town" unique_id=57626456]
@@ -4694,6 +4709,7 @@ shape = SubResource("ConvexPolygonShape3D_3q3xp")
 shape = SubResource("ConvexPolygonShape3D_ogfff")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/Near5CasaRosa" unique_id=1828041739]
+layers = 17
 mesh = ExtResource("11_kbh3x")
 
 [node name="Near6CasaOcraBassa" type="StaticBody3D" parent="Town" unique_id=1371265259]
@@ -4840,6 +4856,7 @@ shape = SubResource("ConvexPolygonShape3D_f1gi5")
 shape = SubResource("ConvexPolygonShape3D_fnqa0")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/Near6CasaOcraBassa" unique_id=2103666120]
+layers = 17
 mesh = ExtResource("10_x0fwf")
 
 [node name="Near7CasaBianca" type="StaticBody3D" parent="Town" unique_id=74884296]
@@ -5025,6 +5042,7 @@ shape = SubResource("ConvexPolygonShape3D_y3s23")
 shape = SubResource("ConvexPolygonShape3D_lsfvu")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/Near7CasaBianca" unique_id=882048113]
+layers = 17
 mesh = ExtResource("9_k0tna")
 
 [node name="Near8CasaOcraBassa" type="StaticBody3D" parent="Town" unique_id=782419790]
@@ -5171,6 +5189,7 @@ shape = SubResource("ConvexPolygonShape3D_f1gi5")
 shape = SubResource("ConvexPolygonShape3D_fnqa0")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/Near8CasaOcraBassa" unique_id=444684995]
+layers = 17
 mesh = ExtResource("10_x0fwf")
 
 [node name="Fountain" type="StaticBody3D" parent="Town" unique_id=1922948232]
@@ -5181,6 +5200,7 @@ collision_mask = 0
 shape = SubResource("ConvexPolygonShape3D_8hqcb")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/Fountain" unique_id=1063295027]
+layers = 17
 mesh = ExtResource("13_e7345")
 
 [node name="StallA" type="StaticBody3D" parent="Town" unique_id=161454404]
@@ -6227,6 +6247,12 @@ instances = ExtResource("153_3bidx")
 
 [node name="Wind" type="FellowWind3D" parent="." unique_id=1823296633]
 speed = 3.5
+
+[node name="Weathering" type="FellowWeathering3D" parent="." unique_id=260174931]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.3, 0)
+streak_length = 2.0
+stain_color = Color(0.42, 0.39, 0.35, 1)
+cull_mask = 16
 
 [node name="Birds" type="Node3D" parent="." unique_id=514984991]
 script = ExtResource("154_p0cxf")

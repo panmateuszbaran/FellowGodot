@@ -1759,6 +1759,213 @@ void fellow_snow_cover(in SceneData p_scene, in FellowWeatherData w, float snow,
 	r_metallic = mix(r_metallic, 0.0, cover);
 }
 
+// FellowEngine weathering (decision 0332): years of weather on the opaque surfaces of the instances in a
+// FellowWeathering3D's layers, from the scene's shape seen from above in horizontal layers (binding 55: each layer's
+// highest surface, so that a sill is seen under the cornice above it):
+// * a patina: the albedo's tone varying over metres;
+// * streaks: dark lanes hanging from the nearest ledge above a wall's point (a sill, a cornice, a balcony, an eave: a
+//   surface in the column just outside the wall), thinning and fading down the wall, each lane its own width, length
+//   and darkness; none under a mass that rises on (a recess, a jetty: sheltered);
+// * damp at the foot of a wall (the ground half a metre and a metre and a half out, the lower: not a balcony's floor
+//   over the street), darker up to a ragged tide line with salt above it, and the splashes' grime in its lowest 35 cm.
+// Albedo only, in the colour passes; each pattern fades to its mean where it is finer than a pixel (TAA, milestone 189).
+uint fellow_wx_pcg(uvec2 v) {
+	v = v * 1664525u + 1013904223u;
+	v.x += v.y * 1664525u;
+	v.y += v.x * 1664525u;
+	v = v ^ (v >> 16u);
+	v.x += v.y * 1664525u;
+	v.y += v.x * 1664525u;
+	v = v ^ (v >> 16u);
+	return v.x;
+}
+
+float fellow_wx_hash(vec2 p_cell) {
+	return float(fellow_wx_pcg(uvec2(ivec2(floor(p_cell)) + ivec2(32768)))) * (1.0 / 4294967296.0);
+}
+
+float fellow_wx_noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(fellow_wx_hash(i), fellow_wx_hash(i + vec2(1.0, 0.0)), f.x), mix(fellow_wx_hash(i + vec2(0.0, 1.0)), fellow_wx_hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+#define FELLOW_WX_EMPTY 0
+#define FELLOW_WX_SURFACE 1
+#define FELLOW_WX_SOLID 2
+
+// Layer p_layer's highest surface over a point (m), nearest texel (a bilinear lookup across a ledge's edge would blend
+// its height with the ground's). r_state: FELLOW_WX_EMPTY (nothing in the layer there, or outside the layers),
+// FELLOW_WX_SURFACE, FELLOW_WX_SOLID (a mass rising through the layer's top: a wall, a pier).
+float fellow_wx_layer(in FellowWeatherData w, int p_layer, vec2 p_xz, out int r_state) {
+	r_state = FELLOW_WX_EMPTY;
+	if (p_layer < 0 || p_layer >= int(w.weathering_occ2.z)) {
+		return 0.0;
+	}
+	vec4 cc = w.weathering_centers[p_layer >> 1];
+	vec2 uv = (p_xz - ((p_layer & 1) == 0 ? cc.xy : cc.zw)) * w.weathering_occ.xy + 0.5;
+	if (any(lessThan(uv, vec2(0.001))) || any(greaterThan(uv, vec2(0.999)))) {
+		return 0.0;
+	}
+	float h = textureLod(sampler2DArray(fellow_weathering_layers, SAMPLER_NEAREST_CLAMP), vec3(uv, float(p_layer)), 0.0).r;
+	float span = w.weathering_occ2.y + w.weathering4.w; // the layer's box: its height and the overlap below it
+	r_state = h <= 1e-6 ? FELLOW_WX_EMPTY : (h >= 1.0 - 0.01 / span ? FELLOW_WX_SOLID : FELLOW_WX_SURFACE);
+	return w.weathering_occ2.x + float(p_layer + 1) * w.weathering_occ2.y - (1.0 - h) * span;
+}
+
+#define FELLOW_WX_GROUND 0 // the ground found
+#define FELLOW_WX_UNSEEN 1 // under a surface above the point (an awning) or in a mass (a wall across an alley)
+#define FELLOW_WX_BELOW 2 // nothing within p_reach layers: the ground is far below (a balcony's edge)
+
+// The ground under a wall's point, seen at p_xz: the highest surface below it in its layer, or in the first layer below
+// that is not empty there (down to p_reach layers).
+float fellow_wx_ground(in FellowWeatherData w, int p_layer, int p_reach, vec2 p_xz, float p_y, out int r_found) {
+	int st;
+	float a = fellow_wx_layer(w, p_layer, p_xz, st);
+	for (int i = 1; i <= 4 && st == FELLOW_WX_EMPTY && i <= p_reach; i++) {
+		a = fellow_wx_layer(w, p_layer - i, p_xz, st);
+	}
+	r_found = st == FELLOW_WX_EMPTY ? FELLOW_WX_BELOW : ((st == FELLOW_WX_SURFACE && a <= p_y + 0.05) ? FELLOW_WX_GROUND : FELLOW_WX_UNSEEN);
+	return a;
+}
+
+void fellow_weathering_apply(in SceneData p_scene, inout vec3 r_albedo, float p_metallic, vec3 p_vertex, vec3 p_geometric_normal) {
+	FellowWeatherData w = fellow_weather.data;
+	mat4 inv_view = transpose(mat4(p_scene.inv_view_matrix[0], p_scene.inv_view_matrix[1], p_scene.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
+	vec3 wp = (inv_view * vec4(p_vertex, 1.0)).xyz;
+	vec3 gn = normalize(mat3(inv_view) * p_geometric_normal);
+	// The pixel's footprint (m): the patterns finer than it fade to their means (here, where every pixel of the quad
+	// still runs: the call's condition is the draw's).
+	float fp = max(length(dFdx(wp)), length(dFdy(wp)));
+	float seed = w.weathering2.w;
+	vec3 alb = r_albedo;
+
+	// Patina: two octaves over the surface's own plane, about 3 m and 0.8 m across.
+	vec2 puv = (abs(gn.y) > 0.7 ? wp.xz : (abs(gn.x) > abs(gn.z) ? wp.zy : wp.xy)) + seed * 17.0;
+	float fine = mix(fellow_wx_noise(puv * 1.3 + 7.1), 0.5, smoothstep(0.25, 0.6, fp * 1.3));
+	float pat = 0.65 * fellow_wx_noise(puv * 0.35) + 0.35 * fine;
+	alb *= 1.0 + w.weathering2.y * 0.3 * (pat - 0.5);
+	alb = mix(alb, alb * vec3(1.04, 1.0, 0.92), w.weathering2.y * 0.5 * smoothstep(0.55, 0.8, pat));
+
+	if (w.weathering_occ2.z > 0.5 && abs(gn.y) < 0.6) {
+		// A wall: its outward direction on the ground and the direction along it.
+		vec2 nh = normalize(gn.xz + vec2(1e-5, 0.0));
+		vec2 along = vec2(-nh.y, nh.x);
+		float u = dot(wp.xz, along) + seed * 13.0;
+		float texel = 1.0 / max(w.weathering_occ2.w, 1e-3);
+		int layer = int(floor((wp.y - w.weathering_occ2.x) / w.weathering_occ2.y));
+
+		if (w.weathering.y > 0.0) {
+			// The nearest ledge above, in the column 1.2 texels out (nearest texel: never the wall's own, whose texels
+			// lie inside its face): in the point's layer, else in the one above.
+			vec2 col = wp.xz + nh * (1.2 * texel);
+			int st;
+			float a = fellow_wx_layer(w, layer, col, st);
+			float ledge = -1e6;
+			int layer_at = layer + 1; // where the ledge was seen
+			if (st != FELLOW_WX_EMPTY && a > wp.y + 0.02) {
+				if (st == FELLOW_WX_SURFACE) {
+					ledge = a;
+					layer_at = layer;
+				} else {
+					// A mass through the layer's top: a ledge across the layers' boundary (a cornice) ends in the
+					// layer above; one rising on shelters the point (a recess, a jetty).
+					int st2;
+					float b = fellow_wx_layer(w, layer + 1, col, st2);
+					ledge = st2 == FELLOW_WX_SURFACE ? b : -1e6;
+				}
+			} else {
+				// The first layer above that is not empty there, as far as five streak lengths: a surface is the
+				// ledge, a mass shelters the point.
+				int reach = int(ceil(5.0 / (w.weathering.z * w.weathering_occ2.y)));
+				for (int i = 1; i <= 6 && i <= reach; i++) {
+					int st2;
+					float b = fellow_wx_layer(w, layer + i, col, st2);
+					if (st2 != FELLOW_WX_EMPTY) {
+						ledge = st2 == FELLOW_WX_SURFACE ? b : -1e6;
+						layer_at = layer + i;
+						break;
+					}
+				}
+			}
+			float above = ledge - wp.y;
+			if (above > 0.02) {
+				float fall = above * w.weathering.z; // in streak lengths below the ledge
+				// Lanes 4 a metre, wavy, about half of them running; each its own width, length and darkness; soft
+				// edges, box-filtered across.
+				float lane = u * 4.0 + 0.6 * fellow_wx_noise(vec2(u * 0.7, wp.y * 0.6));
+				float id = floor(lane);
+				float x = abs(fract(lane) - 0.5);
+				float runs = step(fellow_wx_hash(vec2(id, 1.0 + seed)), 0.55);
+				float len = mix(0.4, 1.6, fellow_wx_hash(vec2(id, 3.0 + seed)));
+				float dark = mix(0.3, 1.0, fellow_wx_hash(vec2(id, 7.0 + seed)));
+				float width = mix(0.15, 0.45, fellow_wx_hash(vec2(id, 11.0 + seed))) * (1.0 - 0.45 * min(fall / len, 1.0));
+				float fw = fp * 4.0;
+				float in_lane = clamp((width - x) / max(fw + 0.35 * width, 1e-4) + 0.5, 0.0, 1.0);
+				// Lumpy down its length: water runs in pulses.
+				float lump = 0.75 + 0.5 * mix(fellow_wx_noise(vec2(id * 3.1, wp.y * 3.0)), 0.5, smoothstep(0.1, 0.3, fp * 3.0));
+				float streak = runs * in_lane * dark * lump * exp(-fall / len);
+				// Finer than a pixel: the lanes' mean (their share, mean width and darkness, their mean length's fade).
+				streak = mix(streak, 0.55 * 0.6 * 0.65 * exp(-fall / 0.9), smoothstep(0.35, 0.9, fw));
+				// A broad, faint wash under the lanes (a metre's curtains of grime), and the ledge's own shadow of dirt
+				// right under it.
+				float wash = fellow_wx_noise(vec2(u * 1.1 + 3.7, 0.5 + seed));
+				streak = max(streak, 0.3 * smoothstep(0.35, 0.75, wash) * exp(-fall * 1.2));
+				streak = max(streak, 0.4 * exp(-fall * 6.0));
+				// A ledge's ends drip most (the water runs off a sill's corners): within 20 cm of where the ledge in
+				// the column stops along the wall, a darker, longer streak.
+				int se1, se2, se3, se4;
+				float e1 = fellow_wx_layer(w, layer_at, col + along * 0.1, se1);
+				float e2 = fellow_wx_layer(w, layer_at, col - along * 0.1, se2);
+				float e3 = fellow_wx_layer(w, layer_at, col + along * 0.2, se3);
+				float e4 = fellow_wx_layer(w, layer_at, col - along * 0.2, se4);
+				float ends = 0.5 * (float(se1 != FELLOW_WX_SURFACE || abs(e1 - ledge) > 0.04) + float(se2 != FELLOW_WX_SURFACE || abs(e2 - ledge) > 0.04));
+				ends = max(ends, 0.5 * max(float(se3 != FELLOW_WX_SURFACE || abs(e3 - ledge) > 0.04), float(se4 != FELLOW_WX_SURFACE || abs(e4 - ledge) > 0.04)));
+				streak = max(streak, ends * 0.85 * lump * exp(-fall / 1.4));
+				// A short ledge (a sill, a hood: it stops within 80 cm along the wall) hangs a curtain of grime its
+				// width, mottled, fading over most of a streak length; a long one (a cornice) only its lanes.
+				int sf1, sf2;
+				float f1 = fellow_wx_layer(w, layer_at, col + along * 0.8, sf1);
+				float f2 = fellow_wx_layer(w, layer_at, col - along * 0.8, sf2);
+				float short_ledge = max(float(sf1 != FELLOW_WX_SURFACE || abs(f1 - ledge) > 0.04), float(sf2 != FELLOW_WX_SURFACE || abs(f2 - ledge) > 0.04));
+				float mottle = mix(fellow_wx_noise(vec2(u * 2.7, wp.y * 2.1 + seed)), 0.5, smoothstep(0.2, 0.5, fp * 2.7));
+				streak = max(streak, short_ledge * (0.3 + 0.25 * mottle) * exp(-fall * 1.1));
+				float s = clamp(streak, 0.0, 1.0) * w.weathering.y;
+				alb = mix(alb, alb * w.weathering3.rgb, s);
+			}
+		}
+
+		if (w.weathering.w > 0.0) {
+			float dh = w.weathering2.x;
+			// The ground: the lower of what lies half a metre and a metre and a half out (a kerb is the street's;
+			// a balcony's floor is not: beyond its edge the street is out of the damp's reach).
+			int g1, g2;
+			int reach = int(ceil((dh * 1.6 + 0.4) / w.weathering_occ2.y)); // the layers within the damp's reach
+			float ga = fellow_wx_ground(w, layer, reach, wp.xz + nh * 0.5, wp.y, g1);
+			float gb = fellow_wx_ground(w, layer, reach, wp.xz + nh * 1.5, wp.y, g2);
+			bool found = (g1 == FELLOW_WX_GROUND || g2 == FELLOW_WX_GROUND) && g1 != FELLOW_WX_BELOW && g2 != FELLOW_WX_BELOW;
+			float ground = (g1 == FELLOW_WX_GROUND && g2 == FELLOW_WX_GROUND) ? min(ga, gb) : (g1 == FELLOW_WX_GROUND ? ga : gb);
+			float h = wp.y - ground;
+			if (found && h > -0.05 && h < dh * 1.6 + 0.3) {
+				// Damp up to a ragged tide line; salt in a broken band just above it; the splashes' grime lowest.
+				float ragged = mix(0.16 * (fellow_wx_noise(vec2(u * 3.3, 5.1 + seed)) - 0.5) + 0.07 * (fellow_wx_noise(vec2(u * 11.0, 8.3 + seed)) - 0.5), 0.0, smoothstep(0.1, 0.3, fp * 11.0));
+				float edge = dh * (0.75 + 0.5 * fellow_wx_noise(vec2(u * 0.9, 3.3 + seed))) + ragged;
+				float soft = max(0.03, fp);
+				// Wettest at the foot.
+				float damp = (1.0 - smoothstep(edge - 0.08 - soft, edge, h)) * mix(1.0, 0.75, clamp(h / max(edge, 0.05), 0.0, 1.0));
+				float salt = smoothstep(edge - soft, edge + 0.02 + soft, h) * (1.0 - smoothstep(edge + 0.03, edge + 0.1 + soft, h));
+				salt *= mix(smoothstep(0.4, 0.7, fellow_wx_noise(vec2(u * 2.3, 9.7 + seed))), 0.3, smoothstep(0.2, 0.5, fp * 2.3));
+				float splash = (1.0 - smoothstep(0.05, 0.35, h)) * mix(fellow_wx_noise(vec2(u * 9.0, wp.y * 9.0)), 0.5, smoothstep(0.1, 0.3, fp * 9.0));
+				float d = clamp(0.75 * damp + 0.45 * splash, 0.0, 1.0) * w.weathering.w;
+				alb = mix(alb, alb * w.weathering4.rgb, d);
+				alb = mix(alb, max(alb, vec3(0.78, 0.76, 0.7) * dot(r_albedo, vec3(0.3333)) * 1.4), salt * 0.25 * w.weathering.w);
+			}
+		}
+	}
+	r_albedo = mix(r_albedo, alb, w.weathering.x * (1.0 - 0.7 * clamp(p_metallic, 0.0, 1.0)));
+}
+
 // FellowEngine weather (decision 0124): a material wetted after its own code and its decals, where the rain reaches it;
 // covered with snow where the snow falls (decision 0128).
 void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float r_roughness, inout float r_metallic, inout vec3 r_normal, vec3 p_vertex, vec3 p_geometric_normal) {
@@ -2355,6 +2562,12 @@ void fragment_shader(in SceneData scene_data) {
 #endif //not render depth
 
 #if !defined(MODE_RENDER_SDF) && (!defined(MODE_RENDER_DEPTH) || defined(MODE_RENDER_NORMAL_ROUGHNESS)) && defined(NORMAL_USED)
+#if !defined(MODE_RENDER_DEPTH)
+	// FellowEngine weathering (decision 0332): before the weather's wetting, in the colour passes (the albedo only).
+	if (sc_fellow_wetness() && fellow_weather.data.weathering.x > 0.0 && bool(uint(fellow_weather.data.weathering2.z) & FELLOW_INSTANCE(layer_mask))) {
+		fellow_weathering_apply(scene_data, albedo, metallic, vertex, normalize(normal_interp));
+	}
+#endif
 	// FellowEngine weather (decision 0124): the same in the depth pre-pass (its normals and roughness feed the
 	// reflections) and the colour passes.
 	if (sc_fellow_wetness()) {

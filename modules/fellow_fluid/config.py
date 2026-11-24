@@ -15,6 +15,7 @@ def get_doc_classes():
         "FellowContactSound3D",
         "FellowFootsteps3D",
         "FellowRain3D",
+        "FellowWeathering3D",
         "FellowWind3D",
         "FellowGasVolume3D",
         "FellowGasEmitter3D",

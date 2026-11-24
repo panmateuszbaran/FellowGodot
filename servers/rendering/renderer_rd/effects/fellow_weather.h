@@ -131,6 +131,37 @@ public:
 		float sky_cover = 0.0f; // 0..1: how grey the sky's light is under the clouds (its ambient light, its reflections)
 	};
 
+	// Weathering (decision 0332): years of weather on every opaque surface of the instances in `cull_mask` — a patina,
+	// dark streaks hanging from the ledges above, damp at the foot of the walls — from the scene's shape seen from above
+	// in layers: a stack of heightfields `layer_height` tall each, so that a sill under a cornice is seen in its own
+	// layer (one heightfield sees only the highest surface over each point).
+	static constexpr int WEATHERING_MAX_LAYERS = 16;
+	struct WeatheringState {
+		bool enabled = false;
+		float strength = 1.0f; // 0..1
+		float streaks = 1.0f; // 0..1
+		float streak_length = 1.5f; // m
+		float damp = 1.0f; // 0..1
+		float damp_height = 0.8f; // m
+		float patina = 0.5f; // 0..1
+		float seed = 0.0f;
+		Color stain_color = Color(0.56f, 0.53f, 0.48f); // what a full streak multiplies the albedo by
+		Color damp_color = Color(0.6f, 0.6f, 0.52f); // what full damp multiplies it by
+		uint32_t cull_mask = 0xFFFFF;
+		// The layers, bottom up: RS base RIDs of particles collision heightfields, drawn into one 2D array texture's
+		// layers (`resolution` texels square); layer i spans [base + i * layer_height - layer_overlap,
+		// base + (i + 1) * layer_height] around its own centre (they follow the camera one a frame).
+		RID layers[WEATHERING_MAX_LAYERS];
+		float layer_center[WEATHERING_MAX_LAYERS][2] = {};
+		uint32_t layer_count = 0;
+		uint32_t resolution = 1024;
+		float base = 0.0f; // m
+		float size_x = 0.0f; // m
+		float size_z = 0.0f; // m
+		float layer_height = 3.0f; // m
+		float layer_overlap = 0.1f; // m
+	};
+
 	// std140: the shader's FellowWeatherData.
 	struct UBO {
 		float params[4]; // wetness, puddles, rain, time
@@ -149,6 +180,13 @@ public:
 		float cloud_shadow3[4]; // beyond the map: the sun's share there; the sky's light's cover (greyed)
 		float frost[4]; // decision 0136: the water's ice (0..1), the hoarfrost (0..1); 0138: the drying's patches (0..1); 0140: the slush (0..1)
 		float slant[4]; // decision 0139: the rain's drift per metre of fall (x, z), how slanted it counts (0..1)
+		float weathering[4]; // decision 0332: strength, streaks, 1 / streak length (1/m), damp
+		float weathering2[4]; // damp height (m), patina, cull mask (a float: 20 bits), seed
+		float weathering3[4]; // stain colour (rgb)
+		float weathering4[4]; // damp colour (rgb), the layers' overlap (m)
+		float weathering_occ[4]; // the layers' 1 / width x, 1 / width z
+		float weathering_occ2[4]; // their base (m), a layer's height (m), the layers' count, texels per metre
+		float weathering_centers[8][4]; // each layer's centre (x, z): two a vec4
 	};
 
 private:
@@ -159,6 +197,13 @@ private:
 	LightningState lightning;
 	SkyState sky;
 	CloudShadowState cloud_shadow;
+	WeatheringState weathering;
+	// Decision 0332: the weathering's layers' depth, one layer each (the heightfields draw into it).
+	RID weathering_array;
+	uint32_t weathering_array_size = 0;
+	uint32_t weathering_array_layers = 0;
+	RID weathering_targeted[WEATHERING_MAX_LAYERS];
+	void _weathering_untarget();
 	RID ubo;
 	bool ubo_dirty = true;
 	// Showers (decision 0137): the clouds' rain at the camera, read back from the GPU (render thread), read by the rain
@@ -177,7 +222,12 @@ public:
 	void set_state(const State &p_state);
 	// Once per frame while a FellowWind3D is active; the previous call's state becomes the previous frame's.
 	void set_wind_state(const WindState &p_wind);
-	bool is_active() const { return state.enabled || wind.enabled || cloud_shadow.active; }
+	bool is_active() const { return state.enabled || wind.enabled || cloud_shadow.active || weathering.enabled; }
+	// Decision 0332: once per frame while a FellowWeathering3D is active.
+	void set_weathering_state(const WeatheringState &p_weathering);
+	const WeatheringState &get_weathering_state() const { return weathering; }
+	// Weathering drawn this frame (enabled, some strength, its layers).
+	bool is_weathering() const { return weathering.enabled && weathering.strength > 0.0f && weathering.cull_mask != 0; }
 	const State &get_state() const { return state; }
 	const WindState &get_wind_state() const { return wind; }
 	void set_lightning_state(const LightningState &p_lightning) { lightning = p_lightning; }
@@ -195,6 +245,8 @@ public:
 	static float get_rain_here();
 	RID get_uniform_buffer();
 	RID get_occlusion_texture() const;
+	// Decision 0332: the weathering's layers (binding 55: a 2D array, one layer each), or none while it is off.
+	RID get_weathering_layers_texture() const;
 	RID get_ripple_texture() const;
 	RID get_gust_texture() const;
 	RID get_tracks_texture() const;

@@ -832,6 +832,13 @@ struct FellowWeatherData {
 	vec4 cloud_shadow3; // beyond the map: the sun's share there (the clear sky's share); the sky light's cover
 	vec4 frost; // decision 0136: how much of the wet surfaces' water is ice (0..1), the hoarfrost (0..1); z: decision 0138's drying patches (0..1); w: decision 0140's slush (0..1)
 	vec4 slant; // decision 0139: the rain's drift per metre of fall (x, z), how slanted the shelter is (0..1)
+	vec4 weathering; // decision 0332: strength, streaks, 1 / streak length (1/m), damp
+	vec4 weathering2; // damp height (m), patina, cull mask (a float), seed
+	vec4 weathering3; // stain colour (rgb): what a full streak multiplies the albedo by
+	vec4 weathering4; // damp colour (rgb); the layers' overlap (m)
+	vec4 weathering_occ; // its layers (binding 55): 1 / their width x, 1 / their width z
+	vec4 weathering_occ2; // their base (m), a layer's height (m), the layers' count (0: none drawn), texels per metre
+	vec4 weathering_centers[8]; // each layer's centre (x, z): layer 2i in .xy, 2i + 1 in .zw
 };
 layout(set = 1, binding = 49, std140) uniform FellowWeatherBlock {
 	FellowWeatherData data;
@@ -845,6 +852,9 @@ layout(set = 1, binding = 52) uniform texture2D fellow_wind_gusts;
 layout(set = 1, binding = 53) uniform texture2D fellow_snow_tracks;
 // The volumetric clouds' shadow (decision 0133): the sun's transmittance through the cloud layer over the ground.
 layout(set = 1, binding = 54) uniform texture2D fellow_cloud_shadow;
+// FellowEngine weathering (decision 0332): the scene seen from above in horizontal layers, bottom up, one layer of the
+// array each (its highest surface, reverse depth: 1 the layer's top, 0 empty).
+layout(set = 1, binding = 55) uniform texture2DArray fellow_weathering_layers;
 
 #endif
 

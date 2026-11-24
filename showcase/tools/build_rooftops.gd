@@ -67,6 +67,10 @@ const KERB := 0.08 ## and their height
 const LAYER_WORLD := 1
 const LAYER_CLIMB := 2
 const LAYER_HAY := 4
+## Milestone 190: the render layer of what FellowWeathering3D weathers and finds the ledges and the ground in (the
+## buildings, the fountain, the pavements and the paving), beside the default layer 1; the people, the stalls, the props
+## and the cloth stay out of it.
+const RENDER_WEATHERED := 1 | 16
 
 var models_dir := ""
 var scene_root: Node3D
@@ -301,9 +305,12 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 	photo["water_stone"] = _photo("stone", {"tint": Color(0.82, 0.8, 0.74), "tint_strength": 0.6, "specular": 0.25, "stains": 0.5,
 			"anti_tile": false, "seed": 2.0})
 	# The ground floors' rustication: the sandstone's blocks, larger and rougher, greyer than the dressings.
+	# Milestone 190 (the owner: "more shadow than texture"): the photograph's rock-faced normals (31 degrees on average,
+	# the bricks' 15) at 0.5 under the low sun, over its colour softened by 0.6, had drawn every block as its shading —
+	# a dark half to every bump; at 0.22 over a colour softened by 0.3 the stone's own colour shows.
 	photo["stone_rustic"] = _photo("ashlar" if _tex.has("ashlar") else "stone", {"tint": Color(0.82, 0.76, 0.66), "tint_strength": 0.4, "specular": 0.22,
-			"stains": 0.4, "ground_dirt": 0.9, "normal_strength": 0.5, "tex_size": 3.4, "variation": 0.16, "anti_tile": false,
-			"seed": 3.0, "parallax_depth": 0.025, "height_lo": 0.4, "height_hi": 0.55, "albedo_soften": 0.6, "cavity": 0.3})
+			"stains": 0.4, "ground_dirt": 0.9, "normal_strength": 0.22, "tex_size": 3.4, "variation": 0.16, "anti_tile": false,
+			"seed": 3.0, "parallax_depth": 0.025, "height_lo": 0.4, "height_hi": 0.55, "albedo_soften": 0.3, "cavity": 0.3})
 	photo["kerb"] = _photo("stone", {"tint": Color(0.62, 0.62, 0.6), "tint_strength": 0.7, "specular": 0.25, "anti_tile": false, "seed": 4.0})
 	photo["brick"] = _photo("brick", {"tint": Color(0.56, 0.38, 0.3), "tint_strength": 0.5, "normal_strength": 0.75, "specular": 0.2,
 			"stains": 0.3, "variation": 0.1, "anti_tile": false, "seed": 5.0})
@@ -479,6 +486,7 @@ func _pavements(p_root: Node3D) -> void:
 	_save(mesh, OUT + "/models/pavements.res")
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
+	mi.layers = RENDER_WEATHERED
 	_add(body, mi, "Mesh")
 
 
@@ -488,7 +496,7 @@ func _place(p_name: String) -> Transform3D:
 	return Transform3D(Basis(Vector3.UP, deg_to_rad(p[1])), Vector3(pos.x, 0.0, pos.y))
 
 
-func _model(p_parent: Node3D, p_name: String, p_xform: Transform3D, p_layer := LAYER_WORLD | LAYER_CLIMB) -> Node3D:
+func _model(p_parent: Node3D, p_name: String, p_xform: Transform3D, p_layer := LAYER_WORLD | LAYER_CLIMB, p_weathered := false) -> Node3D:
 	var info: Dictionary = models[p_name]
 	var node: Node3D
 	if not info["shapes"].is_empty():
@@ -511,6 +519,8 @@ func _model(p_parent: Node3D, p_name: String, p_xform: Transform3D, p_layer := L
 		_add(p_parent, node, p_name)
 	var mi := MeshInstance3D.new()
 	mi.mesh = info["mesh"]
+	if p_weathered:
+		mi.layers = RENDER_WEATHERED
 	_add(node, mi, "Mesh")
 	return node
 
@@ -533,15 +543,15 @@ func _build_scene() -> void:
 	_add(root, town, "Town")
 	for n in BUILDINGS:
 		if models.has(n):
-			_model(town, n, _place(n))
+			_model(town, n, _place(n), LAYER_WORLD | LAYER_CLIMB, true)
 	for i in NEAR.size():
 		var near: Array = NEAR[i]
 		if models.has(near[0]):
 			var p: Vector2 = near[1]
-			_model(town, near[0], Transform3D(Basis(Vector3.UP, deg_to_rad(near[2])), Vector3(p.x, 0.0, p.y))).name = "Near%d%s" % [i, near[0]]
+			_model(town, near[0], Transform3D(Basis(Vector3.UP, deg_to_rad(near[2])), Vector3(p.x, 0.0, p.y)), LAYER_WORLD | LAYER_CLIMB, true).name = "Near%d%s" % [i, near[0]]
 	for n in ["Fountain", "StallA", "StallB"]:
 		if models.has(n):
-			_model(town, n, _place(n), LAYER_WORLD)
+			_model(town, n, _place(n), LAYER_WORLD, n == "Fountain")
 	if models.has("Skyline"):
 		var sky_node := _model(root, "Skyline", _place("Skyline"))
 		(sky_node.get_node("Mesh") as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -554,6 +564,15 @@ func _build_scene() -> void:
 	wind.set("speed", 3.5)
 	wind.set("direction", Vector3(0.8, 0.0, 0.6).normalized())
 	_add(root, wind, "Wind")
+	# Milestone 190 (decision 0332): the town's walls weathered from their shape — streaks under the sills, the hoods,
+	# the cornices and the balconies, damp at their foot, a patina — its layers from just under the paving up.
+	var weathering: Node3D = ClassDB.instantiate("FellowWeathering3D")
+	weathering.set("cull_mask", 16)
+	# Darker and longer than the defaults: the photographs' stone and plaster are busy, and old Italian fronts streaked.
+	weathering.set("streak_length", 2.0)
+	weathering.set("stain_color", Color(0.42, 0.39, 0.35))
+	weathering.position = Vector3(0.0, -0.3, 0.0)
+	_add(root, weathering, "Weathering")
 	_banners(town)
 	_awnings(town)
 	_dust(town)
@@ -722,6 +741,7 @@ func _ground(p_root: Node3D) -> void:
 	_add(body, cs, "Collision")
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
+	mi.layers = RENDER_WEATHERED
 	_add(body, mi, "Mesh")
 
 
