@@ -3746,7 +3746,7 @@
 			Measured and rejected (slower): the TAA resolve in 16 x 16 workgroups. Decision 0023.
 		</member>
 		<member name="rendering/fellow/postfx/taa_v2_antiflicker" type="float" setter="" getter="" default="0.0">
-			TAA v2: more history where the neighbourhood's contrast is high, against flicker (0: off).
+			TAA v2: where the history lies inside the neighbourhood's colour box, its largest weight ([member rendering/fellow/postfx/taa_v2_feedback_max]) however much the frame disagrees with it (0: off).
 		</member>
 		<member name="rendering/fellow/postfx/taa_v2_feedback_max" type="float" setter="" getter="" default="0.9375">
 			TAA v2's most history weight (still pixels).
@@ -3762,6 +3762,9 @@
 		</member>
 		<member name="rendering/fellow/postfx/taa_v2_soften_contrast" type="float" setter="" getter="" default="0.45">
 			TAA v2: the contrast from which motion softening applies.
+		</member>
+		<member name="rendering/fellow/postfx/taa_v2_stability" type="float" setter="" getter="" default="0.0">
+			TAA v2: where the history lies inside the neighbourhood's colour box, the more the frame disagrees with it the more history is kept, as stock Godot's resolve does: the jitter's flicker on detail finer than a pixel (shutters' slats, a rough stone's sunlit grains) averaged out instead of followed. 0: off. Decision 0331.
 		</member>
 		<member name="rendering/fellow/postfx/taa_v2_velocity_dilation" type="bool" setter="" getter="" default="true">
 			TAA v2 takes the nearest neighbour's velocity (reverse-Z dilation): edges move with their objects.
