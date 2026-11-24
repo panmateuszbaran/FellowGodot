@@ -99,3 +99,9 @@ is back (`play_look.gd`'s `base` against `--set=rendering/fellow/sdfgi/screen_ga
 * A neighbourhood clamp on the pixel history: the probes' own history already lags the light; clamped to the 2 x 2
   probes' range, a flat wall's change would pass as it does the TAA's.
 * The residual TAA leaves on the textures' sub-pixel detail (most of what is left): decision 0331's territory.
+
+## The RTX (milestone 197, decision 0339)
+
+The demo's run at 1920x1080 on the RTX 5070 Ti Laptop GPU (job f555), the flicker along the motion vectors: with the
+history per pixel 8.11 % of the pixels more than 3 levels from the frame before, without it (`screen_gather_pixel_history`
+1) 8.58 %; the mean second difference 2.71 / 2.79.

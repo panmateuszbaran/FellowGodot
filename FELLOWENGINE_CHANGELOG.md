@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 197 — Free-running from Mixamo: the vault and the run up a wall (2026-11-25)
+
+- `FellowTraversal3D` (decision 0339): a mantle with a clip's root motion looks for its hold at the wall only up to the
+  root's highest sample (a vault's root comes down and steps on after its landing: a rise there had held the body at
+  the wall through Mixamo's whole vault).
+- The showcase's rooftops: Mixamo's vault (the hand planted, the legs swung across; its root at the lower foot's height)
+  and run up a wall for the first hold; its climb-up from a hang retargeted but kept the mannequin's (through
+  CasaCrema's eave in half the mantle's frames). `climb_look.gd --program=course` films the free-running.
+- The RTX's check of milestone 191's history per pixel: the flicker along the motion 8.58 → 8.11 % of the pixels.
+
 ## Milestone 196 — Mixamo's hangs and moves from hold to hold, fitted to the traversal (2026-11-24)
 
 - `FellowTraversalPose3D` (decision 0338): `hand_flight_weight` (a hand off its hold between holds reached for by that
