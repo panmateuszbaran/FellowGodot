@@ -7,7 +7,9 @@ extends SceneTree
 ##       --out=<dir> [--views=east,north,close,street] [--settle=16] [--glass=<property>=<value>]... [--before=1]
 ##
 ## --before=1: the windows' glass as before milestone 188 (rooftops/shaders/window_glass.gdshader: dark panes, curtains
-## drawn on them); --glass=daylight=0.5 sets one of the glass material's properties.
+## drawn on them); --glass=daylight=0.5 sets one of the glass material's properties; --timing=1 also measures each
+## view's render time over 120 frames after it has settled (the GPU's and the CPU's, milliseconds; printed as
+## "windows_look_timing <view> <gpu> <cpu>").
 
 const VIEWS := {
 	"east": [Vector3(2.0, 3.0, 4.0), Vector3(22.0, 6.5, 0.0), 55.0], # from, to, field of view
@@ -23,6 +25,7 @@ func _init() -> void:
 	var settle := 16
 	var glass_props := {}
 	var before := false
+	var timing := false
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			out = a.get_slice("=", 1)
@@ -35,6 +38,8 @@ func _init() -> void:
 			glass_props[kv.get_slice("=", 0)] = str_to_var(kv.get_slice("=", 1))
 		elif a == "--before=1":
 			before = true
+		elif a == "--timing=1":
+			timing = true
 	DirAccess.make_dir_recursive_absolute(out)
 	var sc: Node = (load("res://rooftops/rooftops.tscn") as PackedScene).instantiate()
 	root.add_child(sc)
@@ -80,4 +85,16 @@ func _init() -> void:
 		await RenderingServer.frame_post_draw
 		root.get_texture().get_image().save_png("%s/%s.png" % [out, v])
 		print("windows_look: ", v)
+		if timing:
+			var vp := root.get_viewport_rid()
+			RenderingServer.viewport_set_measure_render_time(vp, true)
+			var gpu := 0.0
+			var cpu := 0.0
+			for k in 120:
+				cam.current = true
+				await process_frame
+				await RenderingServer.frame_post_draw
+				gpu += RenderingServer.viewport_get_measured_render_time_gpu(vp)
+				cpu += RenderingServer.viewport_get_measured_render_time_cpu(vp)
+			print("windows_look_timing %s %.3f %.3f" % [v, gpu / 120.0, cpu / 120.0])
 	quit()
