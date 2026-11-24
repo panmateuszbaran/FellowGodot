@@ -15,6 +15,11 @@ const BINS := 50
 ## Milestone 156: the whole body's smoothness — each joint's turn against its parent (deg/s) and the hips' acceleration.
 const SMOOTH_BONES := ["Spine", "Chest", "Neck", "Head", "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm",
 		"RightLowerArm", "RightHand", "LeftUpperLeg", "LeftLowerLeg", "RightUpperLeg", "RightLowerLeg"]
+## Milestone 195: the joints that must stay out of the buildings (the head, the elbows, the knees, the ankles and the
+## balls of the feet — not the hands, which wrap over a ledge's edge), each looked at from the hips: a surface between
+## them is a limb through a wall.
+const INSIDE_BONES := ["Head", "LeftLowerArm", "RightLowerArm", "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot",
+		"LeftToes", "RightToes"]
 
 var program := "gaits"
 var out_dir := "user://anim_quality"
@@ -123,6 +128,23 @@ func _upd() -> void:
 			"speed": {"knee": 0.0, "hip": 0.0, "ankle": 0.0}, "contacts": [[], []], "toe_offs": [[], []], "curves": [[], []],
 			"hips_y": [], "body_v": [], "ang": [], "hips_p": []})
 	d.frames += 1
+	# Milestone 195: limbs through the buildings — a surface (not the player's) between the hips and a joint.
+	var space := player.get_world_3d().direct_space_state
+	var hips := _p("Hips")
+	var through := ""
+	for n in INSIDE_BONES:
+		var j := _p(n)
+		var q := PhysicsRayQueryParameters3D.create(hips, j, 1, [player.get_rid()])
+		var hit := space.intersect_ray(q)
+		if not hit.is_empty() and hips.distance_to(hit.position) < hips.distance_to(j) - 0.04:
+			through = n
+			var depth: float = (hit.position as Vector3).distance_to(j) * 100.0
+			d["inside_depth_cm"] = maxf(float(d.get("inside_depth_cm", 0.0)), depth)
+			break
+	if through != "":
+		d["inside"] = int(d.get("inside", 0)) + 1
+		var ib: Dictionary = d.get_or_add("inside_bones", {})
+		ib[through] = int(ib.get(through, 0)) + 1
 	var dt := 1.0 / 120.0
 	# The fastest joint this frame (its turn against its parent's), and where the hips are drawn.
 	var ang := 0.0
@@ -238,7 +260,9 @@ func _write() -> void:
 	var outd := {"program": program, "segments": {}}
 	for k in segs:
 		var d: Dictionary = segs[k]
-		var r := {"frames": d.frames, "g_min_cm": d.g_min * 100.0, "speed_deg_s": d.speed}
+		var r := {"frames": d.frames, "g_min_cm": d.g_min * 100.0, "speed_deg_s": d.speed,
+				"inside_share": float(d.get("inside", 0)) / maxf(1.0, d.frames), "inside_bones": d.get("inside_bones", {}),
+				"inside_depth_cm": d.get("inside_depth_cm", 0.0)}
 		for j in ["knee", "hip", "ankle"]:
 			var a: Array = d[j].duplicate()
 			a.sort()

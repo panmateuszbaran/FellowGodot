@@ -73,7 +73,16 @@ const float OVER_SPLIT = 0.74f;
 const float LEAP_PUSH = 0.25f;
 // Milestone 156 (decision 0296): a mantle with a clip's root motion, the share of it over which the body held at the wall
 // is let go towards the clip's root.
-const float MANTLE_RELEASE = 0.18f;
+// Milestone 195 (decision 0337), in its place: the body's way along the ground through such a mantle is the clip's, held
+// off the wall's face until the feet are within MANTLE_CROSS of the top (a share of the rise, at most MANTLE_CROSS_MAX),
+// the hold eased in, and let go into the clip's way at no more than MANTLE_CATCH_UP faster than it.
+const float MANTLE_CROSS = 0.2f;
+const float MANTLE_CROSS_MAX = 0.3f; // m
+const float MANTLE_EASE = 0.08f; // m: the hold eased in over about this much of the way
+const float MANTLE_CATCH_UP = 2.0f; // m/s over the clip's own speed, letting go
+// Milestone 195 (decision 0337): a braced foot's ankle out from the stone (0.12 m had put the mannequin's ball of the
+// foot, 15 cm from its ankle, 3 cm into the wall with the foot flat).
+const float HANG_FOOT_OUT = 0.15f;
 
 Vector3 flat(const Vector3 &p_v) {
 	return Vector3(p_v.x, 0.0f, p_v.z);
@@ -654,28 +663,50 @@ Vector3 FellowTraversal3D::_path_mantle(double p_t, const Vector3 &p_edge, const
 			} else {
 				sv = (p_target.y - p0.y) / d.y;
 			}
-			float s = flat(r).dot(fwd) * sh;
 			const float y = p0.y + r.y * sv;
-			// Not into the wall before the clip's root is over the top (a clip that leans in early, scaled onto a
-			// higher ledge). Milestone 156 (decision 0296): held at the wall up to the last of the clip's samples still
-			// below the top, then let go over MANTLE_RELEASE of the mantle — let go at once, the body had jumped by as
-			// far as the clip's root had leant in meanwhile (0.65 m in two frames over CasaCrema's eave).
+			// Not into the wall before the feet are nearly over the top (a clip that leans in early, scaled onto a higher
+			// ledge). Milestone 195 (decision 0337): the hold had lasted until the clip's root was over the top (its rise
+			// scaled onto the ledge reaches the top only at its end on a step up: the fountain's rim, 0.75 m) and was let
+			// go over 18 % of the mantle (decision 0296) — the body went 0.7 m across the rim in a tenth of a second at
+			// 9.7 m/s. Now held until the feet are within MANTLE_CROSS of the top; the hold eased in (a smooth minimum of the
+			// clip's way and the wall's), and let go by blending back into the clip's way from no speed, over as long as
+			// the way it has to make up takes at MANTLE_CATCH_UP more than the clip's own speed (the rest of the mantle at
+			// most).
 			const int n = int(clip_root.size());
+			const float rise = MAX(0.0f, y_top - p0.y);
+			const float y_cross = y_top - 0.01f - MIN(MANTLE_CROSS * rise, MANTLE_CROSS_MAX);
 			int last_held = -1;
 			for (int k = n - 2; k >= 0; k--) {
 				const float yk = p0.y + clip_root[k].y * sv;
-				if (yk < y_top - 0.01f && clip_root[k].y < rise_max * 0.98f && clip_root[k + 1].y >= clip_root[k].y) {
+				if (yk < y_cross && clip_root[k].y < rise_max * 0.98f && clip_root[k + 1].y >= clip_root[k].y) {
 					last_held = k;
 					break;
 				}
 			}
+			const float way = flat(r).dot(fwd) * sh;
+			// (held: the clip's way less a soft ramp of how far it is past the wall's — none far short of it, all of it far
+			// past — less the ramp's value at the start, so that it starts where the body is: past the wall's by that, a few
+			// millimetres at most)
+			const float ease = MIN(MANTLE_EASE, 0.25f * wall_s);
+			auto ramp = [&](float p_x) {
+				return 0.5f * (p_x + Math::sqrt(p_x * p_x + ease * ease));
+			};
+			const float ramp0 = ramp(-wall_s);
+			auto held = [&](float p_way) {
+				return p_way - MAX(0.0f, ramp(p_way - wall_s) - ramp0);
+			};
+			float s = way;
 			if (last_held >= 0) {
 				const float t_rel = float(last_held + 1) / float(n - 1);
 				if (t < t_rel) {
-					s = MIN(s, wall_s);
-				} else if (t < t_rel + MANTLE_RELEASE) {
-					const float s_rel = flat(clip_root[last_held + 1]).dot(fwd) * sh;
-					s -= MAX(0.0f, s_rel - wall_s) * (1.0f - smooth((t - t_rel) / MANTLE_RELEASE));
+					s = held(way);
+				} else {
+					const float way_rel = flat(clip_root[last_held + 1]).dot(fwd) * sh;
+					const float behind = way_rel - held(way_rel);
+					const double part = MAX(0.05, (ledge.drop > 0.0f && action != KIND_VAULT) ? duration * OVER_SPLIT : duration);
+					// (smoothstep's steepest is 1.5 times its mean)
+					const float span = CLAMP(float(1.5 * behind / (MANTLE_CATCH_UP * part)), 1e-3f, MAX(1e-3f, 1.0f - t_rel));
+					s = Math::lerp(held(way), way, smooth((t - t_rel) / span));
 				}
 			}
 			Vector3 p = flat(p0) + p_inward * s + lateral * smooth(t);
@@ -956,7 +987,20 @@ Vector3 FellowTraversal3D::_hang_foot(int p_side, const Vector3 &p_feet, const V
 	if (!space->intersect_ray(q, r) || flat(r.normal).length() < 0.6f) {
 		return p_fallback;
 	}
-	return r.position - p_inward * 0.12f; // the ankle: the ball of the foot on the stone
+	// Milestone 195 (decision 0337): the shin rises out from the foot — where the stone stands out above it (a string
+	// course, a sill: CasaCrema's band 14 cm proud of its front, 20 cm over a braced foot), the foot is braced as far out
+	// as that, under it, not in under it with the shin through it.
+	Vector3 at = r.position;
+	for (int k = 1; k <= 2; k++) {
+		PhysicsDirectSpaceState3D::RayParameters qk = q;
+		qk.from += UP * (0.13f * k);
+		qk.to += UP * (0.13f * k);
+		PhysicsDirectSpaceState3D::RayResult rk;
+		if (space->intersect_ray(qk, rk) && flat(rk.normal).length() >= 0.6f && (rk.position - at).dot(p_inward) < 0.0f) {
+			at -= p_inward * (at - rk.position).dot(p_inward);
+		}
+	}
+	return at - p_inward * HANG_FOOT_OUT; // the ankle: the ball of the foot on the stone
 }
 
 // The ledge p_along metres along the edge (positive: the body's left, facing the wall): the wall's face just under the
@@ -1624,7 +1668,9 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 		hints.hand_weight[h] = hold;
 		// Milestone 153 (decision 0291): the hands on a hold at a jump's ends and a drop's, all along a corner.
 		hints.hand_grip[h] = (jump || transfer.how == TRANSFER_DROP) ? ((u < 0.08f || u > 0.92f) ? 1.0f : 0.0f) : 1.0f;
-		hints.foot[h] = face + left * (h == 0 ? 0.14f : -0.14f);
+		// Milestone 195 (decision 0337): on the stone found there, as the hang's own (it had been the face's plane at the
+		// capsule's side: the ankle on the wall, the ball of the foot and the toes in it).
+		hints.foot[h] = _hang_foot(h, feet, inward, face.y, face + left * (h == 0 ? 0.14f : -0.14f));
 		hints.foot_weight[h] = jump ? 0.3f : (transfer.how == TRANSFER_DROP ? 0.8f * smooth(MAX(0.0f, u - 0.4f) / 0.6f) : 0.8f);
 		hints.foot_follow[h] = 1.0f;
 	}
@@ -1656,11 +1702,12 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 			hints.hand[h] = transfer.from_hands[h].lerp(to_hands[h], k) - inward * (0.18f * arc) + UP * (0.08f * arc);
 			hints.hand_weight[h] = 1.0f;
 			hints.hand_grip[h] = (k <= 0.0f || k >= 1.0f) ? 1.0f : 0.0f;
+			// (milestone 195: on the stone found at each end, as the hang's: the ankle out from it, not on its plane)
 			if (on_wall > 0.0f) {
-				hints.foot[h] = to_face + to_left * (h == 0 ? 0.14f : -0.14f);
+				hints.foot[h] = _hang_foot(h, transfer.to_feet, transfer.to.inward, to_face.y, to_face + to_left * (h == 0 ? 0.14f : -0.14f));
 				hints.foot_weight[h] = 0.85f * on_wall;
 			} else {
-				hints.foot[h] = from_face + from_left * (h == 0 ? 0.14f : -0.14f);
+				hints.foot[h] = _hang_foot(h, transfer.from_feet, transfer.from_inward, from_face.y, from_face + from_left * (h == 0 ? 0.14f : -0.14f));
 				hints.foot_weight[h] = 0.85f * (1.0f - off_wall);
 			}
 		}

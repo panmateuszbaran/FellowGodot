@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 195 — From play: the fall, the step up onto the fountain, the hangs and climbs (2026-11-24)
+
+- `FellowTraversal3D` (decision 0337): a mantle with a clip's root motion lets the body over the top once its feet are
+  within a fifth of the rise of it (at most 0.3 m), the hold eased in and let go at no more than 2 m/s over the clip's
+  speed — decision 0296's hold to the clip's end had crossed a 0.75 m rim's 0.7 m in a tenth of a second (9.7 m/s; now
+  5.0); braced feet look for stone standing out above them (a band 14 cm proud had taken a shin through it), stand
+  15 cm off the stone (12), and are placed on it through the moves between holds (they had been on the wall's plane):
+  the showcase's limbs through the walls hanging 8.3 → 2.1 % of the frames, from hold to hold 12.1 → 2.6 %.
+- The showcase's rooftops (the owner's play): the camera's hang framing eased in and out and not a mantle's, its sprint
+  framing on a smoothed speed held through a mantle (stepping onto the fountain it had jumped 0.77 m and 11° in a
+  frame; now 0.013 m); the fall, the hangs and the climb the mannequin's own again
+  (Mixamo's skydiver fall, its hang's grip shifts); `camera_look.gd` (new) and `anim_quality` report limbs through the
+  buildings.
+
 ## Milestone 194 — Mixamo's hangs and climbs on the rooftops' character (2026-11-24)
 
 - The showcase's character hangs, shimmies (a clip for each side), hops from hold to hold and climbs walls with

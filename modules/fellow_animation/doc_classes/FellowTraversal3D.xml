@@ -235,7 +235,7 @@
 			How fast the body climbs over a face (m/s).
 		</member>
 		<member name="clip_root_bone" type="StringName" setter="set_clip_root_bone" getter="get_clip_root_bone" default="&amp;&quot;&quot;">
-			The bone whose position track in the clips is the root's motion: sampled, its rise scaled to the ledge's height and its advance to the distance onto the top (or the landing), it becomes the body's path (kept out of the wall until the root has risen); [FellowTraversalPose3D] takes the displacement out of the bone's pose. Empty: the procedural path, the clip only posing the body.
+			The bone whose position track in the clips is the root's motion: sampled, its rise scaled to the ledge's height and its advance to the distance onto the top (or the landing), it becomes the body's path (kept out of the wall until the feet are within a fifth of the rise of the top — at most 0.3 m —, eased into that hold and out of it); [FellowTraversalPose3D] takes the displacement out of the bone's pose. Empty: the procedural path, the clip only posing the body.
 		</member>
 		<member name="collision_mask" type="int" setter="set_collision_mask" getter="get_collision_mask" default="1">
 			The physics layers the queries see (walls, tops, the room for the capsule).
@@ -265,7 +265,7 @@
 			In the air, hangs from a ledge it cannot climb (no room on its top: a ceiling, an overhang) when the edge is about [member hang_reach] over its feet; and with [member hang_first], from every ledge it could climb.
 		</member>
 		<member name="hang_brace_height" type="float" setter="set_hang_brace_height" getter="get_hang_brace_height" default="0.0">
-			Hanging, the feet braced on the wall this high over the hanging body's feet, in metres: on the wall's face found in front of the body at that height (under a ledge that stands out, further in than its edge), or at the edge's face where there is none within reach (an opening). Reaching up ([member hang_reach_up]), the feet step up the wall at this height in turn. [code]0[/code]: off, the feet 0.35 m up at the edge's face (milestone 151, decision 0282).
+			Hanging, the feet braced on the wall this high over the hanging body's feet, in metres: on the wall's face found in front of the body at that height (under a ledge that stands out, further in than its edge; milestone 195: as far out as stone standing out within 26 cm above the foot — a band the shin would go through —, and so through the moves between holds too), or at the edge's face where there is none within reach (an opening). Reaching up ([member hang_reach_up]), the feet step up the wall at this height in turn. [code]0[/code]: off, the feet 0.35 m up at the edge's face (milestone 151, decision 0282).
 		</member>
 		<member name="hang_clip" type="Animation" setter="set_hang_clip" getter="get_hang_clip">
 			The clip of a mantle that starts from a hang (climbing up onto the ledge the hands hold), in place of [member high_clip] or [member low_clip]: its first pose the hanging one, its root's motion scaled onto the ledge as theirs is. Unset: theirs (milestone 153, decision 0290).

@@ -23,6 +23,12 @@ var _gaits: Array = [[1.6, 0.95], [3.0, 0.8], [4.4, 0.7], [7.0, 0.62]]
 var _mocap := false
 const MOCAP_DIR := "res://rooftops/mocap"
 const MOCAP_GAITS := ["gait_walk", "gait_jog", "gait_run", "gait_sprint"]
+# Milestone 195 (the owner, playing): the mannequin's own clips kept for these — Mixamo's "Falling Idle" is a skydiver's,
+# face down (the character fell on its face after every jump and turned upright on landing); the hangs and the climb
+# (milestone 194's) twitched when idle, were not smooth and put more limbs through the walls (anim_quality.gd: 17 % of
+# the frames from hold to hold against 12 %) — their poses are the traversal's IK's to keep on the stone.
+const MOCAP_KEEP_OWN := ["fall", "hang_idle", "hang_shimmy_l", "hang_shimmy_r", "hang_leap_up", "hang_leap_l", "hang_leap_r",
+		"climb_move"]
 # FellowTraversal3D's Transfer values.
 const TRANSFER_JUMP_ALONG := 2
 const TRANSFER_JUMP_UP := 3
@@ -109,6 +115,8 @@ func _use_mocap() -> void:
 	# The player's own copy of the library (the crowd's NPCs share the mannequin's).
 	var lib := ap.get_animation_library(&"").duplicate() as AnimationLibrary
 	for a in mocap.get_animation_list():
+		if String(a) in MOCAP_KEEP_OWN:
+			continue
 		if lib.has_animation(a):
 			lib.remove_animation(a)
 		lib.add_animation(a, mocap.get_animation(a))
@@ -117,7 +125,7 @@ func _use_mocap() -> void:
 	_mocap = true
 	# Milestone 194: a move from hold to hold plays its clip over the move's time, from the clip's own length.
 	for a in mocap.get_animation_list():
-		if String(a).begins_with("hang_leap") and _one_shots.has(String(a)):
+		if String(a).begins_with("hang_leap") and _one_shots.has(String(a)) and not String(a) in MOCAP_KEEP_OWN:
 			_one_shots[String(a)] = mocap.get_animation(a).length
 	var info = JSON.parse_string(FileAccess.get_file_as_string(MOCAP_DIR.path_join("clips.json")))
 	var gaits: Dictionary = info.get("gaits", {}) if info is Dictionary else {}

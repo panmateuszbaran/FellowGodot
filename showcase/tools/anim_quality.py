@@ -204,6 +204,16 @@ def report(out, baseline):
 		bh = (base or {}).get(k, {}).get("hips_acc")
 		was = f"   ({bj['max']:.0f}, {bh['max']:.1f})" if bj and bh else ""
 		lines.append(f"{k:<14} {j['p95']:>9.0f} {j['p99']:>6.0f} {j['max']:>6.0f}   {h['p95']:>12.1f} {h['p99']:>6.1f} {h['max']:>6.1f}{was}")
+	# Milestone 195 (the owner: the character's limbs through the building while climbing): the share of a segment's frames
+	# with a joint behind a surface seen from the hips (not gated yet), its deepest, and which joints.
+	lines.append("")
+	lines.append(f"{'through walls':<14} {'share':>6} {'deepest':>8}   joints (baseline share)")
+	for k in sorted(segs):
+		if "inside_share" not in segs[k] or k in ("walk", "run", "sprint", "run_in", "sprint_in", "stop", "turn", "start"):
+			continue
+		b = (base or {}).get(k, {}).get("inside_share")
+		bones = ", ".join(f"{n} {c}" for n, c in sorted(segs[k].get("inside_bones", {}).items(), key=lambda x: -x[1]))
+		lines.append(f"{k:<14} {100 * segs[k]['inside_share']:>5.1f}% {segs[k].get('inside_depth_cm', 0):>6.1f}cm   {bones or '—'}" + (f" ({100 * b:.1f}%)" if b is not None else ""))
 	text = "\n".join(lines)
 	open(os.path.join(out, "report.txt"), "w").write(text + "\n")
 	print(text)

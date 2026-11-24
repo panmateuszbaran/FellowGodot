@@ -44,8 +44,13 @@ var _last_heading := 0.0
 var _last_vy := 0.0
 var _dip := 0.0
 var _dip_vel := [0.0]
+# Milestone 195: the climb's framing (closer, level) eased in and out over half a second — switched at once, a mantle onto
+# the fountain's rim (the traversal busy for a moment) had jumped the camera in and back.
+var _wall := 0.0
+var _level := 0.0
 var _accel := 0.0
 var _last_speed := 0.0
+var _speed := 0.0 # the speed the framing follows: smoothed, held through a mantle or a vault
 var _lag := 0.0
 var _stick := Vector2()
 
@@ -118,9 +123,14 @@ func _process(delta: float) -> void:
 	var hvel := Vector3(tvel.x, 0.0, tvel.z)
 	var speed := hvel.length()
 	var climbing := false
+	var mantling := false
 	var trav := _target.get_node_or_null("Traversal")
 	if trav:
 		climbing = trav.is_climbing() or trav.is_hanging() or trav.is_active()
+		mantling = trav.is_active()
+		# The framing for hanging and climbing only: not a mantle's or a vault's moment.
+		var on_wall: bool = trav.is_climbing() or trav.is_hanging()
+		_wall = move_toward(_wall, 1.0 if on_wall else 0.0, delta / 0.5)
 	_idle_mouse += delta
 	_shot_time += delta
 	# The right stick: eased, squared (fine aim near the centre).
@@ -143,11 +153,17 @@ func _process(delta: float) -> void:
 	_last_heading = heading
 	var roll_goal := clampf(turn_rate * speed * 0.0035, -0.044, 0.044) * turn_lean if not climbing and _shot == "" else 0.0
 	_roll = lerpf(_roll, roll_goal, 1.0 - exp(-4.0 * delta))
-	_accel = lerpf(_accel, (speed - _last_speed) / maxf(delta, 1e-4), 1.0 - exp(-6.0 * delta))
-	_last_speed = speed
+	# Milestone 195 (the owner: the camera jumped as the character stepped up onto the fountain): a mantle's path is the
+	# traversal's, over the top at up to 9 m/s for a tenth of a second; the sprint's framing (the shoulder's offset
+	# halved, the distance, the field of view), the lead and the lag followed that speed frame by frame — the camera 0.22 m
+	# sideways in one frame. They follow the speed smoothed (a fifth of a second), held through a mantle or a vault.
+	if not mantling:
+		_speed = lerpf(_speed, speed, 1.0 - exp(-5.0 * delta))
+	_accel = lerpf(_accel, (_speed - _last_speed) / maxf(delta, 1e-4), 1.0 - exp(-6.0 * delta))
+	_last_speed = _speed
 	_lag = lerpf(_lag, clampf(_accel * 0.06, -0.3, 0.45) * speed_lag, 1.0 - exp(-3.0 * delta))
 	# The pivot: over the character, a little ahead of where it runs.
-	_lead = _lead.lerp(hvel.limit_length(7.0) * 0.12, 1.0 - exp(-2.5 * delta))
+	_lead = _lead.lerp(hvel.limit_length(minf(_speed, 7.0)) * 0.12, 1.0 - exp(-2.5 * delta))
 	var goal := tpos + Vector3.UP * height + _lead + Vector3.DOWN * _dip
 	var vx := [_pivot_vel.x]
 	var vy := [_pivot_vel.y]
@@ -160,15 +176,17 @@ func _process(delta: float) -> void:
 	if auto_yaw and _shot == "" and _idle_mouse > 1.5 and speed > 1.0 and not climbing:
 		var behind := atan2(-hvel.x, -hvel.z)
 		yaw = lerp_angle(yaw, behind, 1.0 - exp(-0.9 * delta * clampf(speed / 4.0, 0.3, 1.5)))
-	var sprint := clampf((speed - 4.6) / 2.4, 0.0, 1.0)
+	var sprint := clampf((_speed - 4.6) / 2.4, 0.0, 1.0)
 	# Untouched while running on the ground: the pitch levels towards the horizon (lower while sprinting).
 	if _shot == "" and _idle_mouse > 2.0 and speed > 1.5 and not climbing:
 		pitch = lerpf(pitch, lerpf(-0.2, -0.1, sprint), 1.0 - exp(-0.7 * delta))
-	_dist_goal = distance + 1.3 * sprint - (0.5 if climbing else 0.0) + _lag
+	var wall := smoothstep(0.0, 1.0, _wall)
+	_dist_goal = distance + 1.3 * sprint - 0.5 * wall + _lag
 	var fov_goal := 62.0 + 9.0 * sprint
 	var p := pitch
-	if climbing and _idle_mouse > 1.0:
-		p = lerpf(pitch, 0.18, 0.5)
+	# (on a wall, the mouse still: half way to level; eased in and out, and the mouse's return too)
+	_level = move_toward(_level, wall if _idle_mouse > 1.0 else 0.0, delta / 0.5)
+	p = lerpf(pitch, lerpf(pitch, 0.18, 0.5), smoothstep(0.0, 1.0, _level))
 	var cam_pos: Vector3
 	var look_at_pos := _pivot
 	match _shot:
