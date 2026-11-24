@@ -13,7 +13,8 @@ extends SceneTree
 ## properties (a number); --mat=res://rooftops/materials_photo/stone_rustic.tres:normal_strength=0.2 sets a shader
 ## material's parameter; --debug=1 draws the streaks red and the damp green, without the patina; --lite=1 keeps the
 ## square's buildings, its fountain, the paving and the light alone (no city beyond, no country, no people, props or
-## cloth: lavapipe's whole rooftops outgrows 6 GB).
+## cloth: lavapipe's whole rooftops outgrows 6 GB); --lite=2 (milestone 196) keeps the whole town, the city beyond and the
+## country, without the people, birds, props, cloth and particles.
 
 const VIEWS := {
 	"east": [Vector3(2.0, 3.0, 4.0), Vector3(22.0, 6.5, 0.0), 55.0], # from, to, field of view
@@ -26,6 +27,11 @@ const VIEWS := {
 	# Milestone 193: the square and its sky — towards the campanile, and towards the sun.
 	"sky_n": [Vector3(2.0, 1.7, 12.0), Vector3(-2.0, 14.0, -20.0), 70.0],
 	"sky_sun": [Vector3(4.0, 1.7, -6.0), Vector3(-20.0, 14.0, 13.0), 70.0],
+	# Milestone 196: the view from the campanile's beam (the viewpoint) over the city to the hills — south over the
+	# square, west into the sun, east with it behind.
+	"vista_s": [Vector3(1.3, 27.5, -10.0), Vector3(1.3, 12.0, 200.0), 65.0],
+	"vista_w": [Vector3(1.3, 27.5, -10.0), Vector3(-200.0, 10.0, 40.0), 65.0],
+	"vista_e": [Vector3(1.3, 27.5, -10.0), Vector3(200.0, 10.0, -30.0), 65.0],
 }
 ## --lite=1's town.
 const KEEP := ["PalazzoOcra", "Campanile", "CasaCrema", "PalazzoSiena", "CasaBianca", "CasaOcraBassa", "CasaRosa",
@@ -41,6 +47,7 @@ func _init() -> void:
 	var settle := 40
 	var off := false
 	var lite := false
+	var far := false
 	var debug_colors := false
 	var props := {}
 	var mats := []
@@ -57,6 +64,8 @@ func _init() -> void:
 			off = true
 		elif a == "--lite=1":
 			lite = true
+		elif a == "--lite=2":
+			far = true
 		elif a == "--debug=1":
 			debug_colors = true
 		elif a.begins_with("--mat="):
@@ -89,6 +98,18 @@ func _init() -> void:
 		var town := sc.get_node("Town")
 		for c in town.get_children():
 			if not (c.name in KEEP):
+				town.remove_child(c)
+				c.free()
+	if far:
+		for n in ["Birds", "Player", "Crowd", "CameraRig", "ReferenceShot", "Demo", "PipelineWarmer"]:
+			var c := sc.get_node_or_null(n)
+			if c:
+				sc.remove_child(c)
+				c.free()
+		var town := sc.get_node("Town")
+		for c in town.get_children():
+			if c is FellowCloth3D or c is GPUParticles3D or String(c.name).begins_with("Laundry") or String(c.name).begins_with("Bollard") \
+					or String(c.name).begins_with("Barrel") or String(c.name).begins_with("Crate") or String(c.name).begins_with("Stall"):
 				town.remove_child(c)
 				c.free()
 	for k in scene_props:
