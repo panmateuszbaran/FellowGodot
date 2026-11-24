@@ -160,7 +160,10 @@ func _box(p_parent: Node, p_name: String, p_size: Vector3, p_at: Vector3) -> voi
 
 
 func _course(p_scene: Node) -> void:
-	# (the square's props out of the way)
+	# (the square's props and people out of the way)
+	var crowd := p_scene.get_node_or_null("Crowd")
+	if crowd:
+		crowd.queue_free()
 	var town := p_scene.get_node("Town")
 	for c in town.get_children():
 		var n := String(c.name)

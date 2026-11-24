@@ -95,6 +95,9 @@ CLIPS = [
 	("hang_reach_r", ["climbing up wall"], "anchored", {"from": 0.933, "to": 2.0}),
 	("hang_across_l", ["left braced hang shimmy"], "anchored", {"from": 0.0, "to": 1.167}),
 	("hang_across_r", ["right braced hang shimmy"], "anchored", {"from": 0.0, "to": 1.167}),
+	# Milestone 197: the jump at a wall for its first hold — "Run To Start Climbing" from its last stride to the hands
+	# reaching up with a foot on the wall, the hips held (the player's jump moves the body; the traversal catches the hold).
+	("jump_wall", ["run to start climbing"], "anchored", {"from": 0.67, "to": 1.27}),
 	# Milestone 196: root motion (the traversal's clips: its path is their root's, scaled onto the ledge) — up onto the
 	# ledge from a hang (the hips where the hang holds them at the start), over an obstacle with a hand planted.
 	("hang_climb", ["braced hang to crouch"], "root", {"start_offset": (0.13, 0.915)}),
