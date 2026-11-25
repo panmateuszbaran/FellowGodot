@@ -1263,7 +1263,12 @@ up at 0.9 m/s, reached, hung — `TRANSFER_STEP_UP`), `get_aim_state()` (an aime
 only), `fit_max_speed` (0 m/s: `hang_fit` as fast as it eases; else no faster, its speed changing by at most 8 m/s²);
 the showcase's player: `leap_push_force` 2.3, `climb_pull_speed` 1, `hang_step_up_height` 2.3, `sway_vertical` 0,
 `fit_max_speed` 1.2, its run braked for a wall (`--wall_brake=0`: as before) and its `FellowJointLimits3D`'s
-`hinge_max_turn` 175°; `tools/effort.py` measures the forces; `FellowFootLock3D`: a foot let go is never eased back from further
+`hinge_max_turn` 175°; `tools/effort.py` measures the forces; milestone 204 (decision 0346): with `leap_push_force`
+the push as long as that force needs for the dead point (up to 0.65 m) and the pose's hips held off the body from the
+push to the dead point; with `climb_pull_speed` a foot stepping up or across the wall no higher than 0.25 m over its
+hanging place under the body, the trailing hand across over 0.6-0.95 of the move; a hanging foot's way in and out from
+the wall at most 1.5 m/s; the showcase's player at an arcade's pace — `leap_push_force` 5.5 (the 2 m gaps leapt),
+`climb_pull_speed` 2, no step up, its neck limited to −66..56° (`effort.py --profile arcade`); `FellowFootLock3D`: a foot let go is never eased back from further
 from the hip than the leg reaches; `release_extension` (milestone 172; 1.0: off): let go when holding the foot needs more
 than this share of the leg's length. Let go without jumps (milestone 173, decision 0315): a held point out of
 the leg's reach is let go from where the foot is shown and brought within reach the shorter way (towards the animated

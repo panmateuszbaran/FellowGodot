@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 204 — Arcade pace, a person's motion (2026-11-25)
+
+- The owner: "the joints bend unanatomically again; the climbing is very slow — not 100 % realism but arcade fun, with
+  the animations relatively realistic" (decision 0346). The showcase leaps the house's 2 m gaps again
+  (`leap_push_force` 5.5: an arcade dyno with a person's shape — a push from rest, a flight under gravity to the dead
+  point), pulls up at 2 m/s and has no step up: the demo's first eight moves 19.6 → 8.7 s (milestone 202: 8.5).
+- `FellowTraversal3D`: with `leap_push_force`, the push as long as its force needs for the dead point (the body had been
+  caught short and lifted in a frame) and the pose's hips held off the body from the push to the dead point (the clip's
+  crouch and rise had floated the flight at 0.8 g: now 0.91-0.94); with `climb_pull_speed`, a foot stepping up the wall
+  kept under the body (ahead of it the leg folded against the wall and the knee swung out in a frame), the trailing hand
+  across slower; a hanging foot's way in and out from the wall eased.
+- `anim_quality.py` 35 → 38 / 45: climbing's elbows and knees out of their plane 6.2 → 0 %, wrists 7.0 → 0 %, neck 0 %,
+  the hips from hold to hold 11.5 → 0 %, limbs in the stone 8.5 → 0.5 %, the fastest joint 2,661 → 2,000 °/s.
+  `tools/effort.py --profile arcade` (a hero's strength, the gates that make motion read as real, a pace gate): 8 / 8.
+
 ## Milestone 203 — Climbing within a person's strength (2026-11-25)
 
 - `FellowTraversal3D` (decision 0345): `leap_push_force` (a leap's push as a person's: a half sine to that many body

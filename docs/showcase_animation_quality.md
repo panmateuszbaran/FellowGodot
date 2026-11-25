@@ -166,6 +166,19 @@ up so effortless — assess the forces and make it realistic". `effort.py`'s gat
 Left: the step up's high step — a thigh's pop (2,661 °/s), a knee bent backwards, the wrists pressing (7 %), the toes
 and shin at the top's edge (8.5 % of the frames from hold to hold); the hips' flexion and spread (11.5 %).
 
+Milestone 204 (decision 0346): the owner: "the joints bend unanatomically again; the climbing is very slow — not 100 %
+realism but arcade fun, with the animations relatively realistic". `effort.py --profile arcade`: a hero's strength, the
+gates that make motion read as real, the demo's first eight moves within 10 s.
+
+| step | change | arcade gates | `anim_quality` | what it showed |
+|---|---|---|---|---|
+| 0 | milestone 203 | 6/7 | 35/45 | 19.6 s for the first eight moves; the step up's joints |
+| 1 | `leap_push_force` 5.5, `climb_pull_speed` 2, no step up | 7/8 | 36/45 | 8.6 s; flights at 0.77-0.81 g; a thigh's pop 2,318 °/s; the neck 4.2 % |
+| 2 | the push long enough; the hips held off the body to the dead point | 8/8 | — | flights 0.91-0.94 g |
+| 3 | a foot's way in and out eased | — | 36/45 | the knee still swung out: the foot was above the body |
+| 4 | the feet under the body (`FOOT_HIGH_STEP`) | — | 36/45 | hinges 0 %; a forearm's 2,268 °/s across; the neck |
+| 5 | the trailing hand across slower; the neck to 66° | 8/8 | 38/45 | the fastest joint 2,000 °/s; hinges, wrists, neck 0 % |
+
 ## Reference
 
 * Walking (normal gait): the knee 0° at the heel's strike, 5-10° in loading and mid-stance, 30-40° at pre-swing,
