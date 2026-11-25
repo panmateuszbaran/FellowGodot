@@ -118,8 +118,8 @@ func _ready() -> void:
 		for arg in OS.get_cmdline_user_args():
 			if arg.begins_with("--ledge_grip="): # (tools)
 				grip = float(arg.get_slice("=", 1))
-			elif arg.begins_with("--max_joint_speed="): # (tools)
-				pose.set("max_joint_speed", float(arg.get_slice("=", 1)))
+			elif arg.begins_with("--max_joint_speed=") or arg.begins_with("--body_sway=") or arg.begins_with("--hang_fit="): # (tools)
+				pose.set(arg.get_slice("=", 0).trim_prefix("--"), float(arg.get_slice("=", 1)))
 		pose.set("ledge_grip", grip)
 	tree.active = true
 	_set_state("loco")

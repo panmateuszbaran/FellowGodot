@@ -142,6 +142,8 @@ const float GRIP_STEP_OUT = 0.06f; // m
 // The fingers' middle joints and tips this far in over the edge and this far over the top.
 const float GRIP_FINGER_IN[2] = { 0.037f, 0.08f }; // m
 const float GRIP_FINGER_UP[2] = { 0.016f, 0.01f }; // m
+const float GRIP_THUMB_IN = 0.025f; // m: the thumb's tip in over the edge
+const float GRIP_THUMB_UP = 0.012f; // m: over the top
 
 float smooth01(float p_x) {
 	const float x = CLAMP(p_x, 0.0f, 1.0f);
@@ -336,8 +338,16 @@ void FellowTraversalPose3D::_shape_grip(Skeleton3D *p_skeleton, int p_side, cons
 			aim_bone(p_skeleton, b, open.slerp(aim, curl), p_weight);
 		}
 	}
+	// The thumb along the palm by the index finger, its tip over the edge onto the top beside it (up the face while the
+	// knuckles are under the top; it had stood up off the edge).
 	aim_bone(p_skeleton, fingers[p_side][0][0], p_palm * 0.8f - p_side_dir * 0.55f - p_in * 0.2f, p_weight);
-	aim_bone(p_skeleton, fingers[p_side][0][1], p_palm * 0.9f - p_side_dir * 0.35f - p_in * 0.1f, p_weight);
+	const int thumb = fingers[p_side][0][1];
+	if (thumb >= 0) {
+		const Vector3 at = p_skeleton->get_bone_global_pose(thumb).origin;
+		const Vector3 goal = p_edge + along * (at - p_edge).dot(along) + (over * GRIP_THUMB_IN + p_normal * GRIP_THUMB_UP) * p_meter;
+		const float curl = smooth01(((at - p_edge).dot(p_normal) + GRIP_KNUCKLE_UP * p_meter) / (GRIP_KNUCKLE_UP * p_meter));
+		aim_bone(p_skeleton, thumb, open.slerp((goal - at).normalized(), curl), p_weight);
+	}
 }
 
 int FellowTraversalPose3D::get_role_bone(Role p_role) {

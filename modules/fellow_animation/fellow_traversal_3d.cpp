@@ -855,6 +855,36 @@ void FellowTraversal3D::_update_hints(const Vector3 &p_feet, const Vector3 &p_ed
 	}
 }
 
+// Milestone 198 (decision 0340): a clip's hips p_z over their start (its rise p_reach) as a leap's of p_rise: the slope
+// eased from 1 to the scale over the first LEAP_EASE_IN of the clip's way, back to 1 over its last LEAP_EASE_OUT (and 1
+// below the start and past the end).
+float FellowTraversal3D::_leap_rise(float p_z, float p_reach, float p_rise) {
+	float m0 = LEAP_EASE_IN;
+	float m1 = LEAP_EASE_OUT;
+	if (m0 + m1 > 0.9f * p_reach) {
+		const float k = 0.9f * p_reach / (m0 + m1);
+		m0 *= k;
+		m1 *= k;
+	}
+	const float scale = 1.0f + (p_rise - p_reach) / MAX(p_reach - 0.5f * (m0 + m1), 1e-3f);
+	// The integral of the scale's ramp (0 to 1 and back) up to p_z.
+	float g;
+	if (p_z <= 0.0f) {
+		g = 0.0f;
+	} else if (p_z <= m0) {
+		const float t = p_z / m0;
+		g = m0 * (t * t * t - 0.5f * t * t * t * t);
+	} else if (p_z <= p_reach - m1) {
+		g = 0.5f * m0 + (p_z - m0);
+	} else if (p_z <= p_reach) {
+		const float t = (p_z - (p_reach - m1)) / m1;
+		g = 0.5f * m0 + (p_reach - m1 - m0) + m1 * (t - (t * t * t - 0.5f * t * t * t * t));
+	} else {
+		g = p_reach - 0.5f * (m0 + m1);
+	}
+	return p_z + (scale - 1.0f) * g;
+}
+
 float FellowTraversal3D::_sample(const LocalVector<float> &p_values, float p_u) {
 	const int n = int(p_values.size());
 	if (n == 0) {
@@ -1697,15 +1727,16 @@ void FellowTraversal3D::_start_transfer(const Ledge &p_to, const Vector3 &p_cont
 	transfer.to.kind = KIND_HANG;
 	transfer.to_feet = _hang_feet_of(p_to);
 	// Milestone 198 (decision 0340): a leap up, along or across timed as a clip's — its own time (a leap longer than the
-	// clip's played slower, as a body's flight takes longer: by the square root of the ways' ratio, within 0.8-1.25
-	// times), no wind-up of the traversal's (the clip's push is the wind-up).
+	// clip's played slower, as a body's flight takes longer: by the square root of the ways' ratio, within 0.8-1.6 times
+	// — a flight under gravity's pull; at 1.25 at most a 2 m leap up had the hips at 8 m/s), no wind-up of the
+	// traversal's (the clip's push is the wind-up).
 	transfer.timing = -1;
 	const int timing = p_how == TRANSFER_JUMP_UP ? LEAP_UP : ((p_how == TRANSFER_JUMP_ALONG || p_how == TRANSFER_JUMP_DIAGONAL) ? LEAP_ALONG : -1);
 	if (timing >= 0 && leap_timing[timing].time > 0.0f && leap_timing[timing].progress.size() >= 2) {
 		const Vector3 d = transfer.to_feet - transfer.from_feet;
 		const float way = timing == LEAP_UP ? MAX(0.05f, d.y) : MAX(0.05f, flat(d).length());
 		transfer.timing = timing;
-		transfer.duration = leap_timing[timing].time * CLAMP(Math::sqrt(way / leap_timing[timing].reach), 0.8f, 1.25f);
+		transfer.duration = leap_timing[timing].time * CLAMP(Math::sqrt(way / leap_timing[timing].reach), 0.8f, 1.6f);
 		transfer.windup = 0.0;
 	}
 	transfer.duration += transfer.windup;
@@ -1769,6 +1800,13 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 	if (timed) {
 		w = _sample(timed->progress, u);
 		feet = transfer.from_feet.lerp(transfer.to_feet, w) + UP * _sample(timed->lift, u);
+		if (transfer.timing == LEAP_UP) {
+			// Up: the hips' height the clip's scaled onto the leap's rise — the more in the middle of the way, the less at
+			// its ends (the push's dip and the rise past the end as the clip's): scaled evenly, the rise had stopped at the
+			// end's height from three times the clip's speed in a frame, at 20 g.
+			const float z = _sample(timed->progress, u) * timed->reach + _sample(timed->lift, u);
+			feet.y = transfer.from_feet.y + _leap_rise(z, timed->reach, transfer.to_feet.y - transfer.from_feet.y);
+		}
 	}
 	if (transfer.how == TRANSFER_DROP) {
 		// Out over the edge (the first 40 %), then straight down.

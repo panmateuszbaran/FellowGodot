@@ -285,6 +285,9 @@ private:
 	};
 	LeapTiming leap_timing[2];
 	static float _sample(const LocalVector<float> &p_values, float p_u);
+	static float _leap_rise(float p_z, float p_reach, float p_rise);
+	static constexpr float LEAP_EASE_IN = 0.15f; // m of a clip's rise up (milestone 198)
+	static constexpr float LEAP_EASE_OUT = 0.3f;
 	// After a corner the wish held as it was goes on along the new edge (the stick held left stays "left").
 	bool remap = false;
 	Vector3 remap_from, remap_to;
