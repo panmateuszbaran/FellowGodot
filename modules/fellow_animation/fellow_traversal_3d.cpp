@@ -572,6 +572,22 @@ bool FellowTraversal3D::_start(const Ledge &p_ledge, float p_speed, bool p_from_
 		duration /= OVER_SPLIT; // decision 0289: the mantle, then over and down
 	}
 	_prepare_clip();
+	// Milestone 205 (decision 0347): up from a hang, with climb_pull_speed, the clip's rise (scaled onto the ledge's) no
+	// faster than a quarter more than that (the legs help as the knee comes over): played at its own 1.25 s onto the
+	// roof's 1.9 m, the body had gone up at 2.5-3.3 m/s.
+	if (mantle_from_hang && climb_pull_speed > 0.0f && action == KIND_HIGH && clip_root.size() >= 2 && ledge.drop <= 0.0f) {
+		const float d_y = clip_root[clip_root.size() - 1].y;
+		const Ref<Animation> &c = _mantle_clip();
+		if (d_y > 0.1f && c.is_valid()) {
+			float v_max = 0.0f;
+			for (int k = 0; k + 1 < clip_root.size(); k++) {
+				v_max = MAX(v_max, clip_root[k + 1].y - clip_root[k].y);
+			}
+			v_max /= float(clip_root_step);
+			const float sv = MAX(0.0f, ledge.target.y - start_feet.y) / d_y;
+			duration = MAX(duration, double(float(c->get_length()) * v_max * sv / (1.25f * climb_pull_speed)));
+		}
+	}
 	const Vector3 scale = start_xf.basis.get_scale();
 	if (align_to_wall) {
 		end_basis = Basis::looking_at(ledge.inward, UP).scaled_local(scale);
@@ -815,11 +831,25 @@ void FellowTraversal3D::_update_hints(const Vector3 &p_feet, const Vector3 &p_ed
 			hints.hips_drop = MIN(rise, 0.9f) * (1.0f - smooth((t - 0.56f) / 0.12f));
 			// Both feet against the wall while pulling up, then the right onto the top.
 			const float to_top = smooth((t - 0.56f) / 0.12f);
-			const Vector3 wall_r = Vector3(on_wall.x, p_feet.y + 0.35f, on_wall.z) - left * 0.12f;
+			Vector3 wall_r = Vector3(on_wall.x, p_feet.y + 0.35f, on_wall.z) - left * 0.12f;
+			Vector3 wall_l = Vector3(on_wall.x, p_feet.y + 0.3f, on_wall.z) + left * 0.12f;
+			if (mantle_from_hang && climb_pull_speed > 0.0f) {
+				// Milestone 205 (decision 0347): up from a hang — the hips let go of the arms' reach over the pull and
+				// the press (at once, as the clip's knee came over the top, they had jumped 0.4 m in 0.15 s); the feet on
+				// the wall found under the edge, or hanging free under the body where there is none (an eave: the wall
+				// 0.5 m in under it — braced at the edge's face, they had stood on nothing).
+				hints.hips_drop = MIN(rise, 0.9f) * (1.0f - smooth((t - 0.4f) / 0.32f));
+				float found_r = 0.0f;
+				float found_l = 0.0f;
+				const Vector3 free_r = p_feet + UP * 0.1f + p_inward * 0.08f - left * 0.12f;
+				const Vector3 free_l = p_feet + UP * 0.06f + p_inward * 0.04f + left * 0.12f;
+				wall_r = _hang_foot(1, p_feet, p_inward, p_feet.y + 0.35f, free_r, nullptr, &found_r);
+				wall_l = _hang_foot(0, p_feet, p_inward, p_feet.y + 0.3f, free_l, nullptr, &found_l);
+			}
 			hints.foot[1] = wall_r.lerp(on_top - left * 0.12f, to_top);
 			hints.foot_follow[1] = 1.0f - to_top;
 			hints.foot_weight[1] = window(t, 0.08f, 0.22f, 0.84f, 0.98f);
-			hints.foot[0] = Vector3(on_wall.x, p_feet.y + 0.3f, on_wall.z) + left * 0.12f;
+			hints.foot[0] = wall_l;
 			hints.foot_weight[0] = window(t, 0.1f, 0.24f, 0.55f, 0.75f);
 		} break;
 		case KIND_VAULT: {
@@ -1645,7 +1675,10 @@ bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector
 				}
 				if (_fit_reach(l, from_feet, -ledge.inward * 0.05f, exclude, r_control)) {
 					r_ledge = l;
-					r_how = TRANSFER_REACH_UP;
+					// Milestone 205 (decision 0347): with leap_push_force (an arcade hero's), leapt to — up and out from
+					// the wall to the lip, the legs swinging free under it: reached for, the body had drifted out from the
+					// wall to it with nothing pushing it, the legs hanging.
+					r_how = leap_push_force > 0.0f ? TRANSFER_JUMP_UP : TRANSFER_REACH_UP;
 					return true;
 				}
 				break;

@@ -926,13 +926,19 @@ func _process(delta: float) -> void:
 		_foot_place.influence = move_toward(_foot_place.influence, 1.0 if down else 0.0, delta / 0.1)
 	if _look_target == null or _head_look == null:
 		return
+	if _no_look: # (tools, milestone 205: `--head_look=0`)
+		_head_look.influence = 0.0
+		return
 	var head := get_global_transform_interpolated().origin + Vector3.UP * 1.6
 	var ahead := Vector3(-sin(facing), 0.0, -cos(facing))
 	var goal := ahead * 4.0 + Vector3.DOWN * 0.6
 	var weight := 0.0
 	var hints: Dictionary = traversal.get_pose_targets()
 	if hints.get("active", false) and float(hints.get("look_weight", 0.0)) > 0.01:
-		goal = (hints["look"] as Vector3) - head
+		# (milestone 205: from the head itself — hanging, the capsule's 1.6 m is not where it is — and no steeper than
+		# LOOK_UP_MAX; the target placed back from the estimate's point, where the eased offset is added)
+		var eyes := _head_at(head)
+		goal = _look_way((hints["look"] as Vector3) - eyes, hints.get("inward", ahead)) + (eyes - head)
 		weight = float(hints["look_weight"])
 	elif mode == Mode.GROUND and _one_shot <= 0.0:
 		var w := Vector3(wish.x, 0.0, wish.z)
@@ -944,6 +950,38 @@ func _process(delta: float) -> void:
 	_look_weight = lerpf(_look_weight, weight, 1.0 - exp(-6.0 * delta))
 	_look_target.global_position = head + _look_off
 	_head_look.influence = _look_weight
+
+
+## Milestone 205 (the owner: "the first jump bends the head in a strange way"): a look no steeper than LOOK_UP_MAX over
+## the horizon, its way across the wall's (into it) as it steepens — a hold above the head says little about which way
+## across: looking straight up at the next hold, the head had swung 40-60 degrees from side to side through a leap and
+## tipped back to the neck's limit.
+const LOOK_UP_MAX := 0.87 # radians (50 degrees)
+var _no_look := "--head_look=0" in OS.get_cmdline_user_args()
+
+func _head_at(p_default: Vector3) -> Vector3:
+	var skel := _head_look.get_parent() as Skeleton3D if _head_look else null
+	if skel == null:
+		return p_default
+	if _head_bone < 0:
+		_head_bone = skel.find_bone("Head")
+	return skel.global_transform * skel.get_bone_global_pose(_head_bone).origin if _head_bone >= 0 else p_default
+
+var _head_bone := -1
+
+
+func _look_way(g: Vector3, inward: Vector3) -> Vector3:
+	var l := g.length()
+	var flat := Vector3(g.x, 0.0, g.z)
+	var into := Vector3(inward.x, 0.0, inward.z)
+	if l < 0.01 or into.length() < 0.01:
+		return g
+	into = into.normalized()
+	var way := flat.normalized() if flat.length() > 0.01 else into
+	if way.dot(into) > -0.95:
+		way = way.slerp(into, smoothstep(0.5, 0.9, clampf(g.y / l, 0.0, 1.0))).normalized()
+	var up := minf(atan2(g.y, flat.length()), LOOK_UP_MAX)
+	return (way * cos(up) + Vector3.UP * sin(up)) * l
 
 
 func _set_state(s: String) -> void:
@@ -974,6 +1012,10 @@ func _limit_joints() -> void:
 	# Milestone 204: the head tipped back to 66 degrees at most (the measure's limit 70: eased in at 720 degrees a second, a
 	# look up to a hold 2.5 m over the hands had passed it by 1-3 degrees).
 	limits.set("neck_flexion_range", Vector2(-66.0, 56.0))
+	# Milestone 205 (the owner: "the first jump bends the head in a strange way"): the head tipped to the side at most 15
+	# degrees off the chest (a person's 45 is a stretch: caught on the wall with the chest rolled 35 degrees, the head
+	# held upright had bent the neck 31 degrees sideways).
+	limits.set("neck_bend_limit", 15.0)
 	for arg in args:
 		for p in ["hinge_alignment", "limit_ankles", "limit_wrists", "limit_neck"]:
 			if arg.begins_with("--%s=" % p): # (tools)

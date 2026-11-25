@@ -26,6 +26,7 @@ var out_dir := "user://anim_quality"
 # Milestone 203: the climb program's length — climbing at a person's pace (the body pulled up at 1 m/s at most, stood up
 # onto the holds between the floors) the demo reaches the roof's tiles after 20 s (14 s had been enough).
 const CLIMB_SECONDS := 26.0
+var dump_all := false
 var dump_frames := false # milestone 203: `--dump=1` writes <program>_out.json, every joint out of range frame by frame
 var dumped := []
 var player: CharacterBody3D
@@ -60,6 +61,10 @@ func _initialize() -> void:
 			out_dir = a.get_slice("=", 1)
 		elif a == "--dump=1":
 			dump_frames = true
+		elif a == "--dump=2":
+			# (milestone 205: and the neck and the spine every frame, as `neck` rows)
+			dump_frames = true
+			dump_all = true
 	var scene := (load("res://rooftops/rooftops.tscn") as PackedScene).instantiate()
 	root.add_child(scene)
 	player = scene.get_node("Player")
@@ -143,6 +148,14 @@ func _upd() -> void:
 		var av: Dictionary = d.get_or_add("anat", {})
 		var aw: Dictionary = d.get_or_add("anat_worst", {})
 		var ao: Dictionary = d.get_or_add("anat_out", {})
+		if dump_all:
+			dumped.append([frame, String(player.get("state")), "neck", [snappedf(am.get("neck_flex", 0.0), 0.1), snappedf(am.get("neck_bend", 0.0), 0.1), snappedf(am.get("neck_turn", 0.0), 0.1)], 0.0])
+			# (the head's and the upper chest's tilt off upright in the world, degrees)
+			var tilt := []
+			for bn in ["Head", "UpperChest"]:
+				var bb := (sk.global_transform.basis * sk.get_bone_global_pose(sk.find_bone(bn)).basis).orthonormalized()
+				tilt.append(snappedf(rad_to_deg(bb.y.angle_to(Vector3.UP)), 0.1))
+			dumped.append([frame, String(player.get("state")), "tilt", tilt, 0.0])
 		for k in am:
 			(av.get_or_add(k, []) as Array).append(am[k])
 			var over: float = anat.get_script().beyond(k, am[k])
