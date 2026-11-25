@@ -15,6 +15,8 @@ extends SceneTree
 ##   godot ... -s res://tools/climb_look.gd -- --program=fountain --out=<dir> [--seconds=5] ...   (a run at its middle)
 ##   godot ... -s res://tools/climb_look.gd -- --program=bump --bump=walk|run|sprint --out=<dir> [--seconds=8] ...
 ##       (milestone 208: from 6 m at one of the talkers in the square's middle, into them and on; its reactions printed)
+##   godot ... -s res://tools/climb_look.gd -- --program=people --out=<dir> [--dist=2.6] ...
+##       (milestone 209: beside a walker in a skirt — the cloth — the player out of the way)
 ##
 ## --cam=hand: the hands on the edge from out and above; --cam=handside: the left hand in profile from along the edge
 ## (milestone 198). --warm=<n>: the n frames before --skip drawn too, not saved (the exposure settled).
@@ -93,7 +95,7 @@ func _init() -> void:
 	if _lite:
 		for n in ["Skyline", "CityHouses", "Landscape", "Trees_cypress", "Trees_olive", "Trees_pine", "Trees_broadleaf",
 				"Villas", "Trees_villa_cypress", "Birds", "Crowd", "PipelineWarmer"]:
-			if n == "Crowd" and _program == "bump":
+			if n == "Crowd" and (_program == "bump" or _program == "people"):
 				continue # (milestone 208: the people kept to be run into)
 			var c := sc.get_node_or_null(n)
 			if c:
@@ -135,6 +137,8 @@ func _init() -> void:
 		_player.rotation.y = 0.0
 	elif _program == "bump":
 		_bump_setup(sc)
+	elif _program == "people":
+		_people_setup(sc)
 	elif _program == "fountain":
 		_player.set("autopilot", true)
 		var c := (sc.get_node("Town/Fountain") as Node3D).global_position
@@ -157,6 +161,8 @@ func _init() -> void:
 			_drive_keys(i)
 		elif _program == "bump":
 			_drive_bump(i)
+		elif _program == "people":
+			_player.set("wish", Vector3())
 		elif _program == "fountain":
 			# (milestone 207: a run at the fountain's middle — onto the basin's rim, across it, into the column)
 			_player.set("wish", Vector3(-1.0, 0.0, 0.0))
@@ -179,6 +185,10 @@ func _init() -> void:
 	var crowd := _player.get_parent().get_node_or_null("Crowd")
 	if crowd and crowd.has_method("get_reaction_stats"):
 		print("climb_look: the people ", crowd.call("get_reaction_stats"))
+		if ClassDB.class_exists(&"FellowCloth3D"):
+			# (milestone 208: the skirts' cloth — how many, their particles, the simulation's time)
+			var skirts := crowd.find_children("Skirt", "", true, false)
+			print("climb_look: skirts %d, %s" % [skirts.size(), ClassDB.class_call_static(&"FellowCloth3D", &"get_global_stats") if ClassDB.class_has_method(&"FellowCloth3D", &"get_global_stats") else {}])
 	quit()
 
 
@@ -362,6 +372,22 @@ func _drive_bump(i: int) -> void:
 		_bump_last = key
 
 
+## The "people" program (milestone 209, the owner: "the skirts not solids but cloth"): the camera beside a walker in a
+## skirt (the first of the crowd's), keeping pace; the player out of the way.
+var _people_target: Node3D
+
+func _people_setup(sc: Node) -> void:
+	_player.set("autopilot", true)
+	_player.global_position = Vector3(-30.0, 0.0, -30.0)
+	var crowd := sc.get_node("Crowd")
+	var walkers: Array = crowd.get("_walkers")
+	for w in walkers:
+		var node: Node3D = w.node
+		if node.find_child("Skirt", true, false):
+			_people_target = node
+			break
+
+
 ## The "keys" program (milestone 207, the owner: "climbing, when I hold W and press space the body sometimes goes along
 ## the edge, left or right at random"): a run at CasaCrema's front, the first hold caught, 1 s still, then the stick
 ## held at the wall --keys_yaw degrees off square (the camera's yaw off the wall's) and jump pressed every 0.5 s.
@@ -477,6 +503,16 @@ func _place_camera(p_first: bool) -> void:
 		var at: Vector3 = (hints["hand_left"] + hints["hand_right"]) * 0.5
 		_cam_pos = _cam_pos.lerp(at - inward * _dist + side * (_dist * 0.45) + Vector3.UP * (_dist * 0.35), 1.0 if p_first else 0.25)
 		_look = _look.lerp(at - Vector3.UP * 0.05, 1.0 if p_first else 0.3)
+		_cam.global_position = _cam_pos
+		_cam.look_at(_look, Vector3.UP)
+		return
+	if _program == "people" and _people_target:
+		# (milestone 209: beside a walker in a skirt, keeping pace with it)
+		var at := _people_target.global_position
+		var side_of := _people_target.global_basis.x.normalized()
+		var want_at := at + side_of * _dist + Vector3.UP * 1.0 - _people_target.global_basis.z.normalized() * 0.6
+		_cam_pos = want_at if p_first else _cam_pos.lerp(want_at, 0.1)
+		_look = (at + Vector3.UP * 0.65) if p_first else _look.lerp(at + Vector3.UP * 0.65, 0.2)
 		_cam.global_position = _cam_pos
 		_cam.look_at(_look, Vector3.UP)
 		return

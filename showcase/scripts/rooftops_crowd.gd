@@ -112,17 +112,12 @@ func _person(p_clip: String, p_speed: float) -> Node3D:
 	if skel:
 		# A long robe for some (from the hips past the knees), a hat for some.
 		if _rng.randf() < 0.4 and p_clip != "sit":
-			var robe := CylinderMesh.new()
-			robe.top_radius = 0.17
-			robe.bottom_radius = 0.3
-			robe.height = 0.78
-			robe.radial_segments = 14
-			robe.rings = 1
 			var robe_mat := StandardMaterial3D.new()
 			robe_mat.albedo_color = PALETTE[_rng.randi() % PALETTE.size()].darkened(0.15)
 			robe_mat.roughness = 0.9
-			robe.material = robe_mat
-			_attach(skel, "Hips", robe, Vector3(0.0, -0.33, 0.0))
+			robe_mat.cull_mode = BaseMaterial3D.CULL_DISABLED # (its inside seen from below as it swings)
+			_held.append(robe_mat)
+			_skirt(skel, robe_mat)
 		var hat_kind := _rng.randf()
 		if hat_kind < 0.45:
 			var hat := CylinderMesh.new()
@@ -143,6 +138,103 @@ func _person(p_clip: String, p_speed: float) -> Node3D:
 		ap.speed_scale = p_speed
 		ap.seek(_rng.randf() * ap.current_animation_length, true)
 	return node
+
+
+## Milestone 208 (the owner: "the skirts not solids but cloth with a simulated material"): a long robe from the waist
+## past the knees, flaring, as FellowCloth3D on the figure's skin — its waistband pinned to the hips (vertex colour red),
+## the rest skinned from the hips towards the thighs down its length and kept within SKIRT_FREE of its skinned place
+## (none at the waistband, all of it at the hem), not behind it into the body (the backstop), out of the legs and the
+## hands (capsules on the thighs, shins, forearms and hands), swung by the body, the legs and the wind. Simulated within
+## SKIRT_SIMULATE m of the camera.
+const SKIRT_TOP := 1.0 # m over the ground at rest (the hips' at 0.965)
+const SKIRT_HEM := 0.27
+const SKIRT_FREE := 0.22 # m
+const SKIRT_SIMULATE := 32.0 # m
+
+func _skirt(p_skel: Skeleton3D, p_mat: Material) -> void:
+	var hips := p_skel.find_bone("Hips")
+	var leg_l := p_skel.find_bone("LeftUpperLeg")
+	var leg_r := p_skel.find_bone("RightUpperLeg")
+	if hips < 0 or leg_l < 0 or leg_r < 0:
+		return
+	var seg := 18
+	var rings := 9
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	var idx := PackedInt32Array()
+	for r in rings:
+		var u := float(r) / float(rings - 1)
+		var y := lerpf(SKIRT_TOP, SKIRT_HEM, u)
+		var rad := lerpf(0.175, 0.31, u * u * 0.4 + u * 0.6)
+		for k in seg:
+			var a := TAU * float(k) / float(seg)
+			var x := sin(a) * rad
+			verts.append(Vector3(x, y, cos(a) * rad * 0.92))
+			normals.append(Vector3(sin(a), 0.0, cos(a)))
+			colors.append(Color(1.0 if r == 0 else 0.0, u * u, 0.0))
+			# Down the skirt more of each side on its thigh (the hem half on it): it moves with the stride.
+			var t := 0.7 * u
+			var side := clampf(0.5 + x / (2.0 * rad), 0.0, 1.0)
+			bones.append_array([hips, leg_l, leg_r, 0])
+			weights.append_array([1.0 - t, t * side, t * (1.0 - side), 0.0])
+	for r in rings - 1:
+		for k in seg:
+			var a := r * seg + k
+			var b := r * seg + (k + 1) % seg
+			idx.append_array([a, b, a + seg, b, b + seg, a + seg])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_BONES] = bones
+	arrays[Mesh.ARRAY_WEIGHTS] = weights
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_held.append(mesh)
+	var cloth: GeometryInstance3D = ClassDB.instantiate(&"FellowCloth3D")
+	cloth.name = "Skirt"
+	cloth.set("source_mesh", mesh)
+	cloth.set("pin_mode", 5) # PIN_VERTEX_COLOR
+	cloth.set("material", p_mat)
+	cloth.set("collide_with_world", false)
+	cloth.set("follow_skin", true)
+	cloth.set("skin_max_distance", SKIRT_FREE)
+	cloth.set("skin_distance_mode", 1) # SKIN_DISTANCE_FROM_PINS
+	cloth.set("skin_backstop", true)
+	cloth.set("skin_backstop_distance", 0.01)
+	cloth.set("thickness", 0.02)
+	cloth.set("wind_scale", 0.35)
+	cloth.set("mass", 0.6)
+	cloth.set("substep_rate", 240) # (a skirt's swing needs no flag's 480 a second)
+	cloth.set("lod_distance", 12.0)
+	cloth.set("simulation_distance", SKIRT_SIMULATE)
+	cloth.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	# (on the skeleton's parent, as the skeleton: the mesh is in its space)
+	(p_skel.get_parent() as Node3D).add_child(cloth)
+	cloth.transform = p_skel.transform
+	cloth.set("skeleton_path", cloth.get_path_to(p_skel))
+	var paths := []
+	# (the legs, and the hands and forearms swinging by the hips)
+	for b in [["LeftUpperLeg", 0.105, 0.44], ["RightUpperLeg", 0.105, 0.44], ["LeftLowerLeg", 0.08, 0.44], ["RightLowerLeg", 0.08, 0.44],
+			["LeftLowerArm", 0.05, 0.26], ["RightLowerArm", 0.05, 0.26], ["LeftHand", 0.06, 0.2], ["RightHand", 0.06, 0.2]]:
+		var at := BoneAttachment3D.new()
+		at.bone_name = b[0]
+		p_skel.add_child(at)
+		var cs := CollisionShape3D.new()
+		var cap := CapsuleShape3D.new()
+		cap.radius = b[1]
+		cap.height = b[2]
+		_held.append(cap)
+		cs.shape = cap
+		cs.position = Vector3(0.0, (b[2] as float) * 0.5, 0.0)
+		at.add_child(cs)
+		paths.append(cloth.get_path_to(cs))
+	cloth.set("colliders", paths)
 
 
 func _attach(p_skel: Skeleton3D, p_bone: String, p_mesh: Mesh, p_offset: Vector3) -> void:
