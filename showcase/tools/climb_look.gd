@@ -23,7 +23,13 @@ extends SceneTree
 ##       [--weather_seq=<key>@<s>,...] [--weather_transition=<s>] --out=<dir> ...   (milestone 211: the weather, the
 ##       brazier, the chimneys' smoke from a still camera; the weather turned to each key at its second, over
 ##       WeatherKeys' transition or the one given; the brazier's and the weather's state printed each second)
-## --drop=<node>,...: the scene's top-level nodes left out (an A/B). --draw_all=1: every frame drawn (saved as --every
+## --drop=<node>,...: the scene's top-level nodes left out (an A/B).
+##   godot ... -s res://tools/climb_look.gd -- --program=talk [--talk_to=<group>] --out=<dir> [--seconds=10] ...
+##       (milestone 212: the player walks up to one of a group and talks — E at 1.4 s, then every 2.6 s — the camera over
+##       the player's shoulder; the crowd's social counts printed)
+##   godot ... -s res://tools/climb_look.gd -- --program=lookup --demo --demo_from=house --out=<dir> [--seconds=16] ...
+##       (milestone 212: the demo's climb up CasaCrema's front; the camera on the square behind the people looking up
+##       and pointing) --draw_all=1: every frame drawn (saved as --every
 ## says): what runs on the GPU while drawing goes on between the saved frames.
 ##
 ## --cam=hand: the hands on the edge from out and above; --cam=handside: the left hand in profile from along the edge
@@ -98,6 +104,10 @@ func _init() -> void:
 			_draw_all = true
 		elif a.begins_with("--drop="):
 			_drop = a.get_slice("=", 1).split(",")
+		elif a.begins_with("--talk_to="):
+			_talk_group = int(a.get_slice("=", 1))
+		elif a == "--crowd=1":
+			_crowd_in = true
 		elif a.begins_with("--view="):
 			_view = a.get_slice("=", 1)
 		elif a.begins_with("--weather_transition="):
@@ -118,7 +128,7 @@ func _init() -> void:
 	if _lite:
 		for n in ["Skyline", "CityHouses", "Landscape", "Trees_cypress", "Trees_olive", "Trees_pine", "Trees_broadleaf",
 				"Villas", "Trees_villa_cypress", "Birds", "Crowd", "PipelineWarmer"]:
-			if n == "Crowd" and (_program == "bump" or _program == "people"):
+			if n == "Crowd" and (_program in ["bump", "people", "talk", "lookup"] or _program == "weather" and _crowd_in):
 				continue # (milestone 208: the people kept to be run into)
 			var c := sc.get_node_or_null(n)
 			if c:
@@ -172,6 +182,10 @@ func _init() -> void:
 		_player.set("autopilot", true)
 		_player.global_position = Vector3(-30.0, 0.0, -30.0)
 		_hay_cart = sc.get_node_or_null("Town/HayCart")
+	elif _program == "talk":
+		_talk_setup(sc)
+	elif _program == "lookup":
+		pass # (the demo plays: pass --demo --demo_from=house)
 	elif _program == "weather":
 		_player.set("autopilot", true)
 		_player.global_position = Vector3(-30.0, 0.0, -30.0)
@@ -204,6 +218,12 @@ func _init() -> void:
 		elif _program == "weather":
 			_player.set("wish", Vector3())
 			_drive_weather(i)
+		elif _program == "talk":
+			_drive_talk(i)
+		elif _program == "lookup":
+			if i % 60 == 0:
+				var crowd := _player.get_parent().get_node_or_null("Crowd")
+				print("climb_look: lookup t=%.0f player y %.2f %s" % [i / 60.0, _player.global_position.y, crowd.call("get_social_stats") if crowd else {}])
 		elif _program == "fountain":
 			# (milestone 207: a run at the fountain's middle — onto the basin's rim, across it, into the column)
 			_player.set("wish", Vector3(-1.0, 0.0, 0.0))
@@ -421,6 +441,11 @@ var _hay_cart: Node3D
 ## Milestone 211: the "weather" program.
 const WEATHER_KEEP := ["StallA", "StallB", "HayCart", "Awning0", "Awning1"]
 var _view := "square"
+## Milestone 212: "talk", "lookup".
+var _talk_group := 0
+var _crowd_in := false # --crowd=1: the weather program with the people (the rain sends them off the square)
+var _talk_target: Node3D
+var _talk_at := Vector3()
 var _drop: PackedStringArray = []
 var _draw_all := false # --draw_all=1: every frame drawn, every --every-th saved (what the GPU runs while drawing — the
 		# burning logs, milestone 211 — goes on in the frames between)
@@ -465,6 +490,46 @@ func _drive_weather(i: int) -> void:
 				_weather_keys.call("get_weather_key"), st.get("wind_speed", 0.0), st.get("intensity", 0.0) if int(st.get("precipitation", 0)) else 0.0,
 				st.get("cloud_coverage", 0.0), st.get("sunlight", 0.0), st.get("fog_density", 0.0),
 				_brazier.call("get_stats") if _brazier else {}])
+		var crowd := _player.get_parent().get_node_or_null("Crowd")
+		if crowd and crowd.has_method("get_social_stats"):
+			print("climb_look: people t=%.0f %s" % [t, crowd.call("get_social_stats")])
+
+
+## The "talk" program (milestone 212): the player 3.2 m from one of a group (--talk_to=<group index>, its first
+## person), walking up to them; E pressed at 1.4 s, then every 2.6 s.
+func _talk_setup(sc: Node) -> void:
+	_player.set("autopilot", true)
+	var crowd := sc.get_node_or_null("Crowd")
+	var groups: Array = crowd.get("groups") if crowd else []
+	var c: Vector3 = (groups[clampi(_talk_group, 0, groups.size() - 1)] as Array)[0] if groups.size() > 0 else Vector3()
+	# (the person of the group on the side the player comes from: the nearest to a point 3 m off the group's centre)
+	var from := c + Vector3(0.0, 0.0, 3.6)
+	var best: Node3D = null
+	for n in crowd.get_children():
+		if n is Node3D and n.has_node("AnimationPlayer") and (n as Node3D).position.distance_to(c) < 1.2:
+			if best == null or (n as Node3D).position.distance_to(from) < best.position.distance_to(from):
+				best = n
+	_talk_target = best
+	var at := best.global_position if best else c
+	var dir := Vector3(from.x - at.x, 0.0, from.z - at.z).normalized()
+	_player.global_position = at + dir * 3.2
+	_talk_at = at + dir * 1.1
+	var f := atan2(dir.x, dir.z)
+	_player.set("facing", f)
+	_player.rotation.y = f
+
+
+func _drive_talk(i: int) -> void:
+	var pp := _player.global_position
+	var to := Vector3(_talk_at.x - pp.x, 0.0, _talk_at.z - pp.z)
+	_player.set("wish", to.normalized() * 0.5 if to.length() > 0.12 else Vector3())
+	var crowd := _player.get_parent().get_node_or_null("Crowd")
+	if crowd == null:
+		return
+	if i == 84 or (i > 84 and (i - 84) % 156 == 0):
+		print("climb_look: talk t=%.1f E -> %s" % [i / 60.0, crowd.call("talk_to_nearest")])
+	if i % 60 == 0:
+		print("climb_look: talk t=%.0f %s" % [i / 60.0, crowd.call("get_social_stats")])
 
 
 func _drive_keys(i: int) -> void:
@@ -576,6 +641,26 @@ func _place_camera(p_first: bool) -> void:
 		_look = _look.lerp(at - Vector3.UP * 0.05, 1.0 if p_first else 0.3)
 		_cam.global_position = _cam_pos
 		_cam.look_at(_look, Vector3.UP)
+		return
+	if _program == "talk" and _talk_target:
+		# (over the player's right shoulder, the one talked to ahead)
+		var pp := _player.global_position
+		var to := _talk_target.global_position - pp
+		to.y = 0.0
+		to = to.normalized() if to.length() > 0.1 else Vector3(0, 0, -1)
+		var right := to.cross(Vector3.UP).normalized()
+		var want_at := pp - to * 1.9 + right * 0.75 + Vector3.UP * 1.75
+		_cam_pos = want_at if p_first else _cam_pos.lerp(want_at, 0.08)
+		var look_at := _talk_target.global_position + Vector3.UP * 1.55
+		_look = look_at if p_first else _look.lerp(look_at, 0.12)
+		_cam.global_position = _cam_pos
+		_cam.look_at(_look, Vector3.UP)
+		return
+	if _program == "lookup":
+		if p_first:
+			# (on the square behind the group nearest CasaCrema, looking up at its front over their heads)
+			_cam.global_position = Vector3(9.4, 1.9, -1.2)
+			_cam.look_at(Vector3(12.6, 5.2, -11.5), Vector3.UP)
 		return
 	if _program == "weather":
 		if p_first:

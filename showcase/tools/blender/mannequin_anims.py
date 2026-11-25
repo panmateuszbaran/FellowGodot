@@ -1190,6 +1190,85 @@ def clip_talk():
 	return 6.0, True, lambda t: keyed(keys, t, loop=True, length=6.0)
 
 
+# ------------------------------------------------------------------ milestone 212: the square's people and the player
+
+
+def clip_wave():
+	"""A greeting: the right hand raised beside the head and waved three times, then lowered (rooftops_crowd.gd: the
+	person the player talks to, as they turn to them)."""
+	base = stand()
+	up = {"arm_R": {"ik": ((-0.33, -0.1, 1.6), (-1.0, 0.4, -0.7))}, "hand_R": (0.0, 0.0, 0.0), "grip_R": 0.05,
+			"head": (2.0, 0, 4.0), "spine": (1.0, -3.0, -1.5), "shoulder_R": (6.0, 0.0)}
+	keys = [(0.0, base), (0.45, up)]
+	t = 0.45
+	for i in range(3):
+		keys.append((t + 0.2, {"arm_R": {"ik": ((-0.43, -0.12, 1.58), (-1.0, 0.4, -0.7))}, "hand_R": (0.0, -18.0, 0.0)}))
+		keys.append((t + 0.4, {"arm_R": {"ik": ((-0.3, -0.1, 1.61), (-1.0, 0.4, -0.7))}, "hand_R": (0.0, 12.0, 0.0)}))
+		t += 0.4
+	keys.append((t + 0.15, up))
+	keys.append((t + 0.75, base))
+	return t + 0.75, False, lambda u: keyed(keys, u)
+
+
+def clip_point_up():
+	"""Pointing up at someone climbing: the right arm raised forward and up, the head and chest lifted towards it, the
+	pointing hand jabbed twice ("look, up there!"), held, then lowered."""
+	base = stand()
+	aim = {"arm_R": {"ik": ((-0.2, -0.3, 1.84), (-1.0, 0.0, -0.4))}, "hand_R": (-8.0, 0, 0), "grip_R": 0.7,
+			"spine": (-5.0, -6.0, 0), "neck": (14.0, 0), "head": (16.0, 0, 0), "shoulder_R": (10.0, 4.0),
+			"arm_L": {"fk": (72.0, 10.0, 30.0, 6.0)}}
+	jab = {"arm_R": {"ik": ((-0.21, -0.36, 1.88), (-1.0, 0.0, -0.4))}}
+	keys = [
+		(0.0, base),
+		(0.5, aim),
+		(0.85, jab),
+		(1.1, aim),
+		(1.4, jab),
+		(1.7, aim),
+		(2.2, {"head": (18.0, 3.0, 2.0)}),
+		(2.9, {"head": (14.0, -2.0, 0.0)}),
+		(3.6, base),
+	]
+	return 3.6, False, lambda t: keyed(keys, t)
+
+
+def clip_warm_hands():
+	"""Warming the hands at a fire in front, below: the hands held out to it, palms down, then rubbed together, then out
+	again (rooftops_crowd.gd: round the brazier in the cold and the rain)."""
+	out_l = {"ik": ((0.13, -0.42, 1.05), (1.0, 0.3, -1.0))}
+	out_r = {"ik": ((-0.13, -0.42, 1.05), (-1.0, 0.3, -1.0))}
+	base = stand(spine=(9.0, 0, 0), neck=(-4.0, 0), head=(-8.0, 0, 0), arm_L=out_l, arm_R=out_r,
+			hand_L=(-25.0, 0, 0), hand_R=(-25.0, 0, 0), grip_L=0.15, grip_R=0.15, hips=(0, 0.02, -0.014))
+	keys = [(0.0, base), (0.8, {"arm_L": {"ik": ((0.14, -0.44, 1.07), (1.0, 0.3, -1.0))},
+			"arm_R": {"ik": ((-0.12, -0.43, 1.04), (-1.0, 0.3, -1.0))}, "head": (-6.0, 4.0, 0)})]
+	t = 1.6
+	keys.append((t, {"arm_L": {"ik": ((0.03, -0.36, 1.1), (1.0, 0.2, -1.0))}, "arm_R": {"ik": ((-0.03, -0.36, 1.1), (-1.0, 0.2, -1.0))},
+			"hand_L": (-5.0, 0, -30.0), "hand_R": (-5.0, 0, -30.0), "head": (-10.0, 0, 0)}))
+	for i in range(4):
+		keys.append((t + 0.2, {"arm_L": {"ik": ((0.03, -0.39, 1.1), (1.0, 0.2, -1.0))}, "arm_R": {"ik": ((-0.03, -0.33, 1.1), (-1.0, 0.2, -1.0))}}))
+		keys.append((t + 0.4, {"arm_L": {"ik": ((0.03, -0.33, 1.1), (1.0, 0.2, -1.0))}, "arm_R": {"ik": ((-0.03, -0.39, 1.1), (-1.0, 0.2, -1.0))}}))
+		t += 0.4
+	keys.append((t + 0.6, dict(base)))
+	keys.append((6.0, dict(base)))
+	return 6.0, True, lambda u: keyed(keys, u, loop=True, length=6.0)
+
+
+def clip_huddle():
+	"""Waiting out the rain under a shelter, cold: the arms crossed, the shoulders up, the weight shifting, looking out
+	at the weather now and then."""
+	base = stand(arm_L={"ik": ((-0.1, -0.17, 1.16), (1.0, -0.3, -1.0))}, arm_R={"ik": ((0.12, -0.13, 1.2), (-1.0, -0.3, -1.0))},
+			hand_L=(10.0, 0, 0), hand_R=(10.0, 0, 0), grip_L=0.55, grip_R=0.55, shoulder_L=(9.0, 5.0), shoulder_R=(9.0, 5.0),
+			spine=(5.0, 0, 0), neck=(-3.0, 0), head=(-7.0, 0, 0))
+	keys = [
+		(0.0, base),
+		(1.4, {"hips": (0.016, 0, -0.016), "hips_rot": (0, 1.5, -1.5), "head": (4.0, 14.0, 1.0), "neck": (2.0, 6.0)}),
+		(2.6, {"head": (-6.0, 4.0, 0.0), "neck": (-2.0, 0.0)}),
+		(3.8, {"hips": (-0.012, 0, -0.016), "hips_rot": (0, -1.0, 1.2), "head": (-8.0, -6.0, -1.0)}),
+		(5.0, base),
+	]
+	return 5.0, True, lambda t: keyed(keys, t, loop=True, length=5.0)
+
+
 def clips():
 	out = {}
 	for name in ("walk", "jog", "run", "sprint"):
@@ -1232,6 +1311,10 @@ def clips():
 	out["perch"] = clip_perch()
 	out["sit"] = clip_sit()
 	out["talk"] = clip_talk()
+	out["wave"] = clip_wave()
+	out["point_up"] = clip_point_up()
+	out["warm_hands"] = clip_warm_hands()
+	out["huddle"] = clip_huddle()
 	return out
 
 

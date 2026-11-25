@@ -59,7 +59,7 @@ func _ready() -> void:
 		var length := _length(pts, loop)
 		for i in int(r[2]):
 			var w := {"pts": pts, "loop": loop, "length": length, "s": _rng.randf() * length * (1.0 if loop else 2.0),
-					"speed": _rng.randf_range(1.05, 1.55), "lane": _rng.randf_range(-0.7, 0.7), "push": 0.0}
+					"speed": _rng.randf_range(1.05, 1.55), "lane": _rng.randf_range(-0.7, 0.7), "push": 0.0, "pace": 1.0}
 			w["node"] = _person("walk", (w["speed"] as float) / 1.6)
 			w["detour"] = Vector3()
 			w["person"] = _register(w["node"], "walk", "walk", (w["speed"] as float) / 1.6)
@@ -88,6 +88,7 @@ func _ready() -> void:
 		node.position = k.origin
 		_face(node, k.basis.z)
 		_register(node, "stand", clip, 1.0)
+	_social_ready()
 
 
 func _person(p_clip: String, p_speed: float) -> Node3D:
@@ -295,9 +296,9 @@ func _process(delta: float) -> void:
 				(p.node as Node3D).position = (p.home as Vector3) + (p.shove as Vector3)
 	for w in _walkers:
 		var person: Dictionary = w.person
-		if person.react != "" and person.react != "walk_on":
-			continue # (its way waits: the reaction moves it)
-		w.s += (w.speed as float) * delta
+		if person.react != "" and person.react != "walk_on" or person.act == "talk" or person.act == "point":
+			continue # (its way waits: the reaction moves it; milestone 212: talking, pointing)
+		w.s += (w.speed as float) * (w.pace as float) * delta
 		var pts: PackedVector3Array = w.pts
 		var here := _at(pts, w.loop, w.length, w.s)
 		var ahead := _at(pts, w.loop, w.length, (w.s as float) + 0.7)
@@ -321,6 +322,7 @@ func _process(delta: float) -> void:
 		node.position = here + side * ((w.lane as float) + (w.push as float)) + (w.detour as Vector3) + (person.shove as Vector3)
 		var goal := atan2(dir.x, dir.z)
 		node.rotation.y = lerp_angle(node.rotation.y, goal, 1.0 - exp(-6.0 * delta))
+	_social(delta)
 
 
 # ------------------------------------------------------------------ milestone 208: run into, knocked over, up again
@@ -345,7 +347,8 @@ func _register(p_node: Node3D, p_kind: String, p_clip: String, p_speed: float) -
 	body.set_meta("person", _people.size())
 	var p := {"node": p_node, "ap": p_node.get_node_or_null("AnimationPlayer"), "skel": p_node.find_child("Skeleton3D", true, false),
 			"shape": cs, "kind": p_kind, "clip": p_clip, "speed": p_speed, "home": p_node.position, "face": p_node.rotation.y,
-			"react": "", "t": 0.0, "shove": Vector3(), "nudged": -1.0, "turn_to": 0.0, "pa": null, "wait": 0, "knock_v": Vector3(), "down_t": 0.0}
+			"react": "", "t": 0.0, "shove": Vector3(), "nudged": -1.0, "turn_to": 0.0, "pa": null, "wait": 0, "knock_v": Vector3(), "down_t": 0.0,
+			"act": "", "look": null, "look_w": 0.0, "knocked": 0}
 	_people.append(p)
 	return p
 
@@ -364,9 +367,15 @@ func bump(p_collider: Object, p_velocity: Vector3, p_normal: Vector3) -> int:
 	if push.length() < 1e-3:
 		push = (p.node as Node3D).global_basis.z
 	push = push.normalized()
-	if p.react != "" and p.react != "walk_on" and not (p.react == "stagger" and speed >= KNOCK_MIN):
+	if p.react != "" and p.react != "walk_on" and p.react != "home" and not (p.react == "stagger" and speed >= KNOCK_MIN):
 		return REACT_NONE
 	_bumps += 1
+	if p.act != "" and p.act != "away" and (p.kind != "seat" and speed >= NUDGE_MAX or from_above):
+		# (milestone 212: talking, pointing, leaving — over; a walker's way and the others' place as before)
+		if p.act == "talk" and not _talk.is_empty():
+			_talk = {}
+		p.act = ""
+		_bubbles.call("hush", p.node)
 	if p.kind == "seat" or (speed < NUDGE_MAX and not from_above):
 		# (a shove at most every NUDGE_EVERY, and no further than NUDGE_FAR: leant on, they give a little way)
 		var now := Time.get_ticks_msec() / 1000.0
@@ -377,8 +386,11 @@ func bump(p_collider: Object, p_velocity: Vector3, p_normal: Vector3) -> int:
 		return REACT_NUDGE
 	if speed < KNOCK_MIN and not from_above:
 		_stagger(p, push)
+		if _rng.randf() < 0.7:
+			_bubbles.call("say", p.node, ["Ehi!", "Attento!", "Watch it!", "Oof!"][_rng.randi() % 4], 1.6, _head_height(p))
 		return REACT_STAGGER
 	_knock(p, push * clampf(speed * 0.7, 2.5, 4.5))
+	p.knocked = int(p.knocked) + 1
 	return REACT_KNOCK
 
 
@@ -545,6 +557,7 @@ func _get_up(p: Dictionary) -> void:
 	pa.call("get_up_from_animation", GET_UP_BLEND)
 	p.react = "getup"
 	p.t = 0.0
+	_bubbles.call("say", node, ["Ow... my back.", "Maleducato!", "Are you mad?!", "Santo cielo..."][_rng.randi() % 4], 2.4, 1.3)
 
 
 ## Standing after the get-up: the bodies cleared (they follow the animation within millimetres), the capsule back.
@@ -590,3 +603,520 @@ func get_reaction_stats() -> Dictionary:
 		if p.react != "" and p.react != "walk_on":
 			now += 1
 	return {"bumps": _bumps, "reacting": now, "people": _people.size()}
+
+
+# ------------------------------------------------------------------ milestone 212: talking, looking, the weather
+
+## Milestone 212 (the owner: "some interactions with the NPCs"):
+##  * they look at the player (the head, LookAtModifier3D) — those within LOOK_NEAR, and everyone within LOOK_UP_FAR
+##    while the player is up on a wall or a roof; the LOOK_MAX nearest at once;
+##  * someone pointing up at the player climbing ("point_up"), shouting, at most once every POINT_EVERY;
+##  * talked to (E within TALK_REACH, in front of the player, on the ground): they stop, turn to the player, wave
+##    ("wave") and talk ("talk"), their lines in a bubble (rooftops_bubbles.gd) — about the weather, the player's
+##    climbing, being knocked down by them — E for the next; they go back to what they were doing after;
+##  * in the rain (its intensity over RAIN_LEAVE) the square's standing groups leave it by the nearest street and come
+##    back when it stops; the walkers hurry; the stall keepers huddle under their awnings;
+##  * round the brazier (fire_people of them): in the cold (under COLD) they warm their hands ("warm_hands");
+##  * run into, they shout.
+@export var fire_path := NodePath("../Brazier")
+@export var fire_people := 3
+@export var weather_path := NodePath("../Weather")
+
+const LOOK_NEAR := 7.0 # m
+const LOOK_UP_FAR := 24.0 # m
+const LOOK_MAX := 10
+const TALK_REACH := 2.4 # m
+const POINT_EVERY := 6.0 # s
+const RAIN_LEAVE := 0.3 # the weather's rain intensity
+const RAIN_BACK := 0.12
+const COLD := 5.0 # °C
+const FIRE_RING := 1.2 # m from the brazier's middle
+const HURRY := 1.45 # the walkers' pace in the rain
+## The streets out of the square: its mouth and on along the street to where they are out of sight.
+const EXITS := [[Vector3(-1.8, 0, 12.5), Vector3(-1.8, 0, 30.0)], [Vector3(16.0, 0, 3.0), Vector3(30.0, 0, 3.0)],
+		[Vector3(6.8, 0, -12.0), Vector3(6.8, 0, -24.0)], [Vector3(-16.5, 0, 5.0), Vector3(-30.0, 0, 5.0)]]
+## What stands in the square (a circle each: x, z, radius), walked round.
+const OBSTACLES := [Vector3(-3.5, 1.0, 3.1), Vector3(-7.2, 4.2, 0.9), Vector3(-1.14, -7.35, 2.3), Vector3(-12.0, -6.5, 1.9),
+		Vector3(11.0, 7.5, 1.9)]
+
+var _bubbles: CanvasLayer
+var _weather: Node
+var _rain := 0.0 # the weather's rain now (not snow)
+var _cold := false
+var _sample_t := 0.0
+var _point_t := 0.0
+var _up_t := -1e9 # when the player was last seen up there (s)
+var _talk := {} # the conversation: {p, lines, i, t}
+var _hint_p = null
+var _talks := 0 # (tools)
+var _points := 0
+var _now := 0.0
+var _player_skel: Skeleton3D
+var _player_head := -1
+
+
+func _social_ready() -> void:
+	_weather = get_node_or_null(weather_path)
+	_bubbles = CanvasLayer.new()
+	_bubbles.set_script(load("res://scripts/rooftops_bubbles.gd"))
+	add_child(_bubbles)
+	if _player:
+		_player_skel = _player.get_node_or_null("Model/Mannequin/Skeleton3D") as Skeleton3D
+		if _player_skel:
+			_player_head = _player_skel.find_bone("Head")
+	var fire := get_node_or_null(fire_path) as Node3D
+	if fire and fire_people > 0:
+		var c := fire.global_position
+		for i in fire_people:
+			var a := TAU * (i + 0.35) / fire_people + _rng.randf_range(-0.25, 0.25)
+			var node := _person("talk" if i % 2 == 0 else "idle", 1.0)
+			node.position = c + Vector3(cos(a), 0.0, sin(a)) * FIRE_RING
+			_face(node, c - node.position)
+			var p := _register(node, "stand", "talk" if i % 2 == 0 else "idle", 1.0)
+			p.fire = true
+	for p in _people:
+		_look_setup(p)
+
+
+## The head turned to a target of its own (LookAtModifier3D after the clip, as the player's: tools/build_rooftops.gd).
+func _look_setup(p: Dictionary) -> void:
+	var skel: Skeleton3D = p.skel
+	if skel == null:
+		return
+	var target := Node3D.new()
+	target.name = "LookTarget"
+	target.top_level = true
+	(p.node as Node3D).add_child(target)
+	var look := LookAtModifier3D.new()
+	look.name = "HeadLook"
+	look.bone_name = "Head"
+	look.relative = true
+	look.duration = 0.35
+	look.transition_type = Tween.TRANS_SINE
+	look.ease_type = Tween.EASE_IN_OUT
+	look.use_angle_limitation = true
+	look.symmetry_limitation = true
+	look.primary_limit_angle = deg_to_rad(120.0)
+	look.primary_damp_threshold = 0.6
+	look.secondary_limit_angle = deg_to_rad(80.0)
+	look.secondary_damp_threshold = 0.6
+	look.influence = 0.0
+	look.active = false
+	skel.add_child(look)
+	look.target_node = look.get_path_to(target)
+	p.look = look
+	p.look_target = target
+	p.look_w = 0.0
+
+
+func _player_eyes() -> Vector3:
+	if _player_skel and _player_head >= 0:
+		return _player_skel.global_transform * _player_skel.get_bone_global_pose(_player_head).origin
+	return _player.global_position + Vector3.UP * 1.6
+
+
+## The player up on a wall or a roof (over the square's ground).
+func _player_up() -> bool:
+	return _player != null and _player.global_position.y > 2.5
+
+
+func _player_ground_near(p_at: Vector3, p_reach: float) -> bool:
+	if _player == null or not (_player as CharacterBody3D).is_on_floor():
+		return false
+	var d := _player.global_position - p_at
+	return Vector2(d.x, d.z).length() < p_reach and absf(d.y) < 1.0
+
+
+func _busy(p: Dictionary) -> bool:
+	return p.react != "" and p.react != "walk_on" and p.react != "home"
+
+
+func _social(delta: float) -> void:
+	if _player == null:
+		return
+	_now += delta
+	_sample_t -= delta
+	if _sample_t <= 0.0:
+		_sample_t = 0.5
+		_sample_weather()
+		_weather_acts()
+	var up := _player_up()
+	if up:
+		_up_t = _now
+	var eyes := _player_eyes()
+	var pp := _player.global_position
+	# Who looks: the nearest LOOK_MAX of those near, or (the player up there) within LOOK_UP_FAR.
+	var want: Array = []
+	for p in _people:
+		if _busy(p) or p.get("look") == null or p.act == "away":
+			continue
+		var d := Vector2(pp.x - (p.node as Node3D).global_position.x, pp.z - (p.node as Node3D).global_position.z).length()
+		if p.act == "talk" or d < LOOK_NEAR or (up and d < LOOK_UP_FAR):
+			want.append([0.0 if p.act == "talk" else d, p])
+	want.sort_custom(func(a, b): return a[0] < b[0])
+	var looking := {}
+	for k in mini(want.size(), LOOK_MAX):
+		looking[want[k][1].node] = true
+	for p in _people:
+		var look: LookAtModifier3D = p.get("look")
+		if look == null:
+			continue
+		var goal := 1.0 if looking.has(p.node) and not _busy(p) else 0.0
+		p.look_w = move_toward(float(p.look_w), goal, delta / 0.5)
+		look.influence = p.look_w
+		look.active = p.look_w > 0.001
+		if look.active:
+			(p.look_target as Node3D).global_position = eyes
+	# Someone pointing up at the player.
+	_point_t -= delta
+	if up and _point_t <= 0.0:
+		_point_t = POINT_EVERY
+		_point_at_player(pp)
+	_talk_update(delta)
+	_acts(delta)
+
+
+func _sample_weather() -> void:
+	if _weather == null:
+		return
+	var st: Dictionary = _weather.call("get_current_state")
+	_rain = float(st.get("intensity", 0.0)) if int(st.get("precipitation", 0)) == 1 else 0.0
+	_cold = float(st.get("temperature", 18.0)) < COLD
+
+
+# ------------------------------------------------------------------ pointing
+
+
+func _point_at_player(p_at: Vector3) -> void:
+	var best = null
+	var best_d := LOOK_UP_FAR
+	for p in _people:
+		if _busy(p) or p.act != "" or p.kind == "seat" or p.get("fire", false) and _cold:
+			continue
+		if _now - float(p.get("pointed", -1e9)) < 30.0:
+			continue
+		var at := (p.node as Node3D).global_position
+		var d := Vector2(p_at.x - at.x, p_at.z - at.z).length()
+		if d < best_d and d > 3.0:
+			best_d = d
+			best = p
+	if best == null:
+		return
+	var p: Dictionary = best
+	p.pointed = _now
+	p.act = "point"
+	p.t = 0.0
+	var to := p_at - (p.node as Node3D).global_position
+	p.turn_to = atan2(to.x, to.z)
+	var ap: AnimationPlayer = p.ap
+	ap.speed_scale = 1.0
+	ap.play("point_up", 0.25)
+	_points += 1
+	_bubbles.call("say", p.node, ["Guarda! Up there!", "Look — on the roof!", "Madonna, he'll break his neck!",
+			"Hey! Get down from there!", "Mamma mia, look at him climb!"][_rng.randi() % 5], 2.8, _head_height(p))
+
+
+# ------------------------------------------------------------------ talking
+
+
+func _head_height(p: Dictionary) -> float:
+	return (1.62 if p.kind == "seat" else 2.12) * (p.node as Node3D).scale.y
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _player == null or not event.is_action_pressed(&"interact") or event.is_echo():
+		return
+	if not _talk.is_empty():
+		_talk_next()
+		get_viewport().set_input_as_handled()
+		return
+	var p = _talkable()
+	if p != null:
+		_talk_start(p)
+		get_viewport().set_input_as_handled()
+
+
+## The one in front of the player within TALK_REACH, nearest (the player on the ground).
+func _talkable():
+	if _player == null or not (_player as CharacterBody3D).is_on_floor() or int(_player.get("mode")) != 0:
+		return null
+	var pp := _player.global_position
+	var f: float = _player.get("facing")
+	var ahead := Vector3(-sin(f), 0.0, -cos(f))
+	var best = null
+	var best_s := 1e9
+	for p in _people:
+		if _busy(p) or p.act == "away" or p.act == "leave" or p.act == "back":
+			continue
+		var at := (p.node as Node3D).global_position
+		var d := Vector3(at.x - pp.x, 0.0, at.z - pp.z)
+		var l := d.length()
+		if l > TALK_REACH or absf(at.y - pp.y) > 1.0:
+			continue
+		var facing := d.normalized().dot(ahead) if l > 0.05 else 1.0
+		if facing < 0.15:
+			continue
+		var s := l * (2.0 - facing)
+		if s < best_s:
+			best_s = s
+			best = p
+	return best
+
+
+## (tools) talk to the one in front of the player (as E does): whether there was one.
+func talk_to_nearest() -> bool:
+	if not _talk.is_empty():
+		_talk_next()
+		return true
+	var p = _talkable()
+	if p == null:
+		return false
+	_talk_start(p)
+	return true
+
+
+func _talk_start(p: Dictionary) -> void:
+	_talks += 1
+	p.act = "talk"
+	p.t = 0.0
+	var ap: AnimationPlayer = p.ap
+	var warming := ap.current_animation == "warm_hands" or ap.current_animation == "huddle"
+	if p.kind != "seat" and not warming:
+		var to := _player.global_position - (p.node as Node3D).global_position
+		p.turn_to = atan2(to.x, to.z)
+		ap.speed_scale = 1.0
+		ap.play("wave", 0.25)
+	_talk = {"p": p, "lines": _lines(p), "i": -1, "t": 0.0}
+	_talk_next()
+
+
+func _talk_next() -> void:
+	var p: Dictionary = _talk.p
+	_talk.i = int(_talk.i) + 1
+	_talk.t = 0.0
+	var lines: Array = _talk.lines
+	if int(_talk.i) >= lines.size():
+		_talk_end(true)
+		return
+	var last := int(_talk.i) == lines.size() - 1
+	_bubbles.call("say", p.node, lines[_talk.i], 0.0, _head_height(p), not last)
+
+
+func _talk_end(p_farewell: bool) -> void:
+	var p: Dictionary = _talk.p
+	_talk = {}
+	if p_farewell:
+		_bubbles.call("say", p.node, ["Arrivederci!", "A presto!", "Ciao, ciao.", "Buona serata!", "Go with God."][_rng.randi() % 5], 2.2, _head_height(p))
+	else:
+		_bubbles.call("hush", p.node)
+	_act_done(p)
+
+
+func _talk_update(delta: float) -> void:
+	if not _talk.is_empty():
+		var p: Dictionary = _talk.p
+		_talk.t = float(_talk.t) + delta
+		if _busy(p) or p.act != "talk":
+			# (run into while talking: the talk is over)
+			_talk = {}
+			_bubbles.call("hush", p.node)
+			return
+		var at := (p.node as Node3D).global_position
+		var away := Vector2(_player.global_position.x - at.x, _player.global_position.z - at.z).length()
+		if away > TALK_REACH + 2.2:
+			_talk_end(true)
+		elif float(_talk.t) > 7.0:
+			_talk_next()
+		return
+	var h = _talkable()
+	if h != null:
+		_bubbles.call("hint", h.node, _head_height(h))
+
+
+## What they say: a greeting; the weather, or the player's climbing, or being knocked down by them; a word on the town.
+func _lines(p: Dictionary) -> Array:
+	var r := _rng
+	var out: Array = []
+	if int(p.get("knocked", 0)) > 0:
+		out.append(["You! You knocked me flat!", "Ah, it's you. My back still aches.", "You again? Keep your distance, ragazzo."][r.randi() % 3])
+	else:
+		out.append(["Buonasera!", "Buonasera, forestiero.", "Salve!", "Ah, buonasera!"][r.randi() % 4])
+	if _now - _up_t < 90.0:
+		out.append(["I saw you up on the roofs! Are you mad?", "Climbing the palazzo like a cat... the guards will hear of it.",
+				"From up there you can see all the way to the hills, no?"][r.randi() % 3])
+	var st: Dictionary = _weather.call("get_current_state") if _weather else {}
+	var precip := int(st.get("precipitation", 0))
+	var strength := float(st.get("intensity", 0.0))
+	if precip == 1 and float(st.get("lightning_rate", 0.0)) > 1.0:
+		out.append(["Hear that thunder? Saint Barbara, protect us.", "A storm like this, the bells should be ringing."][r.randi() % 2])
+	elif precip == 1 and strength > 0.1:
+		out.append(["What rain! Better find a roof.", "The stones will be slippery tonight, watch your step."][r.randi() % 2])
+	elif precip == 2 and strength > 0.1:
+		out.append(["Snow in the piazza! My grandmother never saw such a winter.", "Brr... come, warm your hands at the fire."][r.randi() % 2])
+	elif float(st.get("cloud_coverage", 0.0)) > 0.7:
+		out.append(["Grey skies. It'll rain before vespers.", "Smell that? Rain is coming."][r.randi() % 2])
+	else:
+		out.append(["What a light this evening — like honey on the stones.", "A fine evening for a walk, eh?"][r.randi() % 2])
+	if p.get("fire", false):
+		out.append("Old Carlo keeps this fire going all night.")
+	elif p.kind == "stand" and keepers.size() > 0 and p.home.distance_to(keepers[0].origin) < 2.0:
+		out.append("Peaches, the best in Tuscany! Two soldi.")
+	else:
+		out.append(["The bell tower? Two hundred steps, but the view...", "They say there's a passage under the square, from the old palazzo.",
+				"The fountain's water comes down from the hills, cold as ice.", "Market day tomorrow — come early."][r.randi() % 4])
+	return out
+
+
+# ------------------------------------------------------------------ the acts: pointing, talking, leaving in the rain
+
+
+## An act over: back to what they were doing (a walker walks on; the others turn back to their place).
+func _act_done(p: Dictionary) -> void:
+	p.act = ""
+	var ap: AnimationPlayer = p.ap
+	if p.kind == "walk":
+		ap.speed_scale = float(p.speed) * (HURRY if _rain > RAIN_LEAVE else 1.0)
+		ap.play("walk", 0.3)
+	elif p.kind == "stand":
+		p.react = "home"
+	else:
+		ap.play(String(p.clip), 0.3)
+
+
+func _acts(delta: float) -> void:
+	for p in _people:
+		if _busy(p):
+			continue
+		var node: Node3D = p.node
+		var ap: AnimationPlayer = p.ap
+		match String(p.act):
+			"talk", "point":
+				p.t = float(p.t) + delta
+				if p.kind != "seat" and not (ap.current_animation in ["warm_hands", "huddle"]):
+					node.rotation.y = lerp_angle(node.rotation.y, float(p.turn_to), 1.0 - exp(-6.0 * delta))
+				var done := not ap.is_playing() or ap.current_animation_position >= ap.current_animation_length - 1e-3
+				if p.act == "talk" and ap.current_animation == "wave" and done:
+					ap.play("talk", 0.3)
+				elif p.act == "point" and done:
+					_act_done(p)
+			"leave", "back":
+				var path: Array = p.path
+				if path.is_empty():
+					if p.act == "leave":
+						p.act = "away"
+						node.visible = false
+						(p.shape as CollisionShape3D).disabled = true
+					else:
+						p.act = ""
+						p.react = "home" # (the last of the way: the home reaction's walk to its place)
+					continue
+				var to: Vector3 = (path[0] as Vector3) - node.position
+				to.y = 0.0
+				var step := 1.35 * delta
+				if to.length() <= step:
+					node.position = Vector3((path[0] as Vector3).x, node.position.y, (path[0] as Vector3).z)
+					path.pop_front()
+				else:
+					node.position += to.normalized() * step
+					node.rotation.y = lerp_angle(node.rotation.y, atan2(to.x, to.z), 1.0 - exp(-8.0 * delta))
+
+
+## The weather's say on the people (twice a second): in the rain the groups leave and the keepers huddle, after it they
+## come back; in the cold the brazier's ring warm their hands.
+func _weather_acts() -> void:
+	var raining := _rain > RAIN_LEAVE
+	for p in _people:
+		if _busy(p):
+			continue
+		var ap: AnimationPlayer = p.ap
+		if p.kind == "stand" and not _is_keeper(p):
+			if raining and p.act == "" and _rng.randf() < 0.35:
+				_leave(p)
+			elif _rain < RAIN_BACK and p.act == "away" and _rng.randf() < 0.25:
+				_come_back(p)
+		var idle: bool = p.act == "" and p.react == ""
+		if not idle:
+			continue
+		var clip := String(p.clip)
+		if p.get("fire", false) and _cold:
+			clip = "warm_hands"
+		elif _is_keeper(p) and raining:
+			clip = "huddle"
+		if p.kind == "walk":
+			ap.speed_scale = float(p.speed) * (HURRY if raining else 1.0)
+		elif ap.current_animation != clip:
+			ap.speed_scale = 1.0 if clip in ["warm_hands", "huddle"] else float(p.speed)
+			ap.play(clip, 0.5)
+	for w in _walkers:
+		w.pace = HURRY if raining else 1.0
+
+
+func _is_keeper(p: Dictionary) -> bool:
+	for k in keepers:
+		if (p.home as Vector3).distance_to(k.origin) < 0.1:
+			return true
+	return false
+
+
+func _leave(p: Dictionary) -> void:
+	var from := (p.node as Node3D).position
+	var best: Array = EXITS[0]
+	for e in EXITS:
+		if from.distance_to(e[0]) < from.distance_to(best[0]):
+			best = e
+	p.path = _around(from, best[0]) + [best[1]]
+	p.exit = best
+	p.act = "leave"
+	var ap: AnimationPlayer = p.ap
+	ap.speed_scale = 1.35 / 1.6
+	ap.play("walk", 0.35)
+	if _rng.randf() < 0.4:
+		_bubbles.call("say", p.node, ["Andiamo, it's pouring!", "Quick, inside!", "Ugh, my good shoes..."][_rng.randi() % 3], 2.2, _head_height(p))
+
+
+func _come_back(p: Dictionary) -> void:
+	var node: Node3D = p.node
+	var e: Array = p.exit
+	node.position = Vector3(e[1].x, node.position.y, e[1].z)
+	node.visible = true
+	(p.shape as CollisionShape3D).disabled = false
+	p.path = [e[0]] + _around(e[0], p.home)
+	p.act = "back"
+	var ap: AnimationPlayer = p.ap
+	ap.speed_scale = 1.35 / 1.6
+	ap.play("walk", 0.35)
+
+
+## The way from p_a to p_b round what stands in the square (OBSTACLES): the points to walk to, p_b last.
+func _around(p_a: Vector3, p_b: Vector3) -> Array:
+	var out: Array = []
+	var a := p_a
+	for o in OBSTACLES:
+		var c := Vector3(o.x, 0.0, o.y)
+		var ab := Vector3(p_b.x - a.x, 0.0, p_b.z - a.z)
+		var l2 := ab.length_squared()
+		if l2 < 1e-4:
+			continue
+		var t := clampf(Vector3(c.x - a.x, 0.0, c.z - a.z).dot(ab) / l2, 0.0, 1.0)
+		var near := Vector3(a.x, 0.0, a.z) + ab * t
+		var off := near - c
+		if off.length() < o.z + 0.35 and t > 0.0 and t < 1.0:
+			var n := off.normalized() if off.length() > 1e-3 else Vector3(-ab.z, 0.0, ab.x).normalized()
+			var w: Vector3 = c + n * (o.z + 0.6)
+			out.append(Vector3(w.x, p_a.y, w.z))
+			a = w
+	out.append(p_b)
+	return out
+
+
+## (tools) the social layer's counts and the people's acts.
+func get_social_stats() -> Dictionary:
+	var acts := {}
+	var looking := 0
+	for p in _people:
+		var a := String(p.act) if p.act != "" else "-"
+		acts[a] = int(acts.get(a, 0)) + 1
+		if float(p.get("look_w", 0.0)) > 0.5:
+			looking += 1
+	return {"talks": _talks, "points": _points, "looking": looking, "acts": acts, "rain": snappedf(_rain, 0.01), "cold": _cold,
+			"talking": not _talk.is_empty()}

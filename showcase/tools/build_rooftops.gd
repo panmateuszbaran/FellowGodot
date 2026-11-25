@@ -1715,7 +1715,8 @@ func _lamps(p_parent: Node3D) -> void:
 
 ## Clips that loop (glTF says nothing of it).
 const LOOPS := ["idle", "walk", "jog", "run", "sprint", "gait_walk", "gait_jog", "gait_run", "gait_sprint", "fall", "fall_flail", "hang_idle",
-		"hang_shimmy", "climb_idle", "climb_move", "dive", "perch", "sit", "talk", "crawl"]
+		"hang_shimmy", "climb_idle", "climb_move", "dive", "perch", "sit", "talk", "crawl",
+		"warm_hands", "huddle"]
 
 
 func _build_player() -> PackedScene:
