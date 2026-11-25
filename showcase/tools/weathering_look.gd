@@ -8,7 +8,7 @@ extends SceneTree
 ##       --out=<dir> [--views=east,north,close,foot,rustic] [--settle=40] [--off=1] [--set=<property>=<value>]...
 ##       [--mat=<material>:<parameter>=<value>]... [--debug=1] [--lite=1]
 ##       [--scene=<rooftops.gd's property>=<value>]... [--env=<the Environment's property>=<value>]... (milestone 193)
-##       [--node=<a node's path in the scene>:<property>=<value>]... [--cast_city=1] (milestone 199)
+##       [--node=<a node's path in the scene>:<property>=<value>]... [--cast_city=1] [--timing=1] (milestone 199)
 ##
 ## --off=1: the FellowWeathering3D hidden (the town as before milestone 190); --set=streaks=0.5 sets one of its
 ## properties (a number); --mat=res://rooftops/materials_photo/stone_rustic.tres:normal_strength=0.2 sets a shader
@@ -56,6 +56,7 @@ func _init() -> void:
 	var env_props := {}
 	var node_props := []
 	var cast_city := false
+	var timing := false
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			out = a.get_slice("=", 1)
@@ -86,6 +87,8 @@ func _init() -> void:
 			node_props.append(a.substr(7))
 		elif a == "--cast_city=1":
 			cast_city = true
+		elif a == "--timing=1":
+			timing = true
 	DirAccess.make_dir_recursive_absolute(out)
 	for m in mats:
 		var path: String = m.get_slice(":", 0) + ":" + m.get_slice(":", 1) if m.begins_with("res:") else m.get_slice(":", 0)
@@ -166,4 +169,17 @@ func _init() -> void:
 		await RenderingServer.frame_post_draw
 		root.get_texture().get_image().save_png("%s/%s.png" % [out, v])
 		print("weathering_look: ", v)
+		if timing:
+			# Milestone 199: the view's frame on the GPU and the CPU, the mean of 120 frames (ms).
+			var vp := root.get_viewport_rid()
+			RenderingServer.viewport_set_measure_render_time(vp, true)
+			var gpu := 0.0
+			var cpu := 0.0
+			for k in 120:
+				cam.current = true
+				await process_frame
+				await RenderingServer.frame_post_draw
+				gpu += RenderingServer.viewport_get_measured_render_time_gpu(vp)
+				cpu += RenderingServer.viewport_get_measured_render_time_cpu(vp)
+			print("weathering_look_timing %s %.3f %.3f" % [v, gpu / 120.0, cpu / 120.0])
 	quit()

@@ -286,8 +286,9 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 					"tex_size": 2.5, "normal_strength": 0.08, "specular": 0.2, "roughness_bias": 0.05, "stains": 0.25,
 					"variation": 0.29, "anti_tile": false, "parallax_depth": 0.02, "height_lo": 0.38, "height_hi": 0.5,
 					"albedo_soften": 0.5, "cavity": 0.65})
-		photo["far_plaster"] = _photo("ashlar", {"tint": Color(0.9, 0.84, 0.74), "tint_strength": 0.3, "brightness": 1.2,
-				"tex_size": 2.5, "normal_strength": 0.55, "specular": 0.2, "stains": 0.3, "variation": 0.1, "anti_tile": false,
+		# Milestone 199: each far house more its own colour (the city from the bell tower had been one brown).
+		photo["far_plaster"] = _photo("ashlar", {"tint": Color(0.9, 0.84, 0.74), "tint_strength": 0.75, "brightness": 1.05,
+				"tex_size": 2.5, "normal_strength": 0.55, "specular": 0.2, "stains": 0.3, "variation": 0.25, "anti_tile": false,
 				"instance_tint": true, "parallax_depth": 0.0})
 	else:
 		for n in p_plaster:
@@ -706,7 +707,7 @@ func _environment(p_root: Node3D) -> void:
 	sun.light_volumetric_fog_energy = 1.2
 	# From the south-west, over the ring of houses on the west (lower, its shadow would fill the square): the square's
 	# north and east fronts lit, the bell tower's face with its holds.
-	sun.rotation_degrees = Vector3(-24.0, -52.0, 0.0)
+	sun.rotation_degrees = Vector3(SUN_DEGREES.x, SUN_DEGREES.y, 0.0)
 	_add(p_root, sun, "Sun")
 
 
@@ -753,6 +754,13 @@ const LAND_SEG := 256
 const LAND_RINGS := 76
 
 
+## The Sun's turn (degrees: up-down, round): from the south-west, 24 degrees up.
+const SUN_DEGREES := Vector2(-24.0, -52.0)
+## Milestone 199: the baked hill shadows' penumbra — its width per metre from what casts it (the hazy sun's 2.5
+## degrees: about 0.044).
+const SUN_PENUMBRA := 0.044
+
+
 ## The country's height at (x, z): flat by the walls, rolling past them, hills rising from 300 m to 200 m high.
 func _terrain_h(x: float, z: float) -> float:
 	var r := sqrt(x * x + z * z)
@@ -782,6 +790,42 @@ func _mesh_h(x: float, z: float) -> float:
 	return lerpf(lerpf(hs[0], hs[1], fi), lerpf(hs[2], hs[3], fi), fk)
 
 
+## Milestone 199: towards the Sun (the scene's: 24 degrees up from the west-south-west), as the builder places it.
+func _to_sun() -> Vector3:
+	return -(Basis.from_euler(Vector3(deg_to_rad(SUN_DEGREES.x), deg_to_rad(SUN_DEGREES.y), 0.0)) * Vector3(0, 0, -1)).normalized()
+
+
+## How much of the sun a point of the country sees past the hills between (a soft shadow: 1 in the open, 0 well inside
+## a hill's shadow; the penumbra as wide as the hazy sun's).
+func _sun_seen(x: float, y: float, z: float) -> float:
+	var d := _to_sun()
+	var o := Vector3(x, y + 1.5, z)
+	var seen := 1.0
+	var t := 4.0
+	while t < 2600.0:
+		var p := o + d * t
+		var h := _terrain_h(p.x, p.z)
+		seen = minf(seen, 0.5 + 0.5 * (p.y - h) / (t * SUN_PENUMBRA))
+		if seen <= 0.0:
+			return 0.0
+		t *= 1.12
+	return clampf(seen, 0.0, 1.0)
+
+
+## The share of the sky a point of the country sees (its horizon's height round it, eight ways, out to 300 m).
+func _sky_seen(x: float, y: float, z: float) -> float:
+	var hidden := 0.0
+	for k in 8:
+		var a := TAU * k / 8.0
+		var dir := Vector2(cos(a), sin(a))
+		var top := 0.0
+		for dist in [15.0, 40.0, 90.0, 170.0, 300.0]:
+			var q: Vector2 = Vector2(x, z) + dir * dist
+			top = maxf(top, (_terrain_h(q.x, q.y) - y) / dist)
+		hidden += sin(atan(top))
+	return clampf(1.0 - hidden / 8.0 * 1.4, 0.3, 1.0)
+
+
 func _slope(x: float, z: float) -> float:
 	var e := 4.0
 	var dx := (_terrain_h(x + e, z) - _terrain_h(x - e, z)) / (2.0 * e)
@@ -801,14 +845,20 @@ func _landscape(p_root: Node3D) -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var seg := LAND_SEG
 	var rings := LAND_RINGS
+	var t0 := Time.get_ticks_msec()
 	for k in rings + 1:
 		var r := 206.0 + (2600.0 - 206.0) * pow(float(k) / rings, 1.9)
 		for i in seg:
 			var a := TAU * i / seg
 			var x := cos(a) * r
 			var z := sin(a) * r
+			var y := _terrain_h(x, z)
+			# Milestone 199: the low sun's light on the hills baked (red: a hill's shadow on the next, soft; green: the sky
+			# a valley's sides hide) — past the sun's shadows' reach (140 m) the country had been lit as if flat.
+			st.set_color(Color(_sun_seen(x, y, z), _sky_seen(x, y, z), 1.0))
 			st.set_uv(Vector2(x, z))
-			st.add_vertex(Vector3(x, _terrain_h(x, z), z))
+			st.add_vertex(Vector3(x, y, z))
+	print("landscape: sun and sky baked in %d ms" % (Time.get_ticks_msec() - t0))
 	for k in rings:
 		for i in seg:
 			var j := (i + 1) % seg
@@ -965,6 +1015,8 @@ func _trees(p_root: Node3D) -> void:
 			var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc * rng.randf_range(0.9, 1.15), sc))
 			xforms.append(Transform3D(b, Vector3(pt.x, y - 0.3, pt.y)))
 			var tt := rng.randf_range(tint[kind][0], tint[kind][1])
+			# (milestone 199: darker in a hill's baked shadow, as the country under it)
+			tt *= 0.45 + 0.55 * _sun_seen(pt.x, y + 2.0, pt.y)
 			cols.append(Color(tt, tt * rng.randf_range(0.95, 1.05), tt))
 		_instances(p_root, "Trees_" + kind, _tree_mesh(kind), xforms, cols)
 		print("trees %s: %d" % [kind, list.size()])
@@ -1086,8 +1138,10 @@ func _villas(p_root: Node3D) -> void:
 	for i in cyp.size():
 		var pt: Vector2 = cyp[i]
 		var sc := rng.randf_range(0.8, 1.3)
-		xforms.append(Transform3D(Basis().scaled(Vector3(sc, sc, sc)), Vector3(pt.x, _mesh_h(pt.x, pt.y) - 0.3, pt.y)))
-		cols.append(Color(1, 1, 1))
+		var vy := _mesh_h(pt.x, pt.y)
+		xforms.append(Transform3D(Basis().scaled(Vector3(sc, sc, sc)), Vector3(pt.x, vy - 0.3, pt.y)))
+		var tv := 0.45 + 0.55 * _sun_seen(pt.x, vy + 2.0, pt.y)
+		cols.append(Color(tv, tv, tv))
 	_instances(p_root, "Trees_villa_cypress", _tree_mesh("cypress"), xforms, cols)
 
 

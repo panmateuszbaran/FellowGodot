@@ -8,10 +8,14 @@ render_mode diffuse_burley;
 
 varying vec3 world_pos;
 varying vec3 world_nrm;
+// Milestone 199: baked when the scene is built (the vertex colour): how much of the low sun a point sees past the hills
+// between (red) and how much of the sky (green).
+varying vec2 baked;
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_nrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	baked = COLOR.rg;
 }
 
 // A stripe pattern (0..1) of the given period, averaged to `mean` where the period is under a few pixels.
@@ -72,4 +76,13 @@ void fragment() {
 	ALBEDO = clamp(col * macro, 0.0, 1.0);
 	ROUGHNESS = 0.95;
 	SPECULAR = 0.25;
+	AO = baked.g;
+	AO_LIGHT_AFFECT = 0.0;
+}
+
+// Milestone 199: the sun's light (Lambert's, as Burley's is at this roughness to within a few per cent) through the baked
+// shadows of the hills; any other light as it comes.
+void light() {
+	float seen = LIGHT_IS_DIRECTIONAL ? baked.r : 1.0;
+	DIFFUSE_LIGHT += clamp(dot(NORMAL, LIGHT), 0.0, 1.0) * ATTENUATION * seen * LIGHT_COLOR / PI;
 }
