@@ -34,7 +34,7 @@ side 25°, the knee −10..155°, its side 20°, the wrist −85..75° by −40.
 
 ## What was found (the rooftops' demo at 120 fps, milestone 201's motion: the limits off)
 
-| segment | frames out of range (any joint) | the worst |
+| segment | its frames with one joint out of range (the largest share) | the worst |
 |---|---|---|
 | hanging | 52 % | the knees bent sideways in 52 % (the left 47° at the catch — 27° past a hinge's slack); the elbows 25 %; the left hip spread 58° (27 %); the right wrist's deviation 12 % |
 | from hold to hold | 26 % | the elbows bent sideways in 19-26 % (both up to 82° — the arm's IK placing the elbow with the arm's turn the clip's); the left ankle dorsiflexed 52° (14 %); the right knee 41° sideways; the head tipped back 81° (11 %); in the across move the left wrist bent back 169° and 106° to the thumb's side |
