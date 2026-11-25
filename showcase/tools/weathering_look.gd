@@ -135,7 +135,7 @@ func _init() -> void:
 			push_warning("no node " + path)
 	if cast_city:
 		for c in sc.find_children("*", "GeometryInstance3D", true, false):
-			if String(c.get_path()).contains("CityHouses") or String(c.get_parent().name) == "CityHouses":
+			if String(c.get_parent().name) == "CityHouses":
 				(c as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	for n in sc.find_children("*", "WorldEnvironment", true, false):
 		for k in env_props:

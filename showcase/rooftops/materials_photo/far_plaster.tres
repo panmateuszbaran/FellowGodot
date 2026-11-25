@@ -1,19 +1,21 @@
 [gd_resource type="ShaderMaterial" format=3]
 
-[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_p3qnw"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_diff_2k.jpg" id="2_eu2gf"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_arm_2k.jpg" id="3_x1kaq"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_disp_2k.jpg" id="4_fn0c7"]
-[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_nor_gl_2k.jpg" id="5_qg47l"]
+[ext_resource type="Shader" path="res://rooftops/shaders/facade_pbr.gdshader" id="1_x1kaq"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_diff_2k.jpg" id="2_fn0c7"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_arm_2k.jpg" id="3_qg47l"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_disp_2k.jpg" id="4_dlu7s"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/sandstone_blocks_05_nor_gl_2k.jpg" id="5_dh6hc"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/brick_wall_006_diff_2k.jpg" id="6_j83np"]
+[ext_resource type="Texture2D" path="res://rooftops/textures/brick_wall_006_nor_gl_2k.jpg" id="7_qsxwe"]
 
 [resource]
 render_priority = 0
-shader = ExtResource("1_p3qnw")
-shader_parameter/albedo_tex = ExtResource("2_eu2gf")
-shader_parameter/normal_tex = ExtResource("5_qg47l")
-shader_parameter/arm_tex = ExtResource("3_x1kaq")
+shader = ExtResource("1_x1kaq")
+shader_parameter/albedo_tex = ExtResource("2_fn0c7")
+shader_parameter/normal_tex = ExtResource("5_dh6hc")
+shader_parameter/arm_tex = ExtResource("3_qg47l")
 shader_parameter/tex_size = 2.5
-shader_parameter/tint = Color(0.9, 0.84, 0.74, 1)
+shader_parameter/tint = Color(0.86, 0.77, 0.63, 1)
 shader_parameter/tint_strength = 0.75
 shader_parameter/tex_lum = 0.35650870436825244
 shader_parameter/brightness = 1.05
@@ -26,9 +28,16 @@ shader_parameter/stains = 0.3
 shader_parameter/ground_dirt = null
 shader_parameter/seed = null
 shader_parameter/instance_tint = true
+shader_parameter/plaster_share = 0.35
+shader_parameter/brick_share = 0.2
+shader_parameter/stone_house_tint = 0.25
+shader_parameter/brick_tint = Color(0.6, 0.38, 0.28, 1)
+shader_parameter/brick_lum = 0.2522825321932033
 shader_parameter/fallen = null
-shader_parameter/patch_size = null
-shader_parameter/height_tex = ExtResource("4_fn0c7")
+shader_parameter/patch_albedo = ExtResource("6_j83np")
+shader_parameter/patch_normal = ExtResource("7_qsxwe")
+shader_parameter/patch_size = 3.0
+shader_parameter/height_tex = ExtResource("4_dlu7s")
 shader_parameter/parallax_depth = 0.0
 shader_parameter/height_lo = null
 shader_parameter/height_hi = null

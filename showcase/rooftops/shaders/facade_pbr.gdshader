@@ -26,6 +26,15 @@ uniform float ground_dirt = 1.2;
 uniform float seed = 0.0;
 // Milestone 153: the city's houses (a MultiMesh's instances): each instance's colour the tint, its alpha the seed's.
 uniform bool instance_tint = false;
+// Milestone 199: each house of the city its own finish (instance_tint, by its seed): a share smooth plaster in its
+// colour (the texture's own blotches only, its relief flattened), a share brick (patch_albedo, patch_normal at
+// patch_size: Siena's), the rest the texture's stone — its colour the tint's, the house's own colour mixed in by
+// stone_house_tint (from the bell tower the city had been one colour, one stone). 0, 0, 1: as before.
+uniform float plaster_share = 0.0;
+uniform float brick_share = 0.0;
+uniform float stone_house_tint = 1.0;
+uniform vec3 brick_tint : source_color = vec3(0.6, 0.38, 0.28);
+uniform float brick_lum = 0.2; // the brick texture's mean (linear) luminance
 // Plaster fallen off: the bricks under it.
 uniform float fallen = 0.0;
 uniform sampler2D patch_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -135,7 +144,26 @@ void fragment() {
 		arm = mix(arm, texture(arm_tex, uv_b).rgb, m);
 	}
 	float lum = dot(col, vec3(0.3, 0.55, 0.15));
-	col = mix(col, tn * lum / tex_lum, tint_strength) * brightness;
+	// Milestone 199: the house's finish (its seed's other digits: independent of its weathering's).
+	float finish = instance_tint ? fract(inst.a * 97.31 + 0.137) : 1.0;
+	float nfin = 1.0;
+	if (finish < plaster_share) {
+		// Smooth plaster: the house's colour, the photograph's broad blotches (blurred) only.
+		float blot = dot(textureLod(albedo_tex, uv_a * 0.37, soften_lod + 1.0).rgb, vec3(0.3, 0.55, 0.15)) / tex_lum;
+		col = tn * mix(1.0, blot, 0.35) * brightness;
+		nfin = 0.12;
+	} else if (finish < plaster_share + brick_share) {
+		vec2 buv = uv_m / patch_size;
+		vec3 bc = texture(patch_albedo, buv).rgb;
+		col = mix(bc, brick_tint * dot(bc, vec3(0.3, 0.55, 0.15)) / brick_lum, 0.5);
+		// (each brick house a little its own: the house's hue, a sixth of it)
+		col *= mix(vec3(1.0), tn / max(dot(tn, vec3(0.3, 0.55, 0.15)), 0.05), 0.15) * brightness;
+		nrm = texture(patch_normal, buv).rgb;
+		nfin = 0.8;
+	} else {
+		tn = mix(tint, tn, stone_house_tint);
+		col = mix(col, tn * lum / tex_lum, tint_strength) * brightness;
+	}
 	// The tone drifting over the wall, warm blotches.
 	float big = rt_fbm(uv_m * 0.17, 3);
 	col *= 1.0 + variation * (big - 0.5) * 2.0;
@@ -147,7 +175,7 @@ void fragment() {
 	col = mix(col, col * vec3(0.62, 0.6, 0.57), dirt * 0.6);
 	float ao = arm.r;
 	float rough = clamp(arm.g + roughness_bias, 0.05, 1.0);
-	float nstr = normal_strength;
+	float nstr = normal_strength * nfin;
 	if (fallen > 0.0) {
 		float t = mix(0.92, 0.6, fallen);
 		float pn = rt_fbm(uv_m * 0.22 + 11.0, 4) + 0.07 * rt_noise(uv_m * 7.0);

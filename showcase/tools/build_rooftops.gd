@@ -286,10 +286,14 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 					"tex_size": 2.5, "normal_strength": 0.08, "specular": 0.2, "roughness_bias": 0.05, "stains": 0.25,
 					"variation": 0.29, "anti_tile": false, "parallax_depth": 0.02, "height_lo": 0.38, "height_hi": 0.5,
 					"albedo_soften": 0.5, "cavity": 0.65})
-		# Milestone 199: each far house more its own colour (the city from the bell tower had been one brown).
-		photo["far_plaster"] = _photo("ashlar", {"tint": Color(0.9, 0.84, 0.74), "tint_strength": 0.75, "brightness": 1.05,
+		# Milestone 199: the city from the bell tower had been one brown — every house the same ashlar in its plaster's
+		# colour (a sienna's, a rose's: brick from afar). Each house now its own finish: a third smooth plaster in its
+		# colour, a fifth Siena's brick, the rest the square's honey sandstone (a quarter of the house's colour in it).
+		photo["far_plaster"] = _photo("ashlar", {"tint": Color(0.86, 0.77, 0.63), "tint_strength": 0.75, "brightness": 1.05,
 				"tex_size": 2.5, "normal_strength": 0.55, "specular": 0.2, "stains": 0.3, "variation": 0.25, "anti_tile": false,
-				"instance_tint": true, "parallax_depth": 0.0})
+				"instance_tint": true, "parallax_depth": 0.0, "plaster_share": 0.35, "brick_share": 0.2, "stone_house_tint": 0.25,
+				"patch_albedo": brick[0], "patch_normal": brick[1], "patch_size": brick[3], "brick_lum": brick[4],
+				"brick_tint": Color(0.6, 0.38, 0.28)})
 	else:
 		for n in p_plaster:
 			photo[n] = _photo("plaster_smooth", {"tint": p_plaster[n][0], "tint_strength": 0.9, "brightness": 1.0, "seed": p_plaster[n][2],
@@ -702,7 +706,13 @@ func _environment(p_root: Node3D) -> void:
 	sun.shadow_enabled = true
 	sun.shadow_blur = 1.2
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	sun.directional_shadow_max_distance = 140.0
+	# Milestone 199: the city's shadows out to 320 m (from the bell tower its streets and its houses' backs had been lit
+	# past 140 m), the first three splits where they had been (14, 28, 70 m: the square's shadows as sharp), the last
+	# from 70 m to 320 m.
+	sun.directional_shadow_max_distance = 320.0
+	sun.directional_shadow_split_1 = 0.044
+	sun.directional_shadow_split_2 = 0.0875
+	sun.directional_shadow_split_3 = 0.22
 	sun.directional_shadow_blend_splits = true
 	sun.light_volumetric_fog_energy = 1.2
 	# From the south-west, over the ring of houses on the west (lower, its shadow would fill the square): the square's
@@ -750,6 +760,10 @@ func _ground(p_root: Node3D) -> void:
 
 var _tn := FastNoiseLite.new()
 var _tn2 := FastNoiseLite.new()
+var _wn := FastNoiseLite.new()
+## Milestone 199: the terrain's vertices' baked sun (as _sun_seen) and woods (as _wood), for what stands on it.
+var _sun_v := PackedFloat32Array()
+var _wood_v := PackedFloat32Array()
 const LAND_SEG := 256
 const LAND_RINGS := 76
 
@@ -772,8 +786,8 @@ func _terrain_h(x: float, z: float) -> float:
 
 
 ## The terrain mesh's own height at (x, z) (its rings and segments interpolated as its triangles do): what the trees and
-## the farms stand on.
-func _mesh_h(x: float, z: float) -> float:
+## the farms stand on. Milestone 199: or a value baked at its vertices (p_values: the sun's, the woods').
+func _mesh_h(x: float, z: float, p_values := PackedFloat32Array()) -> float:
 	var r := sqrt(x * x + z * z)
 	var kf := float(LAND_RINGS) * pow(clampf((r - 206.0) / (2600.0 - 206.0), 0.0, 1.0), 1.0 / 1.9)
 	var k0 := mini(int(floor(kf)), LAND_RINGS - 1)
@@ -785,9 +799,69 @@ func _mesh_h(x: float, z: float) -> float:
 	for kk in [k0, k0 + 1]:
 		var rr: float = 206.0 + (2600.0 - 206.0) * pow(float(kk) / LAND_RINGS, 1.9)
 		for ii in [i0, (i0 + 1) % LAND_SEG]:
-			var a: float = TAU * ii / LAND_SEG
-			hs.append(_terrain_h(cos(a) * rr, sin(a) * rr))
+			if p_values.is_empty():
+				var a: float = TAU * ii / LAND_SEG
+				hs.append(_terrain_h(cos(a) * rr, sin(a) * rr))
+			else:
+				hs.append(p_values[kk * LAND_SEG + ii])
 	return lerpf(lerpf(hs[0], hs[1], fi), lerpf(hs[2], hs[3], fi), fk)
+
+
+## Milestone 199: the country's woods (0..1) — on the steepest slopes, down the valleys' folds, and copses the noise
+## scatters over the gentler ones (a quarter of the country); none by the walls. Baked at the terrain's vertices (its
+## colour's blue: the landscape shader draws the woods' floor) and filled with trees.
+func _wood(x: float, z: float) -> float:
+	var r := sqrt(x * x + z * z)
+	var n := _wn.get_noise_2d(x, z) * 0.5 + 0.5
+	var e := 35.0
+	var h := _terrain_h(x, z)
+	var fold := (_terrain_h(x + e, z) + _terrain_h(x - e, z) + _terrain_h(x, z + e) + _terrain_h(x, z - e) - 4.0 * h) / (e * e)
+	var steep := smoothstep(0.55, 0.7, _slope(x, z) + (n - 0.5) * 0.4)
+	var valley := smoothstep(0.014, 0.02, fold + (n - 0.5) * 0.01)
+	var copse := smoothstep(0.7, 0.76, n)
+	return maxf(maxf(steep, valley), copse) * smoothstep(250.0, 330.0, r)
+
+
+## Milestone 199: the landscape shader's plots (landscape.gdshader: their turn, the noise that warps them, their size and
+## hashes, its rt_hash12 and rt_noise as they are in rooftops_common.gdshaderinc) — rows of trees where it draws hedges.
+const PLOT := Vector2(78.0, 52.0)
+const PLOT_TURN := 0.35
+
+func _hash12(p: Vector2) -> float:
+	var p3 := Vector3(p.x, p.y, p.x) * 0.1031
+	p3 -= p3.floor()
+	var d := p3.dot(Vector3(p3.y, p3.z, p3.x) + Vector3(33.33, 33.33, 33.33))
+	p3 += Vector3(d, d, d)
+	var v := (p3.x + p3.y) * p3.z
+	return v - floor(v)
+
+
+func _vnoise(p: Vector2) -> float:
+	var i := p.floor()
+	var f := p - i
+	var u := f * f * (Vector2(3.0, 3.0) - 2.0 * f)
+	var a := _hash12(i)
+	var b := _hash12(i + Vector2(1.0, 0.0))
+	var c := _hash12(i + Vector2(0.0, 1.0))
+	var d := _hash12(i + Vector2(1.0, 1.0))
+	return lerpf(lerpf(a, b, u.x), lerpf(c, d, u.x), u.y)
+
+
+## A point of the country in the plots' frame (the shader's q).
+func _plot_q(p: Vector2) -> Vector2:
+	var warp := (Vector2(_vnoise(p * 0.005), _vnoise(p * 0.005 + Vector2(5.0, 5.0))) - Vector2(0.5, 0.5)) * 120.0
+	return p.rotated(PLOT_TURN) + warp
+
+
+## The point of the country at a place in the plots' frame (the warp undone by iterating; Vector2.INF where that fails).
+func _plot_p(q: Vector2) -> Vector2:
+	var p := q.rotated(-PLOT_TURN)
+	for k in 24:
+		var err := _plot_q(p) - q
+		if err.length() < 0.05:
+			return p
+		p -= err.rotated(-PLOT_TURN) * 0.8
+	return Vector2.INF
 
 
 ## Milestone 199: towards the Sun (the scene's: 24 degrees up from the west-south-west), as the builder places it.
@@ -840,6 +914,9 @@ func _landscape(p_root: Node3D) -> void:
 	_tn2.seed = 78
 	_tn2.frequency = 0.007
 	_tn2.fractal_octaves = 3
+	_wn.seed = 79
+	_wn.frequency = 0.004
+	_wn.fractal_octaves = 3
 	# The terrain: rings from the walls out to 2.6 km, closer together near the city.
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -854,11 +931,15 @@ func _landscape(p_root: Node3D) -> void:
 			var z := sin(a) * r
 			var y := _terrain_h(x, z)
 			# Milestone 199: the low sun's light on the hills baked (red: a hill's shadow on the next, soft; green: the sky
-			# a valley's sides hide) — past the sun's shadows' reach (140 m) the country had been lit as if flat.
-			st.set_color(Color(_sun_seen(x, y, z), _sky_seen(x, y, z), 1.0))
+			# a valley's sides hide) — past the sun's shadows' reach the country had been lit as if flat; blue: the woods.
+			var sun_seen := _sun_seen(x, y, z)
+			var wood := _wood(x, z)
+			_sun_v.append(sun_seen)
+			_wood_v.append(wood)
+			st.set_color(Color(sun_seen, _sky_seen(x, y, z), wood))
 			st.set_uv(Vector2(x, z))
 			st.add_vertex(Vector3(x, y, z))
-	print("landscape: sun and sky baked in %d ms" % (Time.get_ticks_msec() - t0))
+	print("landscape: sun, sky and woods baked in %d ms" % (Time.get_ticks_msec() - t0))
 	for k in rings:
 		for i in seg:
 			var j := (i + 1) % seg
@@ -905,11 +986,15 @@ func _tree_mesh(p_kind: String) -> ArrayMesh:
 			prof = [[0.0, 7.5], [3.6, 7.8], [4.4, 8.6], [3.6, 9.6], [0.0, 10.0]]
 			green = Color(0.16, 0.24, 0.11)
 			trunk_h = 8.0
+		"wood":
+			# Milestone 199: a wood's tree — a crown only (the canopy closes over the trunks), fewer sides (some 25,000).
+			prof = [[0.0, 1.6], [2.5, 2.3], [3.2, 4.0], [2.5, 5.7], [0.0, 6.6]]
+			green = Color(0.13, 0.2, 0.09)
 		_:
 			prof = [[0.0, 1.5], [2.6, 2.4], [3.2, 4.5], [2.6, 6.6], [0.0, 7.6]]
 			green = Color(0.15, 0.23, 0.1)
 			trunk_h = 2.0
-	var n := 9
+	var n := 7 if p_kind == "wood" else 9
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(p_kind)
 	var jit := []
@@ -932,7 +1017,7 @@ func _tree_mesh(p_kind: String) -> ArrayMesh:
 				st.set_color(Color(green.r * shade, green.g * shade, green.b * shade))
 				st.add_vertex(v)
 	# The trunk.
-	for i in 5:
+	for i in (5 if trunk_h > 0.0 else 0):
 		var a0 := TAU * i / 5
 		var a1 := TAU * (i + 1) / 5
 		var r := 0.12 if p_kind != "pine" else 0.22
@@ -954,7 +1039,7 @@ func _tree_mesh(p_kind: String) -> ArrayMesh:
 func _trees(p_root: Node3D) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2024
-	var sets := {"cypress": [], "olive": [], "pine": [], "broadleaf": []}
+	var sets := {"cypress": [], "olive": [], "pine": [], "broadleaf": [], "wood": []}
 	# Olive groves: patches of rows on gentle slopes.
 	for g in 46:
 		var a := rng.randf() * TAU
@@ -990,20 +1075,69 @@ func _trees(p_root: Node3D) -> void:
 	for i in 500:
 		var a := rng.randf() * TAU
 		var pt := Vector2(cos(a), sin(a)) * rng.randf_range(225.0, 1800.0)
-		sets["cypress"].append([pt, rng.randf_range(0.7, 1.3)])
+		# (milestone 199: none inside the woods; three in five of the singles kept)
+		if _mesh_h(pt.x, pt.y, _wood_v) < 0.3 and rng.randf() < 0.6:
+			sets["cypress"].append([pt, rng.randf_range(0.7, 1.3)])
 	# Stone pines in clumps by the walls and on the hills.
 	for g in 34:
 		var a := rng.randf() * TAU
 		var c := Vector2(cos(a), sin(a)) * rng.randf_range(225.0, 900.0)
 		for i in rng.randi_range(3, 7):
 			sets["pine"].append([c + Vector2(rng.randf_range(-14, 14), rng.randf_range(-14, 14)), rng.randf_range(0.8, 1.2)])
-	# Woods on the steep slopes.
-	for i in 9000:
+	# Milestone 199: the woods (_wood, baked at the terrain's vertices) filled — a tree each 8 m by the walls, their
+	# crowns closing (the canopy), sparser and larger out to 1.5 km (past it the shader's painted canopy); they had been
+	# 5,800 trees strewn one by one over every slope steeper than a fifth — dots on the fields.
+	var gs := 8.0
+	var gx := -1500.0
+	while gx < 1500.0:
+		var gz := -1500.0
+		while gz < 1500.0:
+			var pt := Vector2(gx + rng.randf_range(0.0, gs), gz + rng.randf_range(0.0, gs))
+			gz += gs
+			var r := pt.length()
+			if r < 250.0 or r > 1500.0:
+				continue
+			var sp := gs + (r - 300.0) / 300.0
+			var w := _mesh_h(pt.x, pt.y, _wood_v)
+			if w < 0.5 + rng.randf_range(-0.12, 0.12) or rng.randf() > pow(gs / sp, 2.0):
+				continue
+			sets["wood"].append([pt, sp / gs * rng.randf_range(0.8, 1.2)])
+		gx += gs
+	# Rows of trees along a third of the plots' hedges (an edge or two of each: the oaks between the fields).
+	for ci in range(-20, 20):
+		for cj in range(-29, 29):
+			var cid := Vector2(ci, cj)
+			if _hash12(cid + Vector2(3.0, 3.0)) < 0.45 or rng.randf() > 0.35:
+				continue
+			var edges := [[Vector2(0.0, 1.3), Vector2(1.0, 0.0), PLOT.x], [Vector2(1.3, 0.0), Vector2(0.0, 1.0), PLOT.y]]
+			if rng.randf() < 0.4:
+				edges.append([Vector2(PLOT.x - 1.3, 0.0), Vector2(0.0, 1.0), PLOT.y])
+			var kind := "cypress" if rng.randf() < 0.12 else "broadleaf"
+			for edge in edges:
+				if rng.randf() < 0.3:
+					continue
+				var t := rng.randf_range(2.0, 6.0)
+				var length: float = edge[2]
+				while t < length - 2.0:
+					var q: Vector2 = cid * PLOT + (edge[0] as Vector2) + (edge[1] as Vector2) * t
+					t += rng.randf_range(6.0, 9.0) if kind == "broadleaf" else rng.randf_range(4.5, 6.0)
+					if rng.randf() < 0.12:
+						continue
+					var p := _plot_p(q)
+					if p == Vector2.INF or p.length() < 240.0 or p.length() > 1500.0 or _slope(p.x, p.y) > 0.6:
+						continue
+					if _mesh_h(p.x, p.y, _wood_v) > 0.45:
+						continue
+					sets[kind].append([p, rng.randf_range(0.55, 0.9) if kind == "broadleaf" else rng.randf_range(0.7, 1.1)])
+	var rows: int = (sets["broadleaf"] as Array).size()
+	# Lone oaks in the fields (they had been the woods' trees).
+	for i in 900:
 		var a := rng.randf() * TAU
-		var pt := Vector2(cos(a), sin(a)) * rng.randf_range(300.0, 2400.0)
-		if _slope(pt.x, pt.y) > 0.22 + rng.randf() * 0.1:
-			sets["broadleaf"].append([pt, rng.randf_range(0.8, 1.4)])
-	var tint := {"cypress": [0.85, 1.15], "olive": [0.85, 1.12], "pine": [0.85, 1.1], "broadleaf": [0.75, 1.25]}
+		var pt := Vector2(cos(a), sin(a)) * rng.randf_range(260.0, 2000.0)
+		if _mesh_h(pt.x, pt.y, _wood_v) < 0.3 and _slope(pt.x, pt.y) < 0.5:
+			sets["broadleaf"].append([pt, rng.randf_range(0.9, 1.4)])
+	print("trees: %d in rows along the hedges" % rows)
+	var tint := {"cypress": [0.85, 1.15], "olive": [0.85, 1.12], "pine": [0.85, 1.1], "broadleaf": [0.75, 1.25], "wood": [0.7, 1.25]}
 	for kind in sets:
 		var list: Array = sets[kind]
 		var xforms := []
@@ -1016,8 +1150,10 @@ func _trees(p_root: Node3D) -> void:
 			xforms.append(Transform3D(b, Vector3(pt.x, y - 0.3, pt.y)))
 			var tt := rng.randf_range(tint[kind][0], tint[kind][1])
 			# (milestone 199: darker in a hill's baked shadow, as the country under it)
-			tt *= 0.45 + 0.55 * _sun_seen(pt.x, y + 2.0, pt.y)
-			cols.append(Color(tt, tt * rng.randf_range(0.95, 1.05), tt))
+			tt *= 0.45 + 0.55 * _mesh_h(pt.x, pt.y, _sun_v)
+			# (and the woods' trees each its own green: oaks' darker, chestnuts' and ashes' yellower)
+			var hue := rng.randf_range(-1.0, 1.0) if kind == "wood" else 0.0
+			cols.append(Color(tt * (1.0 + 0.12 * hue), tt * rng.randf_range(0.95, 1.05) * (1.0 + 0.05 * hue), tt * (1.0 - 0.1 * hue)))
 		_instances(p_root, "Trees_" + kind, _tree_mesh(kind), xforms, cols)
 		print("trees %s: %d" % [kind, list.size()])
 
@@ -1025,7 +1161,7 @@ func _trees(p_root: Node3D) -> void:
 ## Milestone 153: the city's houses beyond the square — prototypes made in Blender (SkylineHouses.glb: windows in
 ## their openings, shutters, sills, string courses, cornices, eaves on rafters, tiled roofs, terraces, chimneys; a near
 ## set and a plainer far one) placed in the blocks (SkylineHouses.json), a MultiMesh for each prototype, each house's
-## plaster its own colour; the near ones (within NEAR_CITY of the square) cast shadows.
+## plaster its own colour; the near ones (within NEAR_CITY of the square) cast shadows (milestone 199: all of them).
 const NEAR_CITY := 95.0
 
 func _skyline_houses(p_root: Node3D) -> void:
@@ -1055,8 +1191,8 @@ func _skyline_houses(p_root: Node3D) -> void:
 	for key in keys:
 		var g: Array = groups[key]
 		var mmi := _instances(city, key, protos[key], g[0], g[1], "houses/")
-		if String(key).begins_with("HN"):
-			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		# (milestone 199: the far ones too — their shadows across the streets and on each other, to the sun's 320 m)
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		var t := 0
 		for i in (protos[key] as Mesh).get_surface_count():
 			t += (protos[key] as Mesh).surface_get_array_index_len(i) / 3

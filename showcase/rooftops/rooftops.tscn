@@ -150,6 +150,8 @@
 [ext_resource type="Resource" path="res://rooftops/models/trees_pine_instances.res" id="148_skgcd"]
 [ext_resource type="ArrayMesh" path="res://rooftops/models/trees_broadleaf_mesh.res" id="149_jpkl2"]
 [ext_resource type="Resource" path="res://rooftops/models/trees_broadleaf_instances.res" id="150_a80gk"]
+[ext_resource type="ArrayMesh" path="res://rooftops/models/trees_wood_mesh.res" id="150_wood1"]
+[ext_resource type="Resource" path="res://rooftops/models/trees_wood_instances.res" id="150_wood2"]
 [ext_resource type="ArrayMesh" path="res://rooftops/models/villas.res" id="151_nauud"]
 [ext_resource type="ArrayMesh" path="res://rooftops/models/trees_villa_cypress_mesh.res" id="152_l0avx"]
 [ext_resource type="Resource" path="res://rooftops/models/trees_villa_cypress_instances.res" id="153_3bidx"]
@@ -2020,8 +2022,11 @@ light_volumetric_fog_energy = 1.2
 light_angular_distance = 2.5
 shadow_enabled = true
 shadow_blur = 1.2
+directional_shadow_split_1 = 0.044
+directional_shadow_split_2 = 0.0875
+directional_shadow_split_3 = 0.22
 directional_shadow_blend_splits = true
-directional_shadow_max_distance = 140.0
+directional_shadow_max_distance = 320.0
 
 [node name="Ground" type="StaticBody3D" parent="." unique_id=1984584682]
 collision_mask = 0
@@ -5884,181 +5889,151 @@ mesh = ExtResource("22_nhe8o")
 [node name="CityHouses" type="Node3D" parent="." unique_id=2039510561]
 
 [node name="HF00" type="MultiMeshInstance3D" parent="CityHouses" unique_id=929236919]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("24_wa3on")
 instances = ExtResource("25_c1gsu")
 
 [node name="HF01" type="MultiMeshInstance3D" parent="CityHouses" unique_id=69324379]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("26_erxod")
 instances = ExtResource("27_aarfx")
 
 [node name="HF02" type="MultiMeshInstance3D" parent="CityHouses" unique_id=2108028216]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("28_crkdw")
 instances = ExtResource("29_412fs")
 
 [node name="HF03" type="MultiMeshInstance3D" parent="CityHouses" unique_id=599297655]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("30_2sbfr")
 instances = ExtResource("31_e5i6i")
 
 [node name="HF04" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1506460932]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("32_iske8")
 instances = ExtResource("33_odora")
 
 [node name="HF05" type="MultiMeshInstance3D" parent="CityHouses" unique_id=620353119]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("34_7cm4x")
 instances = ExtResource("35_mufik")
 
 [node name="HF06" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1780406941]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("36_kq21g")
 instances = ExtResource("37_20d1x")
 
 [node name="HF07" type="MultiMeshInstance3D" parent="CityHouses" unique_id=493052639]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("38_a2mmu")
 instances = ExtResource("39_qgjda")
 
 [node name="HF08" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1053662173]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("40_6dial")
 instances = ExtResource("41_1yae0")
 
 [node name="HF09" type="MultiMeshInstance3D" parent="CityHouses" unique_id=380363535]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("42_5gtxq")
 instances = ExtResource("43_pwi13")
 
 [node name="HF10" type="MultiMeshInstance3D" parent="CityHouses" unique_id=467831944]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("44_susnk")
 instances = ExtResource("45_yfwc2")
 
 [node name="HF11" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1417786740]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("46_aj8mi")
 instances = ExtResource("47_t6ivk")
 
 [node name="HF12" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1660197634]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("48_spky4")
 instances = ExtResource("49_rheq0")
 
 [node name="HF13" type="MultiMeshInstance3D" parent="CityHouses" unique_id=477633926]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("50_fxoh4")
 instances = ExtResource("51_psutp")
 
 [node name="HF14" type="MultiMeshInstance3D" parent="CityHouses" unique_id=434454179]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("52_inur0")
 instances = ExtResource("53_e5cjl")
 
 [node name="HF15" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1215190459]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("54_mmo6v")
 instances = ExtResource("55_h0s58")
 
 [node name="HF16" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1385817931]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("56_jhe43")
 instances = ExtResource("57_2yiw3")
 
 [node name="HF17" type="MultiMeshInstance3D" parent="CityHouses" unique_id=535323768]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("58_ylp0l")
 instances = ExtResource("59_6puq1")
 
 [node name="HF18" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1452001081]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("60_gpdvi")
 instances = ExtResource("61_fvo72")
 
 [node name="HF19" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1642374800]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("62_yl6kd")
 instances = ExtResource("63_sg6wk")
 
 [node name="HF20" type="MultiMeshInstance3D" parent="CityHouses" unique_id=277555471]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("64_je4gf")
 instances = ExtResource("65_62ywm")
 
 [node name="HF21" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1492868667]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("66_q2e6r")
 instances = ExtResource("67_m534g")
 
 [node name="HF22" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1169753645]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("68_8h1cy")
 instances = ExtResource("69_cxvvh")
 
 [node name="HF23" type="MultiMeshInstance3D" parent="CityHouses" unique_id=150846763]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("70_p5ta3")
 instances = ExtResource("71_w5idj")
 
 [node name="HF24" type="MultiMeshInstance3D" parent="CityHouses" unique_id=752200409]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("72_i2kdw")
 instances = ExtResource("73_ynh8h")
 
 [node name="HF25" type="MultiMeshInstance3D" parent="CityHouses" unique_id=625781483]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("74_e44wj")
 instances = ExtResource("75_54jh7")
 
 [node name="HF26" type="MultiMeshInstance3D" parent="CityHouses" unique_id=976933331]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("76_08n8k")
 instances = ExtResource("77_37wsw")
 
 [node name="HF27" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1576498209]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("78_riu0w")
 instances = ExtResource("79_ck4d5")
 
 [node name="HF28" type="MultiMeshInstance3D" parent="CityHouses" unique_id=1942085637]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("80_rva3d")
 instances = ExtResource("81_xmfk8")
 
 [node name="HF29" type="MultiMeshInstance3D" parent="CityHouses" unique_id=980024382]
-cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("82_fln8l")
 instances = ExtResource("83_m748g")
@@ -6235,6 +6210,12 @@ cast_shadow = 0
 script = ExtResource("23_6s3or")
 mesh = ExtResource("149_jpkl2")
 instances = ExtResource("150_a80gk")
+
+[node name="Trees_wood" type="MultiMeshInstance3D" parent="." unique_id=2036129245]
+cast_shadow = 0
+script = ExtResource("23_6s3or")
+mesh = ExtResource("150_wood1")
+instances = ExtResource("150_wood2")
 
 [node name="Villas" type="MeshInstance3D" parent="." unique_id=385578853]
 cast_shadow = 0

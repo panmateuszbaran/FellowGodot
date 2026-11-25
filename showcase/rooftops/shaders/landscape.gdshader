@@ -9,13 +9,13 @@ render_mode diffuse_burley;
 varying vec3 world_pos;
 varying vec3 world_nrm;
 // Milestone 199: baked when the scene is built (the vertex colour): how much of the low sun a point sees past the hills
-// between (red) and how much of the sky (green).
-varying vec2 baked;
+// between (red), how much of the sky (green), and the woods (blue: tools/build_rooftops.gd fills them with trees).
+varying vec3 baked;
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_nrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
-	baked = COLOR.rg;
+	baked = COLOR.rgb;
 }
 
 // A stripe pattern (0..1) of the given period, averaged to `mean` where the period is under a few pixels.
@@ -35,11 +35,14 @@ void fragment() {
 	vec2 cid = floor(q / size);
 	vec2 f = fract(q / size);
 	float k = rt_hash12(cid + 17.0);
-	float macro = 0.85 + 0.3 * rt_fbm(p * 0.008, 4);
+	// Milestone 199: each plot's own shade too (a field's crop sown or cut at its own time), the broad drift wider.
+	float macro = (0.8 + 0.4 * rt_fbm(p * 0.008, 4)) * (0.88 + 0.24 * rt_hash12(cid + 41.0));
 	vec3 earth = vec3(0.5, 0.4, 0.28);
 	vec3 col;
+	// Milestone 199: the palette wider (from the bell tower the plots had read as one beige): the wheat's gold, the
+	// pasture's and the lucerne's greens, the ploughed clay's browns and greys (the crete's), sunflowers.
 	if (k < 0.16) {
-		col = mix(vec3(0.74, 0.62, 0.33), vec3(0.66, 0.53, 0.28), stripes(q.x, 1.4, 0.5, 0.5, pix));
+		col = mix(vec3(0.76, 0.6, 0.27), vec3(0.66, 0.5, 0.23), stripes(q.x, 1.4, 0.5, 0.5, pix));
 	} else if (k < 0.32) {
 		// A vineyard: rows of vines along the plot, earth between.
 		col = mix(earth, vec3(0.24, 0.31, 0.13), stripes(q.y + 0.0 * q.x, 2.6, 0.45, 0.45, pix));
@@ -49,12 +52,19 @@ void fragment() {
 		float dot_ = smoothstep(2.0, 1.4, length(g));
 		dot_ = mix(0.25, dot_, clamp(1.0 - pix * 3.0 / 7.0, 0.0, 1.0));
 		col = mix(vec3(0.56, 0.48, 0.35), vec3(0.36, 0.4, 0.28), dot_);
+	} else if (k < 0.57) {
+		col = vec3(0.3, 0.4, 0.15) * (0.85 + 0.3 * rt_noise(p * 0.08));
 	} else if (k < 0.64) {
-		col = vec3(0.34, 0.41, 0.19) * (0.85 + 0.3 * rt_noise(p * 0.08));
+		// Lucerne or sunflowers: a deep green, or its yellow in bloom.
+		col = rt_hash12(cid + 29.0) < 0.5 ? vec3(0.2, 0.33, 0.1) : vec3(0.62, 0.52, 0.1);
+		col *= 0.9 + 0.2 * rt_noise(p * 0.12);
+	} else if (k < 0.71) {
+		col = mix(vec3(0.38, 0.26, 0.16), vec3(0.3, 0.2, 0.13), stripes(q.x, 0.9, 0.5, 0.5, pix));
 	} else if (k < 0.76) {
-		col = mix(vec3(0.43, 0.31, 0.2), vec3(0.36, 0.26, 0.17), stripes(q.x, 0.9, 0.5, 0.5, pix));
+		// The crete's grey clay, ploughed.
+		col = mix(vec3(0.5, 0.46, 0.4), vec3(0.42, 0.39, 0.34), stripes(q.x, 0.9, 0.5, 0.5, pix));
 	} else if (k < 0.9) {
-		col = vec3(0.62, 0.56, 0.36) * (0.9 + 0.2 * rt_noise(p * 0.1));
+		col = vec3(0.64, 0.55, 0.32) * (0.9 + 0.2 * rt_noise(p * 0.1));
 	} else {
 		col = vec3(0.17, 0.23, 0.11) * (0.8 + 0.4 * rt_fbm(p * 0.15, 3));
 	}
@@ -64,7 +74,12 @@ void fragment() {
 	col = mix(col, vec3(0.14, 0.2, 0.09), hedge * clamp(1.0 - pix / 1.5, 0.3, 1.0));
 	// Woods on the steep slopes.
 	float steep = smoothstep(0.12, 0.3, 1.0 - world_nrm.y + 0.08 * (rt_noise(p * 0.02) - 0.5));
-	col = mix(col, vec3(0.15, 0.21, 0.1) * (0.75 + 0.5 * rt_fbm(p * 0.12, 3)), steep);
+	// Milestone 199: and where the scene's builder planted them (baked; their edges ragged): the floor under the
+	// trees, dark; past their reach (1.5 km) the canopy's crowns drawn, averaged out under a pixel.
+	steep = max(steep, smoothstep(0.42, 0.58, baked.b + 0.22 * (rt_noise(p * 0.03) - 0.5)));
+	float crowns = mix(0.5, rt_noise(p / 3.5), clamp(1.0 - pix * 2.0 / 3.5, 0.0, 1.0));
+	vec3 floor_ = vec3(0.13, 0.19, 0.09) * (0.75 + 0.5 * rt_fbm(p * 0.12, 3)) * (0.7 + 0.6 * crowns);
+	col = mix(col, floor_, steep);
 	// White dirt roads winding over the hills.
 	float rn = rt_fbm(p * 0.0035 + 40.0, 3);
 	float road_w = max(0.0012, pix * 0.0035 * 0.8);
