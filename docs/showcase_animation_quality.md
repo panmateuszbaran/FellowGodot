@@ -218,6 +218,19 @@ fountain's middle; `tools/update_clips.gd` puts clips rebuilt in Blender into th
 | 3 | "fall" ready to land, "fall_flail" blended in from 0.45 to 1.1 s, back near the ground | the knees 11-76 → 51-83°, the hands up to 0.31 m over the shoulders; the fastest joint in the flail 374 °/s |
 | 4 | the fountain's column and bowl | rays 2.7 / 1.86 / 0.75 m; a run at it mantles onto the rim, the bowl, the column |
 
+Milestone 208 (decision 0350): the owner: "more interaction with the NPCs — running into them, knocking someone over,
+not passing through them". `climb_look.gd --program=bump --bump=walk|run|sprint` runs at one of the three talking in
+the square's middle from behind (`--cam=npc`: a still camera by them; `--bump_trace=1`: the bodies' fastest getting
+up); it prints their reactions, how still they lie, and their bodies' statistics as they stand again.
+
+| step | change | what it showed |
+|---|---|---|
+| 0 | milestone 207 | the player through the people |
+| 1 | capsules, `bump()`: a shove, a stagger, a ragdoll | knocked down, the body stuck falling (`knock_down` without balance) |
+| 2 | the state machine on while not standing; `get_up_from_animation` | up into "get_up_back": the clip's first pose 0.40 m from the bodies, the hips' body at 10.5 m/s, driven down while something pushed it up |
+| 3 | no body for the mannequin's root (a capsule from the ground to the hips) | 0.28 m, 4.4 m/s (the feet drawn up) |
+| 4 | Jolt Physics for the ragdoll | lying stiller (0.25 against 1.8 cm/s), but the climb's trailing forearm 2,471 °/s: left on Godot Physics |
+
 ## Reference
 
 * Walking (normal gait): the knee 0° at the heel's strike, 5-10° in loading and mid-stance, 30-40° at pre-swing,

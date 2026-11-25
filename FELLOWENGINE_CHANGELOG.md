@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 208 — The square's people solid: run into, staggered, knocked down and up again (2026-11-25)
+
+- The owner: "more interaction with the NPCs — running into them, knocking someone over, not passing through them"
+  (decision 0350). `FellowPhysicalAnimation3D.get_up_from_animation(blend)`: lying, the bodies blended into the
+  animation the game plays — its own get-up clip, placed where the body lies — without a motion matcher;
+  `knock_down()` goes on to lying with `balance` off; a game rig's root bone on the ground under the hips gets no body
+  (the mannequin's, a capsule from the ground to the hips, pushed the hips up getting up: 10.5 → 4.4 m/s at most).
+- The rooftops' 46 people are capsules the player meets. Run into: a shove at a walk, a stagger at a run (new clips
+  "stagger_back", "stagger_fwd": two steps the way of the push, turned to it), knocked down at a sprint or landed on
+  — a ragdoll that lies still, then "get_up_back" or "get_up_front" — and back to their way or place. The player goes
+  on slowed (45 %, 70 %).
+- The demo's path unchanged with the people solid (a group and two routes moved off its run at CasaCrema).
+  `anim_quality.py` 38 / 45, `effort.py --profile arcade` 8 / 8, `balance_check` and `physical_check` identical.
+
 ## Milestone 207 — Four faults found playing: the jump after the climb, the fall, the fountain, W at the wall (2026-11-25)
 
 - The owner, playing: "after standing up on the roof the character does a strange jump; the fall has a broken

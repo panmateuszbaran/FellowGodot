@@ -776,6 +776,16 @@ the character stands or not, and `foot_grounding` keeps a step's arc over the gr
 `get_stats()`'s `foot_skim_distance`, `foot_air_time`. `balance_check.gd`'s `--skate_guard` (and the feet's skating),
 `balance_video.gd`'s `--program=staggers`, Matching Lab's `--matching_skate_guard` (and the feet's skimming).
 
+Milestone 208 (decision 0350): `FellowPhysicalAnimation3D.get_up_from_animation(blend = -1)` — lying (down, or limp
+after a fall), the bodies blended from where they lie into the animation the skeleton is given from then on (the game's
+own get-up clip, the character placed where the body lies) over `blend` seconds (`get_up_blend` if negative), then
+standing and `got_up`; no motion matcher needed (`get_balance_stats()`'s `get_up_match_error_m`: the clip's first pose
+from the bodies, by mass; `get_up_blend_speed_max_m_s`). `knock_down()` goes on to lying with `balance` off. A root
+bone on the ground under the hips with one child (a game rig's root) gets no body. The rooftops showcase's people:
+`rooftops_crowd.gd`'s `bump()` (a shove under `NUDGE_MAX` 1.8 m/s, a stagger under `KNOCK_MIN` 5.2, else knocked
+down and up again), the player's `LAYER_PEOPLE`, `RAY_MASK`, `BUMP_STAGGER_KEEP`, `BUMP_KNOCK_KEEP`;
+`climb_look.gd --program=bump`.
+
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
 Module `fellow_world`; nothing changes without the node (decision 0187). `FellowVehicleEffects3D` (a `Node3D`, a child
