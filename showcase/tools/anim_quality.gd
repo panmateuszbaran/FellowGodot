@@ -34,6 +34,7 @@ var heel_local: Array[Vector3] = [Vector3(), Vector3()] # the heel's contact in 
 var ball_local: Array[Vector3] = [Vector3(), Vector3()] # the sole under the ball, in the foot bone's space
 # Per segment: frames, the joints' samples, their speeds; per foot: contacts, toe-offs, the stride's samples.
 var segs := {}
+var anat: RefCounted # milestone 202: tools/anatomy.gd — the joints against a person's range of motion
 var last := {}
 var foot_state := [{}, {}]
 var last_rot := {}
@@ -74,6 +75,7 @@ func _initialize() -> void:
 		player.position = Vector3(-25.0, 0.0, 37.0)
 		player.facing = deg_to_rad(-90.0)
 		player.rotation.y = player.facing
+	anat = (load("res://tools/anatomy.gd") as GDScript).new(sk)
 	sk.skeleton_updated.connect(_upd)
 
 
@@ -128,6 +130,19 @@ func _upd() -> void:
 			"speed": {"knee": 0.0, "hip": 0.0, "ankle": 0.0}, "contacts": [[], []], "toe_offs": [[], []], "curves": [[], []],
 			"hips_y": [], "body_v": [], "ang": [], "hips_p": []})
 	d.frames += 1
+	# Milestone 202: each joint against a person's range of motion (tools/anatomy.gd), its worst moment.
+	if anat and frame > 4:
+		var am: Dictionary = anat.call("measure")
+		var av: Dictionary = d.get_or_add("anat", {})
+		var aw: Dictionary = d.get_or_add("anat_worst", {})
+		var ao: Dictionary = d.get_or_add("anat_out", {})
+		for k in am:
+			(av.get_or_add(k, []) as Array).append(am[k])
+			var over: float = anat.get_script().beyond(k, am[k])
+			if over > 0.0:
+				ao[k] = int(ao.get(k, 0)) + 1
+				if over > float((aw.get(k, [0.0]) as Array)[0]):
+					aw[k] = [over, am[k], frame, String(player.get("state"))]
 	# Milestone 195: limbs through the buildings — a surface (not the player's) between the hips and a joint.
 	var space := player.get_world_3d().direct_space_state
 	var hips := _p("Hips")
@@ -352,6 +367,18 @@ func _write() -> void:
 		acc.sort()
 		if acc.size() > 0:
 			r["hips_acc"] = {"p50": acc[acc.size() / 2], "p95": acc[int(acc.size() * 0.95)], "p99": acc[int(acc.size() * 0.99)], "max": acc[-1]}
+		# Milestone 202: the joints against a person's range of motion.
+		var anatomy := {}
+		var av: Dictionary = d.get("anat", {})
+		for n in av:
+			var v: Array = (av[n] as Array).duplicate()
+			v.sort()
+			var w: Array = d.get("anat_worst", {}).get(n, [])
+			anatomy[n] = {"n": v.size(), "out": int(d.get("anat_out", {}).get(n, 0)), "min": v[0], "p01": v[int(v.size() * 0.01)],
+					"p50": v[v.size() / 2], "p99": v[mini(v.size() - 1, int(v.size() * 0.99))], "max": v[-1],
+					"worst": w[0] if w.size() > 0 else 0.0, "worst_value": w[1] if w.size() > 0 else 0.0,
+					"worst_frame": w[2] if w.size() > 0 else -1, "worst_state": w[3] if w.size() > 0 else ""}
+		r["anatomy"] = anatomy
 		outd.segments[k] = r
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	var fa := FileAccess.open(out_dir.path_join(program + ".json"), FileAccess.WRITE)

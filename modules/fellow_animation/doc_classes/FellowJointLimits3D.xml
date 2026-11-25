@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowJointLimits3D" inherits="SkeletonModifier3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Keeps a humanoid's joints within a person's range of motion, after the animation and the IK.
+	</brief_description>
+	<description>
+		A modifier of a humanoid [Skeleton3D], last among its modifiers (milestone 202, decision 0344): it corrects the pose that the animation, the IK ([FellowTraversalPose3D], [FellowFootPlacement3D]) and a look-at leave so that each joint is within an adult's active range of motion. [b]Hinges[/b] ([member hinge_alignment]): an elbow or a knee bends only in its hinge's plane, so the upper arm or the thigh is turned about its own line (nothing moves but its turn — the shoulder's or the hip's rotation, as a person's) until its hinge lies in the bend the limb has: an IK that places the elbow keeps the arm's turn as the animation had it, the elbow bent sideways. A limb near straight (its plane no longer says which way) keeps the turn it had; one bent the wrong way, further round than [member hinge_max_turn], is left. [b]Ankles[/b] ([member ankle_range]): the foot turned about the ankle in the plane of the shin and the foot. [b]Wrists[/b] ([member wrist_flexion_range], [member wrist_deviation_range]): the hand brought back along the way it is bent to an ellipse through the four limits — a hand held on a hold pivots on it as the forearm swings across. [b]Neck[/b] ([member neck_flexion_range], [member neck_bend_limit], [member neck_turn_limit]): the head against the chest. Each correction eases on and off at [member max_correction_speed] (the wrists' at once: they undo the hand's own turn as it comes).
+		The bones are found by their names in common rigs (Godot's humanoid profile, Mixamo's, [code].L[/code]/[code].R[/code] and [code]_l[/code]/[code]_r[/code] names; [member bone_names] over them; [method get_bones] says which were found); the rest pose is taken as a T or an A, the thumbs and the toes forwards (the body's forward the toes' way from the ankles). The wrists need the hands' index, middle and little fingers' first bones. In the rooftops showcase the climbing's elbows and knees bent sideways in 20-58 % of the frames, its ankles, wrists and neck past their range in up to 89 %; with it none (tools/anim_quality.py's anatomy). See [code]docs/decisions/0344-joint-limits.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_bones" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Each role's bone (its name, or [code]null[/code] where none was found): [code]hips[/code], [code]chest[/code], [code]neck[/code], [code]head[/code], [code]left_upper_arm[/code], [code]left_lower_arm[/code], [code]left_hand[/code], the right's, [code]left_upper_leg[/code], [code]left_lower_leg[/code], [code]left_foot[/code], [code]left_toes[/code] and the right's.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				What it has corrected since it started: [code]frames[/code], how many times a hinge was turned into its bend ([code]hinges[/code]), an ankle, a wrist or the neck brought within its range ([code]ankles[/code], [code]wrists[/code], [code]necks[/code]), the largest of each (degrees: [code]hinge_max[/code], [code]ankle_max[/code], [code]wrist_max[/code], [code]neck_max[/code]), its time ([code]usec[/code] in all, [code]last_usec[/code] the last pose's).
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="ankle_range" type="Vector2" setter="set_ankle_range" getter="get_ankle_range" default="Vector2(-30, 55)">
+			The ankle's range from the rest pose's angle between the shin and the foot, in degrees: dorsiflexion (the toes up, negative) and plantarflexion (positive).
+		</member>
+		<member name="bone_names" type="Dictionary" setter="set_bone_names" getter="get_bone_names" default="{}">
+			Role name to bone name (the roles as [method get_bones] lists them), over the names found by themselves.
+		</member>
+		<member name="hinge_alignment" type="bool" setter="set_hinge_alignment" getter="is_hinge_alignment" default="true">
+			The elbows and knees bent in their hinges' plane: the upper arm or thigh turned about itself until its hinge lies in the limb's bend (the bend's way from the rest pose: the elbow's forwards, the knee's back). From 8° of bend to 20° the turn comes in; a limb straighter than that keeps the turn it had.
+		</member>
+		<member name="hinge_max_turn" type="float" setter="set_hinge_max_turn" getter="get_hinge_max_turn" default="120.0">
+			A bend further round than this from the hinge's own way (the hinge bent backwards or nearly so) is left as it is, the turn fading out over its last 15°.
+		</member>
+		<member name="limit_ankles" type="bool" setter="set_limit_ankles" getter="is_limit_ankles" default="true">
+			The ankles within [member ankle_range].
+		</member>
+		<member name="limit_neck" type="bool" setter="set_limit_neck" getter="is_limit_neck" default="true">
+			The neck within [member neck_flexion_range], [member neck_bend_limit] and [member neck_turn_limit].
+		</member>
+		<member name="limit_wrists" type="bool" setter="set_limit_wrists" getter="is_limit_wrists" default="true">
+			The wrists within [member wrist_flexion_range] and [member wrist_deviation_range].
+		</member>
+		<member name="max_correction_speed" type="float" setter="set_max_correction_speed" getter="get_max_correction_speed" default="720.0">
+			Each correction (in its bone's own frame) eases towards what the pose needs no faster than this, in degrees a second — on and off, a hinge's turn a quarter as fast as the limb straightens; the wrists' at once. [code]0[/code]: every correction at once.
+		</member>
+		<member name="neck_bend_limit" type="float" setter="set_neck_bend_limit" getter="get_neck_bend_limit" default="45.0">
+			The head's bend to either side against the chest, in degrees.
+		</member>
+		<member name="neck_flexion_range" type="Vector2" setter="set_neck_flexion_range" getter="get_neck_flexion_range" default="Vector2(-70, 60)">
+			The head's flexion against the chest, in degrees: extension (looking up, negative) and flexion (positive).
+		</member>
+		<member name="neck_turn_limit" type="float" setter="set_neck_turn_limit" getter="get_neck_turn_limit" default="85.0">
+			The head's turn to either side against the chest, in degrees.
+		</member>
+		<member name="wrist_deviation_range" type="Vector2" setter="set_wrist_deviation_range" getter="get_wrist_deviation_range" default="Vector2(-40, 25)">
+			The wrist's deviation, in degrees: ulnar (towards the little finger, negative) and radial (towards the thumb, positive). With [member wrist_flexion_range], the ellipse a hand bent both ways is brought back to.
+		</member>
+		<member name="wrist_flexion_range" type="Vector2" setter="set_wrist_flexion_range" getter="get_wrist_flexion_range" default="Vector2(-85, 75)">
+			The wrist's flexion (towards the palm, negative) and extension (towards the back of the hand, positive), in degrees, from the hand's rest against the forearm.
+		</member>
+	</members>
+	<constants>
+		<constant name="ROLE_HIPS" value="0" enum="Role">
+			The hips's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_CHEST" value="1" enum="Role">
+			The chest's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_NECK" value="2" enum="Role">
+			The neck's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_HEAD" value="3" enum="Role">
+			The head's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_LEFT_UPPER_ARM" value="4" enum="Role">
+			The left upper arm's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_LEFT_LOWER_ARM" value="5" enum="Role">
+			The left lower arm's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_LEFT_HAND" value="6" enum="Role">
+			The left hand's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_RIGHT_UPPER_ARM" value="7" enum="Role">
+			The right upper arm's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_RIGHT_LOWER_ARM" value="8" enum="Role">
+			The right lower arm's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_RIGHT_HAND" value="9" enum="Role">
+			The right hand's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_LEFT_UPPER_LEG" value="10" enum="Role">
+			The left upper leg's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_LEFT_LOWER_LEG" value="11" enum="Role">
+			The left lower leg's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_LEFT_FOOT" value="12" enum="Role">
+			The left foot's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_LEFT_TOES" value="13" enum="Role">
+			The left toes's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_RIGHT_UPPER_LEG" value="14" enum="Role">
+			The right upper leg's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_RIGHT_LOWER_LEG" value="15" enum="Role">
+			The right lower leg's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_RIGHT_FOOT" value="16" enum="Role">
+			The right foot's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_RIGHT_TOES" value="17" enum="Role">
+			The right toes's bone (a role of [member bone_names]: its name in lower case).
+		</constant>
+		<constant name="ROLE_MAX" value="18" enum="Role">
+			The number of roles.
+		</constant>
+	</constants>
+</class>

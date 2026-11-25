@@ -127,6 +127,7 @@ func _ready() -> void:
 	facing = rotation.y
 	_use_mocap()
 	_inertialize()
+	_limit_joints()
 	var pose := get_node_or_null("Model/Mannequin/Skeleton3D/TraversalPose")
 	if pose:
 		var grip := LEDGE_GRIP
@@ -890,6 +891,28 @@ func _set_state(s: String) -> void:
 	tree.set("parameters/state/transition_request", s)
 	if _inertia:
 		_inertia.call("blend", INERTIA_TIME)
+
+
+## Milestone 202 (the owner: "assess the movements' anatomical correctness"): the joints within a person's range of
+## motion after everything else on the skeleton (FellowJointLimits3D, last among its modifiers) — the elbows and knees
+## bent in their hinges' plane, the ankles, the wrists and the neck within a person's range. (tools: `--joint_limits=0`,
+## `--hinge_alignment=0`, `--limit_ankles=0`, `--limit_wrists=0`, `--limit_neck=0`)
+const JOINT_LIMITS := true
+
+func _limit_joints() -> void:
+	var skel := get_node_or_null("Model/Mannequin/Skeleton3D") as Skeleton3D
+	var args := OS.get_cmdline_user_args()
+	if skel == null or not JOINT_LIMITS or not ClassDB.class_exists(&"FellowJointLimits3D") or "--joint_limits=0" in args:
+		return
+	var limits: Node = ClassDB.instantiate(&"FellowJointLimits3D")
+	limits.name = "JointLimits"
+	for arg in args:
+		for p in ["hinge_alignment", "limit_ankles", "limit_wrists", "limit_neck"]:
+			if arg.begins_with("--%s=" % p): # (tools)
+				limits.set(p, arg.get_slice("=", 1) != "0")
+		if arg.begins_with("--max_correction_speed="): # (tools)
+			limits.set("max_correction_speed", float(arg.get_slice("=", 1)))
+	skel.add_child(limits)
 
 
 ## Milestone 198: the player's own copy of the tree (where the mocap's has not made one), its states switched at once,

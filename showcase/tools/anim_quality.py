@@ -61,7 +61,46 @@ GATES = [
 	("mantle pop", "mantle", "joint_max", None, 2200.0, 100.0, "°/s"),
 	("roof pop", "roof", "joint_max", None, 2200.0, 100.0, "°/s (the scramble up the tiles)"),
 	("mantle body jump", "mantle", "hips_acc_max", None, 400.0, 50.0, "m/s², the hips' fastest change of speed"),
+	# Milestone 202 (decision 0344): a person's range of motion (tools/anatomy.gd) — the share of a segment's frames with a
+	# joint of the group outside it, the worst of the climbing's segments (the run up, hanging, hold to hold, the mantle,
+	# the roof) and of the gaits'.
+	("climbing hinges in their plane", "climb_all", "anatomy_hinges", None, 0.01, 0.01, "share of frames, an elbow or a knee bent sideways, back or past its flexion"),
+	("climbing wrists", "climb_all", "anatomy_wrists", None, 0.01, 0.01, "share of frames, a wrist or a forearm's turn"),
+	("climbing ankles", "climb_all", "anatomy_ankles", None, 0.01, 0.01, "share of frames"),
+	("climbing neck", "climb_all", "anatomy_neck", None, 0.01, 0.01, "share of frames"),
+	("climbing spine and shoulders", "climb_all", "anatomy_trunk", None, 0.01, 0.01, "share of frames"),
+	("climbing limbs in the body", "climb_all", "anatomy_body", None, 0.0, 0.005, "share of frames, an elbow or a wrist in the trunk, the knees or ankles through each other"),
+	("gaits within a person's range", "gaits_all", "anatomy_but_hips", None, 0.01, 0.01, "share of frames, every joint but the hips"),
 ]
+
+# Milestone 202: the measures of tools/anatomy.gd by group (each sided one with its _l and _r).
+ANATOMY_GROUPS = {
+	"hinges": ["elbow_flex", "elbow_side", "knee_flex", "knee_side"],
+	"wrists": ["wrist_ext", "wrist_dev", "forearm_turn"],
+	"ankles": ["ankle_pf"],
+	"neck": ["neck_flex", "neck_bend", "neck_turn"],
+	"trunk": ["spine_flex", "spine_bend", "spine_turn", "shoulder_behind", "shoulder_across"],
+	"hips": ["hip_flex", "hip_abd"],
+	"body": ["arm_in_trunk", "knees_apart", "ankles_apart"],
+}
+CLIMB_SEGMENTS = ("approach", "hanging", "hold_to_hold", "mantle", "roof")
+GAIT_SEGMENTS = ("walk", "walk_in", "run", "run_in", "sprint", "sprint_in", "stop", "turn", "run2", "run2_in")
+
+
+def anatomy_shares(seg):
+	"""Per group, the largest share of the segment's frames one of its measures is outside a person's range."""
+	a = seg.get("anatomy", {})
+	out = {}
+	for g, names in ANATOMY_GROUPS.items():
+		share = 0.0
+		for n in names:
+			for k in (n, n + "_l", n + "_r"):
+				x = a.get(k)
+				if x and x["n"]:
+					share = max(share, x["out"] / x["n"])
+		out[g] = share
+	out["but_hips"] = max(v for g, v in out.items() if g != "hips")
+	return out
 
 
 def mean_curve(strides, j):
@@ -115,6 +154,16 @@ def load(d):
 			v["joint_max"] = v["joint_deg_s"]["max"]
 		if v.get("hips_acc"):
 			v["hips_acc_max"] = v["hips_acc"]["max"]
+	# Milestone 202: each segment's share of frames outside a person's range, by group; the climbing's and the gaits' worst.
+	for agg, members in (("climb_all", CLIMB_SEGMENTS), ("gaits_all", GAIT_SEGMENTS)):
+		have = [segs[k] for k in members if k in segs and segs[k].get("anatomy")]
+		if not have:
+			continue
+		row = {}
+		for v in have:
+			for g, x in anatomy_shares(v).items():
+				row["anatomy_" + g] = max(row.get("anatomy_" + g, 0.0), x)
+		segs[agg] = row
 	# The pops: each change's fastest joint against the steady gaits' fastest.
 	steady = [segs[s]["speed_deg_s"] for s in ("walk", "run", "sprint") if s in segs]
 	for s in ("run_in", "sprint_in", "stop", "turn"):
@@ -214,6 +263,21 @@ def report(out, baseline):
 		b = (base or {}).get(k, {}).get("inside_share")
 		bones = ", ".join(f"{n} {c}" for n, c in sorted(segs[k].get("inside_bones", {}).items(), key=lambda x: -x[1]))
 		lines.append(f"{k:<14} {100 * segs[k]['inside_share']:>5.1f}% {segs[k].get('inside_depth_cm', 0):>6.1f}cm   {bones or '—'}" + (f" ({100 * b:.1f}%)" if b is not None else ""))
+	# Milestone 202: the joints against a person's range of motion — per segment and group, the share of its frames
+	# outside it, and the measure that goes furthest (degrees, or metres for the body's volume).
+	lines.append("")
+	groups = list(ANATOMY_GROUPS)
+	lines.append(f"{'anatomy':<14} " + " ".join(f"{g:>7}" for g in groups) + "   furthest out (baseline share of any)")
+	for k in sorted(segs):
+		a = segs[k].get("anatomy")
+		if not a:
+			continue
+		sh = anatomy_shares(segs[k])
+		worst = max(a.items(), key=lambda kv: kv[1].get("worst", 0.0))
+		far = f"{worst[0]} {worst[1]['worst_value']:.1f} ({worst[1]['worst']:.1f} past, {worst[1]['worst_state']})" if worst[1].get("worst", 0.0) > 0 else "—"
+		b = (base or {}).get(k, {})
+		was = f" ({100 * max(anatomy_shares(b).values()):.1f}%)" if b.get("anatomy") else ""
+		lines.append(f"{k:<14} " + " ".join(f"{100 * sh[g]:>6.1f}%" for g in groups) + f"   {far}{was}")
 	text = "\n".join(lines)
 	open(os.path.join(out, "report.txt"), "w").write(text + "\n")
 	print(text)
