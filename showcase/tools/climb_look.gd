@@ -78,6 +78,8 @@ func _init() -> void:
 			_program = a.get_slice("=", 1)
 		elif a.begins_with("--keys_yaw="):
 			_keys_yaw = float(a.get_slice("=", 1))
+		elif a.begins_with("--keys_turn="):
+			_keys_turn = float(a.get_slice("=", 1))
 		elif a.begins_with("--keys_sprint="):
 			_keys_sprint = a.get_slice("=", 1) == "1"
 		elif a.begins_with("--keys_always="):
@@ -267,6 +269,7 @@ func _drive(t: float) -> void:
 var _keys_yaw := 0.0
 var _keys_always := false # --keys_always=1: jump pressed on top too (not only hanging)
 var _keys_sprint := false # --keys_sprint=1: the sprint held too
+var _keys_turn := 0.0 # --keys_turn=<s>: from then on, on the roof, back down it and off the eave
 
 func _drive_keys(i: int) -> void:
 	var trav: Node = _player.get("traversal")
@@ -283,6 +286,10 @@ func _drive_keys(i: int) -> void:
 		return
 	_player.set("wish", Basis(Vector3.UP, deg_to_rad(_keys_yaw)) * into)
 	_player.set("want_sprint", _keys_sprint)
+	if _keys_turn > 0.0 and t >= _keys_turn and not trav.is_hanging() and not trav.is_active():
+		# (on the roof: back down it and off the eave — a fall to the street)
+		_player.set("wish", -into)
+		return
 	if i % 30 == 0 and (trav.is_hanging() or _keys_always):
 		_player.set("want_jump", true)
 		_player.set("_jump_buffer", 0.15) # (as _read_input's press)
