@@ -956,7 +956,10 @@ func _process(delta: float) -> void:
 		# (milestone 205: from the head itself — hanging, the capsule's 1.6 m is not where it is — and no steeper than
 		# LOOK_UP_MAX; the target placed back from the estimate's point, where the eased offset is added)
 		var eyes := _head_at(head)
-		goal = _look_way((hints["look"] as Vector3) - eyes, hints.get("inward", ahead)) + (eyes - head)
+		var way := _look_way((hints["look"] as Vector3) - eyes, hints.get("inward", ahead))
+		# (at least 3 m out along the way: a hold just over the head swung it 37 degrees in two frames as the body moved
+		# under it)
+		goal = way.normalized() * maxf(way.length(), 3.0) + (eyes - head)
 		weight = float(hints["look_weight"])
 	elif mode == Mode.GROUND and _one_shot <= 0.0:
 		var w := Vector3(wish.x, 0.0, wish.z)
