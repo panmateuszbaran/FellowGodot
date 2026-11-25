@@ -179,6 +179,19 @@ gates that make motion read as real, the demo's first eight moves within 10 s.
 | 4 | the feet under the body (`FOOT_HIGH_STEP`) | — | 36/45 | hinges 0 %; a forearm's 2,268 °/s across; the neck |
 | 5 | the trailing hand across slower; the neck to 66° | 8/8 | 38/45 | the fastest joint 2,000 °/s; hinges, wrists, neck 0 % |
 
+Milestone 205 (decision 0347): the owner: "the first jump bends the head in a strange way; the last jump onto the
+roof's outer edge is unnatural; walking on the roof needs improving too". `anim_quality.gd --dump=2` writes the neck
+and the head's and chest's tilt every frame.
+
+| step | change | `anim_quality` | what it showed |
+|---|---|---|---|
+| 0 | milestone 204 | 38/45 | the neck bent 32° sideways at the catch (the chest rolled 35°, the head upright); the head swinging 40-60° looking straight up; to the eave reached for, drifting out; onto the roof at 3.3 m/s, the feet on nothing |
+| 1 | the look capped at 50° and turned into the wall | — | the leaps' swing gone; the catch's bend not (the clip's roll, not the look: `--head_look=0`) |
+| 2 | the neck bent sideways 15° at most; the look from the head | — | 32 → 16°; before the eave still 84° each way |
+| 3 | the eave's lip leapt to; the climb up paced, braced, left at its pace | 38/45 | the mantle's limbs in the stone 4.7 → 0 %, its body jump 189 → 142 m/s² |
+| 4 | the roof walked up (to 28°), leaning, easing in and out | 38/45 | the roof's hips 1.8 → 0 %; a walk eased everywhere had moved the gaits (a sprint's skate 4.9 → 5.7 cm): on roofs only |
+| 5 | the look at least 3 m out | 38/45 | the head's fastest turn climbing 2,568 (the eave's catch) → 1,032 °/s |
+
 ## Reference
 
 * Walking (normal gait): the knee 0° at the heel's strike, 5-10° in loading and mid-stance, 30-40° at pre-swing,

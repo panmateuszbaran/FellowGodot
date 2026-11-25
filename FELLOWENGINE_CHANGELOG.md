@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 205 — The leap to the eave, the climb onto the roof, the walk up it, the head (2026-11-25)
+
+- The owner: "the first jump bends the head in a strange way; the last jump onto the roof's outer edge is unnatural;
+  walking on the roof needs improving too" (decision 0347). `FellowTraversal3D`: with `leap_push_force`, an eave's lip
+  out over the hold is leapt to (reached for, the body had drifted out to it with nothing pushing it); with
+  `climb_pull_speed`, up from a hang onto a ledge no faster than 1.25 times that (the roof's 1.9 m: 1.24 → 1.7 s, the hips
+  3.3 → 2.5 m/s at most), the hips let go over the pull and the press, the feet on the wall found under the edge or
+  hanging free, the climb left at its own pace.
+- The showcase: the head's look no steeper than 50°, turned into the wall as it steepens, from the head, at least 3 m out;
+  the neck bent sideways 15° at most (caught on the wall, 32 → 18°; the head's fastest turn 1,152 → 1,032 °/s); the
+  rooftops' 21° tiles walked up leaning into them (crawled over 28° only), the walk easing in and out on a roof.
+- `anim_quality.py` 38 / 45 (the mantle's limbs in the stone 4.7 → 0 %, its body jump 189 → 142 m/s², the roof's hips
+  1.8 → 0 %); `effort.py --profile arcade` 8 / 8; `anim_quality.gd --dump=2`.
+
 ## Milestone 204 — Arcade pace, a person's motion (2026-11-25)
 
 - The owner: "the joints bend unanatomically again; the climbing is very slow — not 100 % realism but arcade fun, with

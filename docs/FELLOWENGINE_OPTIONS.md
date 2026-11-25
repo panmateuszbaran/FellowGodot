@@ -1268,7 +1268,12 @@ the push as long as that force needs for the dead point (up to 0.65 m) and the p
 push to the dead point; with `climb_pull_speed` a foot stepping up or across the wall no higher than 0.25 m over its
 hanging place under the body, the trailing hand across over 0.6-0.95 of the move; a hanging foot's way in and out from
 the wall at most 1.5 m/s; the showcase's player at an arcade's pace — `leap_push_force` 5.5 (the 2 m gaps leapt),
-`climb_pull_speed` 2, no step up, its neck limited to −66..56° (`effort.py --profile arcade`); `FellowFootLock3D`: a foot let go is never eased back from further
+`climb_pull_speed` 2, no step up, its neck limited to −66..56° (`effort.py --profile arcade`); milestone 205 (decision
+0347): with `leap_push_force` an eave's lip out over the hold (0.3 m at least) is leapt to; with `climb_pull_speed`, up
+from a hang onto a ledge the mantle's clip no faster than its rise at 1.25 times that speed, the feet on the wall found
+under the edge or hanging free, the climb left at its own pace (not `exit_speed`); the showcase's player looks no
+steeper than 50° (from its head, at least 3 m out), bends its neck sideways 15° at most and walks up roofs to 28°
+(`CRAWL_SLOPE`), leaning into them; `FellowFootLock3D`: a foot let go is never eased back from further
 from the hip than the leg reaches; `release_extension` (milestone 172; 1.0: off): let go when holding the foot needs more
 than this share of the leg's length. Let go without jumps (milestone 173, decision 0315): a held point out of
 the leg's reach is let go from where the foot is shown and brought within reach the shorter way (towards the animated
