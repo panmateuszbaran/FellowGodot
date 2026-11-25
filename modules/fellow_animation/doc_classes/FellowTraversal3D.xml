@@ -83,6 +83,12 @@
 				The mantle in progress ([constant KIND_LOW], [constant KIND_HIGH] or [constant KIND_VAULT]), or [constant KIND_NONE].
 			</description>
 		</method>
+		<method name="get_aim_state" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The jump aimed with [method aim_jump_at_hold] under way (milestone 203, decision 0345): [code]time[/code] since the takeoff, [code]catch_time[/code] and [code]rise_time[/code] (s: when the hold will be caught, the top), [code]hang_feet[/code] (where the body's feet will hang from the hold) and the hold's [code]inward[/code]. Empty when not aiming. A controller steers the body in the air with it — the showcase's player brings it to rest where it will hang by the catch, its legs taking the run's speed against the wall.
+			</description>
+		</method>
 		<method name="get_climb_input" qualifiers="const">
 			<return type="float" />
 			<description>
@@ -278,6 +284,9 @@
 		<member name="climb_max_overhang" type="float" setter="set_climb_max_overhang" getter="get_climb_max_overhang" default="20.0">
 			The most a face may lean over the body (degrees past vertical) to be climbed; a face less steep than [member max_ledge_slope] is walked on instead.
 		</member>
+		<member name="climb_pull_speed" type="float" setter="set_climb_pull_speed" getter="get_climb_pull_speed" default="0.0">
+			Milestone 203 (decision 0345): from hold to hold, the body pulled up no faster than this (m/s; a person pulls the body up at about 1 m/s): a reach up or across takes as long as that needs, the body rising over its first three quarters, the leading hand reaching the hold as the body gets there (a hand that took the hold first had yanked the body up to it). [code]0[/code]: the reaches' fixed times, the hand first.
+		</member>
 		<member name="climb_speed" type="float" setter="set_climb_speed" getter="get_climb_speed" default="1.0">
 			How fast the body climbs over a face (m/s).
 		</member>
@@ -341,6 +350,9 @@
 		<member name="hang_reach_up" type="float" setter="set_hang_reach_up" getter="get_hang_reach_up" default="0.0">
 			Hanging, a ledge up to this far over the edge (0.4 m at least, both hands on it, room for the body there) is climbed to hand over hand ([constant TRANSFER_REACH_UP], 0.75 s): pushing up or at the wall where nothing can be mantled, or by [method hang_jump] with the wish up. The hand that followed last time leads, up to the ledge and out from the wall on the way; the body is pulled up as the other follows; the feet step up the wall in turn. A ledge further up, within [member hang_jump_height], is still jumped to. A push held through a reach goes on climbing: over the top when the ledge reached is the last. In this mode, a hold with no room for the body over it — under an eave or a balcony — is caught from the air where its hands have room (nothing 0.2 m over its edge), and an eave's lip within reach is climbed to like any ledge, the body hanging out from the wall under it, and over it onto the roof (milestone 152, decision 0287). With nothing over the hands, a hold up and 0.3-0.9 m to the side is reached across (with [member hang_reach_side]), and an eave's lip 0.3 m or more out from the hold is reached up to; a hold needs 0.12 m free over its edge (decision 0288). Pushing up from a parapet's top (0.6 m thick at most) with a floor 0.3-1.6 m lower behind it, the body climbs over it onto the floor (decision 0289). [code]0[/code]: off, every ledge above is jumped to and only by [method hang_jump] (milestone 151, decision 0282).
 		</member>
+		<member name="hang_step_up_height" type="float" setter="set_hang_step_up_height" getter="get_hang_step_up_height" default="0.0">
+			Milestone 203 (decision 0345): hanging, a ledge above beyond a leap's reach ([member leap_push_force], [member hang_jump_height]) and up to this far above is climbed to by standing up on the one the hands are on ([constant TRANSFER_STEP_UP]) — where its top is at least 0.12 m deep and a body fits standing on it against the wall: pulled up until the chest is at the edge, pressed up on the hands with a foot on the top, stood up (the other foot following), reached up to the next ledge (on the toes, as far as it needs), hung from it; each phase eased from rest to rest, the press no faster than 0.8 m/s, the stand 0.9 m/s, the pull [member climb_pull_speed]. The hands' and feet's places go to the pose ([member FellowTraversalPose3D.hand_ik]). [code]0[/code]: off.
+		</member>
 		<member name="high_clip" type="Animation" setter="set_high_clip" getter="get_high_clip">
 			The clip played for a [constant KIND_HIGH] mantle (its length is the mantle's).
 		</member>
@@ -361,6 +373,9 @@
 		</member>
 		<member name="leap_gravity" type="float" setter="set_leap_gravity" getter="get_leap_gravity" default="0.0">
 			Milestone 200 (decision 0342): a leap up timed by [method set_leap_timing] flies under this gravity, in m/s²: the body dips 8 cm, pushes from rest to the speed that carries it to the dead point (a constant acceleration over a quarter of the rise, at least the clip's push and at most 0.65 m), flies decelerating by gravity alone, the hands catching the hold at the dead point (the settle's drop — the clip's hips over its end at its catch — above the hang), and settles into the hang over the clip's own settling time; along the wall and out from it (6 cm in mid-flight) from the push's start to the dead point. The move's time follows (a 2.3 m leap: 1.55 s). The clip's let-go and catch are where its push and flight are played ([method get_leap_phases]). [code]0[/code]: the clip's rise scaled onto the leap's, as milestone 198.
+		</member>
+		<member name="leap_push_force" type="float" setter="set_leap_push_force" getter="get_leap_push_force" default="0.0">
+			Milestone 203 (decision 0345): a person's strength in a leap up in flight ([member leap_gravity]): the support force at the push's peak, in body weights — the force rising and falling as a half sine from rest (the hips' acceleration [code](F - 1) g[/code] at the peak), the speed off it [code]sqrt(4 d (F - 1) g / pi)[/code] over the push's way [code]d[/code] (at most 0.65 m), no dip down (hanging on straight arms the hips cannot sink: the body swings out from the wall). A ledge higher than such a leap carries the body is not leapt to: it is stood up to ([member hang_step_up_height]) or left. Climbers' explosive pull-ups peak at 1.4-1.7 body weights; with the legs on the wall a strong climber reaches about 2.3 (some 1.2 m of rise). [code]0[/code]: no limit.
 		</member>
 		<member name="low_clip" type="Animation" setter="set_low_clip" getter="get_low_clip">
 			The clip played for a [constant KIND_LOW] mantle (its length is the mantle's).
@@ -558,6 +573,9 @@
 		</constant>
 		<constant name="TRANSFER_REACH_SIDE" value="10" enum="Transfer">
 			Across a gap within [member hang_reach_side] to a ledge to the side, or up and to the side within [member hang_reach_up], hand over hand (milestone 152).
+		</constant>
+		<constant name="TRANSFER_STEP_UP" value="11" enum="Transfer">
+			Up onto the ledge the hands are on and from it to one above, beyond a leap's reach ([member hang_step_up_height]; milestone 203).
 		</constant>
 		<constant name="KIND_MAX" value="10" enum="Kind">
 			The number of kinds.

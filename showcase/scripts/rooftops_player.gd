@@ -50,6 +50,17 @@ const LEAP_GRAVITY := 9.8
 const AIM_JUMP := true
 const AIM_MAX_SPEED := 1.05
 const JUMP_WALL_PUSH := 0.13
+# Milestone 203 (the owner: "why does the character jump face first into the wall"): free-running at a wall the run is
+# braked (no harder than WALL_BRAKE_DECEL, m/s²) to WALL_RUN_SPEED at the takeoff (WALL_JUMP_AT from the wall); in the air
+# the feet meet the stone and the legs take the rest of the speed (no harder than WALL_ABSORB) until the body is
+# WALL_HANG_GAP from it — the sprint had flown on at 7 m/s and stopped against the stone in a frame (43 g), the face 6 cm
+# from it. `--wall_brake=0` (tools): as before.
+const WALL_RUN_SPEED := 4.0
+const WALL_BRAKE_DECEL := 6.0
+const WALL_BRAKE_RANGE := 5.0
+const WALL_JUMP_AT := 0.95
+const WALL_ABSORB := 22.0
+const WALL_HANG_GAP := 0.5
 const JUMP_WALL_SET := 0.55
 # FellowTraversal3D's Transfer values.
 const TRANSFER_JUMP_ALONG := 2
@@ -59,6 +70,7 @@ const TRANSFER_JUMP_BACK := 7
 const TRANSFER_JUMP_CORNER := 8
 const TRANSFER_REACH_UP := 9
 const TRANSFER_REACH_SIDE := 10
+const TRANSFER_STEP_UP := 11 # milestone 203
 
 @export var walk_speed := 1.6
 @export var run_speed := 4.4
@@ -137,6 +149,14 @@ func _ready() -> void:
 			elif arg.begins_with("--max_joint_speed=") or arg.begins_with("--body_sway=") or arg.begins_with("--hang_fit="): # (tools)
 				pose.set(arg.get_slice("=", 0).trim_prefix("--"), float(arg.get_slice("=", 1)))
 		pose.set("ledge_grip", grip)
+	# (tools, milestone 203: `--trav_set=name:value,...`, `--pose_set=...` set the traversal's or the pose's properties)
+	for arg in OS.get_cmdline_user_args():
+		for pre in ["--trav_set=", "--pose_set="]:
+			if arg.begins_with(pre):
+				var node: Node = traversal if pre == "--trav_set=" else pose
+				for pair in arg.trim_prefix(pre).split(","):
+					if node and pair.contains(":"):
+						node.set(pair.get_slice(":", 0), float(pair.get_slice(":", 1)))
 	tree.active = true
 	_set_state("loco")
 	_last_pos = global_position
@@ -328,6 +348,10 @@ func _on_transfer(_ledge: Dictionary, how: int, duration: float, lead: int) -> v
 			clip = "hang_across_" + side
 		TRANSFER_JUMP_UP:
 			clip = "hang_leap_up"
+		TRANSFER_STEP_UP:
+			# Milestone 203: standing up onto the hold — Mixamo's climb up a wall (a hand up, the other side's foot up) under
+			# the traversal's hands and feet.
+			clip = "hang_reach_" + side
 		TRANSFER_JUMP_ALONG, TRANSFER_JUMP_DIAGONAL, TRANSFER_JUMP_CORNER, TRANSFER_JUMP_BACK:
 			clip = "hang_leap_" + side
 	if clip.is_empty():
@@ -448,6 +472,12 @@ func _move(delta: float, speed_goal: float) -> void:
 	var on_floor := is_on_floor()
 	var h := Vector3(velocity.x, 0.0, velocity.z)
 	var goal := wish.limit_length(1.0) * speed_goal
+	var brake := AIM_JUMP and not "--wall_brake=0" in OS.get_cmdline_user_args()
+	if brake and on_floor and mode == Mode.GROUND and want_sprint:
+		# Milestone 203: a run at a wall braked for its jump.
+		var d := _wall_distance(WALL_BRAKE_RANGE)
+		if d < WALL_BRAKE_RANGE:
+			goal = goal.limit_length(sqrt(WALL_RUN_SPEED * WALL_RUN_SPEED + 2.0 * WALL_BRAKE_DECEL * maxf(0.0, d - WALL_JUMP_AT)))
 	if on_floor and mode != Mode.ROLL:
 		var rate := acceleration if goal.length() > h.length() else deceleration
 		# Milestone 191: turning back at speed brakes hard first (a plant and a turn, not a slow arc backwards).
@@ -458,6 +488,18 @@ func _move(delta: float, speed_goal: float) -> void:
 		h = h.move_toward(goal.normalized() * maxf(h.length() * 0.98, 3.0) if goal.length() > 0.1 else h * 0.97, 8.0 * delta)
 	else:
 		h = h.move_toward(goal.limit_length(maxf(h.length(), 2.0)), air_control * delta)
+		if brake and state == "jump_wall":
+			# Milestone 203: the feet on the stone, the legs taking the speed into it — at rest where the body hangs from the
+			# hold by the time it is caught (as fast as stops it there, slowing evenly), never harder than WALL_ABSORB.
+			var gap := _wall_distance(2.0)
+			if gap < 2.0:
+				h = h.limit_length(sqrt(2.0 * WALL_ABSORB * maxf(0.0, gap - WALL_HANG_GAP)))
+			var aim: Dictionary = traversal.call("get_aim_state") if traversal.has_method("get_aim_state") else {}
+			if not aim.is_empty():
+				var inward: Vector3 = aim["inward"]
+				var left := ((aim["hang_feet"] as Vector3) - global_position).dot(inward)
+				var t_left := maxf(float(aim["catch_time"]) - float(aim["time"]), delta)
+				h = h.limit_length(2.0 * maxf(0.0, left) / t_left)
 	# Milestone 154: walking or running (not free-running), the body does not go over a drop — the part of its speed
 	# that would carry it over an edge is taken away and it slides along the edge (Assassin's Creed's low profile).
 	# Milestone 191 (the owner: off the fountain only with a jump): a drop under EDGE_DROP is walked off; at a deeper one
@@ -492,7 +534,7 @@ func _move(delta: float, speed_goal: float) -> void:
 		_start_perch()
 		return
 	# Free-running at a wall: a jump for the first hold (caught in the air by the traversal's grab).
-	if want_sprint and on_floor and _one_shot <= 0.0 and mode == Mode.GROUND and _wall_ahead(1.1):
+	if want_sprint and on_floor and _one_shot <= 0.0 and mode == Mode.GROUND and _wall_ahead(_wall_jump_at()):
 		want_jump = true
 	_jump_buffer = maxf(_jump_buffer - delta, 0.0)
 	_since_floor = 0.0 if on_floor else _since_floor + delta
@@ -508,7 +550,7 @@ func _move(delta: float, speed_goal: float) -> void:
 		_air_top = global_position.y
 		# Milestone 153: at a wall, the arms reaching up for the hold. Milestone 192: from a run, the mocap's running jump.
 		_variant(&"jump", &"jump_run" if Vector2(velocity.x, velocity.z).length() > 3.0 else &"jump")
-		var at_wall := want_sprint and _wall_ahead(1.1)
+		var at_wall := want_sprint and _wall_ahead(maxf(1.1, _wall_jump_at()))
 		var aimed := 0.0
 		if at_wall and AIM_JUMP and not "--aim_jump=0" in OS.get_cmdline_user_args() and traversal.has_method("aim_jump_at_hold"):
 			aimed = traversal.call("aim_jump_at_hold", Vector3(wish.x, 0.0, wish.z), gravity, jump_velocity * AIM_MAX_SPEED)
@@ -649,6 +691,26 @@ func _ground_at(p: Vector3) -> bool:
 
 
 ## A wall in front of the chest within p_distance (the way the body faces and wishes to go).
+## Milestone 203: the jump at a wall taken this far from it (the ray's reach less its 0.35 m): close enough for the legs to
+## take the run's speed by the jump's top (1.1 m as before with `--wall_brake=0`).
+func _wall_jump_at() -> float:
+	return WALL_JUMP_AT - 0.35 if AIM_JUMP and not "--wall_brake=0" in OS.get_cmdline_user_args() else 1.1
+
+
+## Milestone 203: how far the wall ahead (the way the body is asked to go) is from the body's middle (p_range when none).
+func _wall_distance(p_range: float) -> float:
+	var d := Vector3(wish.x, 0.0, wish.z)
+	if d.length() < 0.5:
+		d = -global_basis.z
+	d = d.normalized()
+	var from := global_position + Vector3.UP * 1.3
+	var q := PhysicsRayQueryParameters3D.create(from, from + d * p_range, collision_mask, [get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if hit.is_empty() or absf((hit.normal as Vector3).y) >= 0.3 or (hit.normal as Vector3).dot(-d) <= 0.7:
+		return p_range
+	return from.distance_to(hit.position)
+
+
 func _wall_ahead(p_distance: float) -> bool:
 	if wish.length() < 0.5:
 		return false

@@ -1730,9 +1730,14 @@ func _build_player() -> PackedScene:
 	pose.set("sway_frequency", 1.7)
 	pose.set("sway_damping", 0.32)
 	pose.set("sway_max", 0.16)
+	# Milestone 203 (decision 0345): the swing along and out from the wall only — up and down the arms and legs move the
+	# body (it had lagged a leap's push and floated up after it).
+	pose.set("sway_vertical", 0.0)
 	pose.set("limb_smoothing", 0.05)
-	# The hands on the stone (decision 0291): hanging, the body moved until the shoulders are within reach of the holds.
+	# The hands on the stone (decision 0291): hanging, the body moved until the shoulders are within reach of the holds —
+	# milestone 203: no faster than a person's arms move it (a hand taking a hold had yanked it up at 6 m/s).
 	pose.set("hang_fit", true)
+	pose.set("fit_max_speed", 1.2)
 	# Milestone 155 (decision 0295): no limb of the climbing's pose snaps straight.
 	pose.set("soft_ik", 0.97)
 	# Milestone 156 (decision 0296): a mantle from a hang fades in from the braced pose over 0.25 s (it had snapped).
@@ -1803,7 +1808,16 @@ func _build_player() -> PackedScene:
 	# the feet braced on the wall.
 	trav.set("hang_reach_up", 1.25)
 	trav.set("hang_jump_height", 2.3)
-	trav.set("hang_brace_height", 0.42)
+	# Milestone 203 (decision 0345): the hands 1.95 m over the feet hanging (the mannequin's arms straight: at 2.05 the fit
+	# had lifted the body 0.1 m), the feet braced as high on the wall as before.
+	trav.set("hang_reach", 1.95)
+	trav.set("hang_brace_height", 0.31)
+	# Milestone 203 (decision 0345): a person's strength — a leap's push peaking at 2.3 body weights (a strong climber's
+	# arms and legs: it carries the body some 1.2 m, less than a reach hand over hand), the body pulled up between holds at
+	# 1 m/s at most, a hold 1.25-2.3 m over this one stood up to from it.
+	trav.set("leap_push_force", 2.3)
+	trav.set("climb_pull_speed", 1.0)
+	trav.set("hang_step_up_height", 2.3)
 	# Across from hold to hold (decision 0285): a gap to a ledge to the side up to 0.8 m reached hand over hand.
 	trav.set("hang_reach_side", 0.8)
 	# A leap winds up for 0.15 s, springs, flies hands first and is caught with its speed (decision 0290); up onto a ledge

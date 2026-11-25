@@ -275,6 +275,20 @@ func _depth(p: Vector3, inward: Vector3) -> float:
 	return least
 
 
+## Milestone 203: the gap from a point to the first surface (not the player's) along a horizontal direction, measured from
+## 0.6 m behind it (so a point inside the wall reads negative); 2.0 when nothing is within 1.4 m.
+func _front_gap(p: Vector3, d: Vector3) -> float:
+	var space := _player.get_world_3d().direct_space_state
+	var from := p - d * 0.6
+	var q := PhysicsRayQueryParameters3D.create(from, p + d * 1.4)
+	q.exclude = [_player.get_rid()]
+	q.hit_back_faces = false
+	var hit := space.intersect_ray(q)
+	if hit.is_empty():
+		return 2.0
+	return (hit["position"] as Vector3).distance_to(from) - 0.6
+
+
 func _bone(n: String) -> Vector3:
 	if _posed.has(n):
 		return _posed[n]
@@ -335,6 +349,21 @@ func _record(p_frame: int) -> void:
 		var c := _bone(l[2])
 		limbs.append({"a": _v(a), "b": _v(b), "c": _v(c), "n": _v((b - a).cross(c - b).normalized())})
 	r["limbs"] = limbs
+	# Milestone 203: the head and the upper chest, the body's velocity, and how far the face, the chest, the hips and the
+	# knees are from the wall in front of the body (along the traversal's inward, or the body's facing; negative: in it).
+	r["head"] = _v(_bone("Head"))
+	r["chest"] = _v(_bone("UpperChest"))
+	r["vel"] = _v(_player.velocity)
+	var fwd := -_player.global_basis.z
+	if hints.get("active", false) and hints.has("inward"):
+		fwd = hints["inward"]
+	fwd.y = 0.0
+	fwd = fwd.normalized() if fwd.length() > 0.1 else Vector3(0, 0, -1)
+	r["fwd"] = _v(fwd)
+	var gaps := {}
+	for n in ["Head", "UpperChest", "Hips", "LeftLowerLeg", "RightLowerLeg"]:
+		gaps[n] = snappedf(_front_gap(_bone(n) + (Vector3.UP * 0.08 if n == "Head" else Vector3()), fwd), 0.0001)
+	r["gaps"] = gaps
 	if hints.get("active", false):
 		for k in ["hand_left", "hand_right", "foot_left", "foot_right"]:
 			r[k] = _v(hints[k])

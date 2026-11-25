@@ -76,12 +76,20 @@ private:
 	float sway_frequency = 1.6f; // Hz
 	float sway_damping = 0.35f; // of critical
 	float sway_max = 0.15f; // m
+	// Milestone 203 (decision 0345): the share of the spring's drive that is vertical — a hanging body swings along and out
+	// from the wall as a pendulum, but up and down it is moved by its arms and legs, not by its own inertia (1: as before).
+	float sway_vertical = 1.0f;
 	float limb_smoothing = 0.0f; // s: the time constant of the limbs' targets (0: off)
 	// Milestone 153 (decision 0291): hanging, the body moved until the shoulders are within the arms' reach of the holds
 	// the hands grip (the hands on the stone whatever the clip's pose and the capsule's place).
 	bool hang_fit = false;
 	float soft_ik = 0.0f; // milestone 155 (decision 0295): past this share of a limb's reach its target is eased (0: off)
 	Vector3 fit; // world: the body's move, eased
+	// Milestone 203 (decision 0345): the fit changing no faster than this (m/s; 0: as before) — a hand taking a hold far
+	// above had yanked the body up to it in a tenth of a second (6 m/s, 15 body weights).
+	float fit_max_speed = 0.0f;
+	Vector3 fit_rate; // m/s, world
+	static constexpr float FIT_MAX_ACCEL = 8.0f; // m/s²
 	Vector3 fit_goal_last; // milestone 200: the fit's last goal (its drift followed at once)
 	bool fit_goal_valid = false;
 	// Milestone 156 (decision 0296): a clip (a mantle from a hang) fades in from the pose the limbs' IK gave the frame
@@ -154,7 +162,7 @@ private:
 	void _apply_clip(Skeleton3D *p_skeleton, const FellowTraversal3D::PoseHints &p_hints, float p_weight);
 	void _lean(Skeleton3D *p_skeleton, const Vector3 &p_axis, float p_angle);
 	void _pose(double p_delta);
-	void _two_bone(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_end, const Vector3 &p_target, const Vector3 &p_pole, float p_weight, Vector3 *r_bend = nullptr, float p_max_turn = 0.0f);
+	void _two_bone(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_end, const Vector3 &p_target, const Vector3 &p_pole, float p_weight, Vector3 *r_bend = nullptr, float p_max_turn = 0.0f, float p_follow = -1.0f);
 	void _snapshot(Skeleton3D *p_skeleton);
 	void _clear_wall(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_foot, const Vector3 &p_wall, const Vector3 &p_out, const Vector3 &p_side, float p_meter, float p_weight);
 	void _limit_speed(Skeleton3D *p_skeleton, double p_delta);
@@ -209,6 +217,10 @@ public:
 	float get_sway_damping() const { return sway_damping; }
 	void set_sway_max(float p_meters) { sway_max = CLAMP(p_meters, 0.0f, 0.5f); }
 	float get_sway_max() const { return sway_max; }
+	void set_sway_vertical(float p_share) { sway_vertical = CLAMP(p_share, 0.0f, 1.0f); }
+	float get_sway_vertical() const { return sway_vertical; }
+	void set_fit_max_speed(float p_speed) { fit_max_speed = MAX(0.0f, p_speed); }
+	float get_fit_max_speed() const { return fit_max_speed; }
 	void set_hang_fit(bool p_enabled) { hang_fit = p_enabled; }
 	void set_soft_ik(float p_share) { soft_ik = p_share <= 0.0f ? 0.0f : CLAMP(p_share, 0.8f, 0.999f); }
 	float get_soft_ik() const { return soft_ik; }

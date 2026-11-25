@@ -463,7 +463,7 @@ void FellowTraversalPose3D::_lean(Skeleton3D *p_skeleton, const Vector3 &p_axis,
 
 // A two-bone chain (the upper bone, the lower, the end) reaching for a target (skeleton space), bending towards a pole;
 // the end keeps its rotation from the lower bone. Blended by weight in the bones' local rotations.
-void FellowTraversalPose3D::_two_bone(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_end, const Vector3 &p_target, const Vector3 &p_pole, float p_weight, Vector3 *r_bend, float p_max_turn) {
+void FellowTraversalPose3D::_two_bone(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_end, const Vector3 &p_target, const Vector3 &p_pole, float p_weight, Vector3 *r_bend, float p_max_turn, float p_follow) {
 	if (p_upper < 0 || p_lower < 0 || p_end < 0 || p_weight <= 0.001f) {
 		return;
 	}
@@ -495,13 +495,14 @@ void FellowTraversalPose3D::_two_bone(Skeleton3D *p_skeleton, int p_upper, int p
 	const float sin_a = Math::sqrt(MAX(0.0f, 1.0f - cos_a * cos_a));
 	Vector3 bend = p_pole - s;
 	bend -= dir * bend.dot(dir);
-	if (pole_follow > 0.0f) {
+	const float follow = p_follow >= 0.0f ? p_follow : pole_follow;
+	if (follow > 0.0f) {
 		// Milestone 156 (decision 0296): the bend also follows the joint's own (the clip's): where the target passes the
 		// pole's line its projection turns over, and the joint with it (an elbow 150 degrees in four frames, hanging).
 		Vector3 own = (e - s) - dir * (e - s).dot(dir);
 		const float bl = bend.length();
 		const float ol = own.length();
-		bend = (bl > 1e-5f ? bend / bl : Vector3()) + (ol > 1e-5f ? own / ol * pole_follow : Vector3());
+		bend = (bl > 1e-5f ? bend / bl : Vector3()) + (ol > 1e-5f ? own / ol * follow : Vector3());
 	}
 	if (bend.length() < 1e-4f) {
 		bend = (e - s) - dir * (e - s).dot(dir);
@@ -590,7 +591,11 @@ void FellowTraversalPose3D::_sway_step(const Vector3 &p_point, double p_delta, b
 	const float omega = float(Math::TAU) * sway_frequency;
 	const int steps = MAX(1, int(Math::ceil(dt * 240.0f)));
 	const float h = dt / steps;
-	const Vector3 drive = -accel * body_sway;
+	Vector3 drive = -accel * body_sway;
+	if (sway_vertical < 1.0f) {
+		// (milestone 203: the skeleton's up is the world's for a body hanging upright)
+		drive.y *= sway_vertical;
+	}
 	for (int i = 0; i < steps; i++) {
 		sway_rate += (drive - sway * (omega * omega) - sway_rate * (2.0f * sway_damping * omega)) * h;
 		sway += sway_rate * h;
@@ -877,7 +882,16 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 		}
 		fit_goal_last = fit_goal;
 		fit_goal_valid = true;
+		const Vector3 fit_was = fit;
 		fit = fit.lerp(fit_goal, 1.0f - Math::exp(-float(p_delta) / 0.1f));
+		if (fit_max_speed > 0.0f && p_delta > 0.0) {
+			// Milestone 203 (decision 0345): no faster than a person's arms move the body, its speed changing by no more
+			// than FIT_MAX_ACCEL (a speed limit alone had started it at that speed in a frame).
+			const float dt = float(p_delta);
+			const Vector3 want = ((fit - fit_was) / dt).limit_length(fit_max_speed);
+			fit_rate = fit_rate.move_toward(want, FIT_MAX_ACCEL * dt);
+			fit = fit_was + fit_rate * dt;
+		}
 		if (hips >= 0 && fit != Vector3()) {
 			const Vector3 moved = skeleton->get_bone_global_pose(hips).origin + to_skeleton.basis.xform(fit) * weight;
 			const int parent = skeleton->get_bone_parent(hips);
@@ -952,7 +966,10 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 			const Vector3 side = left * (s == 0 ? 1.0f : -1.0f);
 			const Quaternion foot_global = global_rotation(skeleton, foot);
 			const Vector3 target = to_skeleton.xform(limb_target[2 + s]) - up * (drop * h.foot_follow[s]);
-			_two_bone(skeleton, upper, lower, foot, target, hip + (inward * 0.8f + up * 0.2f + side * 0.1f), fw * weight);
+			// (milestone 203: or the move's own way, the clip's bend followed the less)
+			const float pw = CLAMP(h.foot_pole_weight[s], 0.0f, 1.0f);
+			const Vector3 pole_dir = (inward * 0.8f + up * 0.2f + side * 0.1f).lerp(to_skeleton.basis.xform(h.foot_pole[s]), pw);
+			_two_bone(skeleton, upper, lower, foot, target, hip + pole_dir, fw * weight, nullptr, 0.0f, pole_follow * (1.0f - pw));
 			// The foot keeps its turn in the world (flat on a top, along the wall).
 			if (foot >= 0) {
 				const Quaternion parent = global_rotation(skeleton, skeleton->get_bone_parent(foot));
@@ -1055,7 +1072,10 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 			if (!steady) {
 				arm_bend[s] = Vector3();
 			}
-			_two_bone(skeleton, upper, lower, hand, target, shoulder + (side * 0.6f - up * 0.4f - inward * 0.3f), hw * hand_fade_now, steady ? &arm_bend[s] : nullptr, Math::deg_to_rad(GRIP_ELBOW_TURN) * float(p_delta));
+			// (milestone 203: or the move's own way, the clip's bend followed the less)
+			const float pw = CLAMP(h.hand_pole_weight[s], 0.0f, 1.0f);
+			const Vector3 pole_dir = (side * 0.6f - up * 0.4f - inward * 0.3f).lerp(to_skeleton.basis.xform(h.hand_pole[s]), pw);
+			_two_bone(skeleton, upper, lower, hand, target, shoulder + pole_dir, hw * hand_fade_now, steady ? &arm_bend[s] : nullptr, Math::deg_to_rad(GRIP_ELBOW_TURN) * float(p_delta), pole_follow * (1.0f - pw));
 			if (grip_w[s] > 0.0f) {
 				_shape_grip(skeleton, s, palm_up, to_skeleton.xform(grip_edge[s]), inward, to_skeleton.basis.xform(h.hold_normal[s]).normalized(), side, meter, grip_w[s] * hw * hand_fade_now, grip_letting_go[s], grip_hold[s]);
 			}
@@ -1256,6 +1276,10 @@ void FellowTraversalPose3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_limb_smoothing"), &FellowTraversalPose3D::get_limb_smoothing);
 	ClassDB::bind_method(D_METHOD("get_sway"), &FellowTraversalPose3D::get_sway);
 	ClassDB::bind_method(D_METHOD("set_hang_fit", "enabled"), &FellowTraversalPose3D::set_hang_fit);
+	ClassDB::bind_method(D_METHOD("set_sway_vertical", "share"), &FellowTraversalPose3D::set_sway_vertical);
+	ClassDB::bind_method(D_METHOD("get_sway_vertical"), &FellowTraversalPose3D::get_sway_vertical);
+	ClassDB::bind_method(D_METHOD("set_fit_max_speed", "speed"), &FellowTraversalPose3D::set_fit_max_speed);
+	ClassDB::bind_method(D_METHOD("get_fit_max_speed"), &FellowTraversalPose3D::get_fit_max_speed);
 	ClassDB::bind_method(D_METHOD("is_hang_fit"), &FellowTraversalPose3D::is_hang_fit);
 	ClassDB::bind_method(D_METHOD("get_hang_fit_offset"), &FellowTraversalPose3D::get_hang_fit_offset);
 	ClassDB::bind_method(D_METHOD("set_soft_ik", "share"), &FellowTraversalPose3D::set_soft_ik);
@@ -1275,8 +1299,10 @@ void FellowTraversalPose3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sway_frequency", PROPERTY_HINT_RANGE, "0.2,8,0.01,suffix:Hz"), "set_sway_frequency", "get_sway_frequency");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sway_damping", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_sway_damping", "get_sway_damping");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sway_max", PROPERTY_HINT_RANGE, "0,0.5,0.01,suffix:m"), "set_sway_max", "get_sway_max");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sway_vertical", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_sway_vertical", "get_sway_vertical");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "limb_smoothing", PROPERTY_HINT_RANGE, "0,0.5,0.005,suffix:s"), "set_limb_smoothing", "get_limb_smoothing");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "hang_fit"), "set_hang_fit", "is_hang_fit");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fit_max_speed", PROPERTY_HINT_RANGE, "0,5,0.05,or_greater,suffix:m/s"), "set_fit_max_speed", "get_fit_max_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "soft_ik", PROPERTY_HINT_RANGE, "0,0.999,0.001"), "set_soft_ik", "get_soft_ik");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clip_blend", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"), "set_clip_blend", "get_clip_blend");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "pole_follow", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_pole_follow", "get_pole_follow");

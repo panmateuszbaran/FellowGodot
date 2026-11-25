@@ -75,6 +75,7 @@ public:
 		TRANSFER_JUMP_CORNER, // milestone 149: round the corner past the edge's end, to a ledge on the side
 		TRANSFER_REACH_UP, // milestone 151: up to a ledge within hang_reach_up, hand over hand
 		TRANSFER_REACH_SIDE, // milestone 152: across to a ledge within hang_reach_side to the side (or up and to the side), hand over hand
+		TRANSFER_STEP_UP, // milestone 203: up onto the hold the hands are on (pulled up, pressed, a foot on it, stood up), reaching from it to one up to hang_step_up_height above
 	};
 	// Milestone 198 (decision 0340): the leaps a clip's timing can be given for (set_leap_timing()).
 	enum LeapKind {
@@ -144,6 +145,13 @@ public:
 		// Milestone 201 (decision 0343): the clip's feet kept out of the stone at wall[] (reaching for a hold from the air,
 		// settling from its catch: Mixamo's step up a wall put a foot into it).
 		bool foot_clear = false;
+		// Milestone 203 (decision 0345): the way an elbow or a knee bends (world, from the shoulder or the hip), where the move
+		// knows it better than the pose's own (pressing up on a top the elbows point up and back; a foot stepped onto a
+		// top at the hip's height lifts its knee up and out): weight 0, the pose's own.
+		Vector3 hand_pole[2];
+		float hand_pole_weight[2] = { 0.0f, 0.0f };
+		Vector3 foot_pole[2];
+		float foot_pole_weight[2] = { 0.0f, 0.0f };
 	};
 
 	// Milestone 198 (decision 0340): a hand's target on a ledge: this far in over the edge, this far over the top.
@@ -211,6 +219,15 @@ private:
 	float hold_min_width = 0.0f; // milestone 152 (decision 0286), m: a hold narrower than both hands' 0.48 m, down to this wide, is held with the hands closer (0: off)
 	float hang_leap_windup = 0.0f; // milestone 153 (decision 0290), s: a leap from a hold winds up this long, springs, flies hands first and is caught with its speed (0: as before)
 	float leap_gravity = 0.0f; // milestone 200 (decision 0342), m/s²: a timed leap up flies under this gravity (0: its clip's rise scaled, as milestone 198)
+	// Milestone 203 (decision 0345): a person's strength. leap_push_force: the support force at a leap's peak, in body
+	// weights (the push's force rising and falling as a half sine; a leap up reaches no higher than it carries the body,
+	// and one further is stepped up to or not made; 0: no limit). climb_pull_speed: the body pulled up between holds no
+	// faster than this (m/s; a reach takes as long as that needs; 0: their fixed times). hang_step_up_height: a hold
+	// beyond a leap's reach, up to this far above, is climbed to by standing up on the one the hands are on (its top at
+	// least STEP_MIN_DEPTH deep; 0: off).
+	float leap_push_force = 0.0f;
+	float climb_pull_speed = 0.0f;
+	float hang_step_up_height = 0.0f;
 	// Milestone 84 (decision 0192): walking over an edge, hanging from it.
 	bool drop_to_hang = false;
 	float drop_max_speed = 2.0f; // m/s: faster, the body goes over
@@ -288,6 +305,16 @@ private:
 		float b_dip_time = 0.0f, b_push_time = 0.0f, b_flight_time = 0.0f, b_settle_time = 0.0f;
 		float b_dip = 0.0f, b_push = 0.0f, b_speed = 0.0f, b_settle = 0.0f;
 		float b_clip_release = 0.0f, b_clip_catch = 1.0f, b_release = 0.0f, b_catch = 1.0f;
+		// Milestone 203 (decision 0345): a step up — the body's feet (over the hold the hands are on) at the start and the
+		// ends of its phases (pulled up, pressed up with a foot on the top, stood up, reached, hung from the next hold) and
+		// the phases' ends (shares of the move); where the body stands on the hold; the hold's edge and the wall's face over
+		// it (at the edge's height); the hands on it at the start.
+		float s_feet[6] = {};
+		float s_end[5] = {};
+		Vector3 stand_feet;
+		Vector3 from_edge;
+		Vector3 face;
+		Vector3 from_hold_hands[2];
 	} transfer;
 	// Milestone 198 (decision 0340): a leap timed as a clip's — its hips' way along the move (0 at the start, 1 at the end),
 	// their lift (m: over the straight line along; over the end's height up), sampled evenly over its time; its hands'
@@ -314,6 +341,27 @@ private:
 	static constexpr float LEAP_PUSH_MOST = 0.6f;
 	static constexpr float LEAP_OUT = 0.06f; // m: the body out from the wall in mid-flight (the feet's push)
 	static constexpr float LEAP_HANDS_LEAD = 2.5f; // the hands' way from let-go to catch: 1 - (1 - t)^this (the body's: 2)
+	// Milestone 203 (decision 0345): the step up. Its top at least STEP_MIN_DEPTH deep; the hips (over the hold) pulled up to
+	// STEP_PULL (the chest at the edge), pressed up to STEP_PRESS (a foot on the top), stood up to STEP_STAND over it (the
+	// hips' height over the feet); standing, the hips STEP_OFF off the wall's face (over the top: the body's weight over
+	// its feet — the clips' hips are STEP_HIPS_BACK behind the body's middle) and the torso tipped STEP_LEAN to the wall;
+	// the press and the stand no faster than STEP_PRESS_SPEED, STEP_STAND_SPEED (m/s: a press on the hands, a one-legged
+	// squat).
+	static constexpr float STEP_MIN_DEPTH = 0.12f;
+	static constexpr float STEP_PULL = -0.40f;
+	static constexpr float STEP_PRESS = 0.20f;
+	static constexpr float STEP_STAND = 0.92f;
+	static constexpr float STEP_OFF = 0.12f;
+	static constexpr float STEP_HIPS_BACK = 0.13f;
+	static constexpr float STEP_LEAN = 0.3f; // radians
+	static constexpr float STEP_ANKLE_OFF = 0.16f; // m: standing on the top, the ankles out from the face (the balls of the feet on it)
+	static constexpr float STEP_PRESS_SPEED = 0.8f;
+	static constexpr float STEP_STAND_SPEED = 0.9f;
+	static constexpr float STEP_REACH_TIME = 0.6f;
+	static constexpr float STEP_HANG_TIME = 0.6f;
+	float _leap_reach_max() const; // milestone 203: how far up a leap carries the body with leap_push_force (m; a large number without)
+	bool _step_stand(const Ledge &p_ledge, Vector3 &r_feet, Vector3 *r_face = nullptr) const; // milestone 203: where the body stands on a ledge's top (false: too narrow, no room)
+	void _step_up_step(double p_delta); // milestone 203: the step up under way
 	float _leap_clip_to_move(float p_f) const; // a clip's share of its time as the ballistic leap's share of the move
 	// Milestone 201 (decision 0343): a jump at a wall aimed at a hold (aim_jump_at_hold) — the body flies under the
 	// controller's gravity to the top, where the hands are on the hold (the body AIM_CATCH_LIFT over its hang, the arms a
@@ -467,6 +515,7 @@ public:
 	// Milestone 201 (decision 0343).
 	float aim_jump_at_hold(const Vector3 &p_direction, float p_gravity, float p_max_speed = 0.0f);
 	bool is_aiming() const { return aim.active; }
+	Dictionary get_aim_state() const; // milestone 203: the aim under way (its time, its catch's, the body's place hanging from its hold)
 	bool is_transferring() const { return active && action == KIND_HANG && transfer.active; }
 	bool try_ladder();
 	void climb_up() { climb_requested = true; }
@@ -567,6 +616,12 @@ public:
 	float get_hang_leap_windup() const { return hang_leap_windup; }
 	void set_leap_gravity(float p_gravity) { leap_gravity = MAX(0.0f, p_gravity); }
 	float get_leap_gravity() const { return leap_gravity; }
+	void set_leap_push_force(float p_body_weights) { leap_push_force = p_body_weights <= 0.0f ? 0.0f : MAX(1.05f, p_body_weights); }
+	float get_leap_push_force() const { return leap_push_force; }
+	void set_climb_pull_speed(float p_speed) { climb_pull_speed = MAX(0.0f, p_speed); }
+	float get_climb_pull_speed() const { return climb_pull_speed; }
+	void set_hang_step_up_height(float p_height) { hang_step_up_height = CLAMP(p_height, 0.0f, 3.0f); }
+	float get_hang_step_up_height() const { return hang_step_up_height; }
 	PackedFloat32Array get_leap_phases() const;
 	void set_drop_to_hang(bool p_enabled) { drop_to_hang = p_enabled; }
 	bool is_drop_to_hang() const { return drop_to_hang; }

@@ -56,6 +56,9 @@
 		<member name="clip_blend" type="float" setter="set_clip_blend" getter="get_clip_blend" default="0.0">
 			Seconds over which a clip the traversal plays (a mantle) fades in from the pose this node gave the frame before — the hands and feet on the holds by IK, hanging braced — instead of taking over at once (eased). [code]0[/code]: at once (the braced legs had snapped to the clip's first pose, 74 degrees in a frame). See [code]docs/decisions/0296-the-reference-mannequin.md[/code].
 		</member>
+		<member name="fit_max_speed" type="float" setter="set_fit_max_speed" getter="get_fit_max_speed" default="0.0">
+			Milestone 203 (decision 0345): [member hang_fit] moves the body no faster than this (m/s), its speed changing by no more than 8 m/s² — a hand taking a hold far above had yanked the body up to it in a tenth of a second (6 m/s, 15 body weights). [code]0[/code]: as fast as it eases (0.1 s).
+		</member>
 		<member name="foot_ik" type="bool" setter="set_foot_ik" getter="is_foot_ik" default="true">
 			The feet placed on the wall's face and the top.
 		</member>
@@ -97,6 +100,9 @@
 		</member>
 		<member name="sway_max" type="float" setter="set_sway_max" getter="get_sway_max" default="0.15">
 			The furthest the [member body_sway] spring takes the hips from where the traversal shows the body, in metres.
+		</member>
+		<member name="sway_vertical" type="float" setter="set_sway_vertical" getter="get_sway_vertical" default="1.0">
+			Milestone 203 (decision 0345): the share of [member body_sway]'s drive that is vertical. A hanging body swings along the wall and out from it as a pendulum, but up and down its arms and legs move it: at [code]1[/code] the hips lagged a leap's push (pinned while the body rose, then snapping up at 17 body weights) and floated up after it at an even speed. [code]0[/code] in the rooftops showcase.
 		</member>
 		<member name="traversal_path" type="NodePath" setter="set_traversal_path" getter="get_traversal_path" default="NodePath(&quot;&quot;)">
 			The [FellowTraversal3D] followed; by default the first found among the children of the skeleton's ancestors.
