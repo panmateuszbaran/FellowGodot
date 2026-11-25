@@ -580,7 +580,7 @@ bool FellowTraversal3D::_start(const Ledge &p_ledge, float p_speed, bool p_from_
 		const Ref<Animation> &c = _mantle_clip();
 		if (d_y > 0.1f && c.is_valid()) {
 			float v_max = 0.0f;
-			for (int k = 0; k + 1 < clip_root.size(); k++) {
+			for (int k = 0; k + 1 < int(clip_root.size()); k++) {
 				v_max = MAX(v_max, clip_root[k + 1].y - clip_root[k].y);
 			}
 			v_max /= float(clip_root_step);
@@ -2113,8 +2113,8 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 		const float off_wall = smooth(CLAMP((u - MIN(hs.x, hs.z)) / 0.12f, 0.0f, 1.0f));
 		const float on_wall = smooth(CLAMP((u - MAX(hs.y, hs.w)) / 0.15f, 0.0f, 1.0f));
 		// Milestone 206 (decision 0348): to a lip standing out over the hold left (an eave's), the hands round it — out past
-		// its front, up, and onto its top from outside — the IK theirs from a third of the way (the clip's arm reaching
-		// straight up had put them through the eave, then onto the lip in a frame).
+		// its front at the hold's height, up, and onto its top from above and outside — the IK theirs from a third of the
+		// way (the clip's arm reaching straight up had put them through the eave, then onto the lip in a frame).
 		const Vector3 from_mid = (transfer.from_hands[0] + transfer.from_hands[1]) * 0.5f;
 		const Vector3 to_mid = (to_hands[0] + to_hands[1]) * 0.5f;
 		const bool round_lip = transfer.ballistic && flat(to_mid - from_mid).dot(-flat(transfer.from_inward).normalized()) >= LIP_ROUND_OUT;
@@ -2138,8 +2138,13 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 			const float arc = Math::sin(k * float(Math::PI));
 			hints.hand[h] = transfer.from_hands[h].lerp(to_hands[h], k) - inward * (0.15f * arc) + UP * (0.06f * arc);
 			if (round_lip) {
-				const Vector3 c = to_hands[h] - transfer.to.inward * LIP_ROUND_CONTROL;
-				hints.hand[h] = transfer.from_hands[h] * ((1.0f - k) * (1.0f - k)) + c * (2.0f * k * (1.0f - k)) + to_hands[h] * (k * k);
+				// (a cubic: out first at the hold's height — the eave's underside is just over it —, then up past the lip's
+				// front, onto its top from above and outside)
+				Vector3 c1 = to_hands[h] - transfer.to.inward * LIP_ROUND_CONTROL;
+				c1.y = transfer.from_hands[h].y;
+				const Vector3 c2 = to_hands[h] - transfer.to.inward * (0.45f * LIP_ROUND_CONTROL) + UP * 0.12f;
+				const float m = 1.0f - k;
+				hints.hand[h] = transfer.from_hands[h] * (m * m * m) + c1 * (3.0f * m * m * k) + c2 * (3.0f * m * k * k) + to_hands[h] * (k * k * k);
 			}
 			hints.hand_weight[h] = 1.0f;
 			hints.hand_grip[h] = (k <= 0.0f || k >= 1.0f) ? 1.0f : 0.0f;

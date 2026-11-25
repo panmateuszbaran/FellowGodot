@@ -171,10 +171,13 @@ def analyse(fr):
 		both = [k for k in range(a, b + 1) if min(fr[k].get("hand_grips", [1, 1])) > 0.5]
 		m["elbow_pull"] = max((min(elbow(fr[k], 0), elbow(fr[k], 1)) for k in both), default=0.0)
 		if len(air) >= 6:
-			# the flight: from the take-off (the first frame in the air) to the dead point (or the catch)
+			# the flight: from the take-off (the first frame in the air) to the dead point (or the catch); milestone 206:
+			# from the hips' fastest climb after it, if later — the legs still pushing as the hands leave (a short leap's)
+			# are not the flight
 			k0 = air[0]
 			top = max(range(k0, b + 1), key=lambda k: hy[k])
-			fl = [k for k in air if k <= top]
+			k0 = max(range(k0, top + 1), key=lambda k: vy[k])
+			fl = [k for k in air if k0 <= k <= top]
 			if len(fl) >= 4:
 				dec = -sum(ay[k] for k in fl[1:-1]) / max(1, len(fl) - 2)
 				m["flight_g_ratio"] = dec / G
