@@ -167,6 +167,8 @@
 [ext_resource type="AnimationLibrary" path="res://rooftops/character/reference_shot_clip.res" id="162_pocte"]
 [ext_resource type="Script" path="res://scripts/rooftops_demo.gd" id="163_s4vkt"]
 [ext_resource type="Script" path="res://scripts/rooftops_hay.gd" id="210_hay"]
+[ext_resource type="Script" path="res://scripts/rooftops_weather.gd" id="211_weather"]
+[ext_resource type="Script" path="res://scripts/rooftops_fire.gd" id="211_fire"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kicm1"]
 shader = ExtResource("2_yebai")
@@ -6264,6 +6266,53 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.3, 0)
 streak_length = 2.0
 stain_color = Color(0.42, 0.39, 0.35, 1)
 cull_mask = 16
+
+[node name="Rain" type="FellowRain3D" parent="." unique_id=1211211001]
+rain = 0.0
+wetness = 0.0
+streak_width = 0.004
+wetting_time = 40.0
+drying_time = 240.0
+snowing_time = 120.0
+melting_time = 300.0
+
+[node name="Lightning" type="FellowLightning3D" parent="." unique_id=1211211002]
+seed = 7
+
+[node name="Weather" type="FellowWeather3D" parent="." unique_id=1211211003]
+wind_path = NodePath("../Wind")
+rain_path = NodePath("../Rain")
+lightning_path = NodePath("../Lightning")
+sun_path = NodePath("../Sun")
+environment_path = NodePath("../WorldEnvironment")
+transition_time = 10.0
+
+[node name="WeatherKeys" type="Node" parent="." unique_id=1211211004]
+script = ExtResource("211_weather")
+
+[node name="Brazier" type="Node3D" parent="." unique_id=1211211005]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.2, 0, 4.2)
+script = ExtResource("211_fire")
+
+[node name="ChimneySmoke" type="Node3D" parent="." unique_id=1211211006]
+
+[node name="CasaCrema" type="Node3D" parent="ChimneySmoke" unique_id=1211211007]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.85, 14.26, -16.59)
+script = ExtResource("211_fire")
+kind = "chimney"
+resolution = 48
+
+[node name="PalazzoOcra" type="Node3D" parent="ChimneySmoke" unique_id=1211211008]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.84, 17.93, -16.73)
+script = ExtResource("211_fire")
+kind = "chimney"
+resolution = 48
+
+[node name="CasaOcraBassa" type="Node3D" parent="ChimneySmoke" unique_id=1211211009]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.24, 10.36, 16.41)
+script = ExtResource("211_fire")
+kind = "chimney"
+resolution = 48
 
 [node name="Birds" type="Node3D" parent="." unique_id=514984991]
 script = ExtResource("154_p0cxf")

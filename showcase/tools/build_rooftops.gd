@@ -582,6 +582,7 @@ func _build_scene() -> void:
 	weathering.set("stain_color", Color(0.42, 0.39, 0.35))
 	weathering.position = Vector3(0.0, -0.3, 0.0)
 	_add(root, weathering, "Weathering")
+	_weather(root)
 	_banners(town)
 	_awnings(town)
 	_dust(town)
@@ -1350,6 +1351,52 @@ func _house_block(p_walls: SurfaceTool, p_roofs: SurfaceTool, p_base: Vector3, p
 				var v: Vector3 = f[vi]
 				p_roofs.set_uv(Vector2(v.dot(along), -v.dot(up_s)))
 				p_roofs.add_vertex(p_base + b * v)
+
+
+## Milestone 211 (the owner: "can the showcase also show fire, smoke and the weather?"): the weather on the keys 1-7
+## (FellowWeather3D driving the Wind, a Rain and a Lightning; rooftops_weather.gd), a brazier burning on the square and
+## the smoke of three chimneys (rooftops_fire.gd: FellowGasVolume3D).
+const CHIMNEYS := {"CasaCrema": Vector3(9.85, 14.26, -16.59), "PalazzoOcra": Vector3(-7.84, 17.93, -16.73),
+		"CasaOcraBassa": Vector3(5.24, 10.36, 16.41)}
+const BRAZIER := Vector3(-7.2, 0.0, 4.2)
+
+func _weather(p_root: Node3D) -> void:
+	var rain: Node = ClassDB.instantiate("FellowRain3D")
+	rain.set("rain", 0.0)
+	rain.set("wetness", 0.0)
+	rain.set("streak_width", 0.004)
+	rain.set("wetting_time", 40.0)
+	rain.set("drying_time", 240.0)
+	rain.set("snowing_time", 120.0)
+	rain.set("melting_time", 300.0)
+	_add(p_root, rain, "Rain")
+	var lightning: Node = ClassDB.instantiate("FellowLightning3D")
+	lightning.set("seed", 7)
+	_add(p_root, lightning, "Lightning")
+	var weather: Node = ClassDB.instantiate("FellowWeather3D")
+	weather.set("wind_path", NodePath("../Wind"))
+	weather.set("rain_path", NodePath("../Rain"))
+	weather.set("lightning_path", NodePath("../Lightning"))
+	weather.set("sun_path", NodePath("../Sun"))
+	weather.set("environment_path", NodePath("../WorldEnvironment"))
+	weather.set("transition_time", 10.0)
+	_add(p_root, weather, "Weather")
+	var keys := Node.new()
+	keys.set_script(load("res://scripts/rooftops_weather.gd"))
+	_add(p_root, keys, "WeatherKeys")
+	var brazier := Node3D.new()
+	brazier.set_script(load("res://scripts/rooftops_fire.gd"))
+	brazier.position = BRAZIER
+	_add(p_root, brazier, "Brazier")
+	var smoke := Node3D.new()
+	_add(p_root, smoke, "ChimneySmoke")
+	for n in CHIMNEYS:
+		var c := Node3D.new()
+		c.set_script(load("res://scripts/rooftops_fire.gd"))
+		c.set("kind", "chimney")
+		c.set("resolution", 48)
+		c.position = CHIMNEYS[n]
+		_add(smoke, c, n)
 
 
 func _hay_cart(p_parent: Node3D) -> void:

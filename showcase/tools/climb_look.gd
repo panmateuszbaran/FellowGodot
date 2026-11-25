@@ -19,6 +19,12 @@ extends SceneTree
 ##       (milestone 209: beside a walker in a skirt — the cloth — the player out of the way; --people_side=-1)
 ##   godot ... -s res://tools/climb_look.gd -- --program=hay --out=<dir> [--dist=4.2] [--hay_from=<deg>] ...
 ##       (milestone 210: round the hay cart)
+##   godot ... -s res://tools/climb_look.gd -- --program=weather --view=square|brazier|chimney [--weather=<1-7>] \
+##       [--weather_seq=<key>@<s>,...] [--weather_transition=<s>] --out=<dir> ...   (milestone 211: the weather, the
+##       brazier, the chimneys' smoke from a still camera; the weather turned to each key at its second, over
+##       WeatherKeys' transition or the one given; the brazier's and the weather's state printed each second)
+## --drop=<node>,...: the scene's top-level nodes left out (an A/B). --draw_all=1: every frame drawn (saved as --every
+## says): what runs on the GPU while drawing goes on between the saved frames.
 ##
 ## --cam=hand: the hands on the edge from out and above; --cam=handside: the left hand in profile from along the edge
 ## (milestone 198). --warm=<n>: the n frames before --skip drawn too, not saved (the exposure settled).
@@ -88,6 +94,17 @@ func _init() -> void:
 			_people_side = float(a.get_slice("=", 1))
 		elif a.begins_with("--hay_from="):
 			_hay_from = float(a.get_slice("=", 1))
+		elif a == "--draw_all=1":
+			_draw_all = true
+		elif a.begins_with("--drop="):
+			_drop = a.get_slice("=", 1).split(",")
+		elif a.begins_with("--view="):
+			_view = a.get_slice("=", 1)
+		elif a.begins_with("--weather_transition="):
+			_weather_transition = float(a.get_slice("=", 1))
+		elif a.begins_with("--weather_seq="):
+			for step in a.get_slice("=", 1).split(","):
+				_weather_seq.append([int(step.get_slice("@", 0)), float(step.get_slice("@", 1))])
 		elif a.begins_with("--bump="):
 			_bump_pace = a.get_slice("=", 1)
 		elif a.begins_with("--keys_turn="):
@@ -109,9 +126,15 @@ func _init() -> void:
 				c.free()
 		var town := sc.get_node("Town")
 		for c in town.get_children():
-			if not (c.name in KEEP) and not (_program == "hay" and c.name == "HayCart"):
+			if not (c.name in KEEP) and not (_program == "hay" and c.name == "HayCart") and not (_program == "weather" and c.name in WEATHER_KEEP):
 				town.remove_child(c)
 				c.free()
+	for n in _drop:
+		# (--drop=<node>,...: the scene's top-level nodes left out — an A/B)
+		var c := sc.get_node_or_null(n)
+		if c:
+			sc.remove_child(c)
+			c.free()
 	if _lite:
 		# (the light simplified for lavapipe: no SDFGI, SSIL or volumetric fog — the motion is what is looked at)
 		for n in sc.find_children("*", "WorldEnvironment", true, false):
@@ -149,6 +172,11 @@ func _init() -> void:
 		_player.set("autopilot", true)
 		_player.global_position = Vector3(-30.0, 0.0, -30.0)
 		_hay_cart = sc.get_node_or_null("Town/HayCart")
+	elif _program == "weather":
+		_player.set("autopilot", true)
+		_player.global_position = Vector3(-30.0, 0.0, -30.0)
+		_weather_keys = sc.get_node_or_null("WeatherKeys")
+		_brazier = sc.get_node_or_null("Brazier")
 	elif _program == "fountain":
 		_player.set("autopilot", true)
 		var c := (sc.get_node("Town/Fountain") as Node3D).global_position
@@ -162,7 +190,7 @@ func _init() -> void:
 		var draw := _images and i >= _skip and (i - _skip) % _every == 0
 		# (and --warm frames before the first, unsaved: the exposure settled)
 		var warm := _images and i < _skip and i >= _skip - _warm
-		RenderingServer.viewport_set_update_mode(vp, RenderingServer.VIEWPORT_UPDATE_ALWAYS if (draw or warm) else RenderingServer.VIEWPORT_UPDATE_DISABLED)
+		RenderingServer.viewport_set_update_mode(vp, RenderingServer.VIEWPORT_UPDATE_ALWAYS if (draw or warm or _draw_all) else RenderingServer.VIEWPORT_UPDATE_DISABLED)
 		if _program == "hang":
 			_drive(i / 60.0)
 		elif _program == "course":
@@ -173,6 +201,9 @@ func _init() -> void:
 			_drive_bump(i)
 		elif _program == "people" or _program == "hay":
 			_player.set("wish", Vector3())
+		elif _program == "weather":
+			_player.set("wish", Vector3())
+			_drive_weather(i)
 		elif _program == "fountain":
 			# (milestone 207: a run at the fountain's middle — onto the basin's rim, across it, into the column)
 			_player.set("wish", Vector3(-1.0, 0.0, 0.0))
@@ -387,6 +418,16 @@ func _drive_bump(i: int) -> void:
 var _people_target: Node3D
 var _people_side := 1.0 # --people_side=-1: from its other side
 var _hay_cart: Node3D
+## Milestone 211: the "weather" program.
+const WEATHER_KEEP := ["StallA", "StallB", "HayCart", "Awning0", "Awning1"]
+var _view := "square"
+var _drop: PackedStringArray = []
+var _draw_all := false # --draw_all=1: every frame drawn, every --every-th saved (what the GPU runs while drawing — the
+		# burning logs, milestone 211 — goes on in the frames between)
+var _weather_seq: Array = [] # [key, second]
+var _weather_transition := -1.0 # s (-1: WeatherKeys' own)
+var _weather_keys: Node
+var _brazier: Node3D
 var _hay_from := 0.0 # --hay_from=<deg>: where round the cart the camera starts
 
 func _people_setup(sc: Node) -> void:
@@ -408,6 +449,23 @@ var _keys_yaw := 0.0
 var _keys_always := false # --keys_always=1: jump pressed on top too (not only hanging)
 var _keys_sprint := false # --keys_sprint=1: the sprint held too
 var _keys_turn := 0.0 # --keys_turn=<s>: from then on, on the roof, back down it and off the eave
+
+## The "weather" program (milestone 211): the weather turned as --weather_seq says; each second the weather's and the
+## brazier's state printed.
+func _drive_weather(i: int) -> void:
+	var t := i / 60.0
+	for step in _weather_seq:
+		if i == int(round(float(step[1]) * 60.0)) and _weather_keys:
+			var tr := float(_weather_keys.get("transition")) if _weather_transition < 0.0 else _weather_transition
+			_weather_keys.call("turn_to", int(step[0]), 0.0 if i == 0 else tr)
+	if i % 60 == 0 and _weather_keys:
+		var w: Node = _weather_keys.get_node_or_null(_weather_keys.get("weather_path"))
+		var st: Dictionary = w.call("get_current_state") if w else {}
+		print("climb_look: weather t=%.0f key %d wind %.1f rain %.2f clouds %.2f sun %.2f fog %.4f; brazier %s" % [t,
+				_weather_keys.call("get_weather_key"), st.get("wind_speed", 0.0), st.get("intensity", 0.0) if int(st.get("precipitation", 0)) else 0.0,
+				st.get("cloud_coverage", 0.0), st.get("sunlight", 0.0), st.get("fog_density", 0.0),
+				_brazier.call("get_stats") if _brazier else {}])
+
 
 func _drive_keys(i: int) -> void:
 	var trav: Node = _player.get("traversal")
@@ -518,6 +576,22 @@ func _place_camera(p_first: bool) -> void:
 		_look = _look.lerp(at - Vector3.UP * 0.05, 1.0 if p_first else 0.3)
 		_cam.global_position = _cam_pos
 		_cam.look_at(_look, Vector3.UP)
+		return
+	if _program == "weather":
+		if p_first:
+			var at := Vector3(-7.2, 0.0, 4.2)
+			if _view == "brazier":
+				# (the brazier from 4 m, a person's eyes, the fountain behind)
+				_cam.global_position = at + Vector3(2.6, 1.65, 3.0)
+				_cam.look_at(at + Vector3(0.0, 1.35, 0.0), Vector3.UP)
+			elif _view == "chimney":
+				# (CasaCrema's chimney from over the square, beside the bell tower)
+				_cam.global_position = Vector3(6.0, 15.8, -8.5)
+				_cam.look_at(Vector3(9.85, 16.6, -16.59), Vector3.UP)
+			else:
+				# (the square from its south-east corner: the brazier, the fountain, PalazzoOcra's and CasaCrema's chimneys)
+				_cam.global_position = Vector3(7.5, 2.4, 11.5)
+				_cam.look_at(Vector3(-5.0, 6.5, -8.0), Vector3.UP)
 		return
 	if _program == "hay" and _hay_cart:
 		# (milestone 210: round the hay cart, slowly, at a person's height and from above)
