@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 206 — The hands round the eave's lip, the body square to the wall (2026-11-25)
+
+- The owner: "the leap to the eave still isn't nice — the hands go through the roof and are suddenly on the edge; and
+  why is the torso twisted in the first jump at the wall — what for?" (decision 0348). `FellowTraversal3D`: a leap to a
+  lip standing out over the hold left (0.2 m at least) takes the hands round it — out at the hold's height, up past
+  its front, onto its top from above — from the push's start to the dead point (the forearms had gone 6-15 cm into the
+  eave for 7 frames, then onto the lip at 8 m/s: now none).
+- The twist was a fault: Mixamo's "Run To Start Climbing" reaches with one arm, its chest turned 37° from the stride;
+  caught by both hands, the body rolled 25-34°. The showcase's jump at a wall is the mannequin's own again (9° and 2°),
+  blended in over 0.45 s.
+- `effort.py`: a leap's flight from the hips' fastest climb (re-read, milestone 202's leaps braked in the air at
+  1.32-1.38 g; milestone 204's flew at 0.97-0.99 g). `anim_quality.py` 38 / 45, `effort.py --profile arcade` 8 / 8.
+
 ## Milestone 205 — The leap to the eave, the climb onto the roof, the walk up it, the head (2026-11-25)
 
 - The owner: "the first jump bends the head in a strange way; the last jump onto the roof's outer edge is unnatural;

@@ -1273,7 +1273,9 @@ the wall at most 1.5 m/s; the showcase's player at an arcade's pace — `leap_pu
 from a hang onto a ledge the mantle's clip no faster than its rise at 1.25 times that speed, the feet on the wall found
 under the edge or hanging free, the climb left at its own pace (not `exit_speed`); the showcase's player looks no
 steeper than 50° (from its head, at least 3 m out), bends its neck sideways 15° at most and walks up roofs to 28°
-(`CRAWL_SLOPE`), leaning into them; `FellowFootLock3D`: a foot let go is never eased back from further
+(`CRAWL_SLOPE`), leaning into them; milestone 206 (decision 0348): with `leap_push_force` a leap to a lip standing out over
+the hold left by 0.2 m or more takes the hands round it (out at the hold's height, up past its front, onto its top
+from above); the showcase's jump at a wall is the mannequin's own clip (`MOCAP_KEEP_OWN`), blended over 0.45 s; `FellowFootLock3D`: a foot let go is never eased back from further
 from the hip than the leg reaches; `release_extension` (milestone 172; 1.0: off): let go when holding the foot needs more
 than this share of the leg's length. Let go without jumps (milestone 173, decision 0315): a held point out of
 the leg's reach is let go from where the foot is shown and brought within reach the shorter way (towards the animated

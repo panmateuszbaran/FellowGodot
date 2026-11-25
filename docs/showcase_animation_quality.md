@@ -192,6 +192,18 @@ and the head's and chest's tilt every frame.
 | 4 | the roof walked up (to 28°), leaning, easing in and out | 38/45 | the roof's hips 1.8 → 0 %; a walk eased everywhere had moved the gaits (a sprint's skate 4.9 → 5.7 cm): on roofs only |
 | 5 | the look at least 3 m out | 38/45 | the head's fastest turn climbing 2,568 (the eave's catch) → 1,032 °/s |
 
+Milestone 206 (decision 0348): the owner: "the hands go through the roof and are suddenly on the edge; why is the torso
+twisted in the first jump at the wall — what for?". `--dump=2` adds the hips' and chest's yaw and roll and the forearms
+through a surface; the player's `--mocap_keep=` swaps single clips for the mannequin's own.
+
+| step | change | what it showed |
+|---|---|---|
+| 0 | milestone 205 | the forearms 6-15 cm into the eave for 7 frames, onto the lip at 8.2 m/s; caught on the wall the chest rolled 34°, the hips 25° |
+| 1 | `--mocap_keep=jump_wall` / `hang_catch` | the roll is Mixamo's jump at a wall's (its chest turned 37° from the stride, one arm reaching): with the mannequin's own, 9° and 2° |
+| 2 | the own jump at a wall, blended over 0.45 s | the arms' swing up 2,240 → 2,175 °/s (gate 2,200) |
+| 3 | the hands round the lip on a quadratic, from the push's start | 1 frame through, 5.8 cm; the hands 4.9 m/s |
+| 4 | a cubic: out first at the hold's height | none through; `effort.py`'s flight from the fastest climb (a short leap's push had read as flight: 0.57 g) |
+
 ## Reference
 
 * Walking (normal gait): the knee 0° at the heel's strike, 5-10° in loading and mid-stance, 30-40° at pre-swing,
