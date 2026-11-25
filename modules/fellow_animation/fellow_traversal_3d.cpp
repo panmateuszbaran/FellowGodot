@@ -315,7 +315,7 @@ FellowTraversal3D::Ledge FellowTraversal3D::_check_ledge(const Vector3 &p_direct
 	PhysicsDirectSpaceState3D::ShapeParameters sp;
 	sp.shape_rid = probe_shape;
 	sp.transform = Transform3D(Basis(), Vector3(feet.x, feet.y + (lo + hi) * 0.5f, feet.z));
-	sp.motion = d * (reach_distance + radius - pr);
+	sp.motion = d * (reach_distance + reach_extra + radius - pr);
 	sp.exclude = exclude;
 	sp.collision_mask = collision_mask;
 	real_t safe = 1.0;
@@ -386,7 +386,7 @@ FellowTraversal3D::Ledge FellowTraversal3D::_check_ledge(const Vector3 &p_direct
 	{
 		PhysicsDirectSpaceState3D::RayParameters fq;
 		fq.from = Vector3(feet.x, top.y - 0.06f, feet.z);
-		fq.to = fq.from + inward * (radius + reach_distance + in + 0.3f);
+		fq.to = fq.from + inward * (radius + reach_distance + reach_extra + in + 0.3f);
 		fq.exclude = exclude;
 		fq.collision_mask = collision_mask;
 		PhysicsDirectSpaceState3D::RayResult fr;
@@ -1030,6 +1030,9 @@ void FellowTraversal3D::_finish(bool p_cancelled) {
 }
 
 void FellowTraversal3D::cancel() {
+	if (aim.active) {
+		_cancel_aim();
+	}
 	if (!active) {
 		return;
 	}
@@ -2304,7 +2307,9 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 	// The pose: both hands on the edge, stepping along it as the body moves; the feet against the wall.
 	hints.active = true;
 	hints.kind = KIND_HANG;
-	hints.slide = 1.0f; // (milestone 196: the hands may slide along the edge)
+	// (milestone 196: the hands may slide along the edge; milestone 201: caught with the hands on, eased in — at once, the
+	// catch's clip's hands had pulled them along the edge in a frame)
+	hints.slide = hang_hands_on ? smooth(float(hold_time / AIM_FEET_SETTLE)) : 1.0f;
 	hints.progress = 0.0f;
 	hints.inward = ledge.inward;
 	hints.left = left;
@@ -2327,15 +2332,18 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 		}
 		hints.hold_lip[s] = lip_value[s];
 	}
-	hints.hand_weight[0] = hints.hand_weight[1] = w;
+	// (Milestone 201, decision 0343: caught at an aimed jump's top, the hands are on the hold already.)
+	hints.hand_weight[0] = hints.hand_weight[1] = hang_hands_on ? 1.0f : w;
 	hints.hand_grip[0] = hints.hand_grip[1] = 1.0f;
+	hints.air_reach = false;
+	hints.foot_clear = hang_hands_on && hold_time < AIM_FEET_SETTLE;
 	// Milestone 154 (decision 0293): hanging, the eyes on the hold, along the ledge the way the controller wishes to go,
 	// up the wall when it wishes to climb.
 	{
 		const float aside = CLAMP(wish.dot(left), -1.0f, 1.0f);
 		const float up = CLAMP(wish.dot(ledge.inward) + wish.y, 0.0f, 1.0f);
 		hints.look = ledge.edge + left * (0.9f * aside) + UP * (0.05f + 0.7f * up);
-		hints.look_weight = w;
+		hints.look_weight = hang_hands_on ? 1.0f : w;
 	}
 	const Vector3 face = ledge.edge - ledge.inward * 0.06f;
 	for (int s = 0; s < 2; s++) {
@@ -2346,7 +2354,8 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 			const float y = hang_feet.y + hang_brace_height;
 			hints.foot[s] = _hang_foot(s, hang_feet, ledge.inward, y, Vector3(face.x, y, face.z) + left * (s == 0 ? 0.14f : -0.14f), &hints.wall[s], &hints.wall_weight[s]);
 		}
-		hints.foot_weight[s] = 0.8f * w;
+		// (milestone 201, decision 0343: after an aimed jump's catch over AIM_FEET_SETTLE)
+		hints.foot_weight[s] = 0.8f * (hang_hands_on ? smooth(float(hold_time / AIM_FEET_SETTLE)) : w);
 		hints.foot_follow[s] = 1.0f;
 	}
 	hints.lean = 0.0f;
@@ -2357,6 +2366,7 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 
 void FellowTraversal3D::_end_hang(bool p_climbed) {
 	active = false;
+	hang_hands_on = false;
 	transfer.active = false;
 	hints.active = false;
 	hints.hand_weight[0] = hints.hand_weight[1] = 0.0f;
@@ -2390,6 +2400,154 @@ bool FellowTraversal3D::try_hang(const Vector3 &p_direction) {
 		return false;
 	}
 	return _start_hang(last_check);
+}
+
+// Milestone 201 (decision 0343): a jump at a wall aimed at a hold it can hang from — the takeoff speed (m/s) that brings
+// the body to its top AIM_CATCH_LIFT over its hang from the hold (the hands on it, the arms a little bent), under
+// p_gravity; 0 where there is none in reach (or it needs more than p_max_speed). While the body rises the hands reach for
+// the hold (the pose's IK), and at the top it is caught.
+float FellowTraversal3D::aim_jump_at_hold(const Vector3 &p_direction, float p_gravity, float p_max_speed) {
+	if (aim.active) {
+		_cancel_aim();
+	}
+	if (active || !enabled || !hang || p_gravity <= 0.0f) {
+		return 0.0f;
+	}
+	CollisionObject3D *body = _get_body();
+	if (!body || !body->is_inside_tree()) {
+		return 0.0f;
+	}
+	Vector3 d = p_direction;
+	if (const CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(body)) {
+		if (d == Vector3()) {
+			d = flat(intent).length() > 0.1f ? intent : cb->get_velocity();
+		}
+	}
+	// (the body runs at the wall as it rises: a wall up to AIM_REACH further than a reach)
+	reach_extra = AIM_REACH;
+	Ledge l = _check(d, true, 0.0f);
+	reach_extra = 0.0f;
+	last_check = l;
+	// A hold it would hang from caught in the air: one it cannot climb, or any with hang_first.
+	const bool climbable = l.kind == KIND_LOW || l.kind == KIND_HIGH;
+	if (l.inward == Vector3() || !((l.kind == KIND_BLOCKED && (l.reason != "no room above" || _hands_room(l, 0.2f))) || (hang_first && climbable))) {
+		return 0.0f;
+	}
+	Ledge hold = l;
+	if (hold_min_width > 0.0f && !_fit_hold(hold)) {
+		return 0.0f;
+	}
+	const Vector3 hang_at = _hang_feet_of(hold);
+	HashSet<RID> exclude;
+	exclude.insert(body->get_rid());
+	if (!_capsule_free(hang_at + UP * 0.02f, radius * 0.95f, height - 0.04f, exclude)) {
+		return 0.0f;
+	}
+	const Vector3 feet = _feet_of(body->get_global_transform());
+	const float rise = MAX(hang_at.y + AIM_CATCH_LIFT - feet.y, AIM_MIN_RISE);
+	// (stepped at the physics' rate, the speed taken off gravity each step before the body moves: the top half a step's
+	// climb higher than the speed's v² / 2g)
+	const float half = p_gravity * float(get_physics_process_delta_time()) * 0.5f;
+	const float speed = Math::sqrt(half * half + 2.0f * p_gravity * rise) - half;
+	if (p_max_speed > 0.0f && speed > p_max_speed) {
+		return 0.0f;
+	}
+	aim.active = true;
+	aim.ledge = hold;
+	aim.time = 0.0;
+	aim.rise_time = speed / p_gravity;
+	aim.catch_time = MAX(speed - AIM_CATCH_SPEED, 0.05f) / p_gravity;
+	const Vector3 left = UP.cross(hold.inward).normalized();
+	const Vector3 face = hold.edge - hold.inward * 0.06f;
+	for (int s = 0; s < 2; s++) {
+		aim.lip[s] = _probe_lip(hold.edge + left * (s == 0 ? hold.spread : -hold.spread), hold.inward);
+		// (the face a step up the wall puts a foot on: as a braced foot's, at the hang's knee height)
+		const float y = hang_at.y + 0.6f;
+		aim.wall_found[s] = 0.0f;
+		_hang_foot(s, hang_at, hold.inward, y, Vector3(face.x, y, face.z), &aim.wall[s], &aim.wall_found[s]);
+	}
+	return speed;
+}
+
+void FellowTraversal3D::_cancel_aim() {
+	aim.active = false;
+	if (!active) {
+		hints.active = false;
+		hints.air_reach = false;
+		hints.foot_clear = false;
+		hints.hand_weight[0] = hints.hand_weight[1] = 0.0f;
+		hints.look_weight = 0.0f;
+	}
+}
+
+void FellowTraversal3D::_step_aim(double p_delta) {
+	CollisionObject3D *body = _get_body();
+	const CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(body);
+	if (!body || !enabled || !hang) {
+		_cancel_aim();
+		return;
+	}
+	aim.time += p_delta;
+	const Vector3 feet = _feet_of(body->get_global_transform());
+	const Vector3 v = cb ? cb->get_velocity() : Vector3();
+	// Given up: landed (a ceiling, a step), carried away from the hold, or long past the top.
+	if ((cb && cb->is_on_floor() && aim.time > 0.1) || flat(aim.ledge.edge - feet).length() > radius + reach_distance + AIM_REACH + 0.5f || aim.time > aim.rise_time + AIM_LATE) {
+		_cancel_aim();
+		return;
+	}
+	// The top: caught, the hands on the hold.
+	if (v.y <= AIM_CATCH_SPEED || aim.time >= aim.rise_time) {
+		const Ledge hold = aim.ledge;
+		aim.active = false;
+		hang_hands_on = true;
+		if (!_start_hang(hold)) {
+			hang_hands_on = false;
+			_cancel_aim();
+		}
+		return;
+	}
+	// Rising: the hands reach for the hold (the pose's IK in over the first AIM_REACH_IN of the rise, the hands homing
+	// in on it over the rest), the eyes on it; the feet and the body the clip's and the controller's.
+	const float p = CLAMP(float(aim.time / MAX(aim.catch_time, 1e-3)), 0.0f, 1.0f);
+	const Vector3 left = UP.cross(aim.ledge.inward).normalized();
+	hints.active = true;
+	hints.kind = KIND_HANG;
+	hints.air_reach = true;
+	hints.slide = 0.0f;
+	hints.progress = 0.0f;
+	hints.inward = aim.ledge.inward;
+	hints.left = left;
+	const float in = smooth(MIN(1.0f, p / AIM_REACH_IN));
+	// The hands' way: from in front of the chest up the wall's face to AIM_OUT out of the edge and AIM_UP over it, then in
+	// over the top (blended from the arm's own place straight to the hold, a hand low by the wall had swung up through
+	// the stone under the edge).
+	const float up_face = smooth(MIN(1.0f, p / AIM_OVER));
+	const float over = smooth(CLAMP((p - AIM_OVER) / (AIM_ON - AIM_OVER), 0.0f, 1.0f));
+	for (int s = 0; s < 2; s++) {
+		const Vector3 side = left * (s == 0 ? aim.ledge.spread : -aim.ledge.spread);
+		hints.hold[s] = aim.ledge.edge + side + aim.ledge.inward * HOLD_IN + UP * HOLD_UP;
+		const Vector3 chest = feet + UP * (height * 0.75f) + aim.ledge.inward * (radius + 0.05f) + side * 0.75f;
+		const Vector3 above = hints.hold[s] - aim.ledge.inward * AIM_OUT + UP * AIM_UP;
+		hints.hand[s] = chest.lerp(above, up_face).lerp(hints.hold[s], over);
+		hints.hold_normal[s] = aim.ledge.top_normal.y > 0.3f ? aim.ledge.top_normal : UP;
+		hints.hold_lip[s] = aim.lip[s];
+		hints.hand_weight[s] = in;
+		hints.hand_grip[s] = p >= AIM_ON ? 1.0f : 0.0f; // (on it: the fingers over the edge)
+		// (the IK whole as it comes in — the clip's own arm may be elsewhere: Mixamo's start up a climbing wall has one hand
+		// low on a hold — the hand turned to the edge, its fingers curling as they come over it)
+		hints.hand_reach[s] = 1.0f;
+		hints.foot_weight[s] = 0.0f;
+		hints.wall[s] = aim.wall[s];
+		hints.wall_weight[s] = aim.wall_found[s];
+		hints.foot_follow[s] = 1.0f;
+	}
+	hints.foot_clear = true;
+	hints.look = aim.ledge.edge + UP * 0.05f;
+	hints.look_weight = in;
+	hints.lean = 0.0f;
+	hints.hips_drop = 0.0f;
+	hints.body_offset = Vector3();
+	hints.clip.unref();
 }
 
 // Milestone 75: ladders. One in reach: in front of it and going towards it (the feet along it), or on its top going
@@ -3235,12 +3393,19 @@ void FellowTraversal3D::_notification(int p_what) {
 				break;
 			}
 			if (active) {
+				aim.active = false;
+				hints.air_reach = false;
+				hints.foot_clear = false;
 				_step(dt);
 				has_last_origin = false;
 			} else {
 				cooldown -= dt;
 				const Vector3 v = _body_velocity(body, dt);
-				if (enabled && ladders && cooldown <= 0.0 && !FellowLadder3D::get_all().is_empty()) {
+				if (aim.active) {
+					// Milestone 201 (decision 0343): a jump aimed at a hold, caught at its top.
+					_step_aim(dt);
+				}
+				if (!active && !aim.active && enabled && ladders && cooldown <= 0.0 && !FellowLadder3D::get_all().is_empty()) {
 					// Milestone 75: a ladder in reach, going towards it.
 					const CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(body);
 					const Vector3 d = flat(intent).length() > 0.1f ? intent : v;
@@ -3265,7 +3430,7 @@ void FellowTraversal3D::_notification(int p_what) {
 						}
 					}
 				}
-				if (!active && enabled && auto_mantle && cooldown <= 0.0) {
+				if (!active && !aim.active && enabled && auto_mantle && cooldown <= 0.0) {
 					const CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(body);
 					const bool air = cb && !cb->is_on_floor();
 					const float speed = flat(v).length();
@@ -3295,7 +3460,7 @@ void FellowTraversal3D::_notification(int p_what) {
 						}
 					}
 				}
-				if (!active && enabled && free_climb && cooldown <= 0.0) {
+				if (!active && !aim.active && enabled && free_climb && cooldown <= 0.0) {
 					// Milestone 148 (decision 0276): pushing at a climbable face with nothing to mantle onto, or caught
 					// against it in the air: climbing it.
 					const CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(body);
@@ -3464,6 +3629,8 @@ void FellowTraversal3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_debug_draw", "enabled"), &FellowTraversal3D::set_debug_draw);
 	ClassDB::bind_method(D_METHOD("is_debug_draw"), &FellowTraversal3D::is_debug_draw);
 	ClassDB::bind_method(D_METHOD("try_hang", "direction"), &FellowTraversal3D::try_hang, DEFVAL(Vector3()));
+	ClassDB::bind_method(D_METHOD("aim_jump_at_hold", "direction", "gravity", "max_speed"), &FellowTraversal3D::aim_jump_at_hold, DEFVAL(0.0f));
+	ClassDB::bind_method(D_METHOD("is_aiming"), &FellowTraversal3D::is_aiming);
 	ClassDB::bind_method(D_METHOD("try_ladder"), &FellowTraversal3D::try_ladder);
 	ClassDB::bind_method(D_METHOD("climb_up"), &FellowTraversal3D::climb_up);
 	ClassDB::bind_method(D_METHOD("release"), &FellowTraversal3D::release);

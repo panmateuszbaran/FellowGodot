@@ -138,6 +138,12 @@ public:
 		// Milestone 198 (decision 0340): the stone just under each hand's hold — how far out of the edge it stands (x, m)
 		// within 12 cm under it, and how far under the top its own top is (y, m); (0, 0): a plain edge.
 		Vector2 hold_lip[2];
+		// Milestone 201 (decision 0343): the hands reaching for a hold from the air (a jump aimed at it,
+		// aim_jump_at_hold): the body is the controller's, not the traversal's (the pose's sway spring off).
+		bool air_reach = false;
+		// Milestone 201 (decision 0343): the clip's feet kept out of the stone at wall[] (reaching for a hold from the air,
+		// settling from its catch: Mixamo's step up a wall put a foot into it).
+		bool foot_clear = false;
 	};
 
 	// Milestone 198 (decision 0340): a hand's target on a ledge: this far in over the edge, this far over the top.
@@ -309,6 +315,36 @@ private:
 	static constexpr float LEAP_OUT = 0.06f; // m: the body out from the wall in mid-flight (the feet's push)
 	static constexpr float LEAP_HANDS_LEAD = 2.5f; // the hands' way from let-go to catch: 1 - (1 - t)^this (the body's: 2)
 	float _leap_clip_to_move(float p_f) const; // a clip's share of its time as the ballistic leap's share of the move
+	// Milestone 201 (decision 0343): a jump at a wall aimed at a hold (aim_jump_at_hold) — the body flies under the
+	// controller's gravity to the top, where the hands are on the hold (the body AIM_CATCH_LIFT over its hang, the arms a
+	// little bent); the hands reach for it as it rises (their IK in over the first AIM_REACH_IN of the rise; from in
+	// front of the chest up the wall's face to AIM_OUT out of the edge and AIM_UP over it by AIM_OVER of the way to the
+	// catch, then in over the top by AIM_ON), and it is caught at the top. Looked for up to AIM_REACH further than reach_distance (the body runs at the wall as it rises).
+	struct AimState {
+		bool active = false;
+		Ledge ledge;
+		double time = 0.0;
+		double rise_time = 0.0; // s: the takeoff to the top
+		double catch_time = 0.0; // s: the takeoff to the catch (rising no faster than AIM_CATCH_SPEED)
+		Vector2 lip[2];
+		Vector3 wall[2]; // the stone the feet would brace on, under the hold
+		float wall_found[2] = { 0.0f, 0.0f };
+	} aim;
+	static constexpr float AIM_CATCH_LIFT = 0.08f; // m
+	static constexpr float AIM_MIN_RISE = 0.12f; // m
+	static constexpr float AIM_REACH = 1.0f; // m
+	static constexpr float AIM_REACH_IN = 0.5f;
+	static constexpr float AIM_OUT = 0.18f; // m
+	static constexpr float AIM_UP = 0.08f; // m
+	static constexpr float AIM_OVER = 0.5f;
+	static constexpr float AIM_ON = 0.85f; // on the hold this far to the catch (the limbs' smoothing behind it)
+	static constexpr float AIM_CATCH_SPEED = 0.2f; // m/s: rising no faster than this, at the top
+	static constexpr float AIM_LATE = 0.25f; // s past the top without a catch: given up
+	static constexpr float AIM_FEET_SETTLE = 0.4f; // s: after an aimed jump's catch, the clip's feet kept out of the stone
+	float reach_extra = 0.0f; // m added to reach_distance by a check (the aim's)
+	bool hang_hands_on = false; // a hang begun with the hands on the hold already (an aimed jump's catch)
+	void _step_aim(double p_delta);
+	void _cancel_aim();
 	// After a corner the wish held as it was goes on along the new edge (the stick held left stays "left").
 	bool remap = false;
 	Vector3 remap_from, remap_to;
@@ -428,6 +464,9 @@ public:
 	bool try_hang(const Vector3 &p_direction = Vector3());
 	bool try_drop(const Vector3 &p_direction = Vector3());
 	void hang_jump() { jump_requested = true; }
+	// Milestone 201 (decision 0343).
+	float aim_jump_at_hold(const Vector3 &p_direction, float p_gravity, float p_max_speed = 0.0f);
+	bool is_aiming() const { return aim.active; }
 	bool is_transferring() const { return active && action == KIND_HANG && transfer.active; }
 	bool try_ladder();
 	void climb_up() { climb_requested = true; }

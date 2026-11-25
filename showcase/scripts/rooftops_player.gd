@@ -41,6 +41,16 @@ const MOCAP_SHIMMY_SPEED := 0.6
 ## leap_gravity: a dip, a push from rest to the speed that carries the body to the dead point, the flight, the catch at
 ## the dead point and the settle into the hang), Mixamo's hop played over its push, flight and settle.
 const LEAP_GRAVITY := 9.8
+## Milestone 201 (the owner: "why does the character jump very high, reach with one hand and fall onto the edge instead
+## of jumping straight to it?"): a jump at a wall aimed at the hold above (FellowTraversal3D.aim_jump_at_hold) — as fast
+## as brings the hands onto it at the jump's top (no faster than jump_velocity × AIM_MAX_SPEED: a hold higher than that
+## caught on the way down as before), both hands reaching for it as the body rises, caught at the top; "jump_wall" (Mixamo's
+## "Run To Start Climbing") played from its push off the ground (JUMP_WALL_PUSH s into it) at the takeoff to its hand on
+## its hold (JUMP_WALL_SET) at the top, its limbs the catch's ("hang_catch" held at its first frame).
+const AIM_JUMP := true
+const AIM_MAX_SPEED := 1.05
+const JUMP_WALL_PUSH := 0.13
+const JUMP_WALL_SET := 0.55
 # FellowTraversal3D's Transfer values.
 const TRANSFER_JUMP_ALONG := 2
 const TRANSFER_JUMP_UP := 3
@@ -234,7 +244,44 @@ func _mocap_tree(mocap: AnimationLibrary, keep: Array) -> void:
 				bt.add_node(&"ts_hang", AnimationNodeTimeScale.new(), Vector2(200, 200))
 				bt.connect_node(&"ts_hang", 0, &"hang")
 				bt.connect_node(&"state", i, &"ts_hang")
+	# Milestone 201: the jump at a wall's clip played from a point and at a rate (its hand on its hold at the aimed jump's
+	# top).
+	if bt.has_node(&"jump_wall") and not bt.has_node(&"ts_jump_wall"):
+		for i in tr.get_input_count():
+			if tr.get_input_name(i) == "jump_wall":
+				bt.disconnect_node(&"state", i)
+				bt.add_node(&"ts_jump_wall", AnimationNodeTimeScale.new(), Vector2(200, 2900))
+				bt.add_node(&"seek_jump_wall", AnimationNodeTimeSeek.new(), Vector2(100, 2900))
+				bt.connect_node(&"seek_jump_wall", 0, &"jump_wall")
+				bt.connect_node(&"ts_jump_wall", 0, &"seek_jump_wall")
+				bt.connect_node(&"state", i, &"ts_jump_wall")
+				# (its limbs, at an aimed jump, the catch's first frame's — both arms up on the hold, the legs bent under:
+				# the clip's arms are one up at a climbing wall's hold and one down at another, whose turn the arms' IK kept
+				# as it lifted the hand to the hold, the forearm and the wrist twisting half round as the catch's clip came
+				# in; its foot up the wall at the hips' height swung the knee across the body and back as the catch's
+				# braced legs came in)
+				if mocap.has_animation(&"hang_catch"):
+					bt.disconnect_node(&"state", i)
+					var catch := AnimationNodeAnimation.new()
+					catch.animation = &"hang_catch"
+					bt.add_node(&"jump_wall_catch", catch, Vector2(0, 3100))
+					bt.add_node(&"hold_jump_wall_catch", AnimationNodeTimeScale.new(), Vector2(100, 3100))
+					bt.connect_node(&"hold_jump_wall_catch", 0, &"jump_wall_catch")
+					var arms := AnimationNodeBlend2.new()
+					arms.filter_enabled = true
+					var skel := get_node_or_null("Model/Mannequin/Skeleton3D") as Skeleton3D
+					if skel:
+						for b in skel.get_bone_count():
+							var n := skel.get_bone_name(b)
+							if n.begins_with("Left") or n.begins_with("Right"):
+								arms.set_filter_path(NodePath("Mannequin/Skeleton3D:" + n), true)
+					bt.add_node(&"jump_wall_arms", arms, Vector2(300, 2900))
+					bt.connect_node(&"jump_wall_arms", 0, &"ts_jump_wall")
+					bt.connect_node(&"jump_wall_arms", 1, &"hold_jump_wall_catch")
+					bt.connect_node(&"state", i, &"jump_wall_arms")
 	tree.tree_root = bt
+	if bt.has_node(&"hold_jump_wall_catch"):
+		tree.set("parameters/hold_jump_wall_catch/scale", 0.0)
 	traversal.connect("hang_started", _on_hang_started)
 
 
@@ -460,7 +507,20 @@ func _move(delta: float, speed_goal: float) -> void:
 		_air_top = global_position.y
 		# Milestone 153: at a wall, the arms reaching up for the hold. Milestone 192: from a run, the mocap's running jump.
 		_variant(&"jump", &"jump_run" if Vector2(velocity.x, velocity.z).length() > 3.0 else &"jump")
-		_play("jump_wall" if want_sprint and _wall_ahead(1.1) else "jump")
+		var at_wall := want_sprint and _wall_ahead(1.1)
+		var aimed := 0.0
+		if at_wall and AIM_JUMP and not "--aim_jump=0" in OS.get_cmdline_user_args() and traversal.has_method("aim_jump_at_hold"):
+			aimed = traversal.call("aim_jump_at_hold", Vector3(wish.x, 0.0, wish.z), gravity, jump_velocity * AIM_MAX_SPEED)
+			if aimed > 0.0:
+				velocity.y = aimed
+		_play("jump_wall" if at_wall else "jump")
+		if at_wall and _mocap:
+			# (the clip's reach at the top; at its own rate where nothing was aimed at)
+			var from := JUMP_WALL_PUSH if aimed > 0.0 else 0.0
+			var rate := clampf((JUMP_WALL_SET - from) / (aimed / gravity), 0.5, 2.5) if aimed > 0.0 else 1.0
+			tree.set("parameters/ts_jump_wall/scale", rate)
+			tree.set("parameters/seek_jump_wall/seek_request", from)
+			tree.set("parameters/jump_wall_arms/blend_amount", 1.0 if aimed > 0.0 else 0.0)
 	if want_drop and on_floor and h.length() > 2.0 and mode == Mode.GROUND and not over_edge:
 		mode = Mode.ROLL
 		_play("roll")

@@ -139,6 +139,11 @@ const float GRIP_PALM_CLEAR = 0.024f; // m: the palm's half thickness and a litt
 // following its goal's steady drift at once, up to GRIP_FIT_FOLLOW.
 const float GRIP_HOLD_EASE = 0.04f; // s
 const float GRIP_FIT_FOLLOW = 1.2f; // m/s
+// Milestone 201 (decision 0343): a foot the clip puts into the stone (the traversal's foot_clear) put on its face, the
+// ankle this far off it, the knee this far.
+const float FOOT_CLEAR = 0.1f; // m
+const float FOOT_KNEE_CLEAR = 0.08f; // m: and the knee (more than _clear_wall's: its turn not needed)
+const float GRIP_EASE_AIR = 0.03f; // s: the grip's shape in, reaching for a hold from the air
 // A step just under the edge (its top no more than GRIP_STEP under it, standing out at least GRIP_STEP_OUT): held by its
 // own edge instead; the fingers on it.
 const float GRIP_STEP = 0.04f; // m
@@ -625,7 +630,9 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 	// on (the body moved at the ticks, the frame drawn between them: the hands would slide on their holds by the
 	// difference); the same as its transform with it off.
 	const Transform3D sk_xform = skeleton->get_global_transform_interpolated();
-	_sway_step(sk_xform.origin + (now.active ? now.body_offset : Vector3()), p_delta, now.active && !now.clip.is_valid());
+	// (Milestone 201, decision 0343: not while the hands reach for a hold from the air — the body flying is the
+	// controller's, falling at g: no swing.)
+	_sway_step(sk_xform.origin + (now.active ? now.body_offset : Vector3()), p_delta, now.active && !now.clip.is_valid() && !now.air_reach);
 	if (weight <= 0.0f) {
 		last.clip.unref();
 		limbs_valid = false;
@@ -764,7 +771,11 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 			}
 			// (let go of over twice as long: the hand unwinding into the animation's as the arm swings off)
 			grip_letting_go[s] = shape < grip_shape[s];
-			grip_shape[s] = Math::lerp(grip_shape[s], shape, 1.0f - Math::exp(-float(p_delta) / (grip_letting_go[s] ? 2.0f * GRIP_EASE : GRIP_EASE)));
+			// (milestone 201, decision 0343: reaching for a hold from the air, in at once — the arm swung up from a clip's arm
+			// hanging down, what the grip left of its hand was turned half round from it, the wrist flicking over as the
+			// shortest way between them changed sides)
+			const float ease = grip_letting_go[s] ? 2.0f * GRIP_EASE : (h.air_reach ? GRIP_EASE_AIR : GRIP_EASE);
+			grip_shape[s] = Math::lerp(grip_shape[s], shape, 1.0f - Math::exp(-float(p_delta) / ease));
 			// Milestone 200 (decision 0342): on its hold, the fingers over the edge (eased over GRIP_HOLD_EASE).
 			const float holding = (h.kind == FellowTraversal3D::KIND_HANG && h.hand_grip[s] > 0.0f) ? 1.0f : 0.0f;
 			grip_hold[s] = Math::lerp(grip_hold[s], holding, 1.0f - Math::exp(-float(p_delta) / GRIP_HOLD_EASE));
@@ -947,6 +958,34 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 				const Quaternion parent = global_rotation(skeleton, skeleton->get_bone_parent(foot));
 				skeleton->set_bone_pose_rotation(foot, skeleton->get_bone_pose_rotation(foot).slerp((parent.inverse() * foot_global).normalized(), fw * weight));
 			}
+		}
+	}
+	// Milestone 201 (decision 0343): reaching for a hold from the air and settling from its catch, a foot the clip puts
+	// into the stone (Mixamo's step up a wall) put on its face instead, the ankle FOOT_CLEAR off it and the knee
+	// FOOT_KNEE_CLEAR.
+	if (foot_ik && h.foot_clear) {
+		for (int s = 0; s < 2; s++) {
+			const int upper = bones[s == 0 ? ROLE_LEFT_UPPER_LEG : ROLE_RIGHT_UPPER_LEG];
+			const int lower = bones[s == 0 ? ROLE_LEFT_LOWER_LEG : ROLE_RIGHT_LOWER_LEG];
+			const int foot = bones[s == 0 ? ROLE_LEFT_FOOT : ROLE_RIGHT_FOOT];
+			if (upper < 0 || lower < 0 || foot < 0 || h.wall_weight[s] <= 0.0f) {
+				continue;
+			}
+			const Vector3 out = -inward;
+			const Vector3 wall = to_skeleton.xform(h.wall[s]);
+			const Vector3 ankle = skeleton->get_bone_global_pose(foot).origin;
+			const Vector3 knee = skeleton->get_bone_global_pose(lower).origin;
+			// (the knee off it too, the leg moved out: turned about its line to clear it, a step's knee had swung across
+			// the body and back)
+			const float need = MAX(FOOT_CLEAR * meter - (ankle - wall).dot(out), FOOT_KNEE_CLEAR * meter - (knee - wall).dot(out));
+			if (need <= 0.0f) {
+				continue;
+			}
+			// (the knee kept where the leg's own plane has it)
+			const Quaternion foot_global = global_rotation(skeleton, foot);
+			_two_bone(skeleton, upper, lower, foot, ankle + out * need, knee + (knee - (skeleton->get_bone_global_pose(upper).origin + ankle) * 0.5f), weight * h.wall_weight[s]);
+			const Quaternion parent = global_rotation(skeleton, skeleton->get_bone_parent(foot));
+			skeleton->set_bone_pose_rotation(foot, skeleton->get_bone_pose_rotation(foot).slerp((parent.inverse() * foot_global).normalized(), weight * h.wall_weight[s]));
 		}
 	}
 	// Milestone 196 (decision 0338): hanging and between holds, the knees and the toes kept off the stone the feet brace on

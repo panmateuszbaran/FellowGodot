@@ -42,6 +42,15 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="aim_jump_at_hold">
+			<return type="float" />
+			<param index="0" name="direction" type="Vector3" />
+			<param index="1" name="gravity" type="float" />
+			<param index="2" name="max_speed" type="float" default="0.0" />
+			<description>
+				Aims a jump at a wall at the hold above it (milestone 201): finds a ledge it would hang from in [param direction] (the intent's or the velocity's when zero; a wall up to 1 m further than [member reach_distance], the body running at it as it rises) and returns the takeoff speed up (m/s) that brings the body under [param gravity] to its top 0.08 m over its hang from that hold — the hands on it, the arms a little bent; 0.0 where there is none, or where it needs more than [param max_speed] (0: any). The controller sets its velocity's [code]y[/code] to it. While the body rises the pose's hands reach for the hold (their IK in over the first 30 % of the rise, homing in on it over the rest: [member FellowTraversalPose3D.hand_flight_weight]), the eyes on it; at the top it is caught with the hands on it ([signal hang_started]) and the body settles into its hang. Landing, carried away from the hold or a quarter of a second past the top without it, the aim is given up ([method is_aiming]). Nothing else is looked for while it flies.
+			</description>
+		</method>
 		<method name="cancel">
 			<return type="void" />
 			<description>
@@ -139,6 +148,12 @@
 			<return type="bool" />
 			<description>
 				[code]true[/code] while a mantle moves the body.
+			</description>
+		</method>
+		<method name="is_aiming" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether a jump aimed by [method aim_jump_at_hold] is flying to its hold (not caught yet, not given up).
 			</description>
 		</method>
 		<method name="is_climbing" qualifiers="const">
