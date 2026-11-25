@@ -249,7 +249,7 @@ func _burst_particles() -> GPUParticles3D:
 	p.one_shot = true
 	p.emitting = false
 	p.explosiveness = 0.92
-	p.lifetime = 2.6
+	p.lifetime = 2.2
 	p.local_coords = false
 	var pm := ParticleProcessMaterial.new()
 	pm.direction = Vector3(0, 1, 0)
@@ -266,6 +266,12 @@ func _burst_particles() -> GPUParticles3D:
 	pm.scale_min = 0.8
 	pm.scale_max = 1.6
 	pm.color = Color(0.82, 0.68, 0.36)
+	# (each straw along its flight, turning over as it rises and falls, fluttering: not a stick standing in the air)
+	pm.particle_flag_align_y = true
+	pm.turbulence_enabled = true
+	pm.turbulence_noise_strength = 1.4
+	pm.turbulence_influence_min = 0.08
+	pm.turbulence_influence_max = 0.2
 	p.process_material = pm
 	var blade := QuadMesh.new()
 	blade.size = Vector2(0.01, 0.26)
