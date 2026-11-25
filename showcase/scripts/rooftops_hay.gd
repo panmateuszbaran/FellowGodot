@@ -245,7 +245,7 @@ void fragment() {
 func _burst_particles() -> GPUParticles3D:
 	var p := GPUParticles3D.new()
 	p.name = "Burst"
-	p.amount = 260
+	p.amount = 520
 	p.one_shot = true
 	p.emitting = false
 	p.explosiveness = 0.92
@@ -254,21 +254,21 @@ func _burst_particles() -> GPUParticles3D:
 	var pm := ParticleProcessMaterial.new()
 	pm.direction = Vector3(0, 1, 0)
 	pm.spread = 75.0
-	pm.initial_velocity_min = 1.5
-	pm.initial_velocity_max = 4.2
+	pm.initial_velocity_min = 2.2
+	pm.initial_velocity_max = 5.6
 	pm.gravity = Vector3(0, -4.0, 0)
 	pm.damping_min = 1.2
 	pm.damping_max = 2.4
 	pm.angular_velocity_min = -360.0
 	pm.angular_velocity_max = 360.0
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	pm.emission_sphere_radius = 0.45
-	pm.scale_min = 0.6
-	pm.scale_max = 1.2
+	pm.emission_sphere_radius = 0.6
+	pm.scale_min = 0.8
+	pm.scale_max = 1.6
 	pm.color = Color(0.82, 0.68, 0.36)
 	p.process_material = pm
 	var blade := QuadMesh.new()
-	blade.size = Vector2(0.006, 0.2)
+	blade.size = Vector2(0.01, 0.26)
 	var bm := StandardMaterial3D.new()
 	bm.albedo_color = Color(0.82, 0.68, 0.36)
 	bm.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -284,5 +284,7 @@ func _burst_particles() -> GPUParticles3D:
 func burst(p_at: Vector3) -> void:
 	if _particles == null:
 		return
-	_particles.global_position = p_at
+	# (from the heap's top over where it landed)
+	var local := to_local(p_at)
+	_particles.global_position = to_global(Vector3(local.x, height(local.x, local.z) + 0.1, local.z))
 	_particles.restart()
