@@ -1949,7 +1949,13 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 			const bool lead = h == transfer.lead;
 			const float rel = lead ? hs.x : hs.z;
 			const float cat = lead ? hs.y : hs.w;
-			const float k = smooth(CLAMP((u - rel) / MAX(cat - rel, 0.02f), 0.0f, 1.0f));
+			float k = smooth(CLAMP((u - rel) / MAX(cat - rel, 0.02f), 0.0f, 1.0f));
+			if (transfer.ballistic) {
+				// Milestone 200 (decision 0342): up with the body as it flies (fast off the push, slowing to the dead point)
+				// and a little ahead of it — eased in and out, the hands had stayed by the chest as the body flew past them.
+				const float kt = CLAMP((u - rel) / MAX(cat - rel, 0.02f), 0.0f, 1.0f);
+				k = kt >= 1.0f ? 1.0f : 1.0f - Math::pow(1.0f - kt, LEAP_HANDS_LEAD);
+			}
 			const float arc = Math::sin(k * float(Math::PI));
 			hints.hand[h] = transfer.from_hands[h].lerp(to_hands[h], k) - inward * (0.15f * arc) + UP * (0.06f * arc);
 			hints.hand_weight[h] = 1.0f;

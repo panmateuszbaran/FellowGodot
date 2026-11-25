@@ -307,6 +307,7 @@ private:
 	static constexpr float LEAP_PUSH_MAX = 0.65f; // m
 	static constexpr float LEAP_PUSH_MOST = 0.6f;
 	static constexpr float LEAP_OUT = 0.06f; // m: the body out from the wall in mid-flight (the feet's push)
+	static constexpr float LEAP_HANDS_LEAD = 2.5f; // the hands' way from let-go to catch: 1 - (1 - t)^this (the body's: 2)
 	float _leap_clip_to_move(float p_f) const; // a clip's share of its time as the ballistic leap's share of the move
 	// After a corner the wish held as it was goes on along the new edge (the stick held left stays "left").
 	bool remap = false;
