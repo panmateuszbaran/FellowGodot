@@ -9,6 +9,22 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 207 — Four faults found playing: the jump after the climb, the fall, the fountain, W at the wall (2026-11-25)
+
+- The owner, playing: "after standing up on the roof the character does a strange jump; the fall has a broken
+  animation; the fountain has no collision; holding W and pressing Space while climbing the character sometimes goes
+  along the edge, left or right at random" (decision 0349).
+- `FellowTraversal3D.hang_side_dead_zone`: hanging, a wish pushing in or up whose part along the edge is under that
+  share of its length goes straight in or up. The intent is a speed (a run's 4.4 m/s) and the hang's thresholds are
+  absolute: with the camera 8° off square to the wall the body shimmied 1 m or leapt 4 m along the edge — which way
+  depending on the camera. The showcase sets 0.5 (30°); a diagonal still goes along.
+- The showcase: a jump pressed while hanging stayed in the jump buffer and jumped the body as the climb onto the roof
+  ended, 1.7 s later — now the traversal's alone. The fall is the body ready to land (the knees up, the arms out for
+  balance), blended into a new long fall's flail (the arms wheeling, the legs pedalling) from 0.45 to 1.1 s and back
+  near the ground; it had fallen upright and stiff. The fountain's column and bowl collide (a run at it climbs them).
+- `tools/update_clips.gd`: clips rebuilt in Blender put into the library without rebuilding the town.
+  `anim_quality.py` 38 / 45, `effort.py --profile arcade` 8 / 8, the demo and the benches unchanged.
+
 ## Milestone 206 — The hands round the eave's lip, the body square to the wall (2026-11-25)
 
 - The owner: "the leap to the eave still isn't nice — the hands go through the roof and are suddenly on the edge; and

@@ -204,6 +204,20 @@ through a surface; the player's `--mocap_keep=` swaps single clips for the manne
 | 3 | the hands round the lip on a quadratic, from the push's start | 1 frame through, 5.8 cm; the hands 4.9 m/s |
 | 4 | a cubic: out first at the hold's height | none through; `effort.py`'s flight from the fastest climb (a short leap's push had read as flight: 0.57 g) |
 
+Milestone 207 (decision 0349): the owner, playing: "after standing up on the roof the character does a strange jump;
+the fall has a broken animation; the fountain has no collision; holding W and pressing Space the character goes along
+the edge at random". `climb_look.gd --program=keys --keys_yaw=<deg>` holds the stick at the wall that far off square
+and presses Space every 0.5 s while hanging (`--keys_sprint=1`, `--keys_always=1`); `--program=fountain` runs at the
+fountain's middle; `tools/update_clips.gd` puts clips rebuilt in Blender into the library.
+
+| step | change | what it showed |
+|---|---|---|
+| 0 | milestone 206 | 8° off: a 1.0 m shimmy, never up, or a 4 m leap along the edge; a jump 1.7 s after a press while hanging, as the climb onto the roof ended; the fall upright, the legs nearly straight |
+| 1 | `hang_side_dead_zone` 0.5 | 8° and 20° off climb as square; 45° and 90° still along |
+| 2 | the jump buffer emptied while the traversal has the body | no jump on the roof, with or without the sprint held |
+| 3 | "fall" ready to land, "fall_flail" blended in from 0.45 to 1.1 s, back near the ground | the knees 11-76 → 51-83°, the hands up to 0.31 m over the shoulders; the fastest joint in the flail 374 °/s |
+| 4 | the fountain's column and bowl | rays 2.7 / 1.86 / 0.75 m; a run at it mantles onto the rim, the bowl, the column |
+
 ## Reference
 
 * Walking (normal gait): the knee 0° at the heel's strike, 5-10° in loading and mid-stance, 30-40° at pre-swing,

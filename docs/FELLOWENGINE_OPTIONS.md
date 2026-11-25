@@ -1275,7 +1275,12 @@ under the edge or hanging free, the climb left at its own pace (not `exit_speed`
 steeper than 50° (from its head, at least 3 m out), bends its neck sideways 15° at most and walks up roofs to 28°
 (`CRAWL_SLOPE`), leaning into them; milestone 206 (decision 0348): with `leap_push_force` a leap to a lip standing out over
 the hold left by 0.2 m or more takes the hands round it (out at the hold's height, up past its front, onto its top
-from above); the showcase's jump at a wall is the mannequin's own clip (`MOCAP_KEEP_OWN`), blended over 0.45 s; `FellowFootLock3D`: a foot let go is never eased back from further
+from above); the showcase's jump at a wall is the mannequin's own clip (`MOCAP_KEEP_OWN`), blended over 0.45 s;
+milestone 207 (decision 0349): `hang_side_dead_zone` (0: off; hanging, a wish pushing in or up whose part along the edge
+is under that share of its length goes straight in or up — the intent is a speed and the hang's thresholds absolute, so
+a stick at the wall 7° off square had read as along the edge; the showcase 0.5, 30°); the showcase's fall the clip
+"fall" (ready to land) blended into "fall_flail" from 0.45 to 1.1 s in the air and back within 0.3 s of the ground
+(`FALL_FLAIL_FROM`, `FALL_FLAIL_FULL`, `FALL_READY`), a jump pressed while hanging the traversal's alone; `FellowFootLock3D`: a foot let go is never eased back from further
 from the hip than the leg reaches; `release_extension` (milestone 172; 1.0: off): let go when holding the foot needs more
 than this share of the leg's length. Let go without jumps (milestone 173, decision 0315): a held point out of
 the leg's reach is let go from where the foot is shown and brought within reach the shorter way (towards the animated

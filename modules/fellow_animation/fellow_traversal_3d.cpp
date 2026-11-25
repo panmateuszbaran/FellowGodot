@@ -2610,7 +2610,7 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 		}
 	}
 	// Milestone 207 (decision 0349): with hang_side_dead_zone, a wish pushing in or up whose part along the edge is under
-	// that share of its length goes straight in or up. The intent is a speed (a run's, 4.5 m/s), and the thresholds
+	// that share of its length goes straight in or up. The intent is a speed (a run's, 4.4 m/s), and the thresholds
 	// below are absolute: a stick pushed at the wall with the camera 7 degrees off square to it read as along the edge
 	// (over 0.5) — a jump along it, or a shimmy that way.
 	if (hang_side_dead_zone > 0.0f) {
