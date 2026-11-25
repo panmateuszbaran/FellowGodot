@@ -1209,7 +1209,15 @@ the IK's arc throughout; below 1, a hand off its hold between holds is reached f
 arm carrying it, the grip eased in and out over 0.1 s), `hand_slide` (0: off; hanging from one ledge, each hand's
 target slid along the edge to the animation's hand — a shimmy's hands step as its clip's), and always, hanging and
 between holds, the knees and the balls of the feet kept off the stone the feet brace on (the leg turned about its hip-
-to-ankle line, the foot pitched about its ankle; `FellowTraversal3D` gives the stone in its pose hints); `FellowFootLock3D`: a foot let go is never eased back from further
+to-ankle line, the foot pitched about its ankle; `FellowTraversal3D` gives the stone in its pose hints); milestone 198
+(decision 0340), on `FellowTraversalPose3D`: `ledge_grip` (0: off; hanging, a hand on a ledge held as a climber's — the
+knuckles over the edge, the palm down the face, the fingers and thumb on the top, over a moulding or by a step's edge,
+straightened towards the shoulder where the arm must reach, placed so all the way between holds; with it the hands'
+targets eased over at most 15 ms, the hands in twice as fast as the pose, the elbows' bend at most 720°/s; needs the
+hands' finger bones) and `hand_flight_weight` homing in over the second half of a hand's way; on `FellowTraversal3D`:
+`set_leap_timing(kind, time, reach, progress, lift, hands)` (`LEAP_UP`, `LEAP_ALONG`; none by default: a leap from hold
+to hold as a clip's — its hips' way and lift, its hands' let-go and catch, slower for a longer leap within 0.8-1.6
+times), `clear_leap_timing()`, `has_leap_timing()`; `FellowFootLock3D`: a foot let go is never eased back from further
 from the hip than the leg reaches; `release_extension` (milestone 172; 1.0: off): let go when holding the foot needs more
 than this share of the leg's length. Let go without jumps (milestone 173, decision 0315): a held point out of
 the leg's reach is let go from where the foot is shown and brought within reach the shorter way (towards the animated

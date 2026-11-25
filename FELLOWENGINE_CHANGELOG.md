@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 198 — Hands that hold the edge, leaps timed as captured hops, blends carried on (2026-11-25)
+
+- `FellowTraversalPose3D.ledge_grip` (decision 0340): a hand on a ledge held as a climber's — the knuckles over the
+  edge, the palm down the face, the fingers and the thumb on the top; over a moulding under the edge, by a step's edge,
+  the wrist straightened towards the shoulder where the arm must reach; its place by its knuckles all the way between
+  holds, the fingers open up the face until the knuckles are over the top. A hand on its hold more than 1 cm in the
+  stone hanging 99.7 → 0.4 % of its frames, climbing 72.9 → 1.8 %; the fingertips 13.7 cm over the top → 0.9 cm.
+  `hand_flight_weight` homes in on the next hold over the second half of a hand's way.
+- `FellowTraversal3D.set_leap_timing()` (`LEAP_UP`, `LEAP_ALONG`): a leap from hold to hold follows a clip's hips and
+  lets go and catches with its hands when the clip's did; the pose hints' `hand_reach`, `hold`, `hold_normal` and
+  `hold_lip` (the stone just under a hold's edge).
+- The showcase's rooftops: Mixamo's hops time the leaps (the 2.3 m leap up CasaCrema: 0.62 → 1.93 s, its stop at the
+  top 23 → 6 g); the player's states switch at once, `FellowInertializer3D` carrying the pose on (the approach's
+  fastest joint 2,717 → 1,659°/s; 31 of 38 animation gates); `ledge_grip` on.
+
 ## Milestone 197 — Free-running from Mixamo: the vault and the run up a wall (2026-11-25)
 
 - `FellowTraversal3D` (decision 0339): a mantle with a clip's root motion looks for its hold at the wall only up to the
