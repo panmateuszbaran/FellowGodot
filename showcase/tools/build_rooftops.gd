@@ -1812,12 +1812,13 @@ func _build_player() -> PackedScene:
 	# had lifted the body 0.1 m), the feet braced as high on the wall as before.
 	trav.set("hang_reach", 1.95)
 	trav.set("hang_brace_height", 0.31)
-	# Milestone 203 (decision 0345): a person's strength — a leap's push peaking at 2.3 body weights (a strong climber's
-	# arms and legs: it carries the body some 1.2 m, less than a reach hand over hand), the body pulled up between holds at
-	# 1 m/s at most, a hold 1.25-2.3 m over this one stood up to from it.
-	trav.set("leap_push_force", 2.3)
-	trav.set("climb_pull_speed", 1.0)
-	trav.set("hang_step_up_height", 2.3)
+	# Milestone 204 (decision 0346): an arcade hero's strength with a person's motion (the owner: "not 100 % realism but
+	# arcade fun, the animations relatively realistic") — a leap's push peaking at 5.5 body weights (a dyno of some 2.5 m:
+	# the house's 2 m gaps leapt, a push from rest and a flight under gravity), the body pulled up between holds at 2 m/s
+	# at most; no step up (milestone 203's stood up to the gaps at a person's 2.3 and 1 m/s: 2.3 times as slow).
+	trav.set("leap_push_force", 5.5)
+	trav.set("climb_pull_speed", 2.0)
+	trav.set("hang_step_up_height", 0.0)
 	# Across from hold to hold (decision 0285): a gap to a ledge to the side up to 0.8 m reached hand over hand.
 	trav.set("hang_reach_side", 0.8)
 	# A leap winds up for 0.15 s, springs, flies hands first and is caught with its speed (decision 0290); up onto a ledge

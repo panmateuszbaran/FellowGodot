@@ -156,6 +156,9 @@ public:
 		// in the stone (the foot pitched about the ankle; weight 0: none).
 		Vector3 sole[2];
 		float sole_weight[2] = { 0.0f, 0.0f };
+		// Milestone 204 (decision 0346): the hips kept at the height off the body they had when this rose from 0 (a leap's
+		// push and flight: the body's arc the traversal's alone).
+		float hips_hold_weight = 0.0f;
 	};
 
 	// Milestone 198 (decision 0340): a hand's target on a ledge: this far in over the edge, this far over the top.
@@ -276,6 +279,10 @@ private:
 	LocalVector<Vector3> clip_root;
 	double clip_root_step = 1.0 / 60.0;
 	PoseHints hints;
+	// Milestone 204 (decision 0346): a foot's way in and out from the wall, eased (FOOT_DEPTH_SPEED).
+	float foot_depth[2] = { 0.0f, 0.0f };
+	bool foot_depth_valid[2] = { false, false };
+	Vector3 foot_depth_in;
 	Ledge last_check;
 	// Hanging (action KIND_HANG) and climbing a ladder (KIND_LADDER).
 	Vector3 hang_feet; // where the body hangs (global)
@@ -364,6 +371,8 @@ private:
 	static constexpr float STEP_PRESS_SPEED = 0.8f;
 	static constexpr float STEP_STAND_SPEED = 0.9f;
 	static constexpr float STEP_REACH_TIME = 0.6f;
+	static constexpr float FOOT_DEPTH_SPEED = 1.5f; // m/s
+	static constexpr float FOOT_HIGH_STEP = 0.25f; // m: a foot stepping up the wall at most this over its hanging place
 	static constexpr float STEP_HANG_TIME = 0.6f;
 	float _leap_reach_max() const; // milestone 203: how far up a leap carries the body with leap_push_force (m; a large number without)
 	bool _step_stand(const Ledge &p_ledge, Vector3 &r_feet, Vector3 *r_face = nullptr) const; // milestone 203: where the body stands on a ledge's top (false: too narrow, no room)

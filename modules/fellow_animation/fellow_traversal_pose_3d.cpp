@@ -952,6 +952,24 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 			skeleton->set_bone_pose_position(hips, parent >= 0 ? skeleton->get_bone_global_pose(parent).affine_inverse().xform(raised) : raised);
 		}
 	}
+	// Milestone 204 (decision 0346): the hips kept at the height off the body they had as the hold began (a leap's push and
+	// flight): the clip's own crouch and rise taken out, and the fit's — the body's arc is the traversal's alone.
+	if (hips >= 0 && h.hips_hold_weight > 0.0f) {
+		const Vector3 at = skeleton->get_bone_global_pose(hips).origin;
+		const float rel = at.dot(up);
+		if (!hips_hold_active) {
+			hips_hold_active = true;
+			hips_hold_rel = rel;
+		}
+		const float shift = (hips_hold_rel - rel) * h.hips_hold_weight * weight;
+		if (shift != 0.0f) {
+			const Vector3 held = at + up * shift;
+			const int parent = skeleton->get_bone_parent(hips);
+			skeleton->set_bone_pose_position(hips, parent >= 0 ? skeleton->get_bone_global_pose(parent).affine_inverse().xform(held) : held);
+		}
+	} else {
+		hips_hold_active = false;
+	}
 	if (foot_ik) {
 		for (int s = 0; s < 2; s++) {
 			const int upper = bones[s == 0 ? ROLE_LEFT_UPPER_LEG : ROLE_RIGHT_UPPER_LEG];

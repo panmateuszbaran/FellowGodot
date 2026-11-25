@@ -16,7 +16,12 @@ for a body of BODY_MASS kg whose centre of mass is taken as its hips:
 * gates (human limits — climbers' explosive pull-ups peak at 1.4-1.7 body weights, PeerJ 11:e15886; a strong climber's
   arms and legs together at about 2.5).
 
-    python3 showcase/tools/effort.py <frames.json> [--baseline <frames.json>] [--json <out.json>]
+Milestone 204 (the owner: "not 100 % realism but arcade fun, with the animations relatively realistic"): `--profile
+arcade` (the showcase's) keeps the gates that make a motion read as real — the run braked at the wall, the face off it,
+a flight under gravity, no snap beyond the push itself — and lets the hero be stronger than a person: a leap's push to
+6.5 body weights (a dyno of about 2.5 m), at a game's pace (the demo's first eight moves from hold to hold within 10 s).
+
+    python3 showcase/tools/effort.py <frames.json> [--baseline <frames.json>] [--json <out.json>] [--profile human|arcade]
 """
 import argparse
 import json
@@ -37,6 +42,29 @@ GATES = [
 	("snaps", "snap_g", None, 3.5, "g, the largest change of speed over 3 frames (on a hold or in the air)"),
 	("leaps a person can make", "leap_rise_max", None, 1.45, "m, the hips' rise from the push to the dead point"),
 ]
+
+ARCADE = {
+	# (key: (name, low, high, what)) — the gates the arcade profile changes or adds
+	"support_peak_bw": ("support force at its peak", None, 6.5, "body weights: an arcade dyno's push (a person's: 2.6)"),
+	"snap_g": ("snaps", None, 6.5, "g over 3 frames: none beyond the push itself (a catch lifted 9 cm in a frame: 30)"),
+	"leap_rise_max": ("leaps the hero can make", None, 2.6, "m, the hips' rise from the push to the dead point"),
+	"pace_s": ("the climb's pace", None, 10.0, "s, the demo's first eight moves from hold to hold (milestone 202: 8.5)"),
+}
+
+
+def gates(profile):
+	if profile != "arcade":
+		return GATES
+	out = []
+	for name, key, lo, hi, what in GATES:
+		if key in ARCADE:
+			n, l, h, w = ARCADE[key]
+			out.append((n, key, l, h, w))
+		else:
+			out.append((name, key, lo, hi, what))
+	n, l, h, w = ARCADE["pace_s"]
+	out.append((n, "pace_s", l, h, w))
+	return out
 
 
 def load(path):
@@ -166,6 +194,8 @@ def analyse(fr):
 	if flight_ratios:
 		r["flight_g_ratio"] = min(flight_ratios, key=lambda x: -abs(1.0 - x))
 	r["leap_rise_max"] = rise_max
+	if len(r["moves"]) >= 8:
+		r["pace_s"] = (r["moves"][7]["to"] - r["moves"][0]["from"] + 1) * dt
 	return r
 
 
@@ -179,11 +209,11 @@ def gate_state(v, lo, hi):
 	return "PASS"
 
 
-def report(r, base=None):
+def report(r, base=None, profile="human"):
 	lines = ["gate                                   value  baseline  state  band"]
 	passed = 0
 	total = 0
-	for name, key, lo, hi, what in GATES:
+	for name, key, lo, hi, what in gates(profile):
 		v = r.get(key)
 		bv = base.get(key) if base else None
 		st = gate_state(v, lo, hi)
@@ -209,10 +239,11 @@ def main():
 	ap.add_argument("frames")
 	ap.add_argument("--baseline")
 	ap.add_argument("--json")
+	ap.add_argument("--profile", default="human", choices=["human", "arcade"])
 	a = ap.parse_args()
 	r = analyse(load(a.frames))
 	base = analyse(load(a.baseline)) if a.baseline else None
-	print(report(r, base))
+	print(report(r, base, a.profile))
 	if a.json:
 		with open(a.json, "w") as f:
 			json.dump(r, f, indent=1)

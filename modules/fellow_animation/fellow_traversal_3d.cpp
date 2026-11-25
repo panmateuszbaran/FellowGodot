@@ -954,8 +954,31 @@ void FellowTraversal3D::_step(double p_delta) {
 	hints.hand_pole_weight[0] = hints.hand_pole_weight[1] = 0.0f;
 	hints.foot_pole_weight[0] = hints.foot_pole_weight[1] = 0.0f;
 	hints.sole_weight[0] = hints.sole_weight[1] = 0.0f;
+	hints.hips_hold_weight = 0.0f;
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	_step_body(p_delta);
+	// Milestone 204 (decision 0346): a foot on the wall moves in and out from it (the stone under it stepping out — a
+	// ledge's lip, a cornice) no faster than FOOT_DEPTH_SPEED: at once, a cornice's 12 cm had swung the knee over in a
+	// frame (2,000 °/s). Not across a turn of the wall (a corner: the depth is another wall's).
+	const Vector3 in = hints.inward.length_squared() > 1e-6f ? hints.inward.normalized() : Vector3();
+	const bool same_wall = in != Vector3() && foot_depth_in != Vector3() && in.dot(foot_depth_in) > 0.996f;
+	for (int s = 0; s < 2; s++) {
+		if (hints.active && hints.kind == KIND_HANG && hints.foot_weight[s] > 0.0f && in != Vector3()) {
+			const float depth = hints.foot[s].dot(in);
+			if (foot_depth_valid[s] && same_wall && p_delta > 0.0) {
+				const float step = FOOT_DEPTH_SPEED * float(p_delta);
+				const float d = CLAMP(depth, foot_depth[s] - step, foot_depth[s] + step);
+				hints.foot[s] += in * (d - depth);
+				foot_depth[s] = d;
+			} else {
+				foot_depth[s] = depth;
+				foot_depth_valid[s] = true;
+			}
+		} else {
+			foot_depth_valid[s] = false;
+		}
+	}
+	foot_depth_in = in;
 	global_stats.steps.increment();
 	global_stats.step_usec.add(OS::get_singleton()->get_ticks_usec() - t0);
 }
@@ -1792,7 +1815,7 @@ void FellowTraversal3D::_start_transfer(const Ledge &p_to, const Vector3 &p_cont
 		const float clip_push = CLAMP(_sample(l.progress, f_rel) * l.reach + _sample(l.lift, f_rel), 0.1f, LEAP_PUSH_MAX);
 		const float rise = MAX(0.05f, transfer.to_feet.y - transfer.from_feet.y);
 		const float top = rise + settle;
-		const float push = MIN(CLAMP(LEAP_PUSH_SHARE * top, clip_push, LEAP_PUSH_MAX), LEAP_PUSH_MOST * top);
+		float push = MIN(CLAMP(LEAP_PUSH_SHARE * top, clip_push, LEAP_PUSH_MAX), LEAP_PUSH_MOST * top);
 		float speed = Math::sqrt(2.0f * leap_gravity * MAX(0.05f, top - push));
 		transfer.ballistic = true;
 		transfer.b_dip = LEAP_DIP;
@@ -1802,7 +1825,13 @@ void FellowTraversal3D::_start_transfer(const Ledge &p_to, const Vector3 &p_cont
 			// Milestone 203 (decision 0345): a person's push — the support force rising and falling as a half sine to
 			// leap_push_force at its peak (the hips' acceleration (F - 1) g there), from rest: the push's time 2 push / v;
 			// no dip down (hanging on straight arms the hips cannot sink: the body swings out from the wall instead).
+			// Milestone 204 (decision 0346): the push long enough for that force to give the speed the dead point needs
+			// (a push of d to a speed v peaks at 1 + pi v^2 / (4 d g)): shorter, the speed had been cut and the body caught
+			// short of its hang, lifted 9 cm in a frame.
+			push = MAX(push, MIN(LEAP_PUSH_MAX, top / (2.0f * (leap_push_force - 1.0f) / float(Math::PI) + 1.0f)));
+			speed = Math::sqrt(2.0f * leap_gravity * MAX(0.05f, top - push));
 			speed = MIN(speed, Math::sqrt(4.0f * push * (leap_push_force - 1.0f) * leap_gravity / float(Math::PI)));
+			transfer.b_push = push;
 			transfer.b_push_time = 2.0f * push / speed;
 		} else {
 			transfer.b_push_time = 2.0f * (push + LEAP_DIP) / speed;
@@ -1970,6 +1999,12 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 				y = (transfer.to_feet.y - transfer.from_feet.y) + transfer.b_settle * (1.0f - smooth(CLAMP((t - t_top) / transfer.b_settle_time, 0.0f, 1.0f)));
 			}
 			w = smooth(CLAMP((t - t_push) / (t_top - t_push), 0.0f, 1.0f));
+			// Milestone 204 (decision 0346): from the push to the dead point the hips kept where they were off the body (the
+			// clip's own crouch and rise taken out: the body's arc is the push's and gravity's — with them, it had floated at
+			// 0.8 g), let go over the settle.
+			if (human && t >= t_push) {
+				hints.hips_hold_weight = t < t_top ? 1.0f : 1.0f - smooth(CLAMP((t - t_top) / transfer.b_settle_time, 0.0f, 1.0f));
+			}
 			const float fly = CLAMP((t - t_fly) / transfer.b_flight_time, 0.0f, 1.0f);
 			feet = transfer.from_feet.lerp(transfer.to_feet, w) - flat(transfer.from_inward).normalized() * (LEAP_OUT * Math::sin(fly * float(Math::PI)) + swing);
 			feet.y = transfer.from_feet.y + y;
@@ -2128,7 +2163,9 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 			const float f0 = pulled ? (lead ? 0.3f : 0.0f) : (lead ? 0.55f : 0.3f);
 			const float f1 = pulled ? (lead ? 0.7f : 0.38f) : (lead ? 0.95f : 0.68f);
 			const float j = smooth(CLAMP((u - f0) / (f1 - f0), 0.0f, 1.0f));
-			const float y = Math::lerp(transfer.from_feet.y, transfer.to_feet.y, j) + brace;
+			// (milestone 204: no higher over the body's feet than FOOT_HIGH_STEP above the brace — stepped up ahead of the body,
+			// a foot had folded the leg against the wall and the knee had swung out sideways in a frame)
+			const float y = MIN(Math::lerp(transfer.from_feet.y, transfer.to_feet.y, j), feet.y + FOOT_HIGH_STEP) + brace;
 			const Vector3 wall = _hang_foot(h, feet, inward, y, Vector3(face.x, y, face.z) + left * (h == 0 ? 0.14f : -0.14f), &hints.wall[h], &hints.wall_weight[h]);
 			hints.foot[h] = wall - inward * (0.14f * Math::sin(j * float(Math::PI)));
 			hints.foot_weight[h] = 0.85f;
@@ -2154,7 +2191,8 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 				hints.hold_lip[h] = k < 0.5f ? transfer.from_lip[h] : transfer.to_lip[h];
 				hints.hold[h] = k < 0.5f ? transfer.from_hands[h] : (k2 < 0.5f ? grab : to_hands[h]);
 			} else {
-				const float k = smooth(CLAMP((u - (pulled_side ? 0.68f : 0.62f)) / 0.28f, 0.0f, 1.0f));
+				// (milestone 204: pulled across, the trailing hand over 0.6-0.95 — over 0.68-0.96 its forearm had spun at 2,270 °/s)
+				const float k = pulled_side ? smooth(CLAMP((u - 0.6f) / 0.35f, 0.0f, 1.0f)) : smooth(CLAMP((u - 0.62f) / 0.28f, 0.0f, 1.0f));
 				const float arc = Math::sin(k * float(Math::PI));
 				hints.hand[h] = transfer.from_hands[h].lerp(to_hands[h], k) - inward * (0.1f * arc) + UP * (0.05f * arc);
 				hints.hand_grip[h] = (k <= 0.0f || k >= 1.0f) ? 1.0f : 0.0f;
@@ -2170,7 +2208,7 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 			const float j = smooth(CLAMP((u - f0) / (f1 - f0), 0.0f, 1.0f));
 			const Vector3 base = transfer.from_feet.lerp(transfer.to_feet, j);
 			const Vector3 at = base + inward * (radius + 0.02f);
-			const float y = base.y + brace;
+			const float y = MIN(base.y, feet.y + FOOT_HIGH_STEP) + brace; // (milestone 204, as up)
 			const Vector3 wall = _hang_foot(h, base, inward, y, Vector3(at.x, y, at.z) + left * (h == 0 ? 0.14f : -0.14f), &hints.wall[h], &hints.wall_weight[h]);
 			hints.foot[h] = wall - inward * (0.12f * Math::sin(j * float(Math::PI)));
 			hints.foot_weight[h] = 0.85f;
@@ -2207,7 +2245,12 @@ float FellowTraversal3D::_leap_reach_max() const {
 	}
 	const float g = leap_gravity > 0.0f ? leap_gravity : 9.81f;
 	const float v2 = 4.0f * LEAP_PUSH_MAX * (leap_push_force - 1.0f) * g / float(Math::PI);
-	return LEAP_PUSH_MAX + v2 / (2.0f * g) - 0.05f;
+	// (milestone 204: less the settle into the hang — the dead point is that far over the hang — as _start_transfer's)
+	const LeapTiming &l = leap_timing[LEAP_UP];
+	const float f_rel = MAX(l.hands.x, l.hands.z);
+	const float f_cat = MAX(MAX(l.hands.y, l.hands.w), f_rel + 0.05f);
+	const float settle = leap_gravity > 0.0f ? CLAMP(_sample(l.progress, f_cat) * l.reach + _sample(l.lift, f_cat) - l.reach, 0.05f, 0.5f) : 0.0f;
+	return LEAP_PUSH_MAX + v2 / (2.0f * g) - settle - 0.03f;
 }
 
 // Milestone 203 (decision 0345): a ledge's top a body can stand on — at least STEP_MIN_DEPTH deep (a ray down onto it
@@ -4085,7 +4128,7 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hold_min_width", PROPERTY_HINT_RANGE, "0,0.48,0.01,suffix:m"), "set_hold_min_width", "get_hold_min_width");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_leap_windup", PROPERTY_HINT_RANGE, "0,0.4,0.01,suffix:s"), "set_hang_leap_windup", "get_hang_leap_windup");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "leap_gravity", PROPERTY_HINT_RANGE, "0,20,0.1,or_greater,suffix:m/s²"), "set_leap_gravity", "get_leap_gravity");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "leap_push_force", PROPERTY_HINT_RANGE, "0,4,0.05,suffix:BW"), "set_leap_push_force", "get_leap_push_force");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "leap_push_force", PROPERTY_HINT_RANGE, "0,8,0.05,suffix:BW"), "set_leap_push_force", "get_leap_push_force");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "climb_pull_speed", PROPERTY_HINT_RANGE, "0,3,0.05,suffix:m/s"), "set_climb_pull_speed", "get_climb_pull_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_step_up_height", PROPERTY_HINT_RANGE, "0,3,0.05,suffix:m"), "set_hang_step_up_height", "get_hang_step_up_height");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "drop_to_hang"), "set_drop_to_hang", "is_drop_to_hang");

@@ -340,6 +340,9 @@ func _record(p_frame: int) -> void:
 	var r := {"i": p_frame, "state": String(_player.get("state")), "hang": trav.is_hanging(), "move": trav.is_transferring(),
 			"climb": trav.is_climbing(), "mantle": trav.is_active(), "body": _v(_player.global_position),
 			"hips": _v(_bone("Hips"))}
+	var tpose: Node = _player.get_node_or_null("Model/Mannequin/Skeleton3D/TraversalPose")
+	if tpose and tpose.has_method("get_hang_fit_offset"):
+		r["fit"] = _v(tpose.get_hang_fit_offset())
 	# Each limb: its joints, and the plane it bends in (the normal of upper, joint, end) — a flip of that normal from one
 	# frame to the next is an elbow or knee turning over.
 	var limbs := []

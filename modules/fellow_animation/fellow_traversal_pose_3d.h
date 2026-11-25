@@ -89,6 +89,8 @@ private:
 	// above had yanked the body up to it in a tenth of a second (6 m/s, 15 body weights).
 	float fit_max_speed = 0.0f;
 	Vector3 fit_rate; // m/s, world
+	bool hips_hold_active = false; // milestone 204: the hips' height off the body held (PoseHints::hips_hold_weight)
+	float hips_hold_rel = 0.0f;
 	static constexpr float FIT_MAX_ACCEL = 8.0f; // m/s²
 	Vector3 fit_goal_last; // milestone 200: the fit's last goal (its drift followed at once)
 	bool fit_goal_valid = false;

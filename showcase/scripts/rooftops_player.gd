@@ -971,6 +971,9 @@ func _limit_joints() -> void:
 	# Milestone 203: a hinge turned into its bend however far round (a leg stepped up onto a hold at the hips' height had
 	# its knee bent backwards past the 120 degrees milestone 202 turned).
 	limits.set("hinge_max_turn", 175.0)
+	# Milestone 204: the head tipped back to 66 degrees at most (the measure's limit 70: eased in at 720 degrees a second, a
+	# look up to a hold 2.5 m over the hands had passed it by 1-3 degrees).
+	limits.set("neck_flexion_range", Vector2(-66.0, 56.0))
 	for arg in args:
 		for p in ["hinge_alignment", "limit_ankles", "limit_wrists", "limit_neck"]:
 			if arg.begins_with("--%s=" % p): # (tools)
