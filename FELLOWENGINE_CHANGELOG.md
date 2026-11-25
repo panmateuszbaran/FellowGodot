@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 210 — The cart's hay heaped and strawed (2026-11-25)
+
+- The owner: "the hay pile on the cart looks very unrealistic and off-putting" (decision 0352). The rooftops' hay cart
+  keeps its model's bed, boards and wheels; its smooth yellow dome is replaced at run time (`rooftops_hay.gd`) by a
+  lumpy heap spilling over the boards and 26,000 thin curved straws over it — lying every way, standing out of it, a
+  fringe hanging over the boards, a few fallen round the cart — each its own length, width, curl and colour. The leap
+  of faith landing in it throws straws up.
+
 ## Milestone 209 — The square's robes as cloth (2026-11-25)
 
 - The owner: "the skirts not as solids but as cloth with a simulated material" (decision 0351). A long robe on the

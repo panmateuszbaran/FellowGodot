@@ -786,7 +786,9 @@ bone on the ground under the hips with one child (a game rig's root) gets no bod
 down and up again), the player's `LAYER_PEOPLE`, `RAY_MASK`, `BUMP_STAGGER_KEEP`, `BUMP_KNOCK_KEEP`;
 `climb_look.gd --program=bump`. Milestone 209 (decision 0351): their robes `FellowCloth3D` on the figure's skin
 (`rooftops_crowd.gd`'s `_skirt()`: `SKIRT_TOP` 1.0 m, `SKIRT_HEM` 0.27 m, `SKIRT_FREE` 0.22 m from the skinned place,
-`SKIRT_SIMULATE` 32 m), `climb_look.gd --program=people`.
+`SKIRT_SIMULATE` 32 m), `climb_look.gd --program=people`. Milestone 210 (decision 0352): the hay cart's hay made at
+run time (`rooftops_hay.gd` on the cart: `straws` 26,000, `ground_straws` 500, `seed`; `TOP` 2.02 m, `SPILL` 0.24 m;
+`burst(at)`), `climb_look.gd --program=hay`.
 
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
