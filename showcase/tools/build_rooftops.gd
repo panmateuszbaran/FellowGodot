@@ -674,7 +674,14 @@ func _environment(p_root: Node3D) -> void:
 	env.fog_enabled = true
 	# Milestone 153: the golden hour's haze — the city's far houses and the hills paler and bluer with distance (the
 	# sky's colour mixed in), as the eye reads depth.
-	env.fog_density = 0.0008
+	# Milestone 199: from 150 m out, growing to three quarters at 3 km (Godot's depth fog: smoothstep(150, 3000) to the
+	# power 0.55) — exponential (0.0008 a metre: 4 % at 50 m, 15 % at 200 m), it had lifted every shadow of the city seen
+	# from the bell tower into a milky veil; the hills as hazy as they were (38 % at 1 km, 64 % at 2 km against 55 and 80).
+	env.fog_mode = Environment.FOG_MODE_DEPTH
+	env.fog_depth_begin = 150.0
+	env.fog_depth_end = 3000.0
+	env.fog_depth_curve = 0.55
+	env.fog_density = 0.75
 	env.fog_aerial_perspective = 0.8
 	env.fog_light_color = Color(0.85, 0.72, 0.58)
 	# Milestone 168: the depth fog no longer over the sky (the atmosphere draws its haze; the fog's beige had greyed it).
@@ -682,7 +689,9 @@ func _environment(p_root: Node3D) -> void:
 	env.volumetric_fog_enabled = true
 	# Milestone 168: a quarter as dense — beside the reference the square's far side had been lost in a bright haze (with
 	# the camera's depth of field, three quarters of the reference shot's run veiled); the dust's shafts kept faintly.
-	env.volumetric_fog_density = 0.0004
+	# Milestone 199: the dust low over the town (a FogVolume, below) instead — everywhere, its 64 m (the froxels'
+	# reach) of sunlit dust had veiled everything past them seen from the bell tower; down there as before.
+	env.volumetric_fog_density = 0.0
 	env.volumetric_fog_albedo = Color(0.92, 0.93, 0.96)
 	env.volumetric_fog_anisotropy = 0.7
 	env.volumetric_fog_length = 64.0
@@ -721,6 +730,20 @@ func _environment(p_root: Node3D) -> void:
 	# north and east fronts lit, the bell tower's face with its holds.
 	sun.rotation_degrees = Vector3(SUN_DEGREES.x, SUN_DEGREES.y, 0.0)
 	_add(p_root, sun, "Sun")
+	# Milestone 199: the town's dust, low — as dense at the paving as the global fog had been (0.0004), thinning upward
+	# (to two thirds at 6 m, gone at 12 m), over the city to its walls: the square's light shafts as they were, the view
+	# from the bell tower looking down through only its last few metres.
+	var dust := FogVolume.new()
+	dust.shape = RenderingServer.FOG_VOLUME_SHAPE_BOX
+	dust.size = Vector3(640.0, 24.0, 640.0)
+	var dm := FogMaterial.new()
+	dm.density = 0.0004
+	dm.albedo = Color(0.92, 0.93, 0.96)
+	dm.height_falloff = 0.1
+	dm.edge_fade = 0.1
+	_save(dm, OUT + "/materials/dust_layer.tres")
+	dust.material = dm
+	_add(p_root, dust, "DustLayer")
 
 
 func _ground(p_root: Node3D) -> void:

@@ -1,0 +1,6 @@
+[gd_resource type="FogMaterial" format=3]
+
+[resource]
+density = 0.0004
+albedo = Color(0.92, 0.93, 0.96, 1)
+height_falloff = 0.1

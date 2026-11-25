@@ -98,8 +98,12 @@ func _init() -> void:
 	for m in mats:
 		var path: String = m.get_slice(":", 0) + ":" + m.get_slice(":", 1) if m.begins_with("res:") else m.get_slice(":", 0)
 		var kv: String = m.substr(path.length() + 1)
-		var mat := load(path) as ShaderMaterial
-		mat.set_shader_parameter(kv.get_slice("=", 0), str_to_var(kv.get_slice("=", 1)))
+		var mat := load(path) as Material
+		if mat is ShaderMaterial:
+			(mat as ShaderMaterial).set_shader_parameter(kv.get_slice("=", 0), str_to_var(kv.get_slice("=", 1)))
+		else:
+			# Milestone 199: any other material's property (--mat=res://rooftops/materials/dust_layer.tres:density=0.0003).
+			mat.set(kv.get_slice("=", 0), str_to_var(kv.get_slice("=", 1)))
 		_held.append(mat) # held: a material no longer referenced is freed, and loaded again unchanged
 	var sc: Node = (load("res://rooftops/rooftops.tscn") as PackedScene).instantiate()
 	if lite:

@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/rooftops.gd" id="1_jjugf"]
 [ext_resource type="Shader" path="res://shaders/atmosphere_sky.gdshader" id="2_yebai"]
+[ext_resource type="Material" path="res://rooftops/materials/dust_layer.tres" id="2_dust1"]
 [ext_resource type="ArrayMesh" path="res://rooftops/models/ground.res" id="3_tag5u"]
 [ext_resource type="ArrayMesh" path="res://rooftops/models/pavements.res" id="4_bi26k"]
 [ext_resource type="ArrayMesh" path="res://rooftops/models/PalazzoOcra.res" id="5_60fmd"]
@@ -195,12 +196,16 @@ sdfgi_use_occlusion = true
 sdfgi_bounce_feedback = 0.6
 sdfgi_min_cell_size = 0.25
 fog_enabled = true
+fog_mode = 1
 fog_light_color = Color(0.85, 0.72, 0.58, 1)
-fog_density = 0.0008
+fog_density = 0.75
 fog_aerial_perspective = 0.8
 fog_sky_affect = 0.0
+fog_depth_curve = 0.55
+fog_depth_begin = 150.0
+fog_depth_end = 3000.0
 volumetric_fog_enabled = true
-volumetric_fog_density = 0.0004
+volumetric_fog_density = 0.0
 volumetric_fog_albedo = Color(0.92, 0.93, 0.96, 1)
 volumetric_fog_anisotropy = 0.7
 volumetric_fog_sky_affect = 0.0
@@ -2027,6 +2032,10 @@ directional_shadow_split_2 = 0.0875
 directional_shadow_split_3 = 0.22
 directional_shadow_blend_splits = true
 directional_shadow_max_distance = 320.0
+
+[node name="DustLayer" type="FogVolume" parent="." unique_id=1642263583]
+size = Vector3(640, 24, 640)
+material = ExtResource("2_dust1")
 
 [node name="Ground" type="StaticBody3D" parent="." unique_id=1984584682]
 collision_mask = 0
