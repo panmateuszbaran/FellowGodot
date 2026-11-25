@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 203 — Climbing within a person's strength (2026-11-25)
+
+- `FellowTraversal3D` (decision 0345): `leap_push_force` (a leap's push as a person's: a half sine to that many body
+  weights, no dip on straight arms — at 2.3 about 1.2 m of rise, not 2.2), `climb_pull_speed` (the body pulled up
+  between holds no faster; the leading hand reaching the hold as the body gets there), `hang_step_up_height` and
+  `TRANSFER_STEP_UP` (a hold beyond a leap stood up to from the ledge below: pulled up, pressed to straight arms, a foot
+  on the top, stood up, reached), `get_aim_state()`; `FellowTraversalPose3D`: `sway_vertical`, `fit_max_speed`.
+- The showcase's run braked for the wall (4.0 m/s at the takeoff, not 7.0) and steered in the air to its hang: stopped
+  at 2.5 g, not 42.8 against the stone, the face 0.29 m from it, not 0.07; between holds at most 2.3 body weights (was
+  10.2), 1.1 m/s (was 5.8), no snap over 1.2 g (was 8.5); the house's 2 m gaps stood up to, not leapt.
+  `tools/effort.py` measures it: 6 / 6 gates (0 / 7). The step up's anatomy is not yet clean (`anim_quality.py` 35 / 45,
+  was 38 / 45: a thigh's pop, a knee bent backwards and the toes at the top's edge in the high step).
+
 ## Milestone 202 — The joints within a person's range of motion (2026-11-25)
 
 - `FellowJointLimits3D` (new, module `fellow_animation`; decision 0344): a skeleton modifier, last after the IK, that

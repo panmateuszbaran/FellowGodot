@@ -97,7 +97,14 @@ locks the knee straight and leaves the foot short of where it should be (which i
 python3 showcase/tools/anim_quality.py run --godot bin/godot.linuxbsd.editor.x86_64 --out <dir> [--baseline <dir>]
 ```
 
-`run` measures (two headless programs, about a minute) and reports; `report --out <dir>` reports again. A gate is
+```
+bin/godot.linuxbsd.editor.x86_64 --headless --path showcase --fixed-fps 60 -s res://tools/climb_look.gd -- --demo --demo_from=house --out=<dir> --seconds=24 --images=0 --lite=1
+python3 showcase/tools/effort.py <dir>/frames.json [--baseline <dir>/frames.json]
+```
+
+`run` measures (two headless programs, about a minute) and reports; `report --out <dir>` reports again. `effort.py`
+(milestone 203) reads the forces the climbing asks of the body from the demo's frames: seven gates from human limits.
+`anim_quality.gd -- --program=climb --dump=1` writes every joint out of range and every limb in a wall, frame by frame. A gate is
 PASS, FAIL, or REGRESSED (further from its band than the baseline's value by more than its tolerance). The clips are
 rebuilt with `tools/blender/build_mannequin.py` and the scenes with `tools/build_rooftops.gd` (README).
 
@@ -144,6 +151,20 @@ the clips' own (decision 0344).
 Next: the feet on slopes (the roofs' tiles walked, not only crawled), starts and stops, landings — each with its gates
 first; the run's lean and arm swing against the reference's frames as gates (read off a pose estimate, if the owner
 allows one).
+
+Milestone 203 (decision 0345): the owner: "why does the character jump face first into the wall, and why is its push
+up so effortless — assess the forces and make it realistic". `effort.py`'s gates first.
+
+| iteration | change | effort gates | `anim_quality` | what it showed |
+|---|---|---|---|---|
+| 0 | milestone 202's motion | 0/7 | 38/45 | the run into the wall at 7 m/s, stopped at 42.8 g; the hips pinned and let go at 10.2 body weights; leaps of 2.4 m floating at 0.66 g |
+| 1-4 | the run braked, the takeoff closer, the body steered to its hang; `sway_vertical` 0, `fit_max_speed` | — | — | 2.5 g at the wall; the fit's speed limit alone started it at full speed in a frame → an acceleration limit |
+| 5-8 | `leap_push_force` 2.3; `climb_pull_speed` 1 m/s, the hand reaching as the body arrives | — | — | the house's 2 m gaps beyond a leap: the owner chose a step up |
+| 9-20 | `TRANSFER_STEP_UP`: the standing body in over the top, standing straight, hinges turned 175°, elbows' and knees' poles | 6/6 | 34/45 | forearms through the wall 153 → 5-14 frames; the neck 11.8 → 0 %; the climb program 26 s |
+| 21-24 | the balls of the feet on the top; the grip eased off in the press; pressed only to straight arms; the knee's pole eased off as the leg straightens | 6/6 | 35/45 | the press had pinned the hips 0.7 s then let them go at 2.1 m/s (2.8 body weights) → 1.1 m/s, 2.3 |
+
+Left: the step up's high step — a thigh's pop (2,661 °/s), a knee bent backwards, the wrists pressing (7 %), the toes
+and shin at the top's edge (8.5 % of the frames from hold to hold); the hips' flexion and spread (11.5 %).
 
 ## Reference
 

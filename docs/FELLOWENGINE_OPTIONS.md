@@ -1250,7 +1250,20 @@ push, flight and settle are played); with `ledge_grip`, a hand on its hold keeps
 speed that brings the body to its top 8 cm over its hang from the hold in `direction` — the wall up to 1 m further than
 `reach_distance` —, 0 where there is none or it needs more than `max_speed`; the hands reach for it as the body rises,
 caught at the top with them on), `is_aiming()`; on `FellowTraversalPose3D`, while the hands reach from the air: no sway,
-the grip's shape in at once, the clip's feet kept 10 cm off the stone (the knees 8 cm) until 0.4 s after the catch; `FellowFootLock3D`: a foot let go is never eased back from further
+the grip's shape in at once, the clip's feet kept 10 cm off the stone (the knees 8 cm) until 0.4 s after the catch;
+milestone 203 (decision 0345), on `FellowTraversal3D`: `leap_push_force` (0: no limit; a leap's push as a person's — a
+half sine of support force from rest to that many body weights over at most 0.65 m, no dip on straight arms; a hold
+higher than such a leap carries the body is not leapt to), `climb_pull_speed` (0 m/s: the reaches' fixed times; the body
+pulled up between holds no faster, the leading hand reaching the hold as the body gets there), `hang_step_up_height`
+(0 m: off; a hold beyond a leap and up to this far above stood up to from the ledge the hands are on, where its top is
+0.12 m deep and a body fits on it: pulled up, pressed to straight arms with a foot on the top at 0.8 m/s at most, stood
+up at 0.9 m/s, reached, hung — `TRANSFER_STEP_UP`), `get_aim_state()` (an aimed jump's `time`, `catch_time`,
+`rise_time`, `hang_feet`, `inward`: the controller steers the body in the air to its hang); on `FellowTraversalPose3D`:
+`sway_vertical` (1: the vertical share of `body_sway`'s drive — 0 sways the hanging body along the wall and out from it
+only), `fit_max_speed` (0 m/s: `hang_fit` as fast as it eases; else no faster, its speed changing by at most 8 m/s²);
+the showcase's player: `leap_push_force` 2.3, `climb_pull_speed` 1, `hang_step_up_height` 2.3, `sway_vertical` 0,
+`fit_max_speed` 1.2, its run braked for a wall (`--wall_brake=0`: as before) and its `FellowJointLimits3D`'s
+`hinge_max_turn` 175°; `tools/effort.py` measures the forces; `FellowFootLock3D`: a foot let go is never eased back from further
 from the hip than the leg reaches; `release_extension` (milestone 172; 1.0: off): let go when holding the foot needs more
 than this share of the leg's length. Let go without jumps (milestone 173, decision 0315): a held point out of
 the leg's reach is let go from where the foot is shown and brought within reach the shorter way (towards the animated
