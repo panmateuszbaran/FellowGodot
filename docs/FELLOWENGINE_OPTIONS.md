@@ -784,7 +784,9 @@ from the bodies, by mass; `get_up_blend_speed_max_m_s`). `knock_down()` goes on 
 bone on the ground under the hips with one child (a game rig's root) gets no body. The rooftops showcase's people:
 `rooftops_crowd.gd`'s `bump()` (a shove under `NUDGE_MAX` 1.8 m/s, a stagger under `KNOCK_MIN` 5.2, else knocked
 down and up again), the player's `LAYER_PEOPLE`, `RAY_MASK`, `BUMP_STAGGER_KEEP`, `BUMP_KNOCK_KEEP`;
-`climb_look.gd --program=bump`.
+`climb_look.gd --program=bump`. Milestone 209 (decision 0351): their robes `FellowCloth3D` on the figure's skin
+(`rooftops_crowd.gd`'s `_skirt()`: `SKIRT_TOP` 1.0 m, `SKIRT_HEM` 0.27 m, `SKIRT_FREE` 0.22 m from the skinned place,
+`SKIRT_SIMULATE` 32 m), `climb_look.gd --program=people`.
 
 ## Vehicles' marks, smoke and sounds (milestone 79)
 

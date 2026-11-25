@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 209 — The square's robes as cloth (2026-11-25)
+
+- The owner: "the skirts not as solids but as cloth with a simulated material" (decision 0351). A long robe on the
+  rooftops' people is a `FellowCloth3D` on the figure's skin instead of a solid cone: its waistband pinned to the hips,
+  the rest skinned towards the thighs and kept within 0.22 m of that, off the body by the backstop and out of capsules
+  on the legs and hands — swung by the stride and the wind; it follows a knocked-down figure's ragdoll too.
+  `climb_look.gd --program=people` films one walking.
+
 ## Milestone 208 — The square's people solid: run into, staggered, knocked down and up again (2026-11-25)
 
 - The owner: "more interaction with the NPCs — running into them, knocking someone over, not passing through them"
