@@ -468,16 +468,6 @@ void FellowJointLimits3D::_process_modification(double p_delta) {
 	step = p_delta;
 	Stats s;
 	s.frames = 1;
-	if (hinge_alignment) {
-		static const Role hinge[4][3] = { { ROLE_LEFT_UPPER_ARM, ROLE_LEFT_LOWER_ARM, ROLE_LEFT_HAND }, { ROLE_RIGHT_UPPER_ARM, ROLE_RIGHT_LOWER_ARM, ROLE_RIGHT_HAND }, { ROLE_LEFT_UPPER_LEG, ROLE_LEFT_LOWER_LEG, ROLE_LEFT_FOOT }, { ROLE_RIGHT_UPPER_LEG, ROLE_RIGHT_LOWER_LEG, ROLE_RIGHT_FOOT } };
-		for (int i = 0; i < 4; i++) {
-			const float t = _align_hinge(skeleton, SLOT_LEFT_UPPER_ARM + i, bones[hinge[i][0]], bones[hinge[i][1]], bones[hinge[i][2]]);
-			if (t > 0.5f) {
-				s.hinges++;
-				s.hinge_max = MAX(s.hinge_max, t);
-			}
-		}
-	}
 	for (int side = 0; side < 2; side++) {
 		if (limit_wrists) {
 			const float w = _limit_wrist(skeleton, side);
@@ -491,6 +481,17 @@ void FellowJointLimits3D::_process_modification(double p_delta) {
 			if (a > 0.0f) {
 				s.ankles++;
 				s.ankle_max = MAX(s.ankle_max, a);
+			}
+		}
+	}
+	// (the hinges after the wrists: a wrist turned about its knuckles moves the arm)
+	if (hinge_alignment) {
+		static const Role hinge[4][3] = { { ROLE_LEFT_UPPER_ARM, ROLE_LEFT_LOWER_ARM, ROLE_LEFT_HAND }, { ROLE_RIGHT_UPPER_ARM, ROLE_RIGHT_LOWER_ARM, ROLE_RIGHT_HAND }, { ROLE_LEFT_UPPER_LEG, ROLE_LEFT_LOWER_LEG, ROLE_LEFT_FOOT }, { ROLE_RIGHT_UPPER_LEG, ROLE_RIGHT_LOWER_LEG, ROLE_RIGHT_FOOT } };
+		for (int i = 0; i < 4; i++) {
+			const float t = _align_hinge(skeleton, SLOT_LEFT_UPPER_ARM + i, bones[hinge[i][0]], bones[hinge[i][1]], bones[hinge[i][2]]);
+			if (t > 0.5f) {
+				s.hinges++;
+				s.hinge_max = MAX(s.hinge_max, t);
 			}
 		}
 	}
