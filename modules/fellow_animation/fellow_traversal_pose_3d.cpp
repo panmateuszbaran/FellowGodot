@@ -293,8 +293,10 @@ void FellowTraversalPose3D::_shape_grip(Skeleton3D *p_skeleton, int p_side, cons
 	// The hand's own frame: along the palm to the middle finger's knuckle, across the knuckles from the index finger's to
 	// the little finger's — turned so that the palm goes up the face and the little finger is on the outer side (which
 	// faces the palm to the wall, whatever the rig's axes).
-	const Basis own = frame_of(p_skeleton->get_bone_pose_position(middle), p_skeleton->get_bone_pose_position(little) - p_skeleton->get_bone_pose_position(index));
-	const Basis want = frame_of(p_palm, p_side_dir);
+	// (the knuckles' row level along the edge: a hand's slopes back from the index finger's to the little finger's, which
+	// had been 1.9 cm lower — under the top, its finger left standing up)
+	const Basis own = frame_of(p_skeleton->get_bone_pose_position(little) - p_skeleton->get_bone_pose_position(index), p_skeleton->get_bone_pose_position(middle));
+	const Basis want = frame_of(p_side_dir, p_palm);
 	if (own == Basis() || want == Basis()) {
 		return;
 	}
@@ -320,6 +322,8 @@ void FellowTraversalPose3D::_shape_grip(Skeleton3D *p_skeleton, int p_side, cons
 	Vector3 open = p_normal.cross(along).cross(along); // (up the face)
 	open = (open.dot(p_normal) < 0.0f ? -open : open) - over * 0.15f;
 	open.normalize();
+	// (by the middle finger's knuckle: the hand's)
+	const float curl = smooth01((p_skeleton->get_bone_global_pose(middle).origin - p_edge).dot(p_normal) / (GRIP_KNUCKLE_UP * p_meter));
 	for (int f = 1; f < 5; f++) {
 		const int first = fingers[p_side][f][0];
 		if (first < 0) {
@@ -327,7 +331,6 @@ void FellowTraversalPose3D::_shape_grip(Skeleton3D *p_skeleton, int p_side, cons
 		}
 		const Vector3 knuckle = p_skeleton->get_bone_global_pose(first).origin;
 		const Vector3 base = p_edge + along * (knuckle - p_edge).dot(along);
-		const float curl = smooth01((knuckle - p_edge).dot(p_normal) / (GRIP_KNUCKLE_UP * p_meter));
 		for (int j = 0; j < 2; j++) {
 			const int b = fingers[p_side][f][j];
 			if (b < 0) {
