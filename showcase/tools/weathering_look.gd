@@ -8,6 +8,7 @@ extends SceneTree
 ##       --out=<dir> [--views=east,north,close,foot,rustic] [--settle=40] [--off=1] [--set=<property>=<value>]...
 ##       [--mat=<material>:<parameter>=<value>]... [--debug=1] [--lite=1]
 ##       [--scene=<rooftops.gd's property>=<value>]... [--env=<the Environment's property>=<value>]... (milestone 193)
+##       [--node=<a node's path in the scene>:<property>=<value>]... [--cast_city=1] (milestone 199)
 ##
 ## --off=1: the FellowWeathering3D hidden (the town as before milestone 190); --set=streaks=0.5 sets one of its
 ## properties (a number); --mat=res://rooftops/materials_photo/stone_rustic.tres:normal_strength=0.2 sets a shader
@@ -53,6 +54,8 @@ func _init() -> void:
 	var mats := []
 	var scene_props := {}
 	var env_props := {}
+	var node_props := []
+	var cast_city := false
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			out = a.get_slice("=", 1)
@@ -79,6 +82,10 @@ func _init() -> void:
 		elif a.begins_with("--set="):
 			var kv := a.substr(6)
 			props[kv.get_slice("=", 0)] = str_to_var(kv.get_slice("=", 1))
+		elif a.begins_with("--node="):
+			node_props.append(a.substr(7))
+		elif a == "--cast_city=1":
+			cast_city = true
 	DirAccess.make_dir_recursive_absolute(out)
 	for m in mats:
 		var path: String = m.get_slice(":", 0) + ":" + m.get_slice(":", 1) if m.begins_with("res:") else m.get_slice(":", 0)
@@ -114,6 +121,19 @@ func _init() -> void:
 				c.free()
 	for k in scene_props:
 		sc.set(k, scene_props[k]) # rooftops.gd's (milestone 193), before its _ready
+	# Milestone 199: a node's property (--node=Sun:directional_shadow_max_distance=260); the city's far houses' shadows.
+	for np in node_props:
+		var path: String = np.get_slice(":", 0)
+		var kv: String = np.substr(path.length() + 1)
+		var target := sc.get_node_or_null(path)
+		if target:
+			target.set(kv.get_slice("=", 0), str_to_var(kv.get_slice("=", 1)))
+		else:
+			push_warning("no node " + path)
+	if cast_city:
+		for c in sc.find_children("*", "GeometryInstance3D", true, false):
+			if String(c.get_path()).contains("CityHouses") or String(c.get_parent().name) == "CityHouses":
+				(c as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	for n in sc.find_children("*", "WorldEnvironment", true, false):
 		for k in env_props:
 			(n as WorldEnvironment).environment.set(k, env_props[k])
