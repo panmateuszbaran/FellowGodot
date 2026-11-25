@@ -9,6 +9,7 @@ extends SceneTree
 ##       [--mat=<material>:<parameter>=<value>]... [--debug=1] [--lite=1]
 ##       [--scene=<rooftops.gd's property>=<value>]... [--env=<the Environment's property>=<value>]... (milestone 193)
 ##       [--node=<a node's path in the scene>:<property>=<value>]... [--cast_city=1] [--timing=1] (milestone 199)
+##       [--setting=<a project setting>=<value>]... (milestone 199)
 ##
 ## --off=1: the FellowWeathering3D hidden (the town as before milestone 190); --set=streaks=0.5 sets one of its
 ## properties (a number); --mat=res://rooftops/materials_photo/stone_rustic.tres:normal_strength=0.2 sets a shader
@@ -89,6 +90,10 @@ func _init() -> void:
 			cast_city = true
 		elif a == "--timing=1":
 			timing = true
+		elif a.begins_with("--setting="):
+			# Milestone 199: a project setting (--setting=rendering/fellow/post/bloom/enabled=false), before the scene.
+			var kv := a.substr(10)
+			ProjectSettings.set_setting(kv.get_slice("=", 0), str_to_var(kv.get_slice("=", 1)))
 	DirAccess.make_dir_recursive_absolute(out)
 	for m in mats:
 		var path: String = m.get_slice(":", 0) + ":" + m.get_slice(":", 1) if m.begins_with("res:") else m.get_slice(":", 0)
@@ -99,7 +104,7 @@ func _init() -> void:
 	var sc: Node = (load("res://rooftops/rooftops.tscn") as PackedScene).instantiate()
 	if lite:
 		for n in ["Skyline", "CityHouses", "Landscape", "Trees_cypress", "Trees_olive", "Trees_pine", "Trees_broadleaf",
-				"Villas", "Trees_villa_cypress", "Birds", "Player", "Crowd", "CameraRig", "ReferenceShot", "Demo",
+				"Trees_wood", "Villas", "Trees_villa_cypress", "Birds", "Player", "Crowd", "CameraRig", "ReferenceShot", "Demo",
 				"PipelineWarmer"]:
 			var c := sc.get_node_or_null(n)
 			if c:
