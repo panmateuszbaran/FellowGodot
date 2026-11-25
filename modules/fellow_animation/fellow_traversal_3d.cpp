@@ -953,6 +953,7 @@ void FellowTraversal3D::_step(double p_delta) {
 	// (milestone 203: the move's own bends only from the move that sets them, this tick)
 	hints.hand_pole_weight[0] = hints.hand_pole_weight[1] = 0.0f;
 	hints.foot_pole_weight[0] = hints.foot_pole_weight[1] = 0.0f;
+	hints.sole_weight[0] = hints.sole_weight[1] = 0.0f;
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	_step_body(p_delta);
 	global_stats.steps.increment();
@@ -2281,17 +2282,23 @@ void FellowTraversal3D::_step_up_step(double p_delta) {
 	const Vector3 to_in = flat(transfer.to.inward).normalized();
 	const float a_y = transfer.from_edge.y;
 	// The body's place at the phases' ends: hanging, pulled in to the wall, pressed up over the top, standing, reaching,
-	// hanging from the next hold.
+	// hanging from the next hold — out from the face by the hips' gap (STEP_PULL_GAP, STEP_PRESS_GAP: the hips below the
+	// top stay clear of the hold that stands out from the face; standing they come in to STEP_OFF only once both feet are
+	// on the top: a leg below it would pass through it).
 	const Vector3 stand = transfer.stand_feet;
+	auto out_by = [&](const Vector3 &p_at, float p_hips_gap) {
+		return p_at + in * ((p_at - transfer.face).dot(-in) - (p_hips_gap - STEP_HIPS_BACK));
+	};
 	const Vector3 at[6] = {
 		transfer.from_feet,
-		transfer.from_feet.lerp(stand, 0.45f),
-		transfer.from_feet.lerp(stand, 0.8f),
+		out_by(transfer.from_feet, STEP_PULL_GAP),
+		out_by(transfer.from_feet.lerp(stand, 0.8f), STEP_PRESS_GAP),
 		stand,
 		stand,
 		transfer.to_feet,
 	};
-	Vector3 feet = at[i].lerp(at[i + 1], k);
+	const float kh = i == 2 ? smooth(CLAMP((tau - 0.35f) / 0.65f, 0.0f, 1.0f)) : k;
+	Vector3 feet = at[i].lerp(at[i + 1], kh);
 	feet.y = a_y + Math::lerp(transfer.s_feet[i], transfer.s_feet[i + 1], k);
 	const Vector3 inward = i < 4 ? in : in.slerp(to_in, k).normalized();
 	_place(body, feet, inward, p_delta);
@@ -2335,15 +2342,19 @@ void FellowTraversal3D::_step_up_step(double p_delta) {
 			// (pressing on the hold where the hand holds it: the fingers over its edge, the palm on its top)
 			press_w = smooth(MIN(1.0f, tau * 2.5f));
 		} else if (i == 2) {
+			// (off the hold and up the face: between holds for the pose — its grip eased off, the hand on its way)
 			const float kh = smooth(CLAMP((tau - (first ? 0.2f : 0.4f)) / 0.45f, 0.0f, 1.0f));
 			hand = transfer.from_hold_hands[h].lerp(on_face, kh) - in * (0.06f * Math::sin(kh * float(Math::PI)));
-			grip = kh <= 0.0f ? 1.0f : 0.0f;
+			// (the grip eased off as the body rises over the hands, to nothing as the hand leaves: held to its hold at once,
+			// the body's fit to the arms' reach had pinned the hips under the hold, then let them go at 2 m/s — 2.8 body weights)
+			grip = kh <= 0.0f ? 1.0f - smooth(CLAMP(tau / (first ? 0.2f : 0.4f), 0.0f, 1.0f)) : 0.0f;
+			reach = kh <= 0.0f ? 1.0f : kh;
 			press_w = 1.0f - kh;
 		} else if (i == 3) {
 			const float kh = smooth(CLAMP((tau - (first ? 0.0f : 0.35f)) / 0.6f, 0.0f, 1.0f));
 			hand = on_face.lerp(to_hands[h], kh) - in * (0.08f * Math::sin(kh * float(Math::PI)));
 			grip = kh >= 1.0f ? 1.0f : 0.0f;
-			reach = kh;
+			reach = kh >= 1.0f ? 1.0f : MAX(0.01f, kh);
 			on_next = kh >= 0.5f;
 		} else if (i == 4) {
 			hand = to_hands[h];
@@ -2353,8 +2364,9 @@ void FellowTraversal3D::_step_up_step(double p_delta) {
 		hints.hand_weight[h] = 1.0f;
 		hints.hand_grip[h] = grip;
 		hints.hand_reach[h] = reach;
-		hints.hand_pole[h] = (-in * 0.5f + UP * 0.5f + from_left * (side * 0.4f));
-		hints.hand_pole_weight[h] = press_w;
+		// (pressing, the elbows up and back; up the face, down and out from it — not into the stone)
+		hints.hand_pole[h] = press_w > 0.0f ? (-in * 0.5f + UP * 0.5f + from_left * (side * 0.4f)) : (-in * 0.4f - UP * 0.5f + from_left * (side * 0.6f));
+		hints.hand_pole_weight[h] = press_w > 0.0f ? press_w : ((i == 2 || i == 3) ? 1.0f : 0.0f);
 		hints.hold_normal[h] = on_next ? to_normal : transfer.from_normal;
 		hints.hold_lip[h] = on_next ? transfer.to_lip[h] : transfer.from_lip[h];
 		hints.hold[h] = on_next ? to_hands[h] : transfer.from_hold_hands[h];
@@ -2368,9 +2380,11 @@ void FellowTraversal3D::_step_up_step(double p_delta) {
 		Vector3 wall_foot = _hang_foot(h, feet, inward, face_pt.y, face_pt + left * (side * 0.14f), &hints.wall[h], &hints.wall_weight[h]);
 		float on_top = 0.0f;
 		if (i == 1) {
-			on_top = step_first ? smooth(CLAMP((tau - 0.1f) / 0.6f, 0.0f, 1.0f)) : 0.0f;
+			// (once the hips are near the top's height: a foot onto it from lower folds the hip past its range)
+			on_top = step_first ? smooth(CLAMP((tau - 0.45f) / 0.55f, 0.0f, 1.0f)) : 0.0f;
 		} else if (i == 2) {
-			on_top = step_first ? 1.0f : smooth(CLAMP((tau - 0.15f) / 0.5f, 0.0f, 1.0f));
+			// (the other foot up while the body is still out from the face, before it comes in over the top)
+			on_top = step_first ? 1.0f : smooth(CLAMP(tau / 0.38f, 0.0f, 1.0f));
 		} else if (i == 3) {
 			on_top = 1.0f;
 		} else if (i == 4) {
@@ -2378,9 +2392,12 @@ void FellowTraversal3D::_step_up_step(double p_delta) {
 		}
 		Vector3 foot = wall_foot;
 		if (on_top > 0.0f) {
-			// (up and out from the wall on the way: a knee lifted to the side; on the top the knee kept off the face over it)
+			// (up the face and out round the hold's edge, then in onto its top: a straight way had gone through the hold; a
+			// knee lifted to the side; on the top the knee kept off the face over it)
 			const Vector3 top_at = top_foot + UP * (i >= 3 ? MAX(0.0f, feet.y - stand.y) : 0.0f);
-			foot = wall_foot.lerp(top_at, on_top) - inward * (0.14f * Math::sin(on_top * float(Math::PI))) + UP * (0.1f * Math::sin(on_top * float(Math::PI)));
+			Vector3 round = transfer.from_edge - in * 0.12f + from_left * (side * 0.11f);
+			round.y = a_y + 0.12f;
+			foot = on_top < 0.5f ? wall_foot.lerp(round, smooth(on_top * 2.0f)) : round.lerp(top_at, smooth(on_top * 2.0f - 1.0f));
 			const Vector3 face_pt = transfer.face + UP * 0.5f;
 			hints.wall[h] = hints.wall[h].lerp(face_pt, on_top);
 			hints.wall_weight[h] = Math::lerp(hints.wall_weight[h], 1.0f, on_top);
@@ -2390,12 +2407,19 @@ void FellowTraversal3D::_step_up_step(double p_delta) {
 		hints.foot_follow[h] = 1.0f;
 		// (a foot stepped up onto the top at the hip's height: the knee up and out to the side, not into the stone)
 		hints.foot_pole[h] = UP * 0.6f + from_left * (side * 0.7f) - in * 0.1f;
-		hints.foot_pole_weight[h] = (i == 1 || i == 2) ? on_top : 0.0f;
+		// (the knee up and out over a foot on the top while the body is below it; eased off as the leg straightens to stand —
+		// standing, a knee led up or out bends sideways)
+		hints.foot_pole_weight[h] = i == 1 ? on_top : (i == 2 ? on_top * (1.0f - smooth(CLAMP((tau - 0.5f) / 0.5f, 0.0f, 1.0f))) : 0.0f);
+		hints.sole[h] = Vector3(top_foot.x, a_y, top_foot.z);
+		hints.sole_weight[h] = smooth(CLAMP((on_top - 0.5f) * 4.0f, 0.0f, 1.0f));
 	}
 	const Vector3 look_from = (transfer.from_hold_hands[0] + transfer.from_hold_hands[1]) * 0.5f + UP * 0.1f;
 	const Vector3 look_to = (to_hands[0] + to_hands[1]) * 0.5f;
-	hints.look = i < 2 ? look_from : look_to;
-	hints.look_weight = 1.0f;
+	// (the eyes from the hold to the next as the body stands up)
+	hints.look = i < 2 ? look_from : (i == 2 ? look_from.lerp(look_to, k) : look_to);
+	// (close against the wall the next hold is two metres straight up: the head tips back only as far as a neck goes —
+	// the eyes do the rest)
+	hints.look_weight = i < 2 ? 1.0f : 0.6f;
 	if (transfer.t >= 1.0) {
 		transfer.active = false;
 		ledge = transfer.to;

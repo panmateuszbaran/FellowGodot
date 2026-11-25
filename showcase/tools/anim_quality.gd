@@ -23,6 +23,11 @@ const INSIDE_BONES := ["Head", "LeftLowerArm", "RightLowerArm", "LeftLowerLeg", 
 
 var program := "gaits"
 var out_dir := "user://anim_quality"
+# Milestone 203: the climb program's length — climbing at a person's pace (the body pulled up at 1 m/s at most, stood up
+# onto the holds between the floors) the demo reaches the roof's tiles after 20 s (14 s had been enough).
+const CLIMB_SECONDS := 26.0
+var dump_frames := false # milestone 203: `--dump=1` writes <program>_out.json, every joint out of range frame by frame
+var dumped := []
 var player: CharacterBody3D
 var sk: Skeleton3D
 var traversal: Node
@@ -53,6 +58,8 @@ func _initialize() -> void:
 			program = a.get_slice("=", 1)
 		elif a.begins_with("--out="):
 			out_dir = a.get_slice("=", 1)
+		elif a == "--dump=1":
+			dump_frames = true
 	var scene := (load("res://rooftops/rooftops.tscn") as PackedScene).instantiate()
 	root.add_child(scene)
 	player = scene.get_node("Player")
@@ -141,6 +148,9 @@ func _upd() -> void:
 			var over: float = anat.get_script().beyond(k, am[k])
 			if over > 0.0:
 				ao[k] = int(ao.get(k, 0)) + 1
+				if dump_frames:
+					# (milestone 203, `--dump=1`: every joint out of range, frame by frame, for its moment's move)
+					dumped.append([frame, String(player.get("state")), k, snappedf(am[k], 0.1), snappedf(over, 0.1)])
 				if over > float((aw.get(k, [0.0]) as Array)[0]):
 					aw[k] = [over, am[k], frame, String(player.get("state"))]
 	# Milestone 195: limbs through the buildings — a surface (not the player's) between the hips and a joint.
@@ -157,6 +167,8 @@ func _upd() -> void:
 			d["inside_depth_cm"] = maxf(float(d.get("inside_depth_cm", 0.0)), depth)
 			break
 	if through != "":
+		if dump_frames:
+			dumped.append([frame, String(player.get("state")), "wall " + through, 0.0, 0.0])
 		d["inside"] = int(d.get("inside", 0)) + 1
 		var ib: Dictionary = d.get_or_add("inside_bones", {})
 		ib[through] = int(ib.get(through, 0)) + 1
@@ -265,7 +277,7 @@ func _process(_d: float) -> bool:
 		player.want_sprint = step[4]
 		if seg != "end":
 			return false
-	elif t < 14.0:
+	elif t < CLIMB_SECONDS:
 		return false
 	_write()
 	return true
@@ -385,6 +397,10 @@ func _write() -> void:
 	if limits and limits.has_method("get_stats"):
 		outd["joint_limits"] = limits.call("get_stats")
 	DirAccess.make_dir_recursive_absolute(out_dir)
+	if dump_frames:
+		var fd := FileAccess.open(out_dir.path_join(program + "_out.json"), FileAccess.WRITE)
+		fd.store_string(JSON.stringify(dumped))
+		fd.close()
 	var fa := FileAccess.open(out_dir.path_join(program + ".json"), FileAccess.WRITE)
 	fa.store_string(JSON.stringify(outd))
 	fa.close()

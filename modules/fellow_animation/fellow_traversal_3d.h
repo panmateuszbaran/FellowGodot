@@ -152,6 +152,10 @@ public:
 		float hand_pole_weight[2] = { 0.0f, 0.0f };
 		Vector3 foot_pole[2];
 		float foot_pole_weight[2] = { 0.0f, 0.0f };
+		// Milestone 203 (decision 0345): a top a foot stands on (a point on it, world): the ball of the foot kept on it, not
+		// in the stone (the foot pitched about the ankle; weight 0: none).
+		Vector3 sole[2];
+		float sole_weight[2] = { 0.0f, 0.0f };
 	};
 
 	// Milestone 198 (decision 0340): a hand's target on a ledge: this far in over the edge, this far over the top.
@@ -349,12 +353,14 @@ private:
 	// squat).
 	static constexpr float STEP_MIN_DEPTH = 0.12f;
 	static constexpr float STEP_PULL = -0.40f;
-	static constexpr float STEP_PRESS = 0.20f;
+	static constexpr float STEP_PRESS = 0.0f; // (the arms straight on the hold, the hips out by STEP_PRESS_GAP: higher, the body's fit to the arms' reach held them under it)
 	static constexpr float STEP_STAND = 0.92f;
 	static constexpr float STEP_OFF = 0.12f;
 	static constexpr float STEP_HIPS_BACK = 0.13f;
 	static constexpr float STEP_LEAN = 0.3f; // radians
-	static constexpr float STEP_ANKLE_OFF = 0.16f; // m: standing on the top, the ankles out from the face (the balls of the feet on it)
+	static constexpr float STEP_ANKLE_OFF = 0.19f; // m: standing on the top, the ankles out from the face (the balls of the feet on it)
+	static constexpr float STEP_PULL_GAP = 0.33f; // m: the hips out from the face, pulled up
+	static constexpr float STEP_PRESS_GAP = 0.28f; // m: and pressed up (the hold stands out 0.1-0.2 m)
 	static constexpr float STEP_PRESS_SPEED = 0.8f;
 	static constexpr float STEP_STAND_SPEED = 0.9f;
 	static constexpr float STEP_REACH_TIME = 0.6f;

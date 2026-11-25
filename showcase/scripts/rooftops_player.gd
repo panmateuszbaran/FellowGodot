@@ -968,12 +968,17 @@ func _limit_joints() -> void:
 		return
 	var limits: Node = ClassDB.instantiate(&"FellowJointLimits3D")
 	limits.name = "JointLimits"
+	# Milestone 203: a hinge turned into its bend however far round (a leg stepped up onto a hold at the hips' height had
+	# its knee bent backwards past the 120 degrees milestone 202 turned).
+	limits.set("hinge_max_turn", 175.0)
 	for arg in args:
 		for p in ["hinge_alignment", "limit_ankles", "limit_wrists", "limit_neck"]:
 			if arg.begins_with("--%s=" % p): # (tools)
 				limits.set(p, arg.get_slice("=", 1) != "0")
 		if arg.begins_with("--max_correction_speed="): # (tools)
 			limits.set("max_correction_speed", float(arg.get_slice("=", 1)))
+		if arg.begins_with("--hinge_max_turn="): # (tools, milestone 203)
+			limits.set("hinge_max_turn", float(arg.get_slice("=", 1)))
 	skel.add_child(limits)
 
 

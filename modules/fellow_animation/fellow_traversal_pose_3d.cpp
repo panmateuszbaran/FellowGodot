@@ -1015,6 +1015,10 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 			if (upper >= 0 && lower >= 0 && foot >= 0 && h.wall_weight[s] > 0.0f) {
 				_clear_wall(skeleton, upper, lower, foot, to_skeleton.xform(h.wall[s]), -inward, left * (s == 0 ? 1.0f : -1.0f), meter, weight * h.wall_weight[s]);
 			}
+			// (milestone 203: a foot standing on a top, its ball on it)
+			if (upper >= 0 && lower >= 0 && foot >= 0 && h.sole_weight[s] > 0.0f) {
+				_clear_wall(skeleton, upper, lower, foot, to_skeleton.xform(h.sole[s]), up, left * (s == 0 ? 1.0f : -1.0f), meter, weight * h.sole_weight[s]);
+			}
 		}
 	}
 	if (hand_ik) {
