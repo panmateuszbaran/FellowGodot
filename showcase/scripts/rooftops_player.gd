@@ -30,7 +30,9 @@ const MOCAP_GAITS := ["gait_walk", "gait_jog", "gait_run", "gait_sprint"]
 # Mixamo's climb up from a hang ("Braced Hang To Crouch") is retargeted with its root motion but not played: over
 # CasaCrema's eave (a lip 0.5 m out, a roof's slope) it put the head, an arm and a shin through it in half the mantle's
 # frames (the mannequin's own: none), and onto a plain top it ends crouched (the stand-up a blend). Its vault is played.
-const MOCAP_KEEP_OWN := ["fall", "climb_move", "hang_climb"]
+# (milestone 206: and the jump at a wall — Mixamo's "Run To Start Climbing" reaches with one arm, its chest turned 37
+# degrees from the stride: caught on the hold by both hands, the body rolled 25-34 degrees)
+const MOCAP_KEEP_OWN := ["fall", "climb_move", "hang_climb", "jump_wall"]
 # Milestone 196: between holds a hand off its hold is reached for by this share of the IK (FellowTraversalPose3D's
 # hand_flight_weight): Mixamo's arm carries it, the IK puts it on the hold as it takes it.
 const MOCAP_HAND_FLIGHT := 0.3
@@ -125,6 +127,7 @@ var _shot_name := ""
 ## FellowInertializer3D (before the IK's modifiers) blends from the pose the character had, carried on by its own
 ## velocity, to the new one's — not two animations' poses mixed over 0.2 s.
 const INERTIA_TIME := 0.3
+const INERTIA_JUMP_WALL := 0.45
 var _inertia: Node = null
 ## Milestone 198 (the owner: "the character does not grip the edge with its hand, but somewhere in the air; the hands
 ## sometimes go through the edge"): a hand on a ledge held as a climber's (FellowTraversalPose3D.ledge_grip) — the palm
@@ -178,7 +181,10 @@ func _use_mocap() -> void:
 	# The player's own copy of the library (the crowd's NPCs share the mannequin's).
 	var lib := ap.get_animation_library(&"").duplicate() as AnimationLibrary
 	# (tools: `-- --mocap_all=1` plays every clip of the library, these too)
-	var keep: Array = [] if "--mocap_all=1" in OS.get_cmdline_user_args() else MOCAP_KEEP_OWN
+	var keep: Array = [] if "--mocap_all=1" in OS.get_cmdline_user_args() else MOCAP_KEEP_OWN.duplicate()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--mocap_keep="): # (tools, milestone 206: these clips the mannequin's own too)
+			keep.append_array(arg.get_slice("=", 1).split(","))
 	for a in mocap.get_animation_list():
 		if String(a) in keep:
 			continue
@@ -1011,7 +1017,9 @@ func _set_state(s: String) -> void:
 	state = s
 	tree.set("parameters/state/transition_request", s)
 	if _inertia:
-		_inertia.call("blend", INERTIA_TIME)
+		# (milestone 206: out of the sprint into the jump at a wall over longer — the arms' swing up from the stride's,
+		# the mannequin's own clip: at 0.3 s an upper arm turned at 2,240 °/s)
+		_inertia.call("blend", INERTIA_JUMP_WALL if s == "jump_wall" else INERTIA_TIME)
 
 
 ## Milestone 202 (the owner: "assess the movements' anatomical correctness"): the joints within a person's range of

@@ -156,6 +156,16 @@ func _upd() -> void:
 				var bb := (sk.global_transform.basis * sk.get_bone_global_pose(sk.find_bone(bn)).basis).orthonormalized()
 				tilt.append(snappedf(rad_to_deg(bb.y.angle_to(Vector3.UP)), 0.1))
 			dumped.append([frame, String(player.get("state")), "tilt", tilt, 0.0])
+			# (the hips' and the upper chest's yaw off the body's facing and roll about it, degrees; the body's facing)
+			var facing: Vector3 = -player.global_basis.z
+			var rot := []
+			for bn in ["Hips", "UpperChest"]:
+				var bb := (sk.global_transform.basis * sk.get_bone_global_pose(sk.find_bone(bn)).basis).orthonormalized()
+				var bf := Vector3(bb.z.x, 0.0, bb.z.z).normalized()
+				var side := bb.x
+				rot.append(snappedf(rad_to_deg(facing.signed_angle_to(bf, Vector3.UP)), 0.1))
+				rot.append(snappedf(rad_to_deg(asin(clampf(side.y, -1.0, 1.0))), 0.1))
+			dumped.append([frame, String(player.get("state")), "rot", rot, snappedf(rad_to_deg(atan2(facing.x, facing.z)), 0.1)])
 		for k in am:
 			(av.get_or_add(k, []) as Array).append(am[k])
 			var over: float = anat.get_script().beyond(k, am[k])
@@ -179,6 +189,17 @@ func _upd() -> void:
 			var depth: float = (hit.position as Vector3).distance_to(j) * 100.0
 			d["inside_depth_cm"] = maxf(float(d.get("inside_depth_cm", 0.0)), depth)
 			break
+	if dump_all:
+		# (milestone 206: each forearm, the elbow to the hand, through a surface — a hand through an eave)
+		for side in ["Left", "Right"]:
+			if not (b.has(side + "LowerArm") and b.has(side + "Hand")):
+				continue
+			var e := _p(side + "LowerArm")
+			var hd := _p(side + "Hand")
+			var qf := PhysicsRayQueryParameters3D.create(e, hd, 1, [player.get_rid()])
+			var hf := space.intersect_ray(qf)
+			if not hf.is_empty() and e.distance_to(hf.position) < e.distance_to(hd) - 0.03:
+				dumped.append([frame, String(player.get("state")), "forearm " + side, snappedf((hf.position as Vector3).distance_to(hd) * 100.0, 0.1), 0.0])
 	if through != "":
 		if dump_frames:
 			dumped.append([frame, String(player.get("state")), "wall " + through, 0.0, 0.0])

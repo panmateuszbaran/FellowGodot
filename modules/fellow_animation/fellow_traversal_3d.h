@@ -373,6 +373,8 @@ private:
 	static constexpr float STEP_REACH_TIME = 0.6f;
 	static constexpr float FOOT_DEPTH_SPEED = 1.5f; // m/s
 	static constexpr float FOOT_HIGH_STEP = 0.25f; // m: a foot stepping up the wall at most this over its hanging place
+	static constexpr float LIP_ROUND_OUT = 0.2f; // m: a lip this far out over the hold left is leapt to round its front
+	static constexpr float LIP_ROUND_CONTROL = 0.5f; // m: the hands' curve's control that far out from the lip's hold
 	static constexpr float STEP_HANG_TIME = 0.6f;
 	float _leap_reach_max() const; // milestone 203: how far up a leap carries the body with leap_push_force (m; a large number without)
 	bool _step_stand(const Ledge &p_ledge, Vector3 &r_feet, Vector3 *r_face = nullptr) const; // milestone 203: where the body stands on a ledge's top (false: too narrow, no room)
