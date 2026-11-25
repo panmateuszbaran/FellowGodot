@@ -166,6 +166,7 @@
 [ext_resource type="Skin" path="res://rooftops/character/mannequin_skin.res" id="161_5v0l5"]
 [ext_resource type="AnimationLibrary" path="res://rooftops/character/reference_shot_clip.res" id="162_pocte"]
 [ext_resource type="Script" path="res://scripts/rooftops_demo.gd" id="163_s4vkt"]
+[ext_resource type="Script" path="res://scripts/rooftops_hay.gd" id="210_hay"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kicm1"]
 shader = ExtResource("2_yebai")
@@ -5264,6 +5265,9 @@ shape = SubResource("ConvexPolygonShape3D_8xwoa")
 
 [node name="Mesh" type="MeshInstance3D" parent="Town/HayCart" unique_id=1543261392]
 mesh = ExtResource("16_r3rt5")
+
+[node name="Hay" type="Node3D" parent="Town/HayCart" unique_id=1210210001]
+script = ExtResource("210_hay")
 
 [node name="Bollard0" type="StaticBody3D" parent="Town" unique_id=449710680]
 transform = Transform3D(0.80424315, 0, 0.5943004, 0, 1, 0, -0.5943004, 0, 0.80424315, -17.6, 0, -24.6)

@@ -856,6 +856,8 @@ func _enter_hay(cart: Node3D) -> void:
 	# The way out of the hay is the clip's root motion, read at the physics ticks: the tree advanced with them meanwhile.
 	tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
 	_play("hay_exit")
+	# (milestone 210: straws thrown up where the body lands)
+	get_tree().call_group(&"hay_fx", &"burst", global_position + Vector3.UP * 0.9)
 	if _camera and _camera.has_method("release"):
 		_camera.release()
 

@@ -16,7 +16,9 @@ extends SceneTree
 ##   godot ... -s res://tools/climb_look.gd -- --program=bump --bump=walk|run|sprint --out=<dir> [--seconds=8] ...
 ##       (milestone 208: from 6 m at one of the talkers in the square's middle, into them and on; its reactions printed)
 ##   godot ... -s res://tools/climb_look.gd -- --program=people --out=<dir> [--dist=2.6] ...
-##       (milestone 209: beside a walker in a skirt — the cloth — the player out of the way)
+##       (milestone 209: beside a walker in a skirt — the cloth — the player out of the way; --people_side=-1)
+##   godot ... -s res://tools/climb_look.gd -- --program=hay --out=<dir> [--dist=4.2] [--hay_from=<deg>] ...
+##       (milestone 210: round the hay cart)
 ##
 ## --cam=hand: the hands on the edge from out and above; --cam=handside: the left hand in profile from along the edge
 ## (milestone 198). --warm=<n>: the n frames before --skip drawn too, not saved (the exposure settled).
@@ -82,6 +84,10 @@ func _init() -> void:
 			_program = a.get_slice("=", 1)
 		elif a.begins_with("--keys_yaw="):
 			_keys_yaw = float(a.get_slice("=", 1))
+		elif a.begins_with("--people_side="):
+			_people_side = float(a.get_slice("=", 1))
+		elif a.begins_with("--hay_from="):
+			_hay_from = float(a.get_slice("=", 1))
 		elif a.begins_with("--bump="):
 			_bump_pace = a.get_slice("=", 1)
 		elif a.begins_with("--keys_turn="):
@@ -103,7 +109,7 @@ func _init() -> void:
 				c.free()
 		var town := sc.get_node("Town")
 		for c in town.get_children():
-			if not (c.name in KEEP):
+			if not (c.name in KEEP) and not (_program == "hay" and c.name == "HayCart"):
 				town.remove_child(c)
 				c.free()
 	if _lite:
@@ -139,6 +145,10 @@ func _init() -> void:
 		_bump_setup(sc)
 	elif _program == "people":
 		_people_setup(sc)
+	elif _program == "hay":
+		_player.set("autopilot", true)
+		_player.global_position = Vector3(-30.0, 0.0, -30.0)
+		_hay_cart = sc.get_node_or_null("Town/HayCart")
 	elif _program == "fountain":
 		_player.set("autopilot", true)
 		var c := (sc.get_node("Town/Fountain") as Node3D).global_position
@@ -161,7 +171,7 @@ func _init() -> void:
 			_drive_keys(i)
 		elif _program == "bump":
 			_drive_bump(i)
-		elif _program == "people":
+		elif _program == "people" or _program == "hay":
 			_player.set("wish", Vector3())
 		elif _program == "fountain":
 			# (milestone 207: a run at the fountain's middle — onto the basin's rim, across it, into the column)
@@ -375,6 +385,9 @@ func _drive_bump(i: int) -> void:
 ## The "people" program (milestone 209, the owner: "the skirts not solids but cloth"): the camera beside a walker in a
 ## skirt (the first of the crowd's), keeping pace; the player out of the way.
 var _people_target: Node3D
+var _people_side := 1.0 # --people_side=-1: from its other side
+var _hay_cart: Node3D
+var _hay_from := 0.0 # --hay_from=<deg>: where round the cart the camera starts
 
 func _people_setup(sc: Node) -> void:
 	_player.set("autopilot", true)
@@ -506,10 +519,18 @@ func _place_camera(p_first: bool) -> void:
 		_cam.global_position = _cam_pos
 		_cam.look_at(_look, Vector3.UP)
 		return
+	if _program == "hay" and _hay_cart:
+		# (milestone 210: round the hay cart, slowly, at a person's height and from above)
+		var t := float(_frames.size()) / 60.0
+		var a := deg_to_rad(_hay_from + 16.0 * t)
+		var c := _hay_cart.global_position + Vector3.UP * 1.3
+		_cam.global_position = c + Vector3(cos(a), 0.0, sin(a)) * _dist + Vector3.UP * (0.4 + 0.35 * _dist * 0.3)
+		_cam.look_at(c + Vector3.UP * 0.1, Vector3.UP)
+		return
 	if _program == "people" and _people_target:
 		# (milestone 209: beside a walker in a skirt, keeping pace with it)
 		var at := _people_target.global_position
-		var side_of := _people_target.global_basis.x.normalized()
+		var side_of := _people_target.global_basis.x.normalized() * _people_side
 		var want_at := at + side_of * _dist + Vector3.UP * 1.0 - _people_target.global_basis.z.normalized() * 0.6
 		_cam_pos = want_at if p_first else _cam_pos.lerp(want_at, 0.1)
 		_look = (at + Vector3.UP * 0.65) if p_first else _look.lerp(at + Vector3.UP * 0.65, 0.2)

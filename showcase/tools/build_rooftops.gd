@@ -1363,6 +1363,10 @@ func _hay_cart(p_parent: Node3D) -> void:
 	var x := Transform3D(Basis(Vector3.UP, deg_to_rad(84.0)), Vector3(at.x, 0.0, at.z))
 	var cart := _model(p_parent, "HayCart", x, LAYER_WORLD | LAYER_HAY)
 	cart.add_to_group("hay", true)
+	# Milestone 210 (decision 0352): the hay heaped and strawed at run time (rooftops_hay.gd) in place of the model's dome.
+	var hay := Node3D.new()
+	hay.set_script(load("res://scripts/rooftops_hay.gd"))
+	_add(cart, hay, "Hay")
 
 
 ## The bell tower's beam's end: its -Z out along the beam, over the square.
