@@ -674,14 +674,14 @@ func _environment(p_root: Node3D) -> void:
 	env.fog_enabled = true
 	# Milestone 153: the golden hour's haze — the city's far houses and the hills paler and bluer with distance (the
 	# sky's colour mixed in), as the eye reads depth.
-	# Milestone 199: from 150 m out, growing to three quarters at 3 km (Godot's depth fog: smoothstep(150, 3000) to the
-	# power 0.55) — exponential (0.0008 a metre: 4 % at 50 m, 15 % at 200 m), it had lifted every shadow of the city seen
-	# from the bell tower into a milky veil; the hills as hazy as they were (38 % at 1 km, 64 % at 2 km against 55 and 80).
+	# Milestone 199: from 150 m out, growing to four fifths at 3 km (Godot's depth fog: smoothstep(150, 3000) to the
+	# power 0.5) — exponential (0.0008 a metre: 4 % at 50 m, 15 % at 200 m), it had lifted every shadow of the city seen
+	# from the bell tower into a milky veil; the hills a little clearer (37 % at 1 km, 68 % at 2 km against 55 and 80).
 	env.fog_mode = Environment.FOG_MODE_DEPTH
 	env.fog_depth_begin = 150.0
 	env.fog_depth_end = 3000.0
-	env.fog_depth_curve = 0.55
-	env.fog_density = 0.75
+	env.fog_depth_curve = 0.5
+	env.fog_density = 0.8
 	env.fog_aerial_perspective = 0.8
 	env.fog_light_color = Color(0.85, 0.72, 0.58)
 	# Milestone 168: the depth fog no longer over the sky (the atmosphere draws its haze; the fog's beige had greyed it).
