@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 201 — A jump at a wall aimed at its hold (2026-11-25)
+
+- `FellowTraversal3D.aim_jump_at_hold(direction, gravity, max_speed)`, `is_aiming()` (decision 0343): the takeoff speed
+  that brings the body to its top 8 cm over its hang from the hold it finds; while it rises the pose's hands reach for
+  the hold (up the wall's face, in over the top) and at the top it is caught with them on; `FellowTraversalPose3D`: no
+  sway while the hands reach from the air, the grip's shape in at once, the clip's feet kept out of the stone until
+  0.4 s after the catch.
+- The showcase's jump at a wall aimed (its clip played from its push to its hand on its hold, its limbs the catch's):
+  for CasaCrema's first hold 2.13 m/s, not 4.8 — the hips' top over their hang 0.87 → 0.06 m, caught at the top 0.22 s
+  after the takeoff (not 0.72 s, on the way down), the drop into the hang 0.77 → 0.14 m, both hands on the hold (the
+  wrists 57 / 28 → 9 / 3 cm from their holds at the catch; one had reached 50 cm over the edge); limbs through walls
+  in the run and the jump 4.0 → 0.0 %.
+
 ## Milestone 200 — Hands that hold on, a leap up under gravity, the motion capture unstepped (2026-11-25)
 
 - `FellowTraversalPose3D` (with `ledge_grip`; decision 0342): a hand on its hold keeps its fingers over the edge
