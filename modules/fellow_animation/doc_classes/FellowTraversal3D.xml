@@ -48,6 +48,13 @@
 				Ends the mantle in progress where the body is (its velocity zero); [signal mantle_cancelled] is emitted.
 			</description>
 		</method>
+		<method name="clear_leap_timing">
+			<return type="void" />
+			<param index="0" name="kind" type="int" enum="FellowTraversal3D.LeapKind" />
+			<description>
+				Milestone 198: the traversal's own timing for leaps of [param kind] again (a wind-up of [member hang_leap_windup], the body on its curve).
+			</description>
+		</method>
 		<method name="climb_up">
 			<return type="void" />
 			<description>
@@ -100,7 +107,7 @@
 		<method name="get_pose_targets" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				What the body's pose follows this physics frame (global space), for a pose of one's own: [code]active[/code], [code]kind[/code], [code]progress[/code], [code]inward[/code], [code]hand_left[/code], [code]hand_right[/code], [code]hand_weights[/code] (a [Vector2]: left, right), [code]foot_left[/code], [code]foot_right[/code], [code]foot_weights[/code], [code]foot_follow[/code] (how far each foot's target moves down with the hips), [code]lean[/code] (radians, towards the wall), [code]hips_drop[/code] (meters the hips may hang below the capsule's place), [code]body_offset[/code] (the body shown off the capsule's place: a leap's wind-up, milestone 153), [code]hand_grips[/code] (a [Vector2]: 1 where a hand is on its hold, 0 where it moves to the next; milestone 153), [code]look[/code] and [code]look_weight[/code] (where the climber looks: the next hold through a move from hold to hold, the way it wishes to shimmy or climb while hanging, over the top through a mantle; 0 on a ladder or a free climb; milestone 154), [code]clip[/code] and [code]clip_time[/code].
+				What the body's pose follows this physics frame (global space), for a pose of one's own: [code]active[/code], [code]kind[/code], [code]progress[/code], [code]inward[/code], [code]hand_left[/code], [code]hand_right[/code], [code]hand_weights[/code] (a [Vector2]: left, right), [code]foot_left[/code], [code]foot_right[/code], [code]foot_weights[/code], [code]foot_follow[/code] (how far each foot's target moves down with the hips), [code]lean[/code] (radians, towards the wall), [code]hips_drop[/code] (meters the hips may hang below the capsule's place), [code]body_offset[/code] (the body shown off the capsule's place: a leap's wind-up, milestone 153), [code]hand_grips[/code] (a [Vector2]: 1 where a hand is on its hold, 0 where it moves to the next; milestone 153), [code]hand_reach[/code] (a [Vector2]: how far along its way to the next hold a moving hand is, 1 on a hold), [code]hold_left[/code] and [code]hold_right[/code] (the hold each hand is on, or from half way between holds going to, where [code]hand_left[/code] and [code]hand_right[/code] will be), [code]hold_normal_left[/code] and [code]hold_normal_right[/code] (the top's normal there), [code]hold_lip_left[/code] and [code]hold_lip_right[/code] (a [Vector2]: how far the stone just under the edge stands out of it and how far under the top its own top is; milestone 198), [code]look[/code] and [code]look_weight[/code] (where the climber looks: the next hold through a move from hold to hold, the way it wishes to shimmy or climb while hanging, over the top through a mantle; 0 on a ladder or a free climb; milestone 154), [code]clip[/code] and [code]clip_time[/code].
 			</description>
 		</method>
 		<method name="get_progress" qualifiers="const">
@@ -113,6 +120,13 @@
 			<return type="void" />
 			<description>
 				Hanging, jumps to another ledge the way [method set_intent]'s wish goes, at the next physics frame: along the edge past its end (left or right; the first edge within [member hang_jump_distance] at about the same height, hung from 0.3 m into it; across a gap within [member hang_reach_side], hand over hand instead), up (within [member hang_jump_height], both hands on it; within [member hang_reach_up], hand over hand instead) or down (milestone 86: within [member hang_jump_depth], both hands on it; the body going out to the lower ledge's face first), back (milestone 95: the wish away from the wall: a ledge on the wall behind, within [member hang_jump_distance] of the body's back, at about this edge's height, facing this wall; the body turning round), or diagonally (milestone 93: the wish both along and up or down, each over 0.35: the nearest edge past this one's end within [member hang_jump_distance], 0.4 m higher or lower at least, within [member hang_jump_height] or [member hang_jump_depth]), or round the corner (milestone 149: the wish along with no edge on along it: a ledge on the side of the wall where it turns away, or standing out of it, 0.3 m to [member hang_jump_distance] back from the corner, at about this edge's height, both hands on it; the body out round the corner, turning a quarter, the wish held going on along the new edge), with room for the body there and on the way. Nothing happens when there is none (a wish down then lets go). The body flies there along a curve (0.5 s along, 0.45 s up, 0.4 s down, 0.55 s diagonally, 0.6 s back or round a corner), its hands letting go and catching the new edge; [signal hang_transferred] is emitted when it hangs again. Climbing a face (milestone 148), it lunges over the face the way the wish goes (up without one) by up to [member climb_jump_distance], as far as the face and room for the body go (0.4 m at least), and emits [signal climb_jumped].
+			</description>
+		</method>
+		<method name="has_leap_timing" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="kind" type="int" enum="FellowTraversal3D.LeapKind" />
+			<description>
+				Milestone 198: whether leaps of [param kind] are timed by [method set_leap_timing].
 			</description>
 		</method>
 		<method name="is_active" qualifiers="const">
@@ -169,6 +183,18 @@
 			<param index="0" name="direction" type="Vector3" />
 			<description>
 				The way the player wants to go (the input, in global space), set by the controller every physics frame: the automatic mantle checks that way, and a body pressed against a wall (its velocity into it lost to the slide) still mantles. A zero vector: the body's velocity is used.
+			</description>
+		</method>
+		<method name="set_leap_timing">
+			<return type="void" />
+			<param index="0" name="kind" type="int" enum="FellowTraversal3D.LeapKind" />
+			<param index="1" name="time" type="float" />
+			<param index="2" name="reach" type="float" />
+			<param index="3" name="progress" type="PackedFloat32Array" />
+			<param index="4" name="lift" type="PackedFloat32Array" />
+			<param index="5" name="hands" type="Vector4" />
+			<description>
+				Milestone 198 (decision 0340): times a leap from hold to hold as a clip's — [param kind] [constant LEAP_UP] (a leap up) or [constant LEAP_ALONG] (along or across). [param time]: the clip's length in seconds; [param reach]: its own way in meters (up: its rise; along: across) — a longer leap plays slower by the square root of the ways' ratio, within 0.8-1.25 times. [param progress]: the hips' way along the move sampled evenly over the time (0 at the start, 1 at the end); [param lift]: their height over the straight line (along) or over the end's height (up), in meters, sampled the same way. [param hands]: the leading hand's let-go and catch, then the other's, as shares of the time. The traversal's own wind-up is not played (the clip's push is the wind-up); each hand lets go and catches when the clip's did, on an arc out from the wall; the feet leave the wall as the first hand lets go and brace again as the last catches. The showcase passes [code]tools/blender/mixamo_retarget.py[/code]'s timings from Mixamo's hops.
 			</description>
 		</method>
 		<method name="try_climb">
@@ -481,6 +507,12 @@
 		</constant>
 		<constant name="TRANSFER_JUMP_UP" value="3" enum="Transfer">
 			A jump up to a ledge over the edge.
+		</constant>
+		<constant name="LEAP_UP" value="0" enum="LeapKind">
+			A leap up from one hold to the one above it ([method set_leap_timing]).
+		</constant>
+		<constant name="LEAP_ALONG" value="1" enum="LeapKind">
+			A leap along the wall to a hold beside, or across diagonally ([method set_leap_timing]).
 		</constant>
 		<constant name="TRANSFER_DROP" value="4" enum="Transfer">
 			From the floor over its edge into a hang from it ([method try_drop], [member drop_to_hang]).

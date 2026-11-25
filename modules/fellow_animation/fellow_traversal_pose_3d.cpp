@@ -123,11 +123,82 @@ Quaternion global_rotation(const Skeleton3D *p_skeleton, int p_bone) {
 	return p_bone < 0 ? Quaternion() : p_skeleton->get_bone_global_pose(p_bone).basis.get_rotation_quaternion();
 }
 
+// Milestone 198 (decision 0340): a hand held on a ledge (ledge_grip). The palm this far from level towards up, against
+// the face under the edge; the middle finger's knuckle this far out from the face and over the edge (along the top's
+// normal); the fingers' first two bones this far below the top's plane, over it; the grip turned to and from in about
+// GRIP_EASE.
+const float GRIP_PITCH = 70.0f; // degrees
+const float GRIP_KNUCKLE_OUT = 0.01f; // m
+const float GRIP_KNUCKLE_UP = 0.02f; // m
+const float GRIP_EASE = 0.12f; // s
+const float GRIP_HAND_SMOOTHING = 0.015f; // s
+const float GRIP_TURN = 0.08f; // s: the palm's way from the knuckles to the wrist eased over this
+const float GRIP_ELBOW_TURN = 720.0f; // degrees a second
+const float GRIP_PALM_CLEAR = 0.024f; // m: the palm's half thickness and a little
+// A step just under the edge (its top no more than GRIP_STEP under it, standing out at least GRIP_STEP_OUT): held by its
+// own edge instead; the fingers on it.
+const float GRIP_STEP = 0.04f; // m
+const float GRIP_STEP_OUT = 0.06f; // m
+// The fingers' middle joints and tips this far in over the edge and this far over the top.
+const float GRIP_FINGER_IN[2] = { 0.037f, 0.08f }; // m
+const float GRIP_FINGER_UP[2] = { 0.016f, 0.01f }; // m
+
+float smooth01(float p_x) {
+	const float x = CLAMP(p_x, 0.0f, 1.0f);
+	return x * x * (3.0f - 2.0f * x);
+}
+
+// An orthonormal frame whose first column is along p_along, its second p_across made square to it.
+Basis frame_of(const Vector3 &p_along, const Vector3 &p_across) {
+	const Vector3 f = p_along.normalized();
+	Vector3 a = p_across - f * p_across.dot(f);
+	if (f == Vector3() || a.length() < 1e-5f) {
+		return Basis();
+	}
+	a.normalize();
+	Basis b;
+	b.set_columns(f, a, f.cross(a));
+	return b;
+}
+
+// A bone turned (its parent's pose kept) the least way that points it along p_dir (skeleton space), by p_weight. Its
+// axis: to its first child, or (an end bone) its parent's continued (a finger's bones straight at rest).
+void aim_bone(Skeleton3D *p_skeleton, int p_bone, const Vector3 &p_dir, float p_weight) {
+	if (p_bone < 0 || p_weight <= 0.0f) {
+		return;
+	}
+	const Vector<int> children = p_skeleton->get_bone_children(p_bone);
+	Vector3 axis;
+	if (!children.is_empty()) {
+		axis = p_skeleton->get_bone_pose_position(children[0]);
+	} else {
+		const Transform3D rest = p_skeleton->get_bone_rest(p_bone);
+		axis = rest.basis.inverse().xform(rest.origin);
+	}
+	if (axis.length() < 1e-6f) {
+		return;
+	}
+	const Quaternion now = global_rotation(p_skeleton, p_bone);
+	const Vector3 from = now.xform(axis.normalized());
+	const Vector3 to = p_dir.normalized();
+	if (from.dot(to) > 0.99999f) {
+		return;
+	}
+	const Quaternion swing = from.dot(to) < -0.9999f ? Quaternion(from.get_any_perpendicular(), Math::PI) : Quaternion(from, to);
+	const Quaternion parent = global_rotation(p_skeleton, p_skeleton->get_bone_parent(p_bone));
+	p_skeleton->set_bone_pose_rotation(p_bone, (parent.inverse() * (Quaternion().slerp(swing, p_weight) * now)).normalized());
+}
+
 } // namespace
 
 FellowTraversalPose3D::FellowTraversalPose3D() {
 	for (int &b : bones) {
 		b = -1;
+	}
+	for (int s = 0; s < 2; s++) {
+		for (int f = 0; f < 5; f++) {
+			fingers[s][f][0] = fingers[s][f][1] = -1;
+		}
 	}
 }
 
@@ -162,9 +233,111 @@ void FellowTraversalPose3D::_find_bones(Skeleton3D *p_skeleton) {
 		return;
 	}
 	find_role_bones(p_skeleton, bone_names, bones);
+	_find_fingers(p_skeleton);
 	bones_skeleton = p_skeleton->get_instance_id();
 	bones_count = p_skeleton->get_bone_count();
 	bones_dirty = false;
+}
+
+// Milestone 198 (decision 0340): each hand's fingers — the hand bone's children named for the thumb, the index, middle,
+// ring and little finger (or pinky), and each one's first child.
+void FellowTraversalPose3D::_find_fingers(Skeleton3D *p_skeleton) {
+	static const char *const names[5][2] = { { "thumb", nullptr }, { "index", nullptr }, { "middle", nullptr }, { "ring", nullptr }, { "little", "pinky" } };
+	for (int s = 0; s < 2; s++) {
+		for (int f = 0; f < 5; f++) {
+			fingers[s][f][0] = fingers[s][f][1] = -1;
+		}
+		const int hand = bones[s == 0 ? ROLE_LEFT_HAND : ROLE_RIGHT_HAND];
+		if (hand < 0) {
+			continue;
+		}
+		for (const int c : p_skeleton->get_bone_children(hand)) {
+			const String n = normalized_bone_name(p_skeleton->get_bone_name(c));
+			for (int f = 0; f < 5; f++) {
+				if (fingers[s][f][0] < 0 && (n.contains(names[f][0]) || (names[f][1] && n.contains(names[f][1])))) {
+					fingers[s][f][0] = c;
+					const Vector<int> next = p_skeleton->get_bone_children(c);
+					fingers[s][f][1] = next.is_empty() ? -1 : next[0];
+					break;
+				}
+			}
+		}
+	}
+}
+
+// The hand's length from the wrist to the middle finger's knuckle (the skeleton's units; 0: no such finger).
+float FellowTraversalPose3D::_palm_length(Skeleton3D *p_skeleton, int p_side) const {
+	const int middle = fingers[p_side][2][0];
+	const int index = fingers[p_side][1][0];
+	const int little = fingers[p_side][4][0];
+	if (middle < 0 || index < 0 || little < 0) {
+		return 0.0f;
+	}
+	return p_skeleton->get_bone_pose_position(middle).length();
+}
+
+// Milestone 198 (decision 0340): the hand turned to hold a ledge (skeleton space: p_palm from the wrist to the knuckles,
+// p_edge a point on the edge held, p_in into the wall, p_normal the top's, p_side_dir the hand's outer side along the
+// edge) — its palm against the face under the edge, its fingers over the edge and on the top, the thumb along the palm
+// by the index finger.
+void FellowTraversalPose3D::_shape_grip(Skeleton3D *p_skeleton, int p_side, const Vector3 &p_palm, const Vector3 &p_edge, const Vector3 &p_in, const Vector3 &p_normal, const Vector3 &p_side_dir, float p_meter, float p_weight, bool p_letting_go) {
+	const int hand = bones[p_side == 0 ? ROLE_LEFT_HAND : ROLE_RIGHT_HAND];
+	const int index = fingers[p_side][1][0];
+	const int middle = fingers[p_side][2][0];
+	const int little = fingers[p_side][4][0];
+	if (hand < 0 || index < 0 || middle < 0 || little < 0 || p_weight <= 0.0f) {
+		return;
+	}
+	// The hand's own frame: along the palm to the middle finger's knuckle, across the knuckles from the index finger's to
+	// the little finger's — turned so that the palm goes up the face and the little finger is on the outer side (which
+	// faces the palm to the wall, whatever the rig's axes).
+	const Basis own = frame_of(p_skeleton->get_bone_pose_position(middle), p_skeleton->get_bone_pose_position(little) - p_skeleton->get_bone_pose_position(index));
+	const Basis want = frame_of(p_palm, p_side_dir);
+	if (own == Basis() || want == Basis()) {
+		return;
+	}
+	const Quaternion hand_rot(want * own.transposed());
+	const Quaternion parent = global_rotation(p_skeleton, p_skeleton->get_bone_parent(hand));
+	// Letting go, the wrist's last bend held against the forearm while it eases into the animation's (held in the world,
+	// the wrist had turned as fast as the arm swung off the hold).
+	if (!p_letting_go || !grip_local_valid[p_side]) {
+		grip_local[p_side] = (parent.inverse() * hand_rot).normalized();
+		grip_local_valid[p_side] = true;
+	}
+	p_skeleton->set_bone_pose_rotation(hand, p_skeleton->get_bone_pose_rotation(hand).slerp(grip_local[p_side], p_weight));
+	// The fingers over the edge and on the top: each one's middle joint and tip aimed at their places by its knuckle —
+	// as far as the knuckles are over the top: below it (the arm not yet up to the hold, the body still rising to it), the
+	// fingers open, up the face and a little out from it (not curled into the stone).
+	Vector3 over = p_in - p_normal * p_in.dot(p_normal);
+	Vector3 along = p_normal.cross(over);
+	if (over.length() < 1e-4f || along.length() < 1e-4f) {
+		return;
+	}
+	over.normalize();
+	along.normalize();
+	Vector3 open = p_normal.cross(along).cross(along); // (up the face)
+	open = (open.dot(p_normal) < 0.0f ? -open : open) - over * 0.15f;
+	open.normalize();
+	for (int f = 1; f < 5; f++) {
+		const int first = fingers[p_side][f][0];
+		if (first < 0) {
+			continue;
+		}
+		const Vector3 knuckle = p_skeleton->get_bone_global_pose(first).origin;
+		const Vector3 base = p_edge + along * (knuckle - p_edge).dot(along);
+		const float curl = smooth01((knuckle - p_edge).dot(p_normal) / (GRIP_KNUCKLE_UP * p_meter));
+		for (int j = 0; j < 2; j++) {
+			const int b = fingers[p_side][f][j];
+			if (b < 0) {
+				break;
+			}
+			const Vector3 goal = base + (over * GRIP_FINGER_IN[j] + p_normal * GRIP_FINGER_UP[j]) * p_meter;
+			const Vector3 aim = (goal - p_skeleton->get_bone_global_pose(b).origin).normalized();
+			aim_bone(p_skeleton, b, open.slerp(aim, curl), p_weight);
+		}
+	}
+	aim_bone(p_skeleton, fingers[p_side][0][0], p_palm * 0.8f - p_side_dir * 0.55f - p_in * 0.2f, p_weight);
+	aim_bone(p_skeleton, fingers[p_side][0][1], p_palm * 0.9f - p_side_dir * 0.35f - p_in * 0.1f, p_weight);
 }
 
 int FellowTraversalPose3D::get_role_bone(Role p_role) {
@@ -266,7 +439,7 @@ void FellowTraversalPose3D::_lean(Skeleton3D *p_skeleton, const Vector3 &p_axis,
 
 // A two-bone chain (the upper bone, the lower, the end) reaching for a target (skeleton space), bending towards a pole;
 // the end keeps its rotation from the lower bone. Blended by weight in the bones' local rotations.
-void FellowTraversalPose3D::_two_bone(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_end, const Vector3 &p_target, const Vector3 &p_pole, float p_weight) {
+void FellowTraversalPose3D::_two_bone(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_end, const Vector3 &p_target, const Vector3 &p_pole, float p_weight, Vector3 *r_bend, float p_max_turn) {
 	if (p_upper < 0 || p_lower < 0 || p_end < 0 || p_weight <= 0.001f) {
 		return;
 	}
@@ -313,6 +486,21 @@ void FellowTraversalPose3D::_two_bone(Skeleton3D *p_skeleton, int p_upper, int p
 		return;
 	}
 	bend.normalize();
+	// Milestone 198 (decision 0340): the bend turned no faster than p_max_turn from the last (the elbow had turned over in
+	// a frame where the pole's and the clip's bends crossed).
+	if (r_bend) {
+		Vector3 last_bend = *r_bend - dir * r_bend->dot(dir);
+		if (p_max_turn > 0.0f && last_bend.length() > 1e-4f) {
+			last_bend.normalize();
+			const float turn = last_bend.angle_to(bend);
+			if (turn > p_max_turn) {
+				Vector3 axis = last_bend.cross(bend);
+				axis = axis.length() > 1e-5f ? axis.normalized() : dir;
+				bend = last_bend.rotated(axis, p_max_turn).normalized();
+			}
+		}
+		*r_bend = bend;
+	}
 	const Vector3 e2 = s + dir * (a * cos_a) + bend * (a * sin_a);
 	const Vector3 h2 = s + dir * d;
 
@@ -409,6 +597,9 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 	}
 	const float goal = now.active ? 1.0f : 0.0f;
 	weight = blend_time > 0.0f ? Math::move_toward(weight, goal, float(p_delta) / blend_time) : goal;
+	// Milestone 198 (decision 0340): with ledge_grip, the hands on their holds twice as fast as the rest of the
+	// pose comes in (a hold caught from the air: the hands had reached it a sixth of a second after the body).
+	hand_fade = blend_time > 0.0f ? Math::move_toward(hand_fade, goal, float(p_delta) / (blend_time * 0.5f)) : goal;
 	hips_drop = 0.0f;
 	// Milestone 153: the spring follows the body even while it is off (the body's speed known when it comes on).
 	// Milestone 154 (decision 0292): the skeleton where it is drawn — between two physics ticks with physics interpolation
@@ -419,6 +610,9 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 	if (weight <= 0.0f) {
 		last.clip.unref();
 		limbs_valid = false;
+		// Milestone 198 (decision 0340): a hold caught when the pose comes in again has the hands on it (a reach between
+		// holds left the grip's ease part way).
+		hand_flight[0] = hand_flight[1] = 1.0f;
 		fit = Vector3();
 		clip_on = false;
 		snap_valid = false;
@@ -475,13 +669,24 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 		for (int s = 0; s < 2; s++) {
 			const float grip = h.kind == FellowTraversal3D::KIND_HANG ? h.hand_grip[s] : 1.0f;
 			hand_flight[s] = Math::lerp(hand_flight[s], grip, k);
+			// Milestone 198 (decision 0340): homing in on the next hold over the second half of its way — on it as the
+			// move catches it (the grip's ease alone had left it short of the hold for a fifth of a second, holding the
+			// air).
+			if (h.kind == FellowTraversal3D::KIND_HANG && h.hand_grip[s] <= 0.0f) {
+				hand_flight[s] = MAX(hand_flight[s], smooth01((h.hand_reach[s] - 0.5f) / 0.5f));
+			}
 			limb_w[s] *= Math::lerp(hand_flight_weight, 1.0f, hand_flight[s]);
 		}
 	}
 	if (limb_smoothing > 0.0f) {
 		const float k = limbs_valid ? 1.0f - Math::exp(-float(p_delta) / limb_smoothing) : 1.0f;
+		// Milestone 198 (decision 0340): with ledge_grip, hanging, the hands' targets eased over at most GRIP_HAND_SMOOTHING
+		// (their ways between holds are smooth already: eased over limb_smoothing, a hand reached its hold some 3 cm short,
+		// a twentieth of a second late; not at all, they stepped at the physics' rate where frames are drawn faster).
+		const bool sharp_hands = ledge_grip > 0.0f && h.kind == FellowTraversal3D::KIND_HANG;
+		const float k_hand = limbs_valid ? 1.0f - Math::exp(-float(p_delta) / MIN(limb_smoothing, GRIP_HAND_SMOOTHING)) : 1.0f;
 		for (int i = 0; i < 4; i++) {
-			limb_at[i] = limb_at[i].lerp(limb_target[i], k);
+			limb_at[i] = limb_at[i].lerp(limb_target[i], (sharp_hands && i < 2) ? k_hand : k);
 			limb_weight[i] = Math::lerp(limb_weight[i], limb_w[i], k);
 			limb_target[i] = limb_at[i];
 			limb_w[i] = limb_weight[i];
@@ -489,6 +694,7 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 		limbs_valid = true;
 	}
 	const float meter = to_skeleton.basis.xform(Vector3(0, 1, 0)).length(); // a meter in the skeleton's units
+	const float hand_fade_now = (ledge_grip > 0.0f && h.kind == FellowTraversal3D::KIND_HANG) ? MAX(weight, hand_fade) : weight;
 	const int hips = bones[ROLE_HIPS];
 	const Vector3 shift_world = (h.body_offset + sway) * weight;
 	float shift_down = 0.0f; // the skeleton's units the shift moved the hips down by
@@ -505,6 +711,94 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 			if (axis.length() > 1e-5f) {
 				_lean(skeleton, axis.normalized(), up.angle_to(tilted));
 			}
+		}
+	}
+	// Milestone 196 (decision 0338): hanging from one ledge, the hands along its edge where the animation's are.
+	// (Milestone 198: before the body is fitted to the hands' reach — a hand slid out of the arm's reach had fallen short
+	// of the edge.)
+	if (hand_slide > 0.0f && h.kind == FellowTraversal3D::KIND_HANG && h.slide > 0.0f && h.left != Vector3()) {
+		const Vector3 edge_left = h.left.normalized();
+		for (int s = 0; s < 2; s++) {
+			const int hand = bones[s == 0 ? ROLE_LEFT_HAND : ROLE_RIGHT_HAND];
+			if (hand >= 0) {
+				const Vector3 animated = sk_xform.xform(skeleton->get_bone_global_pose(hand).origin);
+				limb_target[s] += edge_left * ((animated - limb_target[s]).dot(edge_left) * hand_slide * h.slide);
+			}
+		}
+	}
+	// Milestone 198 (decision 0340): a hand on a ledge held as a climber's — the knuckles over the edge, the palm down
+	// the face from them to the wrist (GRIP_PITCH below level, less where the stone under the edge stands out: the palm
+	// over it), the hand turned to it after the arm's IK; turned to it over the last 65 % of its way to a hold, from it as
+	// it lets go. The body is fitted to the wrist's place (below).
+	float grip_w[2] = { 0.0f, 0.0f }; // the hand's shape (turned, the fingers over the edge)
+	float grip_at[2] = { 0.0f, 0.0f }; // its place (the wrist by the knuckles over the edge: on a hold and between holds)
+	Vector3 grip_hint[2]; // world: the hand's target before the grip
+	Vector3 grip_edge[2]; // world: the edge held (a step's under it)
+	Vector3 grip_knuckle[2]; // world: the middle finger's knuckle
+	Vector3 grip_down[2]; // world: from the knuckles to the wrist
+	if (ledge_grip > 0.0f && hand_ik) {
+		const Vector3 world_up(0, 1, 0);
+		for (int s = 0; s < 2; s++) {
+			float shape = 0.0f;
+			if (h.kind == FellowTraversal3D::KIND_HANG) {
+				shape = h.hand_grip[s] > 0.0f ? 1.0f : smooth01((h.hand_reach[s] - 0.35f) / 0.65f);
+			}
+			// (let go of over twice as long: the hand unwinding into the animation's as the arm swings off)
+			grip_letting_go[s] = shape < grip_shape[s];
+			grip_shape[s] = Math::lerp(grip_shape[s], shape, 1.0f - Math::exp(-float(p_delta) / (grip_letting_go[s] ? 2.0f * GRIP_EASE : GRIP_EASE)));
+			const float palm = _palm_length(skeleton, s) / meter;
+			if (h.kind != FellowTraversal3D::KIND_HANG || palm <= 0.0f || h.inward == Vector3()) {
+				continue;
+			}
+			// The place by the knuckles all the way between holds too (the hand's way from one hold's grip to the next's,
+			// out of the stone: blended from the hold's target to the grip's, it had cut through the edge's corner); what
+			// depends on the hold under it (a step, the stone under the edge) with the shape (its hold changes mid-way).
+			grip_at[s] = ledge_grip;
+			grip_w[s] = grip_shape[s] * ledge_grip;
+			const Vector3 in = h.inward.normalized();
+			Vector3 edge = limb_target[s] - in * FellowTraversal3D::HOLD_IN - world_up * FellowTraversal3D::HOLD_UP;
+			// (the hold's own edge: between holds the hand's target is on its way to it)
+			Vector3 hold_edge = h.hold[s] - in * FellowTraversal3D::HOLD_IN - world_up * FellowTraversal3D::HOLD_UP;
+			Vector2 lip = h.hold_lip[s];
+			if (lip.x >= GRIP_STEP_OUT && lip.y <= GRIP_STEP) {
+				const Vector3 step = (-in * lip.x - world_up * lip.y) * grip_shape[s];
+				edge += step;
+				hold_edge += step;
+				lip = Vector2();
+			}
+			const Vector3 knuckle = edge - in * GRIP_KNUCKLE_OUT + h.hold_normal[s] * GRIP_KNUCKLE_UP;
+			// The steepest palm (from GRIP_PITCH down to level, 5 degrees at a time) clear of the stone's outer top under
+			// the edge (its palm-side within GRIP_PALM_CLEAR of it).
+			float pitch = GRIP_PITCH;
+			if (lip.x > 0.0f) {
+				const Vector3 corner = edge - in * lip.x - world_up * lip.y;
+				for (; pitch > 0.0f; pitch -= 5.0f) {
+					const float a = Math::deg_to_rad(pitch);
+					const Vector3 down = -(in * Math::cos(a) + world_up * Math::sin(a));
+					const Vector3 palm_side = in * Math::sin(a) - world_up * Math::cos(a);
+					const float t = (corner - knuckle).dot(down);
+					if (t < 0.0f || t > palm || (corner - knuckle).dot(palm_side) >= GRIP_PALM_CLEAR) {
+						break;
+					}
+				}
+				pitch = Math::lerp(GRIP_PITCH, MAX(pitch, 0.0f), grip_shape[s]);
+			}
+			const float a = Math::deg_to_rad(pitch);
+			grip_hint[s] = limb_target[s];
+			grip_edge[s] = hold_edge;
+			grip_knuckle[s] = knuckle;
+			grip_down[s] = -(in * Math::cos(a) + world_up * Math::sin(a));
+			limb_target[s] = limb_target[s].lerp(knuckle + grip_down[s] * palm, grip_at[s]);
+		}
+	} else {
+		grip_shape[0] = grip_shape[1] = 0.0f;
+	}
+	for (int s = 0; s < 2; s++) {
+		if (grip_at[s] <= 0.0f) {
+			grip_dir_valid[s] = false;
+		}
+		if (grip_w[s] <= 0.0f) {
+			grip_local_valid[s] = false;
 		}
 	}
 	// Milestone 153 (decision 0291): hanging, the body moved (up to 0.75 m, eased over 0.1 s) until the shoulders are
@@ -650,12 +944,52 @@ void FellowTraversalPose3D::_pose(double p_delta) {
 			const Vector3 shoulder = skeleton->get_bone_global_pose(upper).origin;
 			const Vector3 side = left * (s == 0 ? 1.0f : -1.0f);
 			Vector3 target = to_skeleton.xform(limb_target[s]);
-			// Milestone 196 (decision 0338): hanging from one ledge, along its edge where the animation's hand is.
-			if (hand_slide > 0.0f && h.kind == FellowTraversal3D::KIND_HANG && h.slide > 0.0f && hand >= 0 && left != Vector3()) {
-				const Vector3 animated = skeleton->get_bone_global_pose(hand).origin;
-				target += left * ((animated - target).dot(left) * hand_slide * h.slide);
+			// Milestone 198 (decision 0340): the grip's wrist — the knuckles held on the edge, the palm turned towards the
+			// shoulder as far as the arm needs to reach it (a straighter wrist: an arm stretched by a move had let the
+			// hand fall short of the edge, its fingers into the stone).
+			Vector3 palm_up;
+			if (grip_at[s] > 0.0f) {
+				const float palm = _palm_length(skeleton, s);
+				const Vector3 knuckle = to_skeleton.xform(grip_knuckle[s]);
+				Vector3 down = to_skeleton.basis.xform(grip_down[s]).normalized();
+				const int lower_bone = bones[s == 0 ? ROLE_LEFT_LOWER_ARM : ROLE_RIGHT_LOWER_ARM];
+				if (lower_bone >= 0 && hand >= 0) {
+					const Vector3 elbow = skeleton->get_bone_global_pose(lower_bone).origin;
+					const float reach = 0.95f * (shoulder.distance_to(elbow) + elbow.distance_to(skeleton->get_bone_global_pose(hand).origin));
+					const Vector3 to_shoulder = (shoulder - knuckle).normalized();
+					if ((knuckle + down * palm).distance_to(shoulder) > reach && to_shoulder != Vector3()) {
+						float lo = 0.0f;
+						float hi = 1.0f;
+						for (int it = 0; it < 8; it++) {
+							const float mid = 0.5f * (lo + hi);
+							if ((knuckle + down.slerp(to_shoulder, mid) * palm).distance_to(shoulder) > reach) {
+								lo = mid;
+							} else {
+								hi = mid;
+							}
+						}
+						down = down.slerp(to_shoulder, hi).normalized();
+					}
+				}
+				// (eased: the body swinging across under a hand out of its arm's reach had twisted the wrist at 2,000 degrees a
+				// second)
+				const Vector3 down_world = sk_xform.basis.xform(down).normalized();
+				grip_dir[s] = grip_dir_valid[s] ? grip_dir[s].slerp(down_world, 1.0f - Math::exp(-float(p_delta) / GRIP_TURN)).normalized() : down_world;
+				grip_dir_valid[s] = true;
+				down = to_skeleton.basis.xform(grip_dir[s]).normalized();
+				target = to_skeleton.xform(grip_hint[s]).lerp(knuckle + down * palm, grip_at[s]);
+
+				palm_up = -down;
 			}
-			_two_bone(skeleton, upper, lower, hand, target, shoulder + (side * 0.6f - up * 0.4f - inward * 0.3f), hw * weight);
+			// (milestone 198, with ledge_grip hanging: the elbow's bend turned at most GRIP_ELBOW_TURN a second)
+			const bool steady = ledge_grip > 0.0f && h.kind == FellowTraversal3D::KIND_HANG;
+			if (!steady) {
+				arm_bend[s] = Vector3();
+			}
+			_two_bone(skeleton, upper, lower, hand, target, shoulder + (side * 0.6f - up * 0.4f - inward * 0.3f), hw * hand_fade_now, steady ? &arm_bend[s] : nullptr, Math::deg_to_rad(GRIP_ELBOW_TURN) * float(p_delta));
+			if (grip_w[s] > 0.0f) {
+				_shape_grip(skeleton, s, palm_up, to_skeleton.xform(grip_edge[s]), inward, to_skeleton.basis.xform(h.hold_normal[s]).normalized(), side, meter, grip_w[s] * hw * hand_fade_now, grip_letting_go[s]);
+			}
 		}
 	}
 }
@@ -823,6 +1157,8 @@ void FellowTraversalPose3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_blend_time"), &FellowTraversalPose3D::get_blend_time);
 	ClassDB::bind_method(D_METHOD("set_hand_slide", "amount"), &FellowTraversalPose3D::set_hand_slide);
 	ClassDB::bind_method(D_METHOD("get_hand_slide"), &FellowTraversalPose3D::get_hand_slide);
+	ClassDB::bind_method(D_METHOD("set_ledge_grip", "amount"), &FellowTraversalPose3D::set_ledge_grip);
+	ClassDB::bind_method(D_METHOD("get_ledge_grip"), &FellowTraversalPose3D::get_ledge_grip);
 	ClassDB::bind_method(D_METHOD("set_hand_flight_weight", "weight"), &FellowTraversalPose3D::set_hand_flight_weight);
 	ClassDB::bind_method(D_METHOD("get_hand_flight_weight"), &FellowTraversalPose3D::get_hand_flight_weight);
 	ClassDB::bind_method(D_METHOD("set_max_joint_speed", "degrees_per_second"), &FellowTraversalPose3D::set_max_joint_speed);
@@ -878,6 +1214,7 @@ void FellowTraversalPose3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_joint_speed", PROPERTY_HINT_RANGE, "0,5000,1,suffix:°/s"), "set_max_joint_speed", "get_max_joint_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_flight_weight", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_hand_flight_weight", "get_hand_flight_weight");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_slide", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_hand_slide", "get_hand_slide");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ledge_grip", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_ledge_grip", "get_ledge_grip");
 
 	BIND_ENUM_CONSTANT(ROLE_HIPS);
 	BIND_ENUM_CONSTANT(ROLE_SPINE);

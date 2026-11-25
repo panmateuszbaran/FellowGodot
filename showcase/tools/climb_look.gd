@@ -12,6 +12,8 @@ extends SceneTree
 ##   godot ... -s res://tools/climb_look.gd -- --program=hang --out=<dir> [--seconds=18] ...
 ##   godot ... -s res://tools/climb_look.gd -- --program=course --out=<dir> [--seconds=10] ...
 ##
+## --cam=hand: the hands on the edge from out and above; --cam=handside: the left hand in profile from along the edge
+## (milestone 198). --warm=<n>: the n frames before --skip drawn too, not saved (the exposure settled).
 ## --images=0 (headless): frames.json alone. --jpg=1: the frames as JPEG (f%04d.jpg). --program=hang (no demo): at CasaCrema's front up to its first hold, hanging
 ## still for 4 s, along the hold each way, still again, then on up from hold to hold.
 ##
@@ -27,6 +29,7 @@ var _out := "user://climb_look"
 var _seconds := 30.0
 var _skip := 0
 var _every := 2
+var _warm := 0 # milestone 198: frames drawn (not saved) before the first saved one
 var _cam_mode := "side"
 var _lite := false
 var _images := true
@@ -40,8 +43,11 @@ var _cam_pos := Vector3()
 var _look := Vector3()
 var _frames: Array = []
 var _posed := {} # the bones as drawn (after the skeleton's modifiers: read when it says it is updated)
+var _posed_xf := {} # milestone 198: the grip's bones' transforms as drawn
 const BONES := ["Hips", "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm", "RightLowerArm", "RightHand", "LeftUpperLeg",
 		"LeftLowerLeg", "LeftFoot", "RightUpperLeg", "RightLowerLeg", "RightFoot", "Head"]
+## Milestone 198: the bones of a hand's grip (each side's), their transforms kept for the fingers' tips.
+const GRIP_BONES := ["MiddleProximal", "MiddleIntermediate", "ThumbMetacarpal", "ThumbProximal", "Hand", "LowerArm"]
 
 
 func _init() -> void:
@@ -54,6 +60,8 @@ func _init() -> void:
 			_skip = int(a.get_slice("=", 1))
 		elif a.begins_with("--every="):
 			_every = maxi(1, int(a.get_slice("=", 1)))
+		elif a.begins_with("--warm="):
+			_warm = maxi(0, int(a.get_slice("=", 1)))
 		elif a.begins_with("--cam="):
 			_cam_mode = a.get_slice("=", 1)
 		elif a == "--lite=1":
@@ -109,7 +117,9 @@ func _init() -> void:
 	for i in total:
 		# (only the frames saved are drawn)
 		var draw := _images and i >= _skip and (i - _skip) % _every == 0
-		RenderingServer.viewport_set_update_mode(vp, RenderingServer.VIEWPORT_UPDATE_ALWAYS if draw else RenderingServer.VIEWPORT_UPDATE_DISABLED)
+		# (and --warm frames before the first, unsaved: the exposure settled)
+		var warm := _images and i < _skip and i >= _skip - _warm
+		RenderingServer.viewport_set_update_mode(vp, RenderingServer.VIEWPORT_UPDATE_ALWAYS if (draw or warm) else RenderingServer.VIEWPORT_UPDATE_DISABLED)
 		if _program == "hang":
 			_drive(i / 60.0)
 		elif _program == "course":
@@ -231,6 +241,38 @@ func _on_posed() -> void:
 	var xf := _skel.get_global_transform_interpolated()
 	for n in BONES:
 		_posed[n] = xf * _skel.get_bone_global_pose(_skel.find_bone(n)).origin
+	for side in ["Left", "Right"]:
+		for g in GRIP_BONES:
+			var b := _skel.find_bone(side + g)
+			if b >= 0:
+				_posed_xf[side + g] = xf * _skel.get_bone_global_pose(b)
+
+
+## The end of a finger's last bone (its parent's length on along its axis, the finger straight at rest), world space.
+func _tip(n: String) -> Vector3:
+	var b := _skel.find_bone(n)
+	if b < 0 or not _posed_xf.has(n):
+		return Vector3()
+	var rest := _skel.get_bone_rest(b)
+	var axis := (rest.basis.inverse() * rest.origin).normalized()
+	var t: Transform3D = _posed_xf[n]
+	return t * (axis * rest.origin.length())
+
+
+## How deep a point is in the stone: reached from 0.3 m out from the wall and from 0.3 m above, the nearer surface met
+## on the way (0: either way is clear — under an overhang, or in the open).
+func _depth(p: Vector3, inward: Vector3) -> float:
+	var space := _player.get_world_3d().direct_space_state
+	var least := INF
+	for from in [p - inward * 0.3, p + Vector3.UP * 0.3]:
+		var q := PhysicsRayQueryParameters3D.create(from, p)
+		q.exclude = [_player.get_rid()]
+		q.hit_back_faces = false
+		var hit := space.intersect_ray(q)
+		if hit.is_empty():
+			return 0.0
+		least = minf(least, (hit["position"] as Vector3).distance_to(p))
+	return least
 
 
 func _bone(n: String) -> Vector3:
@@ -251,6 +293,22 @@ func _place_camera(p_first: bool) -> void:
 	inward = inward.normalized() if inward.length() > 0.1 else Vector3(0, 0, -1)
 	var side := Vector3.UP.cross(inward).normalized()
 	var want: Vector3
+	if _cam_mode == "handside" and hints.get("active", false):
+		# Milestone 198: the left hand on the edge in profile, from along the edge.
+		var at: Vector3 = hints["hand_left"]
+		_cam_pos = _cam_pos.lerp(at + side * _dist - inward * 0.12 + Vector3.UP * 0.02, 1.0 if p_first else 0.25)
+		_look = _look.lerp(at - inward * 0.08 - Vector3.UP * 0.04, 1.0 if p_first else 0.3)
+		_cam.global_position = _cam_pos
+		_cam.look_at(_look, Vector3.UP)
+		return
+	if _cam_mode == "hand" and hints.get("active", false):
+		# Milestone 198: the hands on the edge, from out and a little to the side and above.
+		var at: Vector3 = (hints["hand_left"] + hints["hand_right"]) * 0.5
+		_cam_pos = _cam_pos.lerp(at - inward * _dist + side * (_dist * 0.45) + Vector3.UP * (_dist * 0.35), 1.0 if p_first else 0.25)
+		_look = _look.lerp(at - Vector3.UP * 0.05, 1.0 if p_first else 0.3)
+		_cam.global_position = _cam_pos
+		_cam.look_at(_look, Vector3.UP)
+		return
 	if _cam_mode == "back":
 		want = hips - inward * _dist + Vector3.UP * -0.4 + side * 0.6
 	else:
@@ -283,7 +341,49 @@ func _record(p_frame: int) -> void:
 		r["hand_weights"] = [hints["hand_weights"].x, hints["hand_weights"].y]
 		r["foot_weights"] = [hints["foot_weights"].x, hints["foot_weights"].y]
 		r["hand_grips"] = [hints["hand_grips"].x, hints["hand_grips"].y]
+		# Milestone 198: each hand by its hold — the elbow, wrist, middle finger's knuckle, middle joint and tip, the
+		# thumb's middle joint and tip: out from the edge (along -inward) and up from it (along the top's normal); how deep
+		# in the stone each bone goes (for climb_metrics.py and the grip's measurements).
+		if hints.has("hand_reach"):
+			var grips := []
+			for s in 2:
+				var side := "Left" if s == 0 else "Right"
+				var inward: Vector3 = hints["inward"]
+				var n: Vector3 = hints["hold_normal_left" if s == 0 else "hold_normal_right"]
+				var edge: Vector3 = hints.get("hold_left" if s == 0 else "hold_right", hints["hand_left" if s == 0 else "hand_right"]) - inward * 0.06 - Vector3.UP * 0.02
+				var pts := [_bone(side + "LowerArm"), _bone(side + "Hand"), (_posed_xf.get(side + "MiddleProximal", Transform3D()) as Transform3D).origin,
+						(_posed_xf.get(side + "MiddleIntermediate", Transform3D()) as Transform3D).origin, _tip(side + "MiddleIntermediate"),
+						(_posed_xf.get(side + "ThumbProximal", Transform3D()) as Transform3D).origin, _tip(side + "ThumbProximal")]
+				var rel := []
+				for p in pts:
+					rel.append([snappedf(-(p - edge).dot(inward), 0.0001), snappedf((p - edge).dot(n), 0.0001)])
+				# Along each bone (the forearm, the palm, the finger's two bones, the thumb's), every 1.5 cm: how deep in the
+				# stone the point is (the least of from the wall's side and from above).
+				var segs := []
+				for pair in [[0, 1], [1, 2], [2, 3], [3, 4], [1, 5], [5, 6]]:
+					var a: Vector3 = pts[pair[0]]
+					var b: Vector3 = pts[pair[1]]
+					var n_s := maxi(1, int(ceil(a.distance_to(b) / 0.015)))
+					var deepest := 0.0
+					for j in range(n_s + 1):
+						deepest = maxf(deepest, _depth(a.lerp(b, float(j) / n_s), inward))
+					segs.append(snappedf(deepest, 0.0001))
+				grips.append({"grip": hints["hand_grips"].x if s == 0 else hints["hand_grips"].y,
+						"reach": hints["hand_reach"].x if s == 0 else hints["hand_reach"].y, "rel": rel, "into": segs.max(), "segs": segs,
+						"lip": _v2(hints.get("hold_lip_left" if s == 0 else "hold_lip_right", Vector2()))})
+			r["grips"] = grips
+			# (the wrists' turn against the forearms, as quaternions)
+			var wr := []
+			for side in ["Left", "Right"]:
+				if _posed_xf.has(side + "Hand") and _posed_xf.has(side + "LowerArm"):
+					var q := ((_posed_xf[side + "LowerArm"] as Transform3D).basis.inverse() * (_posed_xf[side + "Hand"] as Transform3D).basis).get_rotation_quaternion()
+					wr.append([q.x, q.y, q.z, q.w])
+			r["wrists"] = wr
 	_frames.append(r)
+
+
+func _v2(p: Vector2) -> Array:
+	return [snappedf(p.x, 0.0001), snappedf(p.y, 0.0001)]
 
 
 func _v(p: Vector3) -> Array:

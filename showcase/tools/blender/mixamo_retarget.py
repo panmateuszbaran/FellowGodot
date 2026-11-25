@@ -85,9 +85,11 @@ CLIPS = [
 	("hang_catch", ["braced hang"], "span", {"from": 0.47, "to": 1.3}),
 	("hang_shimmy_l", ["left braced hang shimmy", "braced hang shimmy left"], "loop"),
 	("hang_shimmy_r", ["right braced hang shimmy", "braced hang shimmy right", "braced hang shimmy"], "loop"),
-	("hang_leap_up", ["braced hang hop up"], "anchored"),
-	("hang_leap_l", ["braced hang hop left"], "anchored"),
-	("hang_leap_r", ["braced hang hop right"], "anchored"),
+	# Milestone 198: the hops from their push (the hips' first rise) to settled on the next hold, with their timing for the
+	# traversal (the hips' way along the move, their lift, the hands' let-go and catch: clips.json's "leap").
+	("hang_leap_up", ["braced hang hop up"], "anchored", {"from": 0.13, "to": 1.33, "leap": "z"}),
+	("hang_leap_l", ["braced hang hop left"], "anchored", {"from": 0.07, "to": 1.2, "leap": "x"}),
+	("hang_leap_r", ["braced hang hop right"], "anchored", {"from": 0.07, "to": 1.2, "leap": "x"}),
 	("climb_move", ["climbing up wall", "climbing"], "loop"),
 	# Milestone 196: hand over hand from hold to hold — a half of Mixamo's climbing cycle each (the left hand up with the
 	# right foot, then the right with the left), and across from Mixamo's shimmies (a step each).
@@ -496,6 +498,44 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info, opt=None):
 		with open(os.path.join(debug, name + ".json"), "w") as f:
 			json.dump({"map": MAP, "parent": rig.parent, "frames": dump}, f)
 	write_action(rig, name, frames, loop)
+	if "leap" in opt:
+		# Milestone 198: the leap's timing (60 samples a second over the cut): the hips' way along the move's axis (0 at
+		# the start, 1 at the end), their lift over the straight line from the start's height to the end's (m, at the
+		# mannequin's scale; for a leap up, over the end's height), the hands' let-go (10 cm from where they held)
+		# and catch (slowed under 0.6 m/s after their fastest) as shares of the time — the leading hand first.
+		axis = opt["leap"]
+		m = max(2, int(round(length * FPS)) + 1)
+		ts = [start + length * k / (m - 1) for k in range(m)]
+		hp = [src.sample(t)["Hips"].translation for t in ts]
+		a0, a1 = getattr(hp[0], axis), getattr(hp[-1], axis)
+		span = (a1 - a0) if abs(a1 - a0) > 1e-4 else 1.0
+		progress = [round((getattr(h, axis) - a0) / span, 4) for h in hp]
+		if axis == "z":
+			# (up: the way to the end's height, then the rise over it in metres — a higher leap goes no further over)
+			lift = [round(max(0.0, h.z - hp[-1].z) * scale, 4) for h in hp]
+			progress = [min(1.0, p) for p in progress]
+		else:
+			lift = [round((h.z - (hp[0].z + (hp[-1].z - hp[0].z) * k / (m - 1))) * scale, 4) for k, h in enumerate(hp)]
+		times = {}
+		dt = length / (m - 1)
+		for side in ("Left", "Right"):
+			hs = [src.sample(t)[side + "Hand"].translation for t in ts]
+			sp = [(hs[min(m - 1, k + 1)] - hs[max(0, k - 1)]).length * scale / (dt * (min(m - 1, k + 1) - max(0, k - 1))) for k in range(m)]
+			# (let go: 10 cm from where it held; caught: slowed under 0.6 m/s after its fastest)
+			rel = next((k for k in range(m) if (hs[k] - hs[0]).length * scale > 0.10), 0)
+			fast = max(range(rel, m), key=lambda k: sp[k])
+			cat = next((k for k in range(fast, m) if sp[k] < 0.6), m - 1)
+			times[side] = (rel / (m - 1), cat / (m - 1))
+		# (the leading hand: along or across, the one on the side it goes to — the traversal's lead; up, the first to go)
+		if axis == "z":
+			lead, trail = ("Left", "Right") if times["Left"][0] <= times["Right"][0] else ("Right", "Left")
+		else:
+			p0 = src.sample(ts[0])
+			side_l = getattr(p0["LeftHand"].translation, axis) - getattr(p0["Hips"].translation, axis)
+			lead, trail = ("Left", "Right") if side_l * (a1 - a0) > 0.0 else ("Right", "Left")
+		info["clips"][name]["leap"] = {"axis": axis, "time": length, "reach": round(abs(a1 - a0) * scale, 4), "progress": progress, "lift": lift,
+				"hands": [round(times[lead][0], 3), round(times[lead][1], 3), round(times[trail][0], 3), round(times[trail][1], 3)],
+				"lead": lead}
 	if kind == "travel":
 		# The body's speed forward (−Y, scaled) as the hips' third-of-a-second average moves (at Mixamo's samples, a
 		# central difference over a tenth of a second), every 60th of a second.

@@ -76,6 +76,11 @@ public:
 		TRANSFER_REACH_UP, // milestone 151: up to a ledge within hang_reach_up, hand over hand
 		TRANSFER_REACH_SIDE, // milestone 152: across to a ledge within hang_reach_side to the side (or up and to the side), hand over hand
 	};
+	// Milestone 198 (decision 0340): the leaps a clip's timing can be given for (set_leap_timing()).
+	enum LeapKind {
+		LEAP_UP, // TRANSFER_JUMP_UP
+		LEAP_ALONG, // TRANSFER_JUMP_ALONG, TRANSFER_JUMP_DIAGONAL
+	};
 
 	// A check's result (global space).
 	struct Ledge {
@@ -124,7 +129,20 @@ public:
 		// Milestone 196 (decision 0338): hanging from one ledge (1; not between holds), the hands on its edge — the
 		// pose may slide them along it as the animation's go (FellowTraversalPose3D's hand_slide).
 		float slide = 0.0f;
+		// Milestone 198 (decision 0340): a hand between holds, how far along its way it is (0: at the hold it let go of,
+		// 1: at the next; 1 on a hold), and the top's normal at its hold (the hand's target is HOLD_IN over the edge onto
+		// that top, HOLD_UP over it) — the pose closes the hand over the edge as it arrives.
+		float hand_reach[2] = { 1.0f, 1.0f };
+		Vector3 hold[2]; // the hold a hand is on, or (from half way) going to: as hand[] there
+		Vector3 hold_normal[2] = { Vector3(0, 1, 0), Vector3(0, 1, 0) };
+		// Milestone 198 (decision 0340): the stone just under each hand's hold — how far out of the edge it stands (x, m)
+		// within 12 cm under it, and how far under the top its own top is (y, m); (0, 0): a plain edge.
+		Vector2 hold_lip[2];
 	};
+
+	// Milestone 198 (decision 0340): a hand's target on a ledge: this far in over the edge, this far over the top.
+	static constexpr float HOLD_IN = 0.06f;
+	static constexpr float HOLD_UP = 0.02f;
 
 	// Every traversal's work since the last reset (get_global_stats()).
 	struct GlobalStats {
@@ -247,11 +265,26 @@ private:
 		double duration = 0.5;
 		Vector3 from_feet, control, to_feet;
 		Vector3 from_inward;
+		Vector3 from_normal = Vector3(0, 1, 0); // milestone 198: the top's normal at the hold let go of
+		Vector2 from_lip[2], to_lip[2]; // milestone 198: the stone under each hand's hold, at either end
 		Vector3 from_hands[2];
 		Ledge to;
 		int lead = 0; // milestone 151: the hand that goes first (a reach up)
 		double windup = 0.0; // milestone 153: a leap's wind-up before it springs (s, within duration)
+		int timing = -1; // milestone 198: the leap timing it follows (LEAP_UP, LEAP_ALONG), or none
 	} transfer;
+	// Milestone 198 (decision 0340): a leap timed as a clip's — its hips' way along the move (0 at the start, 1 at the end),
+	// their lift (m: over the straight line along; over the end's height up), sampled evenly over its time; its hands'
+	// let-go and catch (the leading hand's, the other's: shares of the time).
+	struct LeapTiming {
+		float time = 0.0f;
+		float reach = 1.0f; // m: the clip's own way (up: its rise; along: across)
+		LocalVector<float> progress;
+		LocalVector<float> lift;
+		Vector4 hands;
+	};
+	LeapTiming leap_timing[2];
+	static float _sample(const LocalVector<float> &p_values, float p_u);
 	// After a corner the wish held as it was goes on along the new edge (the stick held left stays "left").
 	bool remap = false;
 	Vector3 remap_from, remap_to;
@@ -312,6 +345,9 @@ private:
 	Vector3 _hang_feet_at(const Vector3 &p_edge, const Vector3 &p_inward) const;
 	Vector3 _hang_feet_of(const Ledge &p_ledge) const { return _hang_feet_at(p_ledge.edge, p_ledge.inward) - p_ledge.inward * p_ledge.out; }
 	Vector3 _hang_foot(int p_side, const Vector3 &p_feet, const Vector3 &p_inward, float p_y, const Vector3 &p_fallback, Vector3 *r_wall = nullptr, float *r_found = nullptr) const;
+	Vector2 _probe_lip(const Vector3 &p_edge, const Vector3 &p_inward) const;
+	Vector3 lip_point[2]; // milestone 198: where each hand's hold was last probed for the stone under it (hanging)
+	Vector2 lip_value[2];
 	bool _probe_edge(const Vector3 &p_edge, const Vector3 &p_inward, float p_along, Ledge &r_ledge) const;
 	bool _start_hang(const Ledge &p_ledge, bool p_step = true);
 	void _step_hang(double p_delta);
@@ -462,6 +498,9 @@ public:
 	void set_hold_min_width(float p_width) { hold_min_width = CLAMP(p_width, 0.0f, 0.48f); }
 	float get_hold_min_width() const { return hold_min_width; }
 	void set_hang_leap_windup(float p_seconds) { hang_leap_windup = CLAMP(p_seconds, 0.0f, 0.4f); }
+	void set_leap_timing(LeapKind p_kind, float p_time, float p_reach, const PackedFloat32Array &p_progress, const PackedFloat32Array &p_lift, const Vector4 &p_hands);
+	void clear_leap_timing(LeapKind p_kind);
+	bool has_leap_timing(LeapKind p_kind) const;
 	float get_hang_leap_windup() const { return hang_leap_windup; }
 	void set_drop_to_hang(bool p_enabled) { drop_to_hang = p_enabled; }
 	bool is_drop_to_hang() const { return drop_to_hang; }
@@ -490,3 +529,4 @@ public:
 
 VARIANT_ENUM_CAST(FellowTraversal3D::Kind);
 VARIANT_ENUM_CAST(FellowTraversal3D::Transfer);
+VARIANT_ENUM_CAST(FellowTraversal3D::LeapKind);

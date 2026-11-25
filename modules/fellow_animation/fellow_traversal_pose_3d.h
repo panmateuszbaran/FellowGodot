@@ -30,9 +30,9 @@
 
 #pragma once
 
-#include "core/templates/local_vector.h"
 #include "fellow_traversal_3d.h"
 
+#include "core/templates/local_vector.h"
 #include "scene/3d/skeleton_modifier_3d.h"
 
 // FellowEngine (milestone 72, decision 0180): a character's pose while its FellowTraversal3D mantles or vaults — the
@@ -102,6 +102,19 @@ private:
 	// height and depth the edge's): a shimmy's hands step as its clip's do.
 	float hand_slide = 0.0f;
 	float hand_flight[2] = { 1.0f, 1.0f }; // the grips eased (1: holding)
+	// Milestone 198 (decision 0340): a hand on a ledge held as a climber's (0: as the IK leaves it) — the palm against the
+	// face under the edge, the knuckles over the edge and the fingers on the top (the wrist out of the stone), the hand
+	// turned to it as it arrives and let go of as it leaves.
+	float ledge_grip = 0.0f;
+	float grip_shape[2] = { 0.0f, 0.0f }; // eased
+	float hand_fade = 0.0f; // the hands' own blend in (ledge_grip: faster than the pose's)
+	bool grip_letting_go[2] = { false, false };
+	Quaternion grip_local[2]; // the wrist's bend held as a hand lets go
+	bool grip_local_valid[2] = { false, false };
+	Vector3 grip_dir[2]; // world: the palm's way from the knuckles to the wrist, eased
+	bool grip_dir_valid[2] = { false, false };
+	Vector3 arm_bend[2]; // skeleton space: each elbow's last bend (zero: none)
+	int fingers[2][5][2]; // the thumb, index, middle, ring, little: their first two bones (-1: not found)
 	LocalVector<Quaternion> speed_rot;
 	bool speed_valid = false;
 
@@ -136,10 +149,13 @@ private:
 	void _apply_clip(Skeleton3D *p_skeleton, const FellowTraversal3D::PoseHints &p_hints, float p_weight);
 	void _lean(Skeleton3D *p_skeleton, const Vector3 &p_axis, float p_angle);
 	void _pose(double p_delta);
-	void _two_bone(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_end, const Vector3 &p_target, const Vector3 &p_pole, float p_weight);
+	void _two_bone(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_end, const Vector3 &p_target, const Vector3 &p_pole, float p_weight, Vector3 *r_bend = nullptr, float p_max_turn = 0.0f);
 	void _snapshot(Skeleton3D *p_skeleton);
 	void _clear_wall(Skeleton3D *p_skeleton, int p_upper, int p_lower, int p_foot, const Vector3 &p_wall, const Vector3 &p_out, const Vector3 &p_side, float p_meter, float p_weight);
 	void _limit_speed(Skeleton3D *p_skeleton, double p_delta);
+	void _find_fingers(Skeleton3D *p_skeleton);
+	float _palm_length(Skeleton3D *p_skeleton, int p_side) const;
+	void _shape_grip(Skeleton3D *p_skeleton, int p_side, const Vector3 &p_palm, const Vector3 &p_edge, const Vector3 &p_in, const Vector3 &p_normal, const Vector3 &p_side_dir, float p_meter, float p_weight, bool p_letting_go);
 
 protected:
 	void _notification(int p_what);
@@ -167,6 +183,8 @@ public:
 	void set_hand_slide(float p_amount) { hand_slide = CLAMP(p_amount, 0.0f, 1.0f); }
 	float get_hand_slide() const { return hand_slide; }
 	float get_hand_flight_weight() const { return hand_flight_weight; }
+	void set_ledge_grip(float p_amount) { ledge_grip = CLAMP(p_amount, 0.0f, 1.0f); }
+	float get_ledge_grip() const { return ledge_grip; }
 	float get_max_joint_speed() const { return max_joint_speed; }
 	float get_pole_follow() const { return pole_follow; }
 	float get_clip_blend() const { return clip_blend; }

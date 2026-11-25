@@ -156,6 +156,8 @@ func _upd() -> void:
 		if last_rot.has(n) and frame > 4: # (the first frames: from the rest pose to the first animated one)
 			var dq: Quaternion = (last_rot[n] as Quaternion).inverse() * q
 			var w := rad_to_deg(2.0 * acos(clampf(absf(dq.w), 0.0, 1.0))) / dt
+			# (milestone 198: each joint's own, for its p95)
+			(d.get_or_add("bone_ang", {}) as Dictionary).get_or_add(n, []).append(w)
 			if w > ang:
 				ang = w
 				ang_bone = n
@@ -329,6 +331,14 @@ func _write() -> void:
 		an.sort()
 		if an.size() > 0:
 			r["joint_deg_s"] = {"p50": an[an.size() / 2], "p95": an[int(an.size() * 0.95)], "p99": an[int(an.size() * 0.99)], "max": an[-1]}
+		# Milestone 198: each joint's p95 (which joint makes a segment's fastest).
+		var by_bone := {}
+		var ba: Dictionary = d.get("bone_ang", {})
+		for n in ba:
+			var v: Array = (ba[n] as Array).duplicate()
+			v.sort()
+			by_bone[n] = snappedf(v[int(v.size() * 0.95)], 1.0)
+		r["bone_p95_deg_s"] = by_bone
 		var acc := []
 		var hp: Array = d.hips_p
 		for i in range(1, hp.size() - 1):

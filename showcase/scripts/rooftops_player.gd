@@ -94,6 +94,15 @@ var _jump_buffer := 0.0
 var _since_floor := 0.0
 var _walked_off := false
 var _shot_name := ""
+## Milestone 198 (the owner: "the animations' blending is sometimes sudden and violent"): the states switch at once and
+## FellowInertializer3D (before the IK's modifiers) blends from the pose the character had, carried on by its own
+## velocity, to the new one's — not two animations' poses mixed over 0.2 s.
+const INERTIA_TIME := 0.3
+var _inertia: Node = null
+## Milestone 198 (the owner: "the character does not grip the edge with its hand, but somewhere in the air; the hands
+## sometimes go through the edge"): a hand on a ledge held as a climber's (FellowTraversalPose3D.ledge_grip) — the palm
+## against the face under the edge, the fingers over it on the top, the wrist out of the stone.
+const LEDGE_GRIP := 1.0
 
 
 func _ready() -> void:
@@ -102,6 +111,16 @@ func _ready() -> void:
 	_viewpoint = get_node_or_null(viewpoint_path)
 	facing = rotation.y
 	_use_mocap()
+	_inertialize()
+	var pose := get_node_or_null("Model/Mannequin/Skeleton3D/TraversalPose")
+	if pose:
+		var grip := LEDGE_GRIP
+		for arg in OS.get_cmdline_user_args():
+			if arg.begins_with("--ledge_grip="): # (tools)
+				grip = float(arg.get_slice("=", 1))
+			elif arg.begins_with("--max_joint_speed="): # (tools)
+				pose.set("max_joint_speed", float(arg.get_slice("=", 1)))
+		pose.set("ledge_grip", grip)
 	tree.active = true
 	_set_state("loco")
 	_last_pos = global_position
@@ -154,6 +173,17 @@ func _use_mocap() -> void:
 		if mocap.has_animation(slot[1]) and not String(slot[1]) in keep:
 			traversal.set(slot[0], mocap.get_animation(slot[1]))
 	var info = JSON.parse_string(FileAccess.get_file_as_string(MOCAP_DIR.path_join("clips.json")))
+	# Milestone 198 (the owner: "the jump up is not anatomical — it does not put energy into the leap, it just flies up"):
+	# the traversal's leaps up and along timed as Mixamo's hops — the body where their hips went (the push, over the top,
+	# the drop into the catch), the hands letting go and catching when theirs did.
+	var clips_info: Dictionary = info.get("clips", {}) if info is Dictionary else {}
+	for leap in [[0, "hang_leap_up"], [1, "hang_leap_l"]]:
+		var l: Dictionary = clips_info.get(leap[1], {}).get("leap", {})
+		if l.is_empty() or String(leap[1]) in keep or "--no_leap_timing=1" in OS.get_cmdline_user_args():
+			continue
+		var h: Array = l["hands"]
+		traversal.call("set_leap_timing", leap[0], float(l["time"]), float(l.get("reach", 1.0)), PackedFloat32Array(l["progress"]),
+				PackedFloat32Array(l["lift"]), Vector4(h[0], h[1], h[2], h[3]))
 	var gaits: Dictionary = info.get("gaits", {}) if info is Dictionary else {}
 	var table: Array = []
 	for g in MOCAP_GAITS:
@@ -224,6 +254,8 @@ func _variant_point(p_space: StringName, p_point: int, p_clip: StringName) -> vo
 	var n := space.get_blend_point_node(p_point) as AnimationNodeAnimation
 	if n and n.animation != p_clip:
 		n.animation = p_clip
+		if _inertia:
+			_inertia.call("blend", 0.2) # (the shimmy's other side: its clip swapped at once)
 
 
 ## A move from hold to hold: its clip (the hands and feet are put on the stone by the pose's IK over it).
@@ -763,6 +795,25 @@ func _set_state(s: String) -> void:
 		return
 	state = s
 	tree.set("parameters/state/transition_request", s)
+	if _inertia:
+		_inertia.call("blend", INERTIA_TIME)
+
+
+## Milestone 198: the player's own copy of the tree (where the mocap's has not made one), its states switched at once,
+## an inertializer first among the skeleton's modifiers.
+func _inertialize() -> void:
+	var skel := get_node_or_null("Model/Mannequin/Skeleton3D") as Skeleton3D
+	if skel == null or not ClassDB.class_exists(&"FellowInertializer3D") or "--no_inertia=1" in OS.get_cmdline_user_args():
+		return
+	if not _mocap:
+		tree.tree_root = (tree.tree_root as AnimationNodeBlendTree).duplicate(true)
+	var tr := (tree.tree_root as AnimationNodeBlendTree).get_node(&"state") as AnimationNodeTransition
+	tr.xfade_time = 0.0
+	_inertia = ClassDB.instantiate(&"FellowInertializer3D")
+	_inertia.name = "Inertia"
+	_inertia.set("blend_time", INERTIA_TIME)
+	skel.add_child(_inertia)
+	skel.move_child(_inertia, 0)
 
 
 func _play(s: String) -> void:

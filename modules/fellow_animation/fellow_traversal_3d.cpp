@@ -789,8 +789,8 @@ void FellowTraversal3D::_update_hints(const Vector3 &p_feet, const Vector3 &p_ed
 	hints.look_weight = 1.0f;
 	const Vector3 left = hints.left;
 	const float ankle = 0.08f;
-	hints.hand[0] = p_edge + left * 0.22f + p_inward * 0.06f + UP * 0.02f;
-	hints.hand[1] = p_edge - left * 0.22f + p_inward * 0.06f + UP * 0.02f;
+	hints.hand[0] = p_edge + left * 0.22f + p_inward * HOLD_IN + UP * HOLD_UP;
+	hints.hand[1] = p_edge - left * 0.22f + p_inward * HOLD_IN + UP * HOLD_UP;
 	const Vector3 on_top = p_edge + p_inward * 0.2f + UP * ankle;
 	const Vector3 on_wall = p_edge - p_inward * 0.1f;
 	// How far the hips may hang below the capsule's place (the arms reaching the edge, the legs against the wall's
@@ -853,6 +853,45 @@ void FellowTraversal3D::_update_hints(const Vector3 &p_feet, const Vector3 &p_ed
 	} else {
 		hints.clip.unref();
 	}
+}
+
+float FellowTraversal3D::_sample(const LocalVector<float> &p_values, float p_u) {
+	const int n = int(p_values.size());
+	if (n == 0) {
+		return 0.0f;
+	}
+	if (n == 1) {
+		return p_values[0];
+	}
+	const float f = CLAMP(p_u, 0.0f, 1.0f) * float(n - 1);
+	const int i = MIN(int(f), n - 2);
+	return Math::lerp(p_values[i], p_values[i + 1], f - float(i));
+}
+
+void FellowTraversal3D::set_leap_timing(LeapKind p_kind, float p_time, float p_reach, const PackedFloat32Array &p_progress, const PackedFloat32Array &p_lift, const Vector4 &p_hands) {
+	ERR_FAIL_INDEX(int(p_kind), 2);
+	LeapTiming &l = leap_timing[p_kind];
+	l.time = MAX(0.0f, p_time);
+	l.reach = MAX(0.05f, p_reach);
+	l.progress.clear();
+	l.lift.clear();
+	for (int i = 0; i < p_progress.size(); i++) {
+		l.progress.push_back(p_progress[i]);
+	}
+	for (int i = 0; i < p_lift.size(); i++) {
+		l.lift.push_back(p_lift[i]);
+	}
+	l.hands = Vector4(CLAMP(p_hands.x, 0.0f, 1.0f), CLAMP(p_hands.y, 0.0f, 1.0f), CLAMP(p_hands.z, 0.0f, 1.0f), CLAMP(p_hands.w, 0.0f, 1.0f));
+}
+
+void FellowTraversal3D::clear_leap_timing(LeapKind p_kind) {
+	ERR_FAIL_INDEX(int(p_kind), 2);
+	leap_timing[p_kind] = LeapTiming();
+}
+
+bool FellowTraversal3D::has_leap_timing(LeapKind p_kind) const {
+	ERR_FAIL_INDEX_V(int(p_kind), 2, false);
+	return leap_timing[p_kind].time > 0.0f && leap_timing[p_kind].progress.size() >= 2;
 }
 
 void FellowTraversal3D::_step(double p_delta) {
@@ -1020,6 +1059,53 @@ Vector3 FellowTraversal3D::_hang_foot(int p_side, const Vector3 &p_feet, const V
 	return at - p_inward * HANG_FOOT_OUT; // the ankle: the ball of the foot on the stone
 }
 
+// Milestone 198 (decision 0340): the stone just under a hold's edge (p_edge: on the face at the top's height) — how far
+// out of the edge it stands within 12 cm under it (x, m; 0: none, or the face going back) and how far under the top its
+// own top is (y): a moulding under a sill, a band under a cornice, a step. The hand wrapped over the edge clears it.
+Vector2 FellowTraversal3D::_probe_lip(const Vector3 &p_edge, const Vector3 &p_inward) const {
+	CollisionObject3D *body = _get_body();
+	if (!body || !body->is_inside_tree() || p_inward == Vector3()) {
+		return Vector2();
+	}
+	PhysicsDirectSpaceState3D *space = body->get_world_3d()->get_direct_space_state();
+	HashSet<RID> exclude;
+	exclude.insert(body->get_rid());
+	Vector2 lip;
+	for (int k = 1; k <= 4; k++) {
+		PhysicsDirectSpaceState3D::RayParameters q;
+		q.from = p_edge - UP * (0.03f * k) - p_inward * 0.3f;
+		q.to = p_edge - UP * (0.03f * k) + p_inward * 0.05f;
+		q.exclude = exclude;
+		q.collision_mask = collision_mask;
+		PhysicsDirectSpaceState3D::RayResult r;
+		if (space->intersect_ray(q, r) && flat(r.normal).length() >= 0.5f) {
+			const float out = (p_edge - r.position).dot(p_inward);
+			if (out > lip.x && out < 0.2f) {
+				if (lip.x < 0.015f && out >= 0.015f) {
+					lip.y = 0.03f * k;
+				}
+				lip.x = out;
+			}
+		}
+	}
+	if (lip.x < 0.015f) {
+		return Vector2();
+	}
+	// Its top: straight down onto it just inside its outer face.
+	PhysicsDirectSpaceState3D::RayParameters q;
+	q.from = p_edge - p_inward * (lip.x - 0.01f) + UP * 0.05f;
+	q.to = q.from - UP * 0.2f;
+	q.exclude = exclude;
+	q.collision_mask = collision_mask;
+	PhysicsDirectSpaceState3D::RayResult r;
+	if (space->intersect_ray(q, r) && r.normal.y > 0.5f) {
+		lip.y = MAX(0.0f, p_edge.y - r.position.y);
+	} else {
+		lip.y = MAX(0.0f, lip.y - 0.015f);
+	}
+	return lip;
+}
+
 // The ledge p_along metres along the edge (positive: the body's left, facing the wall): the wall's face just under the
 // top found there, the top over it. False where the ledge ends: a corner, a gap, a step of more than 0.3 m, a face
 // turned more than 50 degrees, a slope.
@@ -1146,7 +1232,7 @@ bool FellowTraversal3D::_hands_room(const Ledge &p_ledge, float p_height) const 
 	HashSet<RID> exclude;
 	exclude.insert(body->get_rid());
 	PhysicsDirectSpaceState3D::RayParameters q;
-	q.from = p_ledge.edge + p_ledge.inward * 0.06f + UP * 0.02f;
+	q.from = p_ledge.edge + p_ledge.inward * HOLD_IN + UP * HOLD_UP;
 	q.to = q.from + UP * p_height;
 	q.exclude = exclude;
 	q.collision_mask = collision_mask;
@@ -1568,8 +1654,8 @@ bool FellowTraversal3D::_start_drop(const Ledge &p_ledge, const Vector3 &p_mid) 
 	transfer.from_feet = feet;
 	transfer.from_inward = flat(facing).length() > 1e-3f ? flat(facing).normalized() : -ledge.inward;
 	const Vector3 left = UP.cross(ledge.inward).normalized();
-	transfer.from_hands[0] = ledge.edge + left * 0.24f + ledge.inward * 0.06f + UP * 0.02f;
-	transfer.from_hands[1] = ledge.edge - left * 0.24f + ledge.inward * 0.06f + UP * 0.02f;
+	transfer.from_hands[0] = ledge.edge + left * 0.24f + ledge.inward * HOLD_IN + UP * HOLD_UP;
+	transfer.from_hands[1] = ledge.edge - left * 0.24f + ledge.inward * HOLD_IN + UP * HOLD_UP;
 	// The wish that walked it over the edge points away from the wall: held as it was, it does nothing (it would let
 	// go); changed, it is the world's again.
 	remap = wish.length() > 0.3f;
@@ -1605,13 +1691,36 @@ void FellowTraversal3D::_start_transfer(const Ledge &p_to, const Vector3 &p_cont
 	// Milestone 153 (decision 0290): a leap winds up first, the move made longer by as much.
 	const bool leap = p_how == TRANSFER_JUMP_ALONG || p_how == TRANSFER_JUMP_UP || p_how == TRANSFER_JUMP_DOWN || p_how == TRANSFER_JUMP_DIAGONAL || p_how == TRANSFER_JUMP_BACK || p_how == TRANSFER_JUMP_CORNER;
 	transfer.windup = leap ? double(hang_leap_windup) : 0.0;
-	transfer.duration += transfer.windup;
 	transfer.from_feet = hang_feet;
 	transfer.control = p_control;
 	transfer.to = p_to;
 	transfer.to.kind = KIND_HANG;
 	transfer.to_feet = _hang_feet_of(p_to);
+	// Milestone 198 (decision 0340): a leap up, along or across timed as a clip's — its own time (a leap longer than the
+	// clip's played slower, as a body's flight takes longer: by the square root of the ways' ratio, within 0.8-1.25
+	// times), no wind-up of the traversal's (the clip's push is the wind-up).
+	transfer.timing = -1;
+	const int timing = p_how == TRANSFER_JUMP_UP ? LEAP_UP : ((p_how == TRANSFER_JUMP_ALONG || p_how == TRANSFER_JUMP_DIAGONAL) ? LEAP_ALONG : -1);
+	if (timing >= 0 && leap_timing[timing].time > 0.0f && leap_timing[timing].progress.size() >= 2) {
+		const Vector3 d = transfer.to_feet - transfer.from_feet;
+		const float way = timing == LEAP_UP ? MAX(0.05f, d.y) : MAX(0.05f, flat(d).length());
+		transfer.timing = timing;
+		transfer.duration = leap_timing[timing].time * CLAMP(Math::sqrt(way / leap_timing[timing].reach), 0.8f, 1.25f);
+		transfer.windup = 0.0;
+	}
+	transfer.duration += transfer.windup;
 	transfer.from_inward = ledge.inward;
+	transfer.from_normal = ledge.top_normal.y > 0.3f ? ledge.top_normal : UP;
+	{
+		const Vector3 to_left = UP.cross(transfer.to.inward).normalized();
+		for (int s = 0; s < 2; s++) {
+			transfer.from_lip[s] = hints.hold_lip[s];
+			const Vector3 at = transfer.to.edge + to_left * (s == 0 ? transfer.to.spread : -transfer.to.spread);
+			transfer.to_lip[s] = _probe_lip(at, transfer.to.inward);
+			lip_point[s] = at;
+			lip_value[s] = transfer.to_lip[s];
+		}
+	}
 	transfer.from_hands[0] = hints.hand[0];
 	transfer.from_hands[1] = hints.hand[1];
 	if (p_how == TRANSFER_REACH_UP) {
@@ -1654,6 +1763,13 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 		w = leap_curve(x, LEAP_PUSH, transfer.how == TRANSFER_JUMP_UP ? 0.55f : (transfer.how == TRANSFER_JUMP_DOWN ? 1.35f : 0.9f));
 	}
 	Vector3 feet = transfer.from_feet * ((1.0f - w) * (1.0f - w)) + transfer.control * (2.0f * (1.0f - w) * w) + transfer.to_feet * (w * w);
+	// Milestone 198 (decision 0340): timed as a clip's — the body where its hips were along the move, lifted as they
+	// were: up from the push, over the top, dropping into the catch.
+	const LeapTiming *timed = transfer.timing >= 0 ? &leap_timing[transfer.timing] : nullptr;
+	if (timed) {
+		w = _sample(timed->progress, u);
+		feet = transfer.from_feet.lerp(transfer.to_feet, w) + UP * _sample(timed->lift, u);
+	}
 	if (transfer.how == TRANSFER_DROP) {
 		// Out over the edge (the first 40 %), then straight down.
 		feet = u < 0.4f ? transfer.from_feet.lerp(transfer.control, smooth(u / 0.4f)) : transfer.control.lerp(transfer.to_feet, smooth((u - 0.4f) / 0.6f));
@@ -1673,10 +1789,11 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 	hints.inward = inward;
 	hints.left = left;
 	const Vector3 to_hands[2] = {
-		transfer.to.edge + to_left * transfer.to.spread + transfer.to.inward * 0.06f + UP * 0.02f,
-		transfer.to.edge - to_left * transfer.to.spread + transfer.to.inward * 0.06f + UP * 0.02f,
+		transfer.to.edge + to_left * transfer.to.spread + transfer.to.inward * HOLD_IN + UP * HOLD_UP,
+		transfer.to.edge - to_left * transfer.to.spread + transfer.to.inward * HOLD_IN + UP * HOLD_UP,
 	};
 	const float hold = jump ? 1.0f - 0.85f * Math::sin(u * float(Math::PI)) : (transfer.how == TRANSFER_DROP ? smooth(MIN(1.0f, u * 2.0f)) : 1.0f);
+	const Vector3 to_normal = transfer.to.top_normal.y > 0.3f ? transfer.to.top_normal : UP;
 	// Milestone 154 (decision 0293): the eyes on the next hold from the move's start (a leap's wind-up included).
 	hints.look = (to_hands[0] + to_hands[1]) * 0.5f;
 	hints.look_weight = 1.0f;
@@ -1686,6 +1803,10 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 		hints.hand_weight[h] = hold;
 		// Milestone 153 (decision 0291): the hands on a hold at a jump's ends and a drop's, all along a corner.
 		hints.hand_grip[h] = (jump || transfer.how == TRANSFER_DROP) ? ((u < 0.08f || u > 0.92f) ? 1.0f : 0.0f) : 1.0f;
+		hints.hand_reach[h] = (jump || transfer.how == TRANSFER_DROP) ? ((u < 0.08f || u > 0.92f) ? 1.0f : (u - 0.08f) / 0.84f) : 1.0f;
+		hints.hold_normal[h] = w < 0.5f ? transfer.from_normal : to_normal;
+		hints.hold_lip[h] = w < 0.5f ? transfer.from_lip[h] : transfer.to_lip[h];
+		hints.hold[h] = w < 0.5f ? transfer.from_hands[h] : to_hands[h];
 		// Milestone 195 (decision 0337): on the stone found there, as the hang's own (it had been the face's plane at the
 		// capsule's side: the ankle on the wall, the ball of the foot and the toes in it).
 		hints.foot[h] = _hang_foot(h, feet, inward, face.y, face + left * (h == 0 ? 0.14f : -0.14f), &hints.wall[h], &hints.wall_weight[h]);
@@ -1693,7 +1814,38 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 		hints.foot_follow[h] = 1.0f;
 	}
 	Vector3 body_offset;
-	if (styled) {
+	if (timed) {
+		// Milestone 198: the hands let go and catch when the clip's did (the leading hand, then the other), on arcs out
+		// from the wall; the feet off the wall as the first hand lets go, on it again as the last catches.
+		const float brace = hang_brace_height > 0.0f ? hang_brace_height : 0.35f;
+		const Vector3 from_left = UP.cross(transfer.from_inward).normalized();
+		const Vector3 from_face = transfer.from_feet + transfer.from_inward * (radius + 0.02f) + UP * brace;
+		const Vector3 to_face = transfer.to_feet + transfer.to.inward * (radius + 0.02f) + UP * brace;
+		const Vector4 hs = timed->hands;
+		const float off_wall = smooth(CLAMP((u - MIN(hs.x, hs.z)) / 0.12f, 0.0f, 1.0f));
+		const float on_wall = smooth(CLAMP((u - MAX(hs.y, hs.w)) / 0.15f, 0.0f, 1.0f));
+		for (int h = 0; h < 2; h++) {
+			const bool lead = h == transfer.lead;
+			const float rel = lead ? hs.x : hs.z;
+			const float cat = lead ? hs.y : hs.w;
+			const float k = smooth(CLAMP((u - rel) / MAX(cat - rel, 0.02f), 0.0f, 1.0f));
+			const float arc = Math::sin(k * float(Math::PI));
+			hints.hand[h] = transfer.from_hands[h].lerp(to_hands[h], k) - inward * (0.15f * arc) + UP * (0.06f * arc);
+			hints.hand_weight[h] = 1.0f;
+			hints.hand_grip[h] = (k <= 0.0f || k >= 1.0f) ? 1.0f : 0.0f;
+			hints.hand_reach[h] = k <= 0.0f ? 1.0f : k;
+			hints.hold_normal[h] = k < 0.5f ? transfer.from_normal : to_normal;
+			hints.hold_lip[h] = k < 0.5f ? transfer.from_lip[h] : transfer.to_lip[h];
+			hints.hold[h] = k < 0.5f ? transfer.from_hands[h] : to_hands[h];
+			if (on_wall > 0.0f) {
+				hints.foot[h] = _hang_foot(h, transfer.to_feet, transfer.to.inward, to_face.y, to_face + to_left * (h == 0 ? 0.14f : -0.14f), &hints.wall[h], &hints.wall_weight[h]);
+				hints.foot_weight[h] = 0.85f * on_wall;
+			} else {
+				hints.foot[h] = _hang_foot(h, transfer.from_feet, transfer.from_inward, from_face.y, from_face + from_left * (h == 0 ? 0.14f : -0.14f), &hints.wall[h], &hints.wall_weight[h]);
+				hints.foot_weight[h] = 0.85f * (1.0f - off_wall);
+			}
+		}
+	} else if (styled) {
 		// Milestone 153 (decision 0290): winding up, the body drawn in to the wall and up a little (the arms bending, the
 		// legs coiled on the wall); springing, it lets go and throws its hands to the ledge ahead of it, the leading one
 		// first (going down, with the body; turning back, once it has turned), the feet pushing off the wall and braced
@@ -1720,6 +1872,10 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 			hints.hand[h] = transfer.from_hands[h].lerp(to_hands[h], k) - inward * (0.18f * arc) + UP * (0.08f * arc);
 			hints.hand_weight[h] = 1.0f;
 			hints.hand_grip[h] = (k <= 0.0f || k >= 1.0f) ? 1.0f : 0.0f;
+			hints.hand_reach[h] = k <= 0.0f ? 1.0f : k;
+			hints.hold_normal[h] = k < 0.5f ? transfer.from_normal : to_normal;
+			hints.hold_lip[h] = k < 0.5f ? transfer.from_lip[h] : transfer.to_lip[h];
+			hints.hold[h] = k < 0.5f ? transfer.from_hands[h] : to_hands[h];
 			// (milestone 195: on the stone found at each end, as the hang's: the ankle out from it, not on its plane)
 			if (on_wall > 0.0f) {
 				hints.foot[h] = _hang_foot(h, transfer.to_feet, transfer.to.inward, to_face.y, to_face + to_left * (h == 0 ? 0.14f : -0.14f), &hints.wall[h], &hints.wall_weight[h]);
@@ -1744,6 +1900,10 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 			hints.hand[h] = transfer.from_hands[h].lerp(to_hands[h], k) - inward * (0.12f * arc) + UP * (0.05f * arc);
 			hints.hand_weight[h] = 1.0f;
 			hints.hand_grip[h] = (k <= 0.0f || k >= 1.0f) ? 1.0f : 0.0f;
+			hints.hand_reach[h] = k <= 0.0f ? 1.0f : k;
+			hints.hold_normal[h] = k < 0.5f ? transfer.from_normal : to_normal;
+			hints.hold_lip[h] = k < 0.5f ? transfer.from_lip[h] : transfer.to_lip[h];
+			hints.hold[h] = k < 0.5f ? transfer.from_hands[h] : to_hands[h];
 			const float f0 = lead ? 0.55f : 0.3f;
 			const float f1 = lead ? 0.95f : 0.68f;
 			const float j = smooth(CLAMP((u - f0) / (f1 - f0), 0.0f, 1.0f));
@@ -1768,11 +1928,19 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 				const float k2 = smooth(CLAMP((u - 0.55f) / 0.25f, 0.0f, 1.0f));
 				hints.hand[h] = first.lerp(to_hands[h], k2);
 				hints.hand_grip[h] = ((k <= 0.0f || k >= 1.0f) && (k2 <= 0.0f || k2 >= 1.0f)) ? 1.0f : 0.0f;
+				hints.hand_reach[h] = (k > 0.0f && k < 1.0f) ? k : ((k2 > 0.0f && k2 < 1.0f) ? k2 : 1.0f);
+				hints.hold_normal[h] = k < 0.5f ? transfer.from_normal : to_normal;
+				hints.hold_lip[h] = k < 0.5f ? transfer.from_lip[h] : transfer.to_lip[h];
+				hints.hold[h] = k < 0.5f ? transfer.from_hands[h] : (k2 < 0.5f ? grab : to_hands[h]);
 			} else {
 				const float k = smooth(CLAMP((u - 0.62f) / 0.28f, 0.0f, 1.0f));
 				const float arc = Math::sin(k * float(Math::PI));
 				hints.hand[h] = transfer.from_hands[h].lerp(to_hands[h], k) - inward * (0.1f * arc) + UP * (0.05f * arc);
 				hints.hand_grip[h] = (k <= 0.0f || k >= 1.0f) ? 1.0f : 0.0f;
+				hints.hand_reach[h] = k <= 0.0f ? 1.0f : k;
+				hints.hold_normal[h] = k < 0.5f ? transfer.from_normal : to_normal;
+				hints.hold_lip[h] = k < 0.5f ? transfer.from_lip[h] : transfer.to_lip[h];
+				hints.hold[h] = k < 0.5f ? transfer.from_hands[h] : to_hands[h];
 			}
 			hints.hand_weight[h] = 1.0f;
 			const bool trail = h != transfer.lead;
@@ -2017,8 +2185,21 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 	const float swing = Math::sin(shimmy_phase / stride * Math::PI);
 	const float sgn = shimmy_velocity >= 0.0f ? 1.0f : -1.0f;
 	const float stretch = 0.08f * swing * sgn * (ledge.spread / 0.24f); // (on a narrow hold, the hands step less)
-	hints.hand[0] = ledge.edge + left * (ledge.spread + stretch) + ledge.inward * 0.06f + UP * 0.02f;
-	hints.hand[1] = ledge.edge - left * (ledge.spread - stretch) + ledge.inward * 0.06f + UP * 0.02f;
+	hints.hand[0] = ledge.edge + left * (ledge.spread + stretch) + ledge.inward * HOLD_IN + UP * HOLD_UP;
+	hints.hand[1] = ledge.edge - left * (ledge.spread - stretch) + ledge.inward * HOLD_IN + UP * HOLD_UP;
+	hints.hand_reach[0] = hints.hand_reach[1] = 1.0f;
+	hints.hold[0] = hints.hand[0];
+	hints.hold[1] = hints.hand[1];
+	hints.hold_normal[0] = hints.hold_normal[1] = ledge.top_normal.y > 0.3f ? ledge.top_normal : UP;
+	// Milestone 198 (decision 0340): the stone under each hand's hold, looked for again as the hand moves 5 cm along it.
+	for (int s = 0; s < 2; s++) {
+		const Vector3 at = hints.hand[s] - ledge.inward * HOLD_IN - UP * HOLD_UP;
+		if (at.distance_to(lip_point[s]) > 0.05f) {
+			lip_point[s] = at;
+			lip_value[s] = _probe_lip(at, ledge.inward);
+		}
+		hints.hold_lip[s] = lip_value[s];
+	}
 	hints.hand_weight[0] = hints.hand_weight[1] = w;
 	hints.hand_grip[0] = hints.hand_grip[1] = 1.0f;
 	// Milestone 154 (decision 0293): hanging, the eyes on the hold, along the ledge the way the controller wishes to go,
@@ -2597,7 +2778,7 @@ void FellowTraversal3D::_step_climb(double p_delta) {
 		const Vector3 l2 = n.cross(t_up).normalized();
 		hints.active = true;
 		hints.kind = KIND_CLIMB;
-	hints.look_weight = 0.0f;
+		hints.look_weight = 0.0f;
 		hints.look_weight = 0.0f;
 		hints.inward = -nf;
 		hints.left = flat(l2).normalized();
@@ -2818,6 +2999,13 @@ Dictionary FellowTraversal3D::get_pose_targets() const {
 	d["hand_right"] = hints.hand[1];
 	d["hand_weights"] = Vector2(hints.hand_weight[0], hints.hand_weight[1]);
 	d["hand_grips"] = Vector2(hints.hand_grip[0], hints.hand_grip[1]);
+	d["hand_reach"] = Vector2(hints.hand_reach[0], hints.hand_reach[1]);
+	d["hold_normal_left"] = hints.hold_normal[0];
+	d["hold_normal_right"] = hints.hold_normal[1];
+	d["hold_left"] = hints.hold[0];
+	d["hold_right"] = hints.hold[1];
+	d["hold_lip_left"] = hints.hold_lip[0];
+	d["hold_lip_right"] = hints.hold_lip[1];
 	d["look"] = hints.look;
 	d["look_weight"] = hints.look_weight;
 	d["foot_left"] = hints.foot[0];
@@ -3136,6 +3324,9 @@ void FellowTraversal3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_high_clip"), &FellowTraversal3D::get_high_clip);
 	ClassDB::bind_method(D_METHOD("set_vault_clip", "clip"), &FellowTraversal3D::set_vault_clip);
 	ClassDB::bind_method(D_METHOD("get_vault_clip"), &FellowTraversal3D::get_vault_clip);
+	ClassDB::bind_method(D_METHOD("set_leap_timing", "kind", "time", "reach", "progress", "lift", "hands"), &FellowTraversal3D::set_leap_timing);
+	ClassDB::bind_method(D_METHOD("clear_leap_timing", "kind"), &FellowTraversal3D::clear_leap_timing);
+	ClassDB::bind_method(D_METHOD("has_leap_timing", "kind"), &FellowTraversal3D::has_leap_timing);
 	ClassDB::bind_method(D_METHOD("set_hang_clip", "clip"), &FellowTraversal3D::set_hang_clip);
 	ClassDB::bind_method(D_METHOD("get_hang_clip"), &FellowTraversal3D::get_hang_clip);
 	ClassDB::bind_method(D_METHOD("set_clip_root_bone", "bone"), &FellowTraversal3D::set_clip_root_bone);
@@ -3291,6 +3482,8 @@ void FellowTraversal3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(TRANSFER_INNER_CORNER);
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_ALONG);
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_UP);
+	BIND_ENUM_CONSTANT(LEAP_UP);
+	BIND_ENUM_CONSTANT(LEAP_ALONG);
 	BIND_ENUM_CONSTANT(TRANSFER_DROP);
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_DOWN);
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_DIAGONAL);
