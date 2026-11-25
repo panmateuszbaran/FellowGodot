@@ -200,6 +200,10 @@ void FellowPhysicalAnimation3D::build() {
 		trunk[i] = false;
 	}
 	const float root_y = rest_global[0].y;
+	float low_y = root_y; // (the lowest bone: the feet)
+	for (int i = 0; i < bone_count; i++) {
+		low_y = MIN(low_y, rest_global[i].y);
+	}
 	for (int b = top; b >= 0; b = skeleton->get_bone_parent(b)) {
 		if (rest_global[b].y - root_y < 0.8f * (rest_global[top].y - root_y)) {
 			trunk[b] = true;
@@ -211,6 +215,15 @@ void FellowPhysicalAnimation3D::build() {
 	kind.resize(bone_count);
 	for (int b = 0; b < bone_count; b++) {
 		kind[b] = to_child_of[b].length() >= min_bone_length ? 1 : (skeleton->get_bone_parent(b) < 0 ? 2 : 0);
+		// Milestone 208 (decision 0350): a game rig's root on the ground under the hips (it carries the character's
+		// motion, not a part of the body) gets no body — its capsule from the ground up to the hips had stood in the
+		// ground and fought the hips getting up from lying; the body begins at its child.
+		if (skeleton->get_bone_parent(b) < 0 && skeleton->get_bone_children(b).size() == 1) {
+			const float tall = rest_global[top].y - low_y;
+			if (tall > 0.5f && rest_global[b].y - low_y < 0.1f * tall && rest_global[skeleton->get_bone_children(b)[0]].y - low_y > 0.3f * tall) {
+				kind[b] = 0;
+			}
+		}
 	}
 	auto has_body_below = [&](int p_bone) {
 		LocalVector<int> stack;
@@ -913,6 +926,27 @@ void FellowPhysicalAnimation3D::_process_modification(double p_delta) {
 				bodies[i].target = Transform3D(r * fall_targets[i].basis, fall_pivot + r.xform(fall_targets[i].origin - fall_pivot));
 			}
 		}
+	} else if (state == STATE_GETTING_UP && gu_external) {
+		// Milestone 208 (decision 0350): from where the bodies lay into the animation the skeleton is given now (the game's
+		// own get-up clip, the character placed where it lies), smoothstep over the blend.
+		const float x = CLAMP(state_time / gu_external_blend, 0.0f, 1.0f);
+		const float w = x * x * (3.0f - 2.0f * x);
+		if (!gu_external_fit && gu_snapshot.size() == bodies.size()) {
+			// (how far the animation's first pose is from where the bodies lie: the mean distance, by mass)
+			gu_external_fit = true;
+			float sum = 0.0f;
+			float mass = 0.0f;
+			for (uint32_t i = 0; i < bodies.size(); i++) {
+				sum += bodies[i].node->get_mass() * (bodies[i].target.origin - gu_snapshot[i].origin).length();
+				mass += bodies[i].node->get_mass();
+			}
+			stat_match_error = mass > 0.0f ? sum / mass : 0.0f;
+		}
+		if (w < 1.0f && gu_snapshot.size() == bodies.size()) {
+			for (uint32_t i = 0; i < bodies.size(); i++) {
+				bodies[i].target = gu_snapshot[i].interpolate_with(bodies[i].target, w);
+			}
+		}
 	} else if (state == STATE_GETTING_UP && gu_clip >= 0) {
 		FellowMotionMatcher3D *mm = _get_matcher();
 		const Ref<FellowMotionDatabase> db = mm ? mm->get_database() : Ref<FellowMotionDatabase>();
@@ -956,7 +990,8 @@ void FellowPhysicalAnimation3D::_drive(double p_delta) {
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	const float dt = float(p_delta);
 	const float decay = Math::exp(-0.69314718056f * dt / recovery_halflife);
-	if (balance) {
+	// (milestone 208: a fall from knock_down() and a get-up go on without balance too — only a hit's decision needs it)
+	if (balance || state != STATE_STANDING) {
 		_update_balance(dt);
 	}
 	const float drive_strength = strength * state_strength;
@@ -1281,6 +1316,7 @@ void FellowPhysicalAnimation3D::_fall(const Vector3 &p_direction, float p_speed)
 	fall_axis = Vector3(0, 1, 0).cross(dir).normalized();
 	fall_direction = dir;
 	fall_ground = feet_y;
+	gu_external = false;
 	fall_angle0 = 0.02f;
 	fall_angle = fall_angle0;
 	fall_sink = 0.0f;
@@ -1846,6 +1882,32 @@ bool FellowPhysicalAnimation3D::get_up() {
 	stat_blend_speed_max = 0.0f;
 	stat_get_up_clip = get_up_clips[best].name;
 	handing_over = false;
+	gu_external = false;
+	_set_state(STATE_GETTING_UP);
+	return true;
+}
+
+bool FellowPhysicalAnimation3D::get_up_from_animation(float p_blend) {
+	// Milestone 208 (decision 0350): lying (down, or limp after a fall), the bodies taken from where they lie into the
+	// animation the skeleton is given from now on — the game's own get-up clip, played where the body lies — over
+	// p_blend seconds (get_up_blend if negative); then standing. No motion matcher needed.
+	if (!built || (state != STATE_DOWN && !(state == STATE_FALLING && state_strength <= 0.0f))) {
+		return false;
+	}
+	gu_clip = -1;
+	gu_external = true;
+	gu_external_fit = false;
+	gu_external_blend = p_blend < 0.0f ? get_up_blend : MAX(p_blend, 0.01f);
+	gu_snapshot.resize(bodies.size());
+	for (uint32_t i = 0; i < bodies.size(); i++) {
+		gu_snapshot[i] = bodies[i].node->get_global_transform().orthonormalized();
+		// (as get_up(): the targets from the bodies on, no feed-forward from the pose they last had)
+		bodies[i].target = gu_snapshot[i];
+		bodies[i].has_previous = false;
+	}
+	stat_blend_speed_max = 0.0f;
+	stat_get_up_clip = "";
+	handing_over = false;
 	_set_state(STATE_GETTING_UP);
 	return true;
 }
@@ -1959,6 +2021,20 @@ void FellowPhysicalAnimation3D::_update_balance(float p_dt) {
 			}
 		} break;
 		case STATE_GETTING_UP: {
+			if (gu_external) {
+				// Milestone 208: standing once the blend is done (the animation goes on as the game plays it).
+				for (const Body &b : bodies) {
+					stat_blend_speed_max = MAX(stat_blend_speed_max, float(b.node->get_linear_velocity().length()));
+				}
+				if (state_time >= gu_external_blend) {
+					gu_external = false;
+					stat_get_up_seconds = state_time;
+					stat_get_ups++;
+					_set_state(STATE_STANDING);
+					emit_signal(SNAME("got_up"));
+				}
+				break;
+			}
 			FellowMotionMatcher3D *mm = _get_matcher();
 			const Ref<FellowMotionDatabase> db = mm ? mm->get_database() : Ref<FellowMotionDatabase>();
 			if (db.is_null() || gu_clip < 0) {
@@ -2125,6 +2201,7 @@ void FellowPhysicalAnimation3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_landed_face"), &FellowPhysicalAnimation3D::get_landed_face);
 	ClassDB::bind_method(D_METHOD("knock_down", "velocity"), &FellowPhysicalAnimation3D::knock_down);
 	ClassDB::bind_method(D_METHOD("get_up"), &FellowPhysicalAnimation3D::get_up);
+	ClassDB::bind_method(D_METHOD("get_up_from_animation", "blend"), &FellowPhysicalAnimation3D::get_up_from_animation, DEFVAL(-1.0f));
 	ClassDB::bind_method(D_METHOD("get_balance_stats"), &FellowPhysicalAnimation3D::get_balance_stats);
 
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "simulate"), "set_simulate", "is_simulating");

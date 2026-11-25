@@ -13,6 +13,8 @@ extends SceneTree
 ##   godot ... -s res://tools/climb_look.gd -- --program=course --out=<dir> [--seconds=10] ...
 ##   godot ... -s res://tools/climb_look.gd -- --program=keys --keys_yaw=<deg> --out=<dir> [--seconds=6] ...
 ##   godot ... -s res://tools/climb_look.gd -- --program=fountain --out=<dir> [--seconds=5] ...   (a run at its middle)
+##   godot ... -s res://tools/climb_look.gd -- --program=bump --bump=walk|run|sprint --out=<dir> [--seconds=8] ...
+##       (milestone 208: from 6 m at one of the talkers in the square's middle, into them and on; its reactions printed)
 ##
 ## --cam=hand: the hands on the edge from out and above; --cam=handside: the left hand in profile from along the edge
 ## (milestone 198). --warm=<n>: the n frames before --skip drawn too, not saved (the exposure settled).
@@ -78,6 +80,8 @@ func _init() -> void:
 			_program = a.get_slice("=", 1)
 		elif a.begins_with("--keys_yaw="):
 			_keys_yaw = float(a.get_slice("=", 1))
+		elif a.begins_with("--bump="):
+			_bump_pace = a.get_slice("=", 1)
 		elif a.begins_with("--keys_turn="):
 			_keys_turn = float(a.get_slice("=", 1))
 		elif a.begins_with("--keys_sprint="):
@@ -89,6 +93,8 @@ func _init() -> void:
 	if _lite:
 		for n in ["Skyline", "CityHouses", "Landscape", "Trees_cypress", "Trees_olive", "Trees_pine", "Trees_broadleaf",
 				"Villas", "Trees_villa_cypress", "Birds", "Crowd", "PipelineWarmer"]:
+			if n == "Crowd" and _program == "bump":
+				continue # (milestone 208: the people kept to be run into)
 			var c := sc.get_node_or_null(n)
 			if c:
 				sc.remove_child(c)
@@ -127,6 +133,8 @@ func _init() -> void:
 		_player.global_position = Vector3(13.1, 0.0, -9.6)
 		_player.set("facing", 0.0)
 		_player.rotation.y = 0.0
+	elif _program == "bump":
+		_bump_setup(sc)
 	elif _program == "fountain":
 		_player.set("autopilot", true)
 		var c := (sc.get_node("Town/Fountain") as Node3D).global_position
@@ -147,6 +155,8 @@ func _init() -> void:
 			_drive_course(i / 60.0)
 		elif _program == "keys":
 			_drive_keys(i)
+		elif _program == "bump":
+			_drive_bump(i)
 		elif _program == "fountain":
 			# (milestone 207: a run at the fountain's middle — onto the basin's rim, across it, into the column)
 			_player.set("wish", Vector3(-1.0, 0.0, 0.0))
@@ -166,6 +176,9 @@ func _init() -> void:
 	f.store_string(JSON.stringify({"every": _every, "skip": _skip, "frames": _frames}))
 	f.close()
 	print("climb_look: %d frames" % total)
+	var crowd := _player.get_parent().get_node_or_null("Crowd")
+	if crowd and crowd.has_method("get_reaction_stats"):
+		print("climb_look: the people ", crowd.call("get_reaction_stats"))
 	quit()
 
 
@@ -261,6 +274,92 @@ func _drive(t: float) -> void:
 	else:
 		w = into
 	_player.set("wish", w)
+
+
+## The "bump" program (milestone 208, the owner: "running into the NPCs, knocking someone over"): one of the three
+## talking in the square's middle (round (1, 5.5)) run at from 6 m at --bump's pace and on 4 m past them.
+var _bump_pace := "run"
+var _bump_target: Node3D
+var _bump_from := Vector3()
+var _bump_dir := Vector3()
+var _bump_last := ""
+var _lying := [0.0, 0.0, 0, 0]
+
+func _bump_setup(sc: Node) -> void:
+	_player.set("autopilot", true)
+	var crowd := sc.get_node("Crowd")
+	var best := 1e9
+	for c in crowd.get_children():
+		if c is Node3D and (c as Node3D).position.distance_to(Vector3(1.0, 0.0, 5.5)) < best:
+			best = (c as Node3D).position.distance_to(Vector3(1.0, 0.0, 5.5))
+			_bump_target = c
+	var at := _bump_target.global_position
+	_bump_dir = (at - Vector3(1.0, 0.0, 5.5)).normalized() if at.distance_to(Vector3(1.0, 0.0, 5.5)) > 0.1 else Vector3(1, 0, 0)
+	# (from outside the group, through the one person to its middle and beyond)
+	_bump_from = at + _bump_dir * 6.0
+	_player.global_position = _bump_from
+	var yaw := atan2(_bump_dir.x, _bump_dir.z)
+	_player.set("facing", yaw)
+	_player.rotation.y = yaw
+
+
+func _drive_bump(i: int) -> void:
+	var t := i / 60.0
+	var crowd := _player.get_parent().get_node("Crowd")
+	_player.set("want_sprint", _bump_pace == "sprint" and t > 0.3)
+	_player.set("want_walk", _bump_pace == "walk")
+	var gone := (_player.global_position - _bump_from).dot(-_bump_dir)
+	_player.set("wish", -_bump_dir if t > 0.3 and gone < 10.0 else Vector3())
+	var st: Dictionary = crowd.call("get_reaction_stats")
+	var ps: Array = crowd.call("get_person_state", _bump_target)
+	if int(ps[1]) == 3:
+		# (lying: how still the bodies lie — their fastest and their mean speed, the frames counted)
+		var top := 0.0
+		var sum := 0.0
+		var n := 0
+		for b in _bump_target.find_children("*", "PhysicalBone3D", true, false):
+			var v := (b as PhysicalBone3D).linear_velocity.length()
+			top = maxf(top, v)
+			sum += v
+			n += 1
+		_lying[0] = maxf(_lying[0], top)
+		_lying[1] += sum / maxf(n, 1)
+		_lying[2] += 1
+	elif int(ps[1]) == 4 and "--bump_trace=1" in OS.get_cmdline_user_args():
+		var top := 0.0
+		var who := ""
+		for b in _bump_target.find_children("*", "PhysicalBone3D", true, false):
+			var v := (b as PhysicalBone3D).linear_velocity.length()
+			if v > top:
+				top = v
+				who = (b as PhysicalBone3D).bone_name
+		var hb: PhysicalBone3D = null
+		for b in _bump_target.find_children("*", "PhysicalBone3D", true, false):
+			if (b as PhysicalBone3D).bone_name == "Hips":
+				hb = b
+		var skel := _bump_target.find_child("Skeleton3D", true, false) as Skeleton3D
+		var anim_hips := skel.global_transform * skel.get_bone_global_pose(skel.find_bone("Hips")).origin
+		var pa := skel.get_node_or_null("Physical")
+		var tg := Vector3()
+		if pa:
+			var bones: PackedStringArray = pa.call("get_body_bones")
+			var targets: Array = pa.call("get_body_targets")
+			for k in bones.size():
+				if bones[k] == "Hips":
+					tg = (targets[k] as Transform3D).origin
+		print("bump getup t %.3f fastest %.2f %s hips body %s v %s target %s anim %s" % [t, top, who, hb.global_position if hb else Vector3(), hb.linear_velocity if hb else Vector3(), tg, anim_hips])
+	if int(ps[1]) != 3 and _lying[2] > 0 and _lying[3] == 0:
+		_lying[3] = 1
+		print("bump lying: frames %d, the bodies' fastest %.3f m/s, their mean %.4f m/s" % [_lying[2], _lying[0], _lying[1] / _lying[2]])
+	var key := "%s %s" % [crowd.call("get_person_state", _bump_target), _bump_target.find_child("AnimationPlayer", true, false).get("current_animation")]
+	if key != _bump_last:
+		print("bump t %.2f %s at %s player %s v %.2f" % [t, key, _bump_target.global_position, _player.global_position, (_player.velocity as Vector3).length()])
+		if key.begins_with("[\"home\"") and not _bump_last.begins_with("[\"home\""):
+			var stats: Dictionary = crowd.call("get_person_stats", _bump_target)
+			if not stats.is_empty():
+				stats.erase("get_up_clips")
+				print("bump stats ", stats)
+		_bump_last = key
 
 
 ## The "keys" program (milestone 207, the owner: "climbing, when I hold W and press space the body sometimes goes along
@@ -380,6 +479,14 @@ func _place_camera(p_first: bool) -> void:
 		_look = _look.lerp(at - Vector3.UP * 0.05, 1.0 if p_first else 0.3)
 		_cam.global_position = _cam_pos
 		_cam.look_at(_look, Vector3.UP)
+		return
+	if _cam_mode == "npc" and _bump_target:
+		# (milestone 208: still, beside the person run into, looking at where they stand and fall)
+		if p_first:
+			var across := Vector3.UP.cross(_bump_dir).normalized()
+			var at := _bump_target.global_position - _bump_dir * 0.5
+			_cam.global_position = at + across * (_dist * 0.7) + Vector3.UP * 1.4 + _bump_dir * (_dist * 0.5)
+			_cam.look_at(at - _bump_dir * 0.4 + Vector3.UP * 0.55, Vector3.UP)
 		return
 	if _cam_mode == "back":
 		want = hips - inward * _dist + Vector3.UP * -0.4 + side * 0.6

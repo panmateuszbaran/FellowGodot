@@ -1715,7 +1715,8 @@ func _build_player() -> PackedScene:
 	player.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
 	player.set_script(load("res://scripts/rooftops_player.gd"))
 	player.collision_layer = 8
-	player.collision_mask = LAYER_WORLD
+	# (milestone 208: and the square's people, rooftops_crowd.gd's LAYER_PEOPLE)
+	player.collision_mask = LAYER_WORLD | 16
 	player.floor_snap_length = 0.3
 	player.floor_max_angle = deg_to_rad(50.0)
 	var prev := scene_root
@@ -1971,10 +1972,11 @@ func _crowd(p_root: Node3D) -> void:
 		return out
 	crowd.set("routes", [
 		# Round the square by its fronts, one way and (further in) the other.
-		[P.call([Vector2(-15.0, -10.6), Vector2(14.6, -10.6), Vector2(14.6, 11.6), Vector2(-15.0, 11.6)]), true, 7],
+		# (milestone 208: the people solid, round CasaCrema's front clear of the demo's run at it and climb, x 13.1 from z -7)
+		[P.call([Vector2(-15.0, -10.6), Vector2(10.5, -10.6), Vector2(10.5, -5.5), Vector2(14.6, -5.5), Vector2(14.6, 11.6), Vector2(-15.0, 11.6)]), true, 7],
 		[P.call([Vector2(-10.5, -5.0), Vector2(-10.5, 8.6), Vector2(8.4, 8.6), Vector2(8.4, -5.0)]), true, 5],
 		# Across it, past the fountain.
-		[P.call([Vector2(14.0, -9.5), Vector2(6.0, -2.0), Vector2(0.5, 6.5), Vector2(-8.0, 11.5)]), false, 3],
+		[P.call([Vector2(15.0, -5.5), Vector2(6.0, -2.0), Vector2(0.5, 6.5), Vector2(-8.0, 11.5)]), false, 3],
 		# In and out of the streets.
 		[P.call([Vector2(-1.8, 34.0), Vector2(-1.8, 12.5), Vector2(-7.5, 9.5)]), false, 3],
 		[P.call([Vector2(32.0, 3.0), Vector2(16.0, 3.0), Vector2(10.0, -1.0)]), false, 2],
@@ -1982,7 +1984,7 @@ func _crowd(p_root: Node3D) -> void:
 		# (Milestone 157: by the alley north of CasaRiferimento, which closes the street.)
 		[P.call([Vector2(-32.0, 5.0), Vector2(-16.5, 5.0), Vector2(-10.0, -2.5)]), false, 2],
 	])
-	crowd.set("groups", [[Vector3(1.0, 0.0, 5.5), 3], [Vector3(-9.6, 0.0, 7.0), 2], [Vector3(12.6, 0.0, -9.6), 2],
+	crowd.set("groups", [[Vector3(1.0, 0.0, 5.5), 3], [Vector3(-9.6, 0.0, 7.0), 2], [Vector3(10.6, 0.0, -8.6), 2],
 			[Vector3(14.0, 0.0, -4.0), 2], [Vector3(-7.0, 0.0, -9.2), 3]])
 	var seats: Array[Transform3D] = []
 	for n in ["PalazzoOcra", "PalazzoSiena"]:

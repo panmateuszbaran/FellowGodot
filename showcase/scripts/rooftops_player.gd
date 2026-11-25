@@ -581,7 +581,9 @@ func _move(delta: float, speed_goal: float) -> void:
 	if want_drop and on_floor and h.length() > 2.0 and mode == Mode.GROUND and not over_edge:
 		mode = Mode.ROLL
 		_play("roll")
+	var before := velocity
 	move_and_slide()
+	_bump_people(before)
 	on_floor = is_on_floor()
 	match mode:
 		Mode.GROUND:
@@ -713,7 +715,7 @@ func _edge_guard(h: Vector3) -> Vector3:
 
 
 func _ground_at(p: Vector3) -> bool:
-	var q := PhysicsRayQueryParameters3D.create(p + Vector3.UP * 0.5, p + Vector3.DOWN * EDGE_DROP, collision_mask, [get_rid()])
+	var q := PhysicsRayQueryParameters3D.create(p + Vector3.UP * 0.5, p + Vector3.DOWN * EDGE_DROP, RAY_MASK, [get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	return not hit.is_empty() and (hit.normal as Vector3).y >= 0.5
 
@@ -732,7 +734,7 @@ func _wall_distance(p_range: float) -> float:
 		d = -global_basis.z
 	d = d.normalized()
 	var from := global_position + Vector3.UP * 1.3
-	var q := PhysicsRayQueryParameters3D.create(from, from + d * p_range, collision_mask, [get_rid()])
+	var q := PhysicsRayQueryParameters3D.create(from, from + d * p_range, RAY_MASK, [get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	if hit.is_empty() or absf((hit.normal as Vector3).y) >= 0.3 or (hit.normal as Vector3).dot(-d) <= 0.7:
 		return p_range
@@ -744,7 +746,7 @@ func _wall_ahead(p_distance: float) -> bool:
 		return false
 	var d := Vector3(wish.x, 0.0, wish.z).normalized()
 	var from := global_position + Vector3.UP * 1.3
-	var q := PhysicsRayQueryParameters3D.create(from, from + d * (p_distance + 0.35), collision_mask, [get_rid()])
+	var q := PhysicsRayQueryParameters3D.create(from, from + d * (p_distance + 0.35), RAY_MASK, [get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	return not hit.is_empty() and absf((hit.normal as Vector3).y) < 0.3 and (hit.normal as Vector3).dot(-d) > 0.7
 
@@ -865,7 +867,7 @@ func _hay(_delta: float) -> void:
 	# Never below the street: the clip ends on the ground, wherever the cart stands.
 	var space := get_world_3d().direct_space_state
 	var q := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.35, global_position + Vector3.DOWN * 0.4,
-			collision_mask, [get_rid()])
+			RAY_MASK, [get_rid()])
 	var hit := space.intersect_ray(q)
 	if hit and (hit.normal as Vector3).y > 0.7 and global_position.y < (hit.position as Vector3).y:
 		global_position.y = (hit.position as Vector3).y
@@ -1037,6 +1039,38 @@ func _set_state(s: String) -> void:
 		_inertia.call("blend", INERTIA_JUMP_WALL if s == "jump_wall" else INERTIA_TIME)
 
 
+## Milestone 208 (the owner: "more interaction with the NPCs — running into them, knocking someone over, not passing
+## through them"): the square's people are capsules on LAYER_PEOPLE, which the body meets (its rays — the edge, the wall
+## ahead, the ground — see the world alone: RAY_MASK). A person run into is told how fast (rooftops_crowd.gd's bump():
+## a shove, a stagger, knocked down); the body loses speed to one staggered (BUMP_STAGGER_KEEP of it) or knocked down
+## (BUMP_KNOCK_KEEP), going on through where they stood.
+const LAYER_PEOPLE := 16
+const RAY_MASK := 1
+const BUMP_STAGGER_KEEP := 0.45
+const BUMP_KNOCK_KEEP := 0.7
+var _crowd: Node
+
+func _bump_people(p_before: Vector3) -> void:
+	for i in get_slide_collision_count():
+		var c := get_slide_collision(i)
+		var other := c.get_collider()
+		if other == null or not (other is CollisionObject3D) or ((other as CollisionObject3D).collision_layer & LAYER_PEOPLE) == 0:
+			continue
+		if _crowd == null:
+			_crowd = get_tree().get_first_node_in_group(&"crowd")
+		if _crowd == null:
+			return
+		var r := int(_crowd.call("bump", other, p_before, c.get_normal()))
+		if r == 2:
+			velocity.x = p_before.x * BUMP_STAGGER_KEEP
+			velocity.z = p_before.z * BUMP_STAGGER_KEEP
+		elif r == 3:
+			velocity.x = p_before.x * BUMP_KNOCK_KEEP
+			velocity.z = p_before.z * BUMP_KNOCK_KEEP
+		if r >= 2:
+			return
+
+
 ## Milestone 207 (the owner: "the fall has a broken animation" — the body had fallen upright and stiff, the legs nearly
 ## straight, one arm out behind): a fall is the clip "fall" (in the air ready to land: the knees up, the arms out for
 ## balance, the eyes down) blended into "fall_flail" (the arms wheeling over the shoulders, the legs pedalling) as it
@@ -1075,7 +1109,7 @@ func _fall_mix(delta: float) -> void:
 	var want := clampf((_fall_time - FALL_FLAIL_FROM) / (FALL_FLAIL_FULL - FALL_FLAIL_FROM), 0.0, 1.0)
 	if want > 0.0 and velocity.y < 0.0:
 		var reach := -velocity.y * FALL_READY + 0.2
-		var q := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.1, global_position + Vector3.DOWN * reach, collision_mask, [get_rid()])
+		var q := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.1, global_position + Vector3.DOWN * reach, RAY_MASK, [get_rid()])
 		if not get_world_3d().direct_space_state.intersect_ray(q).is_empty():
 			want = 0.0
 	_flail = move_toward(_flail, want, delta / 0.25)

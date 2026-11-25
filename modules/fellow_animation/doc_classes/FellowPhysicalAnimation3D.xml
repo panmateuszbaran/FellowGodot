@@ -9,7 +9,8 @@
 		- a capsule along each bone at least [member min_bone_length] long, to its farthest child; the chain from the root to the head's end below 80 % of its height as thick as a torso (11 cm);
 		- a sphere for the root;
 		- a small body for every bone between two bodies, so that no joint spans a bone that turns;
-		- a sphere for a leaf bone named like a head when the bone above it has no body.
+		- a sphere for a leaf bone named like a head when the bone above it has no body;
+		- (milestone 208) no body for a root bone on the ground under the hips with one child — a game rig's root, which carries the character's motion: the body begins at its child.
 		Their masses go by volume and together make [member total_mass] (with [member anatomical_limits]: by the part of a person's body each is). Each body is joined to the nearest body up the bones: by a pin while the bodies are driven (their angles are the animation's), by a cone limited to [member swing_limit] and [member twist_limit] about the pose it went limp in once [member strength] is under 0.5 (with [member anatomical_limits]: by its part's limits). The bodies are on [member collision_layer] and meet [member collision_mask]; they do not meet one another.
 		[b]The drive[/b] runs each physics step. Each body's velocity goes towards the animation's own motion plus a share of the error ([member position_gain], [member rotation_gain] of it a step), less the gravity the step will add. The share of the step it takes is the strength cubed, so a weakened body is let go of. With nothing pushing, the bodies stay within millimetres of the animation.
 		[b]Hits[/b] ([method apply_hit]): the impulse goes to the body nearest the point. That body is weakened by [member hit_weakening], its neighbours by half of it a link (two links), and the weakness fades with [member recovery_halflife], so the body gives way and comes back.
@@ -119,6 +120,13 @@
 				Gets up now from lying (down, or limp after a fall): the motion matcher's database's clip tagged [member get_up_tag] that starts on the face the body lies on and whose first pose fits it best — each turned about the vertical and moved over the ground to fit the bodies (least squares, by mass) — played from the bodies' places, blended over [member get_up_blend]; when it stands the motion matcher is put where the clip ends. Returns [code]false[/code] if it is not lying or there is no such clip. With [member auto_get_up] it is called after [member get_up_delay].
 			</description>
 		</method>
+		<method name="get_up_from_animation">
+			<return type="bool" />
+			<param index="0" name="blend" type="float" default="-1.0" />
+			<description>
+				Milestone 208 (decision 0350): gets up from lying (down, or limp after a fall) into the animation the skeleton is given from now on — the game's own get-up clip, the character placed where the body lies, its first pose lying as the body does — the bodies' targets blended from where they lie into the animation's over [param blend] seconds ([member get_up_blend] if negative), smoothstep; then the state is standing and [signal got_up] is emitted. No motion matcher is needed. Returns [code]false[/code] if the body is not lying.
+			</description>
+		</method>
 		<method name="is_built" qualifiers="const">
 			<return type="bool" />
 			<description>
@@ -129,7 +137,7 @@
 			<return type="void" />
 			<param index="0" name="velocity" type="Vector3" />
 			<description>
-				Knocks the body down the way of [param velocity] (its horizontal part), leaning as fast: the fall [member balance] starts beyond [member fall_threshold] (there with the speed the centre of mass keeps after the farthest step).
+				Knocks the body down the way of [param velocity] (its horizontal part), leaning as fast: the fall [member balance] starts beyond [member fall_threshold] (there with the speed the centre of mass keeps after the farthest step). Milestone 208: the fall goes on to lying (and a get-up to standing) with [member balance] off too.
 			</description>
 		</method>
 		<method name="reset_bodies">

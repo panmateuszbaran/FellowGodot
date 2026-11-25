@@ -212,6 +212,9 @@ private:
 	LocalVector<int> db_bone_of; // per skeleton bone: the database's bone, or -1
 	LocalVector<Transform3D> clip_globals; // scratch: a clip frame's bones (skeleton space)
 	int gu_clip = -1;
+	bool gu_external = false; // milestone 208: getting up into the animation the skeleton is given (get_up_from_animation)
+	float gu_external_blend = 0.5f;
+	bool gu_external_fit = false;
 	double gu_frame = 0.0;
 	Transform3D gu_anchor; // the clip's space in the world
 	LocalVector<Transform3D> gu_snapshot; // the bodies when it began (world)
@@ -358,6 +361,7 @@ public:
 	int get_landed_face() const { return landed_face; }
 	void knock_down(const Vector3 &p_velocity);
 	bool get_up();
+	bool get_up_from_animation(float p_blend = -1.0f);
 	Dictionary get_balance_stats() const;
 
 	FellowPhysicalAnimation3D();

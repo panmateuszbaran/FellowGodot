@@ -424,6 +424,117 @@ def clip_fall_flail():
 	return length, True, pose
 
 
+# ------------------------------------------------------------------ the square's people knocked into (milestone 208)
+
+
+def clip_stagger(back):
+	# Milestone 208 (the owner: "more interaction with the NPCs — running into them, knocking someone over"): run into
+	# from the front (back: stumbling backwards) or from behind (stumbling forwards) — the trunk thrown, two quick steps
+	# the way of the push, the second catching it, the arms out, standing. The root's way (STAGGER_D) is the clip's root
+	# motion (the crowd moves the figure by it).
+	length = 1.0
+	sgn = 1.0 if back else -1.0  # +Y is back in the root's frame
+
+	def root_y(t):
+		u = min(1.0, t / 0.75)
+		return STAGGER_D * (1.0 - (1.0 - u) ** 2.2)
+
+	# The steps (the way along, from where the root began): the right foot first, landing a little past the hips to
+	# catch them; the left beside it.
+	steps = (("R", -0.105, 0.10, 0.32, 0.01, root_y(0.32) + 0.12), ("L", 0.105, 0.38, 0.62, -0.01, STAGGER_D + 0.01))
+
+	def pose(t):
+		ry = root_y(t)
+		p = stand(root=(0, sgn * ry, 0))
+		for side, x, t0, t1, a0, a1 in steps:
+			u = min(1.0, max(0.0, (t - t0) / (t1 - t0)))
+			along = a0 + (a1 - a0) * smoother(u)
+			lift = 0.11 * math.sin(math.pi * u) if 0.0 < u < 1.0 else 0.0
+			p["leg_" + side] = {"ik": ((x, sgn * (along - ry), ANKLE + lift), (0.15 if side == "L" else -0.15, -1.0, 0.0))}
+			p["foot_" + side] = (-12.0 * math.sin(math.pi * u) if 0.0 < u < 1.0 else 0.0, 7.0, 0)
+		# The trunk thrown by the hit (back for a push in front: the chest goes first), then bent the other way as the
+		# hips are carried past it, upright again as the second step catches it.
+		hit = math.exp(-((t - 0.08) / 0.07) ** 2)
+		bend = math.exp(-((t - 0.4) / 0.16) ** 2)
+		lean = (-16.0 * hit + 14.0 * bend) if back else (-10.0 * hit + 18.0 * bend)
+		p["spine"] = (lean, 0, 0)
+		p["hips_rot"] = (0.4 * lean, 0, 0)
+		p["head"] = (-0.6 * lean + 6.0 * hit, 0, 0)
+		p["hips"] = (0, 0, -0.012 - 0.04 * bend)
+		# The arms flung out and forward, coming back down.
+		out = math.exp(-((t - 0.3) / 0.22) ** 2)
+		for side, ph in (("L", 0.0), ("R", 0.6)):
+			p["arm_" + side] = {"fk": (78.0 - 52.0 * out, 3.0 + (48.0 if back else 34.0) * out + 6.0 * math.sin(6.0 * t + ph) * out, 14.0 + 22.0 * out, 6.0)}
+			p["shoulder_" + side] = (10.0 * out, 0)
+			p["grip_" + side] = 0.3 - 0.15 * out
+		return p
+
+	return length, False, pose
+
+
+STAGGER_D = 0.55  # m, a stagger's way
+
+
+def get_up_lying_back():
+	# On the back, the head behind the root (+Y), the root under the hips: the legs out ahead, the arms out a little.
+	return stand(hips=(0, 0.0, 0.11 - 0.965), hips_rot=(-88.0, 0, 0), spine=(4.0, 0, 0), neck=(4.0, 0), head=(4.0, 0, 0),
+			leg_L={"fk": (4.0, 10.0, 6.0, 0)}, leg_R={"fk": (4.0, 10.0, 8.0, 0)}, foot_L=(-30.0, 10.0, 0), foot_R=(-30.0, 10.0, 0),
+			arm_L={"fk": (55.0, -8.0, 15.0, 0)}, arm_R={"fk": (55.0, -8.0, 15.0, 0)}, grip_L=0.2, grip_R=0.2)
+
+
+def clip_get_up_back():
+	# Milestone 208: up from the back — the knees drawn up, sitting up onto a hand behind, the weight forward over the
+	# feet, pushed up off the hand, standing. The root ends under the hips, 0.32 m ahead of where it lay (root motion).
+	F = -0.32  # the feet's place ahead of the hips as it sits
+	keys = [
+		(0.0, get_up_lying_back()),
+		(0.35, {"hips_rot": (-80.0, 0, 0), "neck": (28.0, 0), "head": (10.0, 0, 0),
+				"leg_L": {"fk": (55.0, 8.0, 95.0, 0)}, "leg_R": {"fk": (50.0, 8.0, 90.0, 0)}, "foot_L": (0.0, 8.0, 0), "foot_R": (0.0, 8.0, 0),
+				"arm_L": {"fk": (70.0, -20.0, 40.0, 0)}, "arm_R": {"fk": (70.0, -20.0, 40.0, 0)}}),
+		(0.75, {"hips": (0, 0.0, 0.13 - 0.965), "hips_rot": (-22.0, 0, 0), "spine": (28.0, 0, 0), "neck": (8.0, 0), "head": (2.0, 0, 0),
+				"leg_L": {"ik": ((0.13, F, ANKLE), (0.3, -1, 0.3))}, "leg_R": {"ik": ((-0.14, F + 0.06, ANKLE), (-0.3, -1, 0.3))},
+				"foot_L": (0.0, 8.0, 0), "foot_R": (0.0, 8.0, 0),
+				"arm_L": {"ik": ((0.32, 0.22, 0.06), (1.0, 0.6, 0.0))}, "arm_R": {"fk": (60.0, 35.0, 45.0, 0)}}),
+		(1.15, {"root": (0, -0.12, 0), "hips": (0, -0.08, 0.42 - 0.965), "hips_rot": (38.0, 0, 0), "spine": (26.0, 0, 0), "neck": (0.0, 0), "head": (-22.0, 0, 0),
+				"leg_L": {"ik": ((0.13, F + 0.12, ANKLE), (0.3, -1, 0.2))}, "leg_R": {"ik": ((-0.14, F + 0.18, ANKLE), (-0.3, -1, 0.2))},
+				"arm_L": {"ik": ((0.3, 0.2, 0.06), (1.0, 0.6, 0.0))}, "arm_R": {"fk": (55.0, 45.0, 40.0, 0)}}),
+		(1.55, {"root": (0, -0.28, 0), "hips": (0, 0.0, -0.2), "hips_rot": (22.0, 0, 0), "spine": (16.0, 0, 0), "head": (-14.0, 0, 0),
+				"leg_L": {"ik": ((0.12, F + 0.28, ANKLE), (0.15, -1, 0))}, "leg_R": {"ik": ((-0.12, F + 0.32, ANKLE), (-0.15, -1, 0))},
+				"arm_L": {"fk": (60.0, 25.0, 35.0, 0)}, "arm_R": {"fk": (62.0, 30.0, 40.0, 0)}}),
+		(2.0, stand(root=(0, -0.32, 0))),
+	]
+	return 2.0, False, lambda t: keyed(keys, t)
+
+
+def get_up_lying_front():
+	# On the face, the head ahead of the root (−Y), the root under the hips: the legs out behind, the hands by the
+	# shoulders.
+	return stand(hips=(0, 0.0, 0.13 - 0.965), hips_rot=(88.0, 0, 0), spine=(-4.0, 0, 0), neck=(-20.0, 0), head=(-20.0, 0, 0),
+			leg_L={"fk": (-4.0, 10.0, 6.0, 0)}, leg_R={"fk": (-4.0, 10.0, 8.0, 0)}, foot_L=(40.0, 10.0, 0), foot_R=(40.0, 10.0, 0),
+			arm_L={"ik": ((0.3, -0.45, 0.05), (1.0, 0.3, 0.6))}, arm_R={"ik": ((-0.3, -0.45, 0.05), (-1.0, 0.3, 0.6))}, grip_L=0.1, grip_R=0.1)
+
+
+def clip_get_up_front():
+	# Milestone 208: up from the face — pushed up on the hands, the knees drawn under (on all fours), a foot forward,
+	# up off the knee, standing. The root ends 0.3 m behind where the hips lay... under the hips as they stand.
+	keys = [
+		(0.0, get_up_lying_front()),
+		(0.4, {"hips": (0, 0.0, 0.2 - 0.965), "hips_rot": (70.0, 0, 0), "spine": (-12.0, 0, 0), "neck": (-10.0, 0), "head": (-14.0, 0, 0),
+				"arm_L": {"ik": ((0.24, -0.5, 0.05), (1.0, 0.6, 0.2))}, "arm_R": {"ik": ((-0.24, -0.5, 0.05), (-1.0, 0.6, 0.2))}}),
+		(0.85, {"hips": (0, 0.1, 0.52 - 0.965), "hips_rot": (72.0, 0, 0), "spine": (6.0, 0, 0), "neck": (-14.0, 0), "head": (-20.0, 0, 0),
+				"leg_L": {"fk": (85.0, 8.0, 115.0, 0)}, "leg_R": {"fk": (85.0, 8.0, 115.0, 0)}, "foot_L": (30.0, 8.0, 0), "foot_R": (30.0, 8.0, 0),
+				"arm_L": {"ik": ((0.22, -0.48, 0.05), (1.0, 0.6, 0.2))}, "arm_R": {"ik": ((-0.22, -0.48, 0.05), (-1.0, 0.6, 0.2))}}),
+		(1.25, {"hips": (0, 0.06, 0.5 - 0.965), "hips_rot": (40.0, 0, 0), "spine": (22.0, 0, 0), "neck": (-6.0, 0), "head": (-22.0, 0, 0),
+				"leg_L": {"ik": ((0.13, -0.32, ANKLE), (0.2, -1, 0.3))}, "leg_R": {"fk": (70.0, 8.0, 120.0, 0)}, "foot_R": (30.0, 8.0, 0), "foot_L": (0.0, 8.0, 0),
+				"arm_L": {"fk": (65.0, 40.0, 40.0, 0)}, "arm_R": {"ik": ((-0.22, -0.4, 0.06), (-1.0, 0.6, 0.2))}}),
+		(1.65, {"root": (0, -0.16, 0), "hips": (0, 0.02, -0.18), "hips_rot": (20.0, 0, 0), "spine": (14.0, 0, 0), "neck": (0.0, 0), "head": (-12.0, 0, 0),
+				"leg_L": {"ik": ((0.12, -0.16 + 0.16, ANKLE), (0.15, -1, 0))}, "leg_R": {"ik": ((-0.12, 0.14 + 0.16 - 0.1, ANKLE + 0.04), (-0.15, -1, 0))},
+				"foot_R": (-10.0, 7.0, 0), "arm_L": {"fk": (62.0, 25.0, 35.0, 0)}, "arm_R": {"fk": (60.0, 20.0, 35.0, 0)}}),
+		(2.0, stand(root=(0, -0.2, 0))),
+	]
+	return 2.0, False, lambda t: keyed(keys, t)
+
+
 def clip_land():
 	keys = [
 		(0.0, stand(hips=(0, 0, 0.0), arm_L={"fk": (55.0, 25.0, 30.0, 0.0)}, arm_R={"fk": (55.0, 25.0, 30.0, 0.0)})),
@@ -1091,6 +1202,10 @@ def clips():
 	out["jump"] = clip_jump()
 	out["fall"] = clip_fall()
 	out["fall_flail"] = clip_fall_flail()
+	out["stagger_back"] = clip_stagger(True)
+	out["stagger_fwd"] = clip_stagger(False)
+	out["get_up_back"] = clip_get_up_back()
+	out["get_up_front"] = clip_get_up_front()
 	out["land"] = clip_land()
 	out["roll"] = clip_roll()
 	out["hang_idle"] = clip_hang_idle()

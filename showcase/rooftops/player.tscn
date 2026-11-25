@@ -316,6 +316,7 @@ node_connections = [&"output", 0, &"state", &"state", 0, &"loco", &"state", 1, &
 [node name="Player" type="CharacterBody3D" unique_id=342003766]
 physics_interpolation_mode = 1
 collision_layer = 8
+collision_mask = 17
 floor_max_angle = 0.87266463
 floor_snap_length = 0.3
 script = ExtResource("1_gtwnn")
