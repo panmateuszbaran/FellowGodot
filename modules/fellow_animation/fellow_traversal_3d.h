@@ -235,6 +235,7 @@ private:
 	float leap_push_force = 0.0f;
 	float climb_pull_speed = 0.0f;
 	float hang_step_up_height = 0.0f;
+	float hang_side_dead_zone = 0.0f; // milestone 207
 	// Milestone 84 (decision 0192): walking over an edge, hanging from it.
 	bool drop_to_hang = false;
 	float drop_max_speed = 2.0f; // m/s: faster, the body goes over
@@ -639,6 +640,8 @@ public:
 	float get_climb_pull_speed() const { return climb_pull_speed; }
 	void set_hang_step_up_height(float p_height) { hang_step_up_height = CLAMP(p_height, 0.0f, 3.0f); }
 	float get_hang_step_up_height() const { return hang_step_up_height; }
+	void set_hang_side_dead_zone(float p_zone) { hang_side_dead_zone = CLAMP(p_zone, 0.0f, 1.0f); }
+	float get_hang_side_dead_zone() const { return hang_side_dead_zone; }
 	PackedFloat32Array get_leap_phases() const;
 	void set_drop_to_hang(bool p_enabled) { drop_to_hang = p_enabled; }
 	bool is_drop_to_hang() const { return drop_to_hang; }

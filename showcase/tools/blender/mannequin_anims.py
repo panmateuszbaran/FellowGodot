@@ -376,17 +376,52 @@ def clip_jump():
 
 
 def clip_fall():
-	a = {"hips": (0, 0, 0.06), "hips_rot": (-4.0, 0, 0), "spine": (-6.0, 0, 0), "head": (-8.0, 0, 0),
-			"leg_L": {"ik": ((0.12, -0.14, 0.34), (0.2, -1, 0))}, "leg_R": {"ik": ((-0.1, 0.1, 0.15), (-0.2, -1, 0))},
-			"foot_L": (5.0, 8.0, 0), "foot_R": (-20.0, 8.0, 0),
-			"arm_L": {"fk": (38.0, 25.0, 35.0, 0.0)}, "arm_R": {"fk": (44.0, 10.0, 30.0, 0.0)}, "grip_L": 0.2, "grip_R": 0.2,
-			"shoulder_L": (8.0, 0), "shoulder_R": (8.0, 0)}
-	b = {"hips": (0, 0, 0.05), "hips_rot": (-6.0, 0, 0), "spine": (-8.0, 0, 0), "head": (-10.0, 0, 0),
-			"leg_L": {"ik": ((0.11, 0.08, 0.18), (0.2, -1, 0))}, "leg_R": {"ik": ((-0.12, -0.12, 0.3), (-0.2, -1, 0))},
-			"foot_L": (-15.0, 8.0, 0), "foot_R": (8.0, 8.0, 0),
-			"arm_L": {"fk": (46.0, 8.0, 28.0, 0.0)}, "arm_R": {"fk": (36.0, 28.0, 38.0, 0.0)}}
-	keys = [(0.0, stand() | a), (0.45, b), (0.9, stand() | a)]
-	return 0.9, True, lambda t: keyed(keys, t, loop=True, length=0.9)
+	# Milestone 207 (the owner: "the fall has a broken animation" — the body had fallen upright and stiff, the legs nearly
+	# straight under it, one arm out behind): in the air ready to land — the knees up and bent, one leg ahead of the other,
+	# the arms out to the sides and forward for balance, the trunk a little forward, the eyes down at where it lands;
+	# drifting slowly between two such poses. A long fall blends into "fall_flail" (rooftops_player.gd's fall_mix).
+	a = {"hips": (0, 0.02, 0.0), "hips_rot": (8.0, 0, 0), "spine": (6.0, 0, 0), "neck": (6.0, 0), "head": (6.0, 0, 0),
+			"leg_L": {"fk": (55.0, 8.0, 75.0, 0)}, "leg_R": {"fk": (22.0, 10.0, 55.0, 0)},
+			"foot_L": (8.0, 6.0, 0), "foot_R": (-15.0, 6.0, 0),
+			"arm_L": {"fk": (14.0, 18.0, 30.0, 0.0)}, "arm_R": {"fk": (22.0, 8.0, 36.0, 0.0)},
+			"shoulder_L": (10.0, 0), "shoulder_R": (8.0, 0), "hand_L": (10.0, 0, 0), "hand_R": (10.0, 0, 0),
+			"grip_L": 0.25, "grip_R": 0.25}
+	b = {"hips": (0, 0.02, 0.0), "hips_rot": (6.0, 0, 0), "spine": (8.0, 0, 0), "neck": (6.0, 0), "head": (8.0, 0, 0),
+			"leg_L": {"fk": (40.0, 8.0, 68.0, 0)}, "leg_R": {"fk": (34.0, 10.0, 66.0, 0)},
+			"foot_L": (0.0, 6.0, 0), "foot_R": (-6.0, 6.0, 0),
+			"arm_L": {"fk": (22.0, 8.0, 36.0, 0.0)}, "arm_R": {"fk": (14.0, 18.0, 30.0, 0.0)},
+			"shoulder_L": (8.0, 0), "shoulder_R": (10.0, 0), "hand_L": (10.0, 0, 0), "hand_R": (10.0, 0, 0),
+			"grip_L": 0.25, "grip_R": 0.25}
+	keys = [(0.0, stand() | a), (0.6, stand() | b), (1.2, stand() | a)]
+	return 1.2, True, lambda t: keyed(keys, t, loop=True, length=1.2)
+
+
+def clip_fall_flail():
+	# Milestone 207: a long fall (rooftops_player.gd blends it in as the fall lasts): the arms wheeling over the shoulders
+	# out of step with each other, the legs pedalling, the trunk a little back and turning with them, the head down at
+	# the ground coming up.
+	length = 0.8
+
+	def pose(t):
+		r = 2.0 * math.pi * t / length
+		p = stand()
+		p["hips_rot"] = (-6.0, 5.0 * math.sin(r), 0)
+		p["spine"] = (-4.0, -7.0 * math.sin(r), 0)
+		p["neck"] = (10.0, 0)
+		p["head"] = (12.0, 0, 0)
+		for s, ph in (("L", 0.0), ("R", math.pi)):
+			a = r + ph
+			p["arm_" + s] = {"fk": (-20.0 + 30.0 * math.sin(a), 55.0 * math.cos(a), 35.0 + 10.0 * math.sin(a), 0.0)}
+			p["shoulder_" + s] = (14.0 + 6.0 * math.sin(a), 0)
+			p["hand_" + s] = (12.0, 0, 0)
+			p["grip_" + s] = 0.15
+			# (each leg with the other side's arm, as in a run: the thigh up as the knee bends, the shin kicking out ahead)
+			lp = a + math.pi / 2.0
+			p["leg_" + s] = {"fk": (38.0 + 26.0 * math.sin(lp), 10.0, 62.0 + 30.0 * math.sin(lp + 1.0), 0)}
+			p["foot_" + s] = (-10.0 + 10.0 * math.sin(lp), 6.0, 0)
+		return p
+
+	return length, True, pose
 
 
 def clip_land():
@@ -1055,6 +1090,7 @@ def clips():
 	out["idle"] = clip_idle()
 	out["jump"] = clip_jump()
 	out["fall"] = clip_fall()
+	out["fall_flail"] = clip_fall_flail()
 	out["land"] = clip_land()
 	out["roll"] = clip_roll()
 	out["hang_idle"] = clip_hang_idle()

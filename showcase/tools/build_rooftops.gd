@@ -558,7 +558,9 @@ func _build_scene() -> void:
 			_model(town, near[0], Transform3D(Basis(Vector3.UP, deg_to_rad(near[2])), Vector3(p.x, 0.0, p.y)), LAYER_WORLD | LAYER_CLIMB, true).name = "Near%d%s" % [i, near[0]]
 	for n in ["Fountain", "StallA", "StallB"]:
 		if models.has(n):
-			_model(town, n, _place(n), LAYER_WORLD, n == "Fountain")
+			var m := _model(town, n, _place(n), LAYER_WORLD, n == "Fountain")
+			if n == "Fountain":
+				_fountain_collision(m)
 	if models.has("Skyline"):
 		var sky_node := _model(root, "Skyline", _place("Skyline"))
 		(sky_node.get_node("Mesh") as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -1409,6 +1411,19 @@ func _props(p_parent: Node3D) -> void:
 			_model(p_parent, "Drain", Transform3D(Basis(Vector3.UP, a), at), LAYER_WORLD).name = "Drain%d" % i
 
 
+## Milestone 207 (the owner: "the fountain in the middle has no collision box"): its model's collider is the basin's
+## octagon to the rim (0.75 m); the column (to 2.7 m) and the upper bowl (1.5 m across at 1.45-1.85 m) were walked through.
+func _fountain_collision(p_body: Node3D) -> void:
+	for piece in [["Collision1", 0.45, 2.7, 1.35], ["Collision2", 1.5, 0.42, 1.65]]:
+		var cyl := CylinderShape3D.new()
+		cyl.radius = piece[1]
+		cyl.height = piece[2]
+		var cs := CollisionShape3D.new()
+		cs.shape = cyl
+		cs.position = Vector3(0.0, piece[3], 0.0)
+		_add(p_body, cs, piece[0])
+
+
 func _fountain_water(p_parent: Node3D) -> void:
 	if not models.has("Fountain"):
 		return
@@ -1648,7 +1663,7 @@ func _lamps(p_parent: Node3D) -> void:
 # ------------------------------------------------------------------ the character
 
 ## Clips that loop (glTF says nothing of it).
-const LOOPS := ["idle", "walk", "jog", "run", "sprint", "gait_walk", "gait_jog", "gait_run", "gait_sprint", "fall", "hang_idle",
+const LOOPS := ["idle", "walk", "jog", "run", "sprint", "gait_walk", "gait_jog", "gait_run", "gait_sprint", "fall", "fall_flail", "hang_idle",
 		"hang_shimmy", "climb_idle", "climb_move", "dive", "perch", "sit", "talk", "crawl"]
 
 
@@ -1819,6 +1834,9 @@ func _build_player() -> PackedScene:
 	trav.set("leap_push_force", 5.5)
 	trav.set("climb_pull_speed", 2.0)
 	trav.set("hang_step_up_height", 0.0)
+	# Milestone 207 (decision 0349): pushing up with the stick a little to the side (the camera off square to the wall) is
+	# no shimmy, no jump along the edge.
+	trav.set("hang_side_dead_zone", 0.5)
 	# Across from hold to hold (decision 0285): a gap to a ledge to the side up to 0.8 m reached hand over hand.
 	trav.set("hang_reach_side", 0.8)
 	# A leap winds up for 0.15 s, springs, flies hands first and is caught with its speed (decision 0290); up onto a ledge

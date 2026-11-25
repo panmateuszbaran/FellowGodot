@@ -142,6 +142,7 @@ func _ready() -> void:
 	facing = rotation.y
 	_use_mocap()
 	_inertialize()
+	_fall_tree()
 	_limit_joints()
 	var pose := get_node_or_null("Model/Mannequin/Skeleton3D/TraversalPose")
 	if pose:
@@ -607,6 +608,8 @@ func _move(delta: float, speed_goal: float) -> void:
 					_set_state("loco")
 			elif _one_shot <= 0.0 and (velocity.y < 1.0 or state != "jump") and not (state == "jump_wall" and velocity.y > -3.0):
 				_set_state("fall")
+			if state == "fall":
+				_fall_mix(delta)
 		Mode.ROLL:
 			if _one_shot <= 0.0:
 				mode = Mode.GROUND
@@ -640,6 +643,10 @@ func _traverse(_delta: float) -> void:
 	mode = Mode.TRAVERSE
 	facing = rotation.y
 	velocity = Vector3()
+	# Milestone 207 (the owner: "after standing up on the roof the body does a strange jump"): a jump pressed while
+	# hanging or climbing is the traversal's — kept in the buffer (counted down only on the ground), it had jumped the
+	# body as soon as the climb onto the roof let go of it, 1.7 s later.
+	_jump_buffer = 0.0
 	if traversal.is_hanging() or traversal.is_transferring():
 		# Free-running on: pushing on leaps to a hold out of reach (the traversal reaches to a near one by itself).
 		var at_wall := wish.length() > 0.5
@@ -648,6 +655,10 @@ func _traverse(_delta: float) -> void:
 		elif want_drop:
 			traversal.release()
 		var side := wish.dot(global_basis.x)
+		# (milestone 207: as the traversal's hang_side_dead_zone — pushing up, a little to the side is no shimmy)
+		var dz := float(traversal.get("hang_side_dead_zone")) if "hang_side_dead_zone" in traversal else 0.0
+		if dz > 0.0 and wish.dot(-global_basis.z) > 0.0 and absf(side) < dz * wish.length():
+			side = 0.0
 		var along := absf(side)
 		tree.set("parameters/hang/blend_position", clampf(along * 1.5, 0.0, 1.0))
 		# Milestone 194: the mocap's shimmy has a side (the model faces the body's −Z: its left is the body's −X).
@@ -1015,11 +1026,60 @@ func _set_state(s: String) -> void:
 	if s == state:
 		return
 	state = s
+	if s == "fall":
+		_fall_time = 0.0
+		_flail = 0.0
+		tree.set("parameters/fall_mix/blend_amount", 0.0)
 	tree.set("parameters/state/transition_request", s)
 	if _inertia:
 		# (milestone 206: out of the sprint into the jump at a wall over longer — the arms' swing up from the stride's,
 		# the mannequin's own clip: at 0.3 s an upper arm turned at 2,240 °/s)
 		_inertia.call("blend", INERTIA_JUMP_WALL if s == "jump_wall" else INERTIA_TIME)
+
+
+## Milestone 207 (the owner: "the fall has a broken animation" — the body had fallen upright and stiff, the legs nearly
+## straight, one arm out behind): a fall is the clip "fall" (in the air ready to land: the knees up, the arms out for
+## balance, the eyes down) blended into "fall_flail" (the arms wheeling over the shoulders, the legs pedalling) as it
+## lasts — from FALL_FLAIL_FROM to FALL_FLAIL_FULL seconds — and back to the first as the ground comes up (under
+## FALL_READY seconds away at the speed it falls): fall_mix, a Blend2 in place of the state's clip.
+const FALL_FLAIL_FROM := 0.45
+const FALL_FLAIL_FULL := 1.1
+const FALL_READY := 0.3
+var _fall_time := 0.0
+var _flail := 0.0
+
+func _fall_tree() -> void:
+	var ap := tree.get_node(tree.anim_player) as AnimationPlayer
+	if ap == null or not ap.has_animation(&"fall_flail"):
+		return
+	var bt := (tree.tree_root as AnimationNodeBlendTree).duplicate(true) as AnimationNodeBlendTree
+	var tr := bt.get_node(&"state") as AnimationNodeTransition
+	if bt.has_node(&"fall_mix") or not bt.has_node(&"fall"):
+		return
+	for i in tr.get_input_count():
+		if tr.get_input_name(i) == "fall":
+			bt.disconnect_node(&"state", i)
+			var flail := AnimationNodeAnimation.new()
+			flail.animation = &"fall_flail"
+			bt.add_node(&"fall_flail", flail, Vector2(0, 3300))
+			bt.add_node(&"fall_mix", AnimationNodeBlend2.new(), Vector2(200, 3300))
+			bt.connect_node(&"fall_mix", 0, &"fall")
+			bt.connect_node(&"fall_mix", 1, &"fall_flail")
+			bt.connect_node(&"state", i, &"fall_mix")
+	tree.tree_root = bt
+	tree.set("parameters/fall_mix/blend_amount", 0.0)
+
+
+func _fall_mix(delta: float) -> void:
+	_fall_time += delta
+	var want := clampf((_fall_time - FALL_FLAIL_FROM) / (FALL_FLAIL_FULL - FALL_FLAIL_FROM), 0.0, 1.0)
+	if want > 0.0 and velocity.y < 0.0:
+		var reach := -velocity.y * FALL_READY + 0.2
+		var q := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.1, global_position + Vector3.DOWN * reach, collision_mask, [get_rid()])
+		if not get_world_3d().direct_space_state.intersect_ray(q).is_empty():
+			want = 0.0
+	_flail = move_toward(_flail, want, delta / 0.25)
+	tree.set("parameters/fall_mix/blend_amount", smoothstep(0.0, 1.0, _flail))
 
 
 ## Milestone 202 (the owner: "assess the movements' anatomical correctness"): the joints within a person's range of

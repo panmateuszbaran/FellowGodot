@@ -11,6 +11,8 @@ extends SceneTree
 ##       --out=<dir> [--seconds=30] [--skip=0] [--every=2] [--cam=side] [--lite=1] [--mocap_all=1] [--images=0]
 ##   godot ... -s res://tools/climb_look.gd -- --program=hang --out=<dir> [--seconds=18] ...
 ##   godot ... -s res://tools/climb_look.gd -- --program=course --out=<dir> [--seconds=10] ...
+##   godot ... -s res://tools/climb_look.gd -- --program=keys --keys_yaw=<deg> --out=<dir> [--seconds=6] ...
+##   godot ... -s res://tools/climb_look.gd -- --program=fountain --out=<dir> [--seconds=5] ...   (a run at its middle)
 ##
 ## --cam=hand: the hands on the edge from out and above; --cam=handside: the left hand in profile from along the edge
 ## (milestone 198). --warm=<n>: the n frames before --skip drawn too, not saved (the exposure settled).
@@ -74,6 +76,12 @@ func _init() -> void:
 			_dist = float(a.get_slice("=", 1))
 		elif a.begins_with("--program="):
 			_program = a.get_slice("=", 1)
+		elif a.begins_with("--keys_yaw="):
+			_keys_yaw = float(a.get_slice("=", 1))
+		elif a.begins_with("--keys_sprint="):
+			_keys_sprint = a.get_slice("=", 1) == "1"
+		elif a.begins_with("--keys_always="):
+			_keys_always = a.get_slice("=", 1) == "1"
 	DirAccess.make_dir_recursive_absolute(_out)
 	var sc: Node = (load("res://rooftops/rooftops.tscn") as PackedScene).instantiate()
 	if _lite:
@@ -112,6 +120,17 @@ func _init() -> void:
 		_player.rotation.y = 0.0
 	elif _program == "course":
 		_course(sc)
+	elif _program == "keys":
+		_player.set("autopilot", true)
+		_player.global_position = Vector3(13.1, 0.0, -9.6)
+		_player.set("facing", 0.0)
+		_player.rotation.y = 0.0
+	elif _program == "fountain":
+		_player.set("autopilot", true)
+		var c := (sc.get_node("Town/Fountain") as Node3D).global_position
+		_player.global_position = c + Vector3(5.0, 0.0, 0.3)
+		_player.set("facing", PI * 0.5)
+		_player.rotation.y = PI * 0.5
 	var total := _skip + int(_seconds * 60.0)
 	var vp := root.get_viewport_rid()
 	for i in total:
@@ -124,6 +143,11 @@ func _init() -> void:
 			_drive(i / 60.0)
 		elif _program == "course":
 			_drive_course(i / 60.0)
+		elif _program == "keys":
+			_drive_keys(i)
+		elif _program == "fountain":
+			# (milestone 207: a run at the fountain's middle — onto the basin's rim, across it, into the column)
+			_player.set("wish", Vector3(-1.0, 0.0, 0.0))
 		if _cam:
 			_place_camera(i == 0)
 			_cam.current = true
@@ -235,6 +259,33 @@ func _drive(t: float) -> void:
 	else:
 		w = into
 	_player.set("wish", w)
+
+
+## The "keys" program (milestone 207, the owner: "climbing, when I hold W and press space the body sometimes goes along
+## the edge, left or right at random"): a run at CasaCrema's front, the first hold caught, 1 s still, then the stick
+## held at the wall --keys_yaw degrees off square (the camera's yaw off the wall's) and jump pressed every 0.5 s.
+var _keys_yaw := 0.0
+var _keys_always := false # --keys_always=1: jump pressed on top too (not only hanging)
+var _keys_sprint := false # --keys_sprint=1: the sprint held too
+
+func _drive_keys(i: int) -> void:
+	var trav: Node = _player.get("traversal")
+	var t := i / 60.0
+	var into := Vector3(0.0, 0.0, -1.0)
+	_player.set("want_sprint", false)
+	if t < 2.2 and not trav.is_hanging():
+		_player.set("wish", into)
+		_player.set("want_sprint", t > 0.2)
+		return
+	var u := t - 3.2
+	if u < 0.0:
+		_player.set("wish", Vector3())
+		return
+	_player.set("wish", Basis(Vector3.UP, deg_to_rad(_keys_yaw)) * into)
+	_player.set("want_sprint", _keys_sprint)
+	if i % 30 == 0 and (trav.is_hanging() or _keys_always):
+		_player.set("want_jump", true)
+		_player.set("_jump_buffer", 0.15) # (as _read_input's press)
 
 
 func _on_posed() -> void:

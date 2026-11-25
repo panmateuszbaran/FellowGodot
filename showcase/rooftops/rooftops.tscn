@@ -2011,6 +2011,14 @@ dof_blur_far_distance = 7.0
 dof_blur_far_transition = 9.0
 dof_blur_amount = 0.02
 
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_fcol1"]
+height = 2.7
+radius = 0.45
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_fcol2"]
+height = 0.42
+radius = 1.5
+
 [node name="Rooftops" type="Node3D" unique_id=774291455]
 physics_interpolation_mode = 2
 script = ExtResource("1_jjugf")
@@ -5217,6 +5225,14 @@ shape = SubResource("ConvexPolygonShape3D_8hqcb")
 [node name="Mesh" type="MeshInstance3D" parent="Town/Fountain" unique_id=1063295027]
 layers = 17
 mesh = ExtResource("13_e7345")
+
+[node name="Collision1" type="CollisionShape3D" parent="Town/Fountain" unique_id=1206207001]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.35, 0)
+shape = SubResource("CylinderShape3D_fcol1")
+
+[node name="Collision2" type="CollisionShape3D" parent="Town/Fountain" unique_id=1206207002]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.65, 0)
+shape = SubResource("CylinderShape3D_fcol2")
 
 [node name="StallA" type="StaticBody3D" parent="Town" unique_id=161454404]
 transform = Transform3D(0.17364822, 0, 0.9848077, 0, 1, 0, -0.9848077, 0, 0.17364822, -12, 0, -6.5)

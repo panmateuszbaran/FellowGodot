@@ -2609,6 +2609,17 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 			remap = false;
 		}
 	}
+	// Milestone 207 (decision 0349): with hang_side_dead_zone, a wish pushing in or up whose part along the edge is under
+	// that share of its length goes straight in or up. The intent is a speed (a run's, 4.5 m/s), and the thresholds
+	// below are absolute: a stick pushed at the wall with the camera 7 degrees off square to it read as along the edge
+	// (over 0.5) — a jump along it, or a shimmy that way.
+	if (hang_side_dead_zone > 0.0f) {
+		const Vector3 side = UP.cross(ledge.inward).normalized();
+		const float a = wish.dot(side);
+		if (MAX(flat(wish).dot(ledge.inward), wish.y) > 0.0f && Math::abs(a) < hang_side_dead_zone * wish.length()) {
+			wish -= side * a;
+		}
+	}
 	if (jump_requested) {
 		// Milestone 81: a jump to another ledge the way the controller wishes (nothing there: nothing happens).
 		jump_requested = false;
@@ -4068,6 +4079,8 @@ void FellowTraversal3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_climb_pull_speed", "speed"), &FellowTraversal3D::set_climb_pull_speed);
 	ClassDB::bind_method(D_METHOD("get_climb_pull_speed"), &FellowTraversal3D::get_climb_pull_speed);
 	ClassDB::bind_method(D_METHOD("set_hang_step_up_height", "height"), &FellowTraversal3D::set_hang_step_up_height);
+	ClassDB::bind_method(D_METHOD("set_hang_side_dead_zone", "zone"), &FellowTraversal3D::set_hang_side_dead_zone);
+	ClassDB::bind_method(D_METHOD("get_hang_side_dead_zone"), &FellowTraversal3D::get_hang_side_dead_zone);
 	ClassDB::bind_method(D_METHOD("get_hang_step_up_height"), &FellowTraversal3D::get_hang_step_up_height);
 	ClassDB::bind_method(D_METHOD("get_leap_phases"), &FellowTraversal3D::get_leap_phases);
 	ClassDB::bind_method(D_METHOD("set_hang_clip", "clip"), &FellowTraversal3D::set_hang_clip);
@@ -4190,6 +4203,7 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "leap_push_force", PROPERTY_HINT_RANGE, "0,8,0.05,suffix:BW"), "set_leap_push_force", "get_leap_push_force");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "climb_pull_speed", PROPERTY_HINT_RANGE, "0,3,0.05,suffix:m/s"), "set_climb_pull_speed", "get_climb_pull_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_step_up_height", PROPERTY_HINT_RANGE, "0,3,0.05,suffix:m"), "set_hang_step_up_height", "get_hang_step_up_height");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_side_dead_zone", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_hang_side_dead_zone", "get_hang_side_dead_zone");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "drop_to_hang"), "set_drop_to_hang", "is_drop_to_hang");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "drop_max_speed", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:m/s"), "set_drop_max_speed", "get_drop_max_speed");
 	ADD_GROUP("Ladders", "");

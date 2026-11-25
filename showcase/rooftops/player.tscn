@@ -719,5 +719,6 @@ hang_reach_side = 0.8
 hang_leap_windup = 0.15
 leap_push_force = 5.5
 climb_pull_speed = 2.0
+hang_side_dead_zone = 0.5
 climb_mask = 2
 climb_speed = 1.5
