@@ -58,6 +58,10 @@ locks the knee straight and leaves the foot short of where it should be (which i
    * climbing: the gripping hands to their holds, the braced feet to the wall, the knees braced, the body's distance
      from the wall, the look (decision 0293);
    * plots: each joint's curve over its band, one PNG per gait.
+   * anatomy (milestone 202, `tools/anatomy.gd`): each joint against an adult's active range of motion — the spine, the
+     neck, the shoulders, the elbows' and knees' flexion and bend to the side, the forearms' turn, the wrists, the hips,
+     the ankles, the limbs through the body — each segment's share of frames out of range and its worst moment (the
+     measure, how far past, the frame, the state);
 3. **Gates** (all must hold; a gate is changed only with the reason written in the decision record):
 
    | | gate | milestone 154 |
@@ -71,6 +75,7 @@ locks the knee straight and leaves the foot short of where it should be (which i
    | climbing | no knee within 5° of straight while braced or mantling; gripping hands ≤ 2 cm (decision 0291) | mantle 23 % |
    | transitions | no joint faster than 1.5× its fastest in either gait during a blend | to measure |
    | pops (milestone 156) | climbing (the run and jump at the wall, hanging, hold to hold, the mantle, the roof): no joint faster than 2200°/s against its parent; the mantle's hips' acceleration ≤ 400 m/s² | 3000-8900°/s; 4650 m/s² |
+   | anatomy (milestone 202) | climbing: the elbows and knees in their hinges' plane, the wrists and forearms, the ankles, the neck, the spine and shoulders out of an adult's active range of motion in ≤ 1 % of any segment's frames; no limb inside the body (an elbow or a wrist in the trunk, the knees or ankles through each other); the gaits: every joint but the hips ≤ 1 % (`tools/anatomy.gd`; decision 0344) | 52 %, 12.5 %, 14.4 %, 89 %, 0 %; 0 %; 4.8 % |
    | no regression | every other metric no worse than the last accepted build; `climb_check.gd` value for value | — |
 
 4. **Change** — one cause at a time, the worst failing gate first; each change rebuilt and measured before the next.
@@ -121,6 +126,20 @@ Milestone 156 (decision 0296): the owner's reference video; the whole body's smo
 | 4-5 | `max_joint_speed` (1500, then 2000: 5 % of the climbing's frames had reached 1500) | 30/32 + 6 new | every climbing segment ≤ 2087°/s |
 | 6-8 | the foot lock's way back within the leg's reach (not the hold: the walk's planted foot let go) | 36/38 | the run from standing 2804 → 1343°/s; the sprint's knee at the toe-off 12.7 → 14.9° |
 | 9 | the walk's hips 8 mm higher; the sprint's knee 34° at the toe-off | 38/38 | the walk's knee at the strike 20 → 15° |
+
+Milestone 202 (decision 0344): the owner: "assess the movements' anatomical correctness, run a quality loop".
+
+| iteration | change | gates | what it showed |
+|---|---|---|---|
+| 0 | the anatomy measured (7 gates), milestone 201's motion | 33/45 | hanging's knees and elbows bent sideways in 52 % of its frames, from hold to hold 26 % (up to 82°); the roof's head tipped back (89 %); the ankles 14 %, the wrists 12.5 % |
+| 1-3 | the measure checked: bends by `asin`, arms overhead not "across", the hip's flexion limit 140°, 0.5° slack | 33/45 | the spine's and hips' false bends gone |
+| 4-6 | `FellowJointLimits3D`: hinges, ankles, wrists, neck; the wrists' clamp an ellipse, at once | 38/45 | the wrists' first clamp flipped a hand (20,272 °/s); hinges turned at once snapped (4,014 °/s) |
+| 7-9 | hinge corrections eased per bone, held near straight, slower near straight | 38/45 | the pops ≤ 2,026 °/s |
+| 10 | the wrist turned about the knuckles, the arm re-reaching | 38/45 | held hands' fingers off the edge 1.8 → 1.1 % |
+| 11 | the wrists before the hinges | 38/45 | elbows out of plane 1.4 → 0.4 % |
+
+The hips stay out of range in places (the hang's catch, the mantle's and the crawl's deep flexion, the gaits' push-off):
+the clips' own (decision 0344).
 
 Next: the feet on slopes (the roofs' tiles walked, not only crawled), starts and stops, landings — each with its gates
 first; the run's lean and arm swing against the reference's frames as gates (read off a pose estimate, if the owner

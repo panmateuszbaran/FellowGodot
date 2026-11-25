@@ -1102,6 +1102,30 @@ Methods: `get_foot_offset(foot)`, `get_hips_drop()`, `get_stats()` (`frames`, `r
 in the air). Measured with `benchmarks/tools/foot_placement/placement.gd` (`--gait=walk|run`, `--lanes=`,
 `--variants=off,on,lock,lock_on`, `--set=property:value,...`); pictured by `showcase/tools/foot_placement_lab.gd`.
 
+## Joint limits (milestone 202)
+
+`FellowJointLimits3D` (module `fellow_animation`; decision 0344), a `SkeletonModifier3D` under a humanoid `Skeleton3D`,
+last among its modifiers (after the IK, the foot placement and a look-at): the pose kept within an adult's active range
+of motion. Nothing changes without it.
+
+| property | default | meaning |
+|---|---|---|
+| `hinge_alignment` | on | an elbow or a knee bent in its hinge's plane: the upper arm or the thigh turned about its own line (the elbow, the knee and the lower limb stay) until the hinge lies in the limb's bend; a limb under 8° of bend (fully from 20°) keeps the turn it had |
+| `hinge_max_turn` | 120° | a limb bent backwards, further round than this, is left |
+| `limit_ankles`, `ankle_range` | on, (−30°, 55°) | the foot's dorsi- and plantarflexion, turned about the ankle in the plane of the shin and the foot |
+| `limit_wrists`, `wrist_flexion_range`, `wrist_deviation_range` | on, (−85°, 75°), (−40°, 25°) | the hand brought back along the way it is bent to an ellipse through the four limits (flexion −, extension +; ulnar −, radial +) |
+| `wrist_pivot` | on | the hand turned about its middle knuckle, the arm brought to the wrist's new place (a hand on a hold stays on it); off: about the wrist |
+| `limit_neck`, `neck_flexion_range`, `neck_bend_limit`, `neck_turn_limit` | on, (−70°, 60°), 45°, 85° | the head against the chest: flexion forwards (+) and back, the bend to the side, the turn |
+| `max_correction_speed` | 720 °/s | each correction eased on and off (a hinge's at a quarter of this near straight, the full speed from 48° of bend; the wrists' at once); 0: at once |
+| `bone_names` | {} | role → bone name, over the names found (Godot's humanoid profile, Mixamo's, `.L`/`.R`, `_l`/`_r`) |
+
+Methods: `get_bones()` (the roles found), `get_stats()` (`frames`; how many corrections: `hinges`, `ankles`, `wrists`,
+`necks`; the largest of each in degrees: `hinge_max`, `ankle_max`, `wrist_max`, `neck_max`; `usec` in all, `last_usec`).
+The rest pose is taken as a T or an A, the thumbs and toes forwards; the wrists need the index, middle and little
+fingers' first bones. Measured with `showcase/tools/anim_quality.py` (its anatomy table and gates, from
+`showcase/tools/anatomy.gd`); the showcase's player: `--joint_limits=0`, `--hinge_alignment=0`, `--limit_ankles=0`,
+`--limit_wrists=0`, `--limit_neck=0`, `--max_correction_speed=<°/s>`.
+
 ## Traversal: mantling and vaulting (milestone 72)
 
 Module `fellow_animation`; nothing changes without the nodes (decision 0180). `FellowTraversal3D`, a child of the

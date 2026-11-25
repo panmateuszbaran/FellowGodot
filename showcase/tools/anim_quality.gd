@@ -380,6 +380,10 @@ func _write() -> void:
 					"worst_frame": w[2] if w.size() > 0 else -1, "worst_state": w[3] if w.size() > 0 else ""}
 		r["anatomy"] = anatomy
 		outd.segments[k] = r
+	# Milestone 202: what the joints' limits corrected over the program (FellowJointLimits3D's statistics).
+	var limits := sk.get_node_or_null("JointLimits")
+	if limits and limits.has_method("get_stats"):
+		outd["joint_limits"] = limits.call("get_stats")
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	var fa := FileAccess.open(out_dir.path_join(program + ".json"), FileAccess.WRITE)
 	fa.store_string(JSON.stringify(outd))

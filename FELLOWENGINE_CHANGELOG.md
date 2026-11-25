@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 202 — The joints within a person's range of motion (2026-11-25)
+
+- `FellowJointLimits3D` (new, module `fellow_animation`; decision 0344): a skeleton modifier, last after the IK, that
+  keeps a humanoid's pose within an adult's active range of motion — an elbow or a knee bent in its hinge's plane (the
+  upper arm or thigh turned about its own line), the wrists within an ellipse of their four limits (turned about the
+  knuckles, the arm re-reaching), the ankles, the head against the chest; each correction eased.
+- `showcase/tools/anatomy.gd`, `anim_quality.py`: every joint against a person's range, per segment, with seven gates.
+  The showcase's climbing: elbows and knees bent sideways 52.1 → 0.4 % of a segment's frames, wrists 12.5 → 0 %, ankles
+  14.4 → 0 %, the neck 89.2 → 0 %; the gaits 4.8 → 0 %; gates 33 → 38 / 45 (the hips left to the clips).
+
 ## Milestone 201 — A jump at a wall aimed at its hold (2026-11-25)
 
 - `FellowTraversal3D.aim_jump_at_hold(direction, gravity, max_speed)`, `is_aiming()` (decision 0343): the takeoff speed
