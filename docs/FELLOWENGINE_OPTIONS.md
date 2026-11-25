@@ -1587,7 +1587,9 @@ only; every pattern fades to its mean where it is finer than a pixel. One node a
 | `heightfield_always_update` | off | the layers drawn every frame (geometry that moves) |
 
 The showcase's rooftops weather their buildings, fountain, pavements and paving (render layer 5); `tools/weathering_look.gd`
-looks at it with the node on and off.
+looks at it with the node on and off (milestone 199: and from the bell tower — `vista_s`, `vista_w`, `vista_e` —,
+`--timing=1` each view's GPU and CPU time over 120 frames, `--node`, `--env`, `--mat` and `--setting` a node's, the
+environment's, a material's or a project setting's value for the run).
 
 ## Options that change the image (off by default)
 

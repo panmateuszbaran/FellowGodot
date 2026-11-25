@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 199 — The view from the bell tower: the hills' light, woods, the far city, the haze (2026-11-25)
+
+- The showcase's rooftops (decision 0341; no engine change): the hills' soft shadows on each other under the low sun
+  and the sky their valleys hide baked into the terrain (the landscape shader lights the sun through them); a quarter
+  of the country wooded — the steepest slopes, the valleys' folds, copses — with 13,727 trees and 2,343 more in rows
+  along the fields' hedges (the 5,839 strewn one by one gone); the fields gold, deep green, brown and grey.
+- The far city's houses each their own finish (`facade_pbr`'s `plaster_share`, `brick_share`, `stone_house_tint`):
+  smooth plaster in its colour, Siena's brick or the square's sandstone; every house casting shadows, the sun's to
+  320 m with the square's splits kept; the streets' dark basalt toned to a warm grey stone (`paving_pbr`'s `fan_tint`).
+- The veil over the view lifted: Godot's depth fog in its depth mode from 150 m out (none over the square; 37 % at
+  1 km), the volumetric dust a `FogVolume` low over the town (the square's shafts as they were) — the darkest 1 % of
+  the view south 46 → 16 of 255. On the RTX +0.13 to +0.44 ms a frame.
+- `weathering_look.gd`: `--node`, `--cast_city`, `--timing` (each view's GPU and CPU time), `--setting`.
+
 ## Milestone 198 — Hands that hold the edge, leaps timed as captured hops, blends carried on (2026-11-25)
 
 - `FellowTraversalPose3D.ledge_grip` (decision 0340): a hand on a ledge held as a climber's — the knuckles over the
