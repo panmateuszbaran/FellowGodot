@@ -465,11 +465,14 @@ func _physics_process(delta: float) -> void:
 
 
 func _move(delta: float, speed_goal: float) -> void:
+	# (milestone 205: the first step off a climb onto a top — not yet on its floor — at the ground's rates: at the air's,
+	# the walk up the roof had started at full speed in a frame)
+	var off_traverse := mode == Mode.TRAVERSE
 	if mode == Mode.TRAVERSE:
 		mode = Mode.GROUND if is_on_floor() else Mode.AIR
 		facing = rotation.y
 		_air_top = global_position.y
-	var on_floor := is_on_floor()
+	var on_floor := is_on_floor() or (off_traverse and velocity.y <= 0.5)
 	var h := Vector3(velocity.x, 0.0, velocity.z)
 	var goal := wish.limit_length(1.0) * speed_goal
 	var brake := AIM_JUMP and not "--wall_brake=0" in OS.get_cmdline_user_args()
@@ -480,6 +483,10 @@ func _move(delta: float, speed_goal: float) -> void:
 			goal = goal.limit_length(sqrt(WALL_RUN_SPEED * WALL_RUN_SPEED + 2.0 * WALL_BRAKE_DECEL * maxf(0.0, d - WALL_JUMP_AT)))
 	if on_floor and mode != Mode.ROLL:
 		var rate := acceleration if goal.length() > h.length() else deceleration
+		# Milestone 205: a walk on a roof's slope starts and stops carefully (WALK_ACCEL: at the run's 16 and 22 m/s², the
+		# body had rocked back at the ridge).
+		if want_walk and h.length() <= walk_speed + 0.1 and goal.length() <= walk_speed + 0.1 and get_floor_normal().angle_to(Vector3.UP) > deg_to_rad(10.0):
+			rate = minf(rate, WALK_ACCEL)
 		# Milestone 191: turning back at speed brakes hard first (a plant and a turn, not a slow arc backwards).
 		if h.length() > 2.5 and goal.length() > 0.5 and h.normalized().dot(goal.normalized()) < -0.3:
 			rate = deceleration * 1.6
@@ -606,7 +613,11 @@ func _move(delta: float, speed_goal: float) -> void:
 ## Milestone 156 (the owner's reference video: over the gutter and up the tiles on hands and feet): on a roof steeper
 ## than CRAWL_SLOPE, going up it (within 40 degrees of straight up) slowly — walking, or the demo's `want_crawl` — the
 ## body scrambles on hands and feet (the clip "crawl", made for a roof of 21 degrees, played at the rate of the speed).
-const CRAWL_SLOPE := 15.0
+## Milestone 205 (the owner: "walking on the roof needs improving"): only steeper than 28 degrees — the rooftops' tiles
+## (21) are walked up, leaning into the slope (`ROOF_LEAN`), the feet placed on them.
+const CRAWL_SLOPE := 28.0
+const WALK_ACCEL := 4.0 # m/s²
+const ROOF_LEAN := 0.6 # of the slope's angle, going straight up it
 const CRAWL_CLIP_SPEED := 0.55 # m/s, mannequin_anims.py's CRAWL_V
 
 func _crawl_wanted() -> bool:
@@ -896,6 +907,13 @@ func _lean_model(v: float, delta: float) -> void:
 	_last_facing = facing
 	_last_speed = v
 	var goal := Vector2(clampf(-turn * v * 0.018, -0.25, 0.25), clampf(accel * 0.012, -0.14, 0.14))
+	# (milestone 205: up a roof, into its slope — the more the straighter up it the body goes)
+	if is_on_floor() and v > 0.2:
+		var n := get_floor_normal()
+		var uphill := Vector3(-n.x, 0.0, -n.z)
+		if n.angle_to(Vector3.UP) > deg_to_rad(10.0): # (a roof's; the square's paving and its kerbs, none)
+			var along := Vector3(velocity.x, 0.0, velocity.z).normalized().dot(uphill.normalized())
+			goal.y += clampf(n.angle_to(Vector3.UP) * ROOF_LEAN * along, -0.2, 0.3)
 	if mode != Mode.GROUND or _one_shot > 0.0:
 		goal = Vector2()
 	_lean = _lean.lerp(goal, 1.0 - exp(-8.0 * delta))

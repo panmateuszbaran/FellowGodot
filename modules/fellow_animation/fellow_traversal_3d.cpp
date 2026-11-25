@@ -1076,7 +1076,12 @@ void FellowTraversal3D::_finish(bool p_cancelled) {
 	hints.clip.unref();
 	cooldown = 0.25;
 	if (CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(_get_body())) {
-		const float speed = done == KIND_VAULT ? MAX(entry_speed, exit_speed) : exit_speed;
+		float speed = done == KIND_VAULT ? MAX(entry_speed, exit_speed) : exit_speed;
+		// Milestone 205 (decision 0347): up from a hang (with climb_pull_speed), on at the climb's own pace — it ends
+		// standing: given exit_speed at once, the body had lurched on up the roof at 1.5 m/s.
+		if (mantle_from_hang && climb_pull_speed > 0.0f) {
+			speed = MIN(speed, MAX(0.0f, flat(cb->get_velocity()).dot(ledge.inward)));
+		}
 		cb->set_velocity(p_cancelled ? Vector3() : ledge.inward * speed);
 	}
 	if (p_cancelled) {

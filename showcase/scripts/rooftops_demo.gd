@@ -159,12 +159,12 @@ func _make_shots() -> void:
 			"prog": [],
 		},
 		{
-			# Over the gutter and up the tiles on hands and feet (milestone 156), then the camera rising over the roofs to
-			# the tower.
+			# Over the gutter and up the tiles on hands and feet (milestone 156; milestone 205: walked up, leaning into the
+			# slope), then the camera rising over the roofs to the tower.
 			"name": "roof", "duration": 7.8, "mantle_at_start": true,
 			"cam": {"mode": "orbit", "offset": Vector3(2.3, 0.15, 0.9), "look_up": -0.3, "rate": 2.0, "fov": 52.0},
-			"prog": [["m+1.25", {"house": [], "sprint": false, "crawl": true, "wish": Vector3(0.0, 0.0, -1.0)}],
-					["m+4.2", {"crawl": false, "wish": Vector3(), "cam": {"mode": "path_follow", "keys": [
+			"prog": [["m+1.25", {"house": [], "sprint": false, "walk": true, "to": Vector3(14.0, 0.0, -14.35)}],
+					["m+4.2", {"crawl": false, "walk": false, "wish": Vector3(), "cam": {"mode": "path_follow", "keys": [
 						[4.2, Vector3(10.0, 12.5, -7.0), Vector3(13.5, 12.0, -13.0), 55.0],
 						[7.8, Vector3(15.5, 16.1, -2.0), Vector3(10.8, 12.5, -14.5), 58.0]]}}]],
 		},
