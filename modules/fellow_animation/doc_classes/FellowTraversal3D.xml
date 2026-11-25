@@ -104,6 +104,12 @@
 				The last check's result (automatic, [method find_ledge] or [method try_mantle]), as [method find_ledge] returns it.
 			</description>
 		</method>
+		<method name="get_leap_phases" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<description>
+				Milestone 200 (decision 0342): during a leap up in flight under [member leap_gravity], where its clip's parts are played: the clip's let-go of its last hand and the move's end of the push (shares of the clip's time and of the move's), then the clip's catch and the move's dead point. Empty for any other move. A player that plays the leap's clip over the move plays its first part over the dip and the push, its second over the flight and its last over the settle.
+			</description>
+		</method>
 		<method name="get_pose_targets" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
@@ -337,6 +343,9 @@
 		</member>
 		<member name="ladders" type="bool" setter="set_ladders" getter="is_ladders" default="true">
 			Takes the [FellowLadder3D]s the body goes towards (see [FellowLadder3D]).
+		</member>
+		<member name="leap_gravity" type="float" setter="set_leap_gravity" getter="get_leap_gravity" default="0.0">
+			Milestone 200 (decision 0342): a leap up timed by [method set_leap_timing] flies under this gravity, in m/s²: the body dips 8 cm, pushes from rest to the speed that carries it to the dead point (a constant acceleration over a quarter of the rise, at least the clip's push and at most 0.65 m), flies decelerating by gravity alone, the hands catching the hold at the dead point (the settle's drop — the clip's hips over its end at its catch — above the hang), and settles into the hang over the clip's own settling time; along the wall and out from it (6 cm in mid-flight) from the push's start to the dead point. The move's time follows (a 2.3 m leap: 1.55 s). The clip's let-go and catch are where its push and flight are played ([method get_leap_phases]). [code]0[/code]: the clip's rise scaled onto the leap's, as milestone 198.
 		</member>
 		<member name="low_clip" type="Animation" setter="set_low_clip" getter="get_low_clip">
 			The clip played for a [constant KIND_LOW] mantle (its length is the mantle's).

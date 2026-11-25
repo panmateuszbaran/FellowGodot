@@ -204,6 +204,7 @@ private:
 	float hang_reach_side = 0.0f; // milestone 152 (decision 0285), m: a gap to a ledge to the side up to this wide is crossed hand over hand (0: jumped)
 	float hold_min_width = 0.0f; // milestone 152 (decision 0286), m: a hold narrower than both hands' 0.48 m, down to this wide, is held with the hands closer (0: off)
 	float hang_leap_windup = 0.0f; // milestone 153 (decision 0290), s: a leap from a hold winds up this long, springs, flies hands first and is caught with its speed (0: as before)
+	float leap_gravity = 0.0f; // milestone 200 (decision 0342), m/s²: a timed leap up flies under this gravity (0: its clip's rise scaled, as milestone 198)
 	// Milestone 84 (decision 0192): walking over an edge, hanging from it.
 	bool drop_to_hang = false;
 	float drop_max_speed = 2.0f; // m/s: faster, the body goes over
@@ -272,6 +273,15 @@ private:
 		int lead = 0; // milestone 151: the hand that goes first (a reach up)
 		double windup = 0.0; // milestone 153: a leap's wind-up before it springs (s, within duration)
 		int timing = -1; // milestone 198: the leap timing it follows (LEAP_UP, LEAP_ALONG), or none
+		// Milestone 200 (decision 0342): a leap up in flight under leap_gravity — its dip, its push (from rest to the
+		// speed of the flight, the hands letting go), its flight (to the dead point, where the hands catch) and its settle
+		// (down into the hang as the arms take the weight): their times (s); the dip's depth, the push's rise, the speed
+		// it flies off with, the settle's drop (m, m/s); the clip's let-go of the last hand and its catch (shares of its
+		// time) and the move's (shares of the move's).
+		bool ballistic = false;
+		float b_dip_time = 0.0f, b_push_time = 0.0f, b_flight_time = 0.0f, b_settle_time = 0.0f;
+		float b_dip = 0.0f, b_push = 0.0f, b_speed = 0.0f, b_settle = 0.0f;
+		float b_clip_release = 0.0f, b_clip_catch = 1.0f, b_release = 0.0f, b_catch = 1.0f;
 	} transfer;
 	// Milestone 198 (decision 0340): a leap timed as a clip's — its hips' way along the move (0 at the start, 1 at the end),
 	// their lift (m: over the straight line along; over the end's height up), sampled evenly over its time; its hands'
@@ -288,6 +298,16 @@ private:
 	static float _leap_rise(float p_z, float p_reach, float p_rise);
 	static constexpr float LEAP_EASE_IN = 0.15f; // m of a clip's rise up (milestone 198)
 	static constexpr float LEAP_EASE_OUT = 0.3f;
+	// Milestone 200 (decision 0342): a leap up under gravity — a dip of LEAP_DIP over LEAP_DIP_TIME before the push; the
+	// push LEAP_PUSH_SHARE of the rise to the dead point (at least the clip's, at most LEAP_PUSH_MAX, at most
+	// LEAP_PUSH_MOST of it).
+	static constexpr float LEAP_DIP = 0.08f; // m
+	static constexpr float LEAP_DIP_TIME = 0.2f; // s
+	static constexpr float LEAP_PUSH_SHARE = 0.25f;
+	static constexpr float LEAP_PUSH_MAX = 0.65f; // m
+	static constexpr float LEAP_PUSH_MOST = 0.6f;
+	static constexpr float LEAP_OUT = 0.06f; // m: the body out from the wall in mid-flight (the feet's push)
+	float _leap_clip_to_move(float p_f) const; // a clip's share of its time as the ballistic leap's share of the move
 	// After a corner the wish held as it was goes on along the new edge (the stick held left stays "left").
 	bool remap = false;
 	Vector3 remap_from, remap_to;
@@ -505,6 +525,9 @@ public:
 	void clear_leap_timing(LeapKind p_kind);
 	bool has_leap_timing(LeapKind p_kind) const;
 	float get_hang_leap_windup() const { return hang_leap_windup; }
+	void set_leap_gravity(float p_gravity) { leap_gravity = MAX(0.0f, p_gravity); }
+	float get_leap_gravity() const { return leap_gravity; }
+	PackedFloat32Array get_leap_phases() const;
 	void set_drop_to_hang(bool p_enabled) { drop_to_hang = p_enabled; }
 	bool is_drop_to_hang() const { return drop_to_hang; }
 	void set_drop_max_speed(float p_speed) { drop_max_speed = MAX(0.0f, p_speed); }

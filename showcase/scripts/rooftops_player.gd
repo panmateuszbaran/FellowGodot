@@ -37,6 +37,10 @@ const MOCAP_HAND_FLIGHT := 0.3
 # Milestone 196: Mixamo's shimmy goes this fast along the ledge (m/s, at the mannequin's scale); played at the body's pace.
 const SHIMMY_CLIP_SPEED := 0.45
 const MOCAP_SHIMMY_SPEED := 0.6
+## Milestone 200 (the owner: "the push up still looks unnatural"): a leap up flies under gravity (the traversal's
+## leap_gravity: a dip, a push from rest to the speed that carries the body to the dead point, the flight, the catch at
+## the dead point and the settle into the hang), Mixamo's hop played over its push, flight and settle.
+const LEAP_GRAVITY := 9.8
 # FellowTraversal3D's Transfer values.
 const TRANSFER_JUMP_ALONG := 2
 const TRANSFER_JUMP_UP := 3
@@ -76,6 +80,7 @@ var want_perch := false
 var want_crawl := false ## the demo: up a roof on hands and feet whatever the speed asked
 var state := ""
 var _one_shot := 0.0
+var _warp: Array = [] # milestone 200: a leap's clip time warped onto its phases: [clip, length, duration, elapsed, phases]
 var _air_top := 0.0
 var _camera: Node3D
 var _viewpoint: Node3D
@@ -184,6 +189,12 @@ func _use_mocap() -> void:
 		var h: Array = l["hands"]
 		traversal.call("set_leap_timing", leap[0], float(l["time"]), float(l.get("reach", 1.0)), PackedFloat32Array(l["progress"]),
 				PackedFloat32Array(l["lift"]), Vector4(h[0], h[1], h[2], h[3]))
+		if leap[0] == 0:
+			var g := LEAP_GRAVITY
+			for arg in OS.get_cmdline_user_args():
+				if arg.begins_with("--leap_gravity="): # (tools; 0: milestone 198's leap)
+					g = float(arg.get_slice("=", 1))
+			traversal.set("leap_gravity", g)
 	var gaits: Dictionary = info.get("gaits", {}) if info is Dictionary else {}
 	var table: Array = []
 	for g in MOCAP_GAITS:
@@ -276,6 +287,13 @@ func _on_transfer(_ledge: Dictionary, how: int, duration: float, lead: int) -> v
 	# Milestone 153: the clip played over the move's time (its wind-up included).
 	var length: float = _one_shots[clip]
 	tree.set("parameters/ts_%s/scale" % clip, length / maxf(duration, 0.05))
+	# Milestone 200: a leap in flight under gravity — the clip's push played over its dip and push, its flight over the
+	# flight, the rest over the settle.
+	_warp = []
+	var phases: PackedFloat32Array = traversal.call("get_leap_phases") if how == TRANSFER_JUMP_UP else PackedFloat32Array()
+	if phases.size() == 4:
+		_warp = [clip, length, maxf(duration, 0.05), 0.0, phases]
+		_warp_clip(0.0)
 	_play(clip)
 	_one_shot = duration
 
@@ -321,10 +339,25 @@ func _read_input() -> void:
 	want_perch = want_perch or Input.is_action_just_pressed("interact")
 
 
+## Milestone 200: the leap's clip played at the rate of the phase the move is in (see _on_transfer).
+func _warp_clip(delta: float) -> void:
+	_warp[3] += delta
+	var u: float = _warp[3] / _warp[2]
+	var ph: PackedFloat32Array = _warp[4]
+	var f := [0.0, ph[0], ph[2], 1.0]
+	var m := [0.0, ph[1], ph[3], 1.0]
+	var i := 0 if u < m[1] else (1 if u < m[2] else 2)
+	tree.set("parameters/ts_%s/scale" % _warp[0], _warp[1] * (f[i + 1] - f[i]) / maxf(_warp[2] * (m[i + 1] - m[i]), 1e-3))
+	if u >= 1.0:
+		_warp = []
+
+
 func _physics_process(delta: float) -> void:
 	_read_input()
 	if _one_shot > 0.0:
 		_one_shot -= delta
+	if not _warp.is_empty():
+		_warp_clip(delta)
 	var busy: bool = traversal.is_active() or traversal.is_hanging() or traversal.is_climbing() or traversal.is_on_ladder() or traversal.is_transferring()
 	var speed_goal := run_speed
 	if want_sprint:

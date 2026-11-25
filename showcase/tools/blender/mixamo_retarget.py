@@ -368,7 +368,13 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info, opt=None):
 	hz = {round(a[0] * SRC_FPS): a[3].z for a in track}
 
 	def hips_z(t):
-		return hz.get(round(t * SRC_FPS), track[-1][3].z)
+		# (milestone 200: between the source's frames, interpolated — the nearest frame's, a clip sampled at 60 fps from a
+		# 30 fps source had its hips stepped every other frame)
+		f = t * SRC_FPS
+		i = math.floor(f)
+		a = hz.get(i, track[-1][3].z)
+		b = hz.get(i + 1, a)
+		return a + (b - a) * (f - i)
 
 	lift = None
 	if kind == "takeoff":
@@ -442,16 +448,23 @@ def bake_clip(rig, src, name, kind, scale, ankle_dz, info, opt=None):
 			# (the height's drift too: a climb up a wall in place)
 			return Vector((mx + bx * (t - tm), my + by * (t - tm), bz * (t - tm)))
 	elif kind == "anchored":
-		h0 = min(hips, key=lambda h: abs(h[0] - start))[1]
+		# (milestone 200: the hips at the very moment, not the nearest of the source's 30 frames a second — the clip's 60 had
+		# their hips zigzag by half a frame's travel every other frame: up to 10 cm in a leap, at 300 m/s²)
+		h0 = src.sample(start)["Hips"].translation.copy()
 
 		def centre_at(t):
-			h = min(hips, key=lambda x: abs(x[0] - t))[1]
+			h = src.sample(min(t, src.length))["Hips"].translation
 			return Vector((h.x, h.y, h.z - h0.z))
 	else:
 
 		def centre_at(t):
-			near = [h[1] for h in hips if abs(h[0] - t) <= 0.25] or [min(hips, key=lambda h: abs(h[0] - t))[1]]
-			return Vector((sum(h.x for h in near) / len(near), sum(h.y for h in near) / len(near), lift(t) if lift else 0.0))
+			# (milestone 200: weighted down to nothing at the window's ends — a window's frames counted in or out as it moved
+			# by half a frame had stepped its mean every other frame)
+			near = [(h[1], 1.0 - abs(h[0] - t) / 0.25) for h in hips if abs(h[0] - t) < 0.25]
+			if not near:
+				near = [(min(hips, key=lambda h: abs(h[0] - t))[1], 1.0)]
+			wsum = sum(w for _, w in near)
+			return Vector((sum(h.x * w for h, w in near) / wsum, sum(h.y * w for h, w in near) / wsum, lift(t) if lift else 0.0))
 	if name in HIPS_AT and kind != "root":
 		# The hips' mean over the cut moved to the mannequin's own (the same offset to every joint).
 		ty, tz = HIPS_AT[name]

@@ -82,6 +82,8 @@ private:
 	bool hang_fit = false;
 	float soft_ik = 0.0f; // milestone 155 (decision 0295): past this share of a limb's reach its target is eased (0: off)
 	Vector3 fit; // world: the body's move, eased
+	Vector3 fit_goal_last; // milestone 200: the fit's last goal (its drift followed at once)
+	bool fit_goal_valid = false;
 	// Milestone 156 (decision 0296): a clip (a mantle from a hang) fades in from the pose the limbs' IK gave the frame
 	// before over clip_blend seconds (0: at once — the braced legs had snapped to the clip's first pose, 74 degrees in a
 	// frame).
@@ -109,6 +111,9 @@ private:
 	float grip_shape[2] = { 0.0f, 0.0f }; // eased
 	float hand_fade = 0.0f; // the hands' own blend in (ledge_grip: faster than the pose's)
 	bool grip_letting_go[2] = { false, false };
+	// Milestone 200 (decision 0342): the hand on its hold, eased (its fingers kept over the edge whatever its knuckles'
+	// height: a held hand's had sprung open where its arm fell a centimetre short of the hold).
+	float grip_hold[2] = { 0.0f, 0.0f };
 	Quaternion grip_local[2]; // the wrist's bend held as a hand lets go
 	bool grip_local_valid[2] = { false, false };
 	Vector3 grip_dir[2]; // world: the palm's way from the knuckles to the wrist, eased
@@ -155,7 +160,7 @@ private:
 	void _limit_speed(Skeleton3D *p_skeleton, double p_delta);
 	void _find_fingers(Skeleton3D *p_skeleton);
 	float _palm_length(Skeleton3D *p_skeleton, int p_side) const;
-	void _shape_grip(Skeleton3D *p_skeleton, int p_side, const Vector3 &p_palm, const Vector3 &p_edge, const Vector3 &p_in, const Vector3 &p_normal, const Vector3 &p_side_dir, float p_meter, float p_weight, bool p_letting_go);
+	void _shape_grip(Skeleton3D *p_skeleton, int p_side, const Vector3 &p_palm, const Vector3 &p_edge, const Vector3 &p_in, const Vector3 &p_normal, const Vector3 &p_side_dir, float p_meter, float p_weight, bool p_letting_go, float p_hold);
 
 protected:
 	void _notification(int p_what);

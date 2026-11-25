@@ -924,6 +924,31 @@ bool FellowTraversal3D::has_leap_timing(LeapKind p_kind) const {
 	return leap_timing[p_kind].time > 0.0f && leap_timing[p_kind].progress.size() >= 2;
 }
 
+// Milestone 200 (decision 0342): a share of the clip's time as the ballistic leap's share of the move — its push (to the
+// last hand's let-go) over the dip and the push, its flight (to the catch) over the flight, the rest over the settle.
+float FellowTraversal3D::_leap_clip_to_move(float p_f) const {
+	const float f0 = transfer.b_clip_release;
+	const float f1 = transfer.b_clip_catch;
+	if (p_f <= f0) {
+		return f0 > 0.0f ? p_f / f0 * transfer.b_release : 0.0f;
+	}
+	if (p_f <= f1) {
+		return transfer.b_release + (p_f - f0) / MAX(f1 - f0, 1e-4f) * (transfer.b_catch - transfer.b_release);
+	}
+	return transfer.b_catch + (p_f - f1) / MAX(1.0f - f1, 1e-4f) * (1.0f - transfer.b_catch);
+}
+
+PackedFloat32Array FellowTraversal3D::get_leap_phases() const {
+	PackedFloat32Array r;
+	if (transfer.active && transfer.ballistic) {
+		r.push_back(transfer.b_clip_release);
+		r.push_back(transfer.b_release);
+		r.push_back(transfer.b_clip_catch);
+		r.push_back(transfer.b_catch);
+	}
+	return r;
+}
+
 void FellowTraversal3D::_step(double p_delta) {
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	_step_body(p_delta);
@@ -1739,6 +1764,37 @@ void FellowTraversal3D::_start_transfer(const Ledge &p_to, const Vector3 &p_cont
 		transfer.duration = leap_timing[timing].time * CLAMP(Math::sqrt(way / leap_timing[timing].reach), 0.8f, 1.6f);
 		transfer.windup = 0.0;
 	}
+	// Milestone 200 (decision 0342): a leap up in flight under leap_gravity — a dip, a push from rest to the speed that
+	// carries the body to the dead point (the settle's drop over the hang's height: the clip's lift over its end at its
+	// catch), the flight decelerating by gravity alone, the catch at the dead point and the settle into the hang (the
+	// clip's own time); the clip's push, flight and settle played over them. Scaled from the clip's 0.7 m onto a 2.3 m
+	// leap, the rise had gone at 7 m/s and stopped at 3.5 g, then crept on at 1 m/s for 0.4 s.
+	transfer.ballistic = false;
+	if (transfer.timing == LEAP_UP && leap_gravity > 0.0f) {
+		const LeapTiming &l = leap_timing[LEAP_UP];
+		const float f_rel = MAX(l.hands.x, l.hands.z);
+		const float f_cat = MAX(MAX(l.hands.y, l.hands.w), f_rel + 0.05f);
+		const float settle = CLAMP(_sample(l.progress, f_cat) * l.reach + _sample(l.lift, f_cat) - l.reach, 0.05f, 0.5f);
+		const float clip_push = CLAMP(_sample(l.progress, f_rel) * l.reach + _sample(l.lift, f_rel), 0.1f, LEAP_PUSH_MAX);
+		const float rise = MAX(0.05f, transfer.to_feet.y - transfer.from_feet.y);
+		const float top = rise + settle;
+		const float push = MIN(CLAMP(LEAP_PUSH_SHARE * top, clip_push, LEAP_PUSH_MAX), LEAP_PUSH_MOST * top);
+		const float speed = Math::sqrt(2.0f * leap_gravity * MAX(0.05f, top - push));
+		transfer.ballistic = true;
+		transfer.b_dip = LEAP_DIP;
+		transfer.b_push = push;
+		transfer.b_speed = speed;
+		transfer.b_settle = settle;
+		transfer.b_dip_time = LEAP_DIP_TIME;
+		transfer.b_push_time = 2.0f * (push + LEAP_DIP) / speed;
+		transfer.b_flight_time = speed / leap_gravity;
+		transfer.b_settle_time = MAX(0.25f, l.time * (1.0f - f_cat));
+		transfer.duration = transfer.b_dip_time + transfer.b_push_time + transfer.b_flight_time + transfer.b_settle_time;
+		transfer.b_clip_release = f_rel;
+		transfer.b_clip_catch = f_cat;
+		transfer.b_release = float((transfer.b_dip_time + transfer.b_push_time) / transfer.duration);
+		transfer.b_catch = float((transfer.b_dip_time + transfer.b_push_time + transfer.b_flight_time) / transfer.duration);
+	}
 	transfer.duration += transfer.windup;
 	transfer.from_inward = ledge.inward;
 	transfer.from_normal = ledge.top_normal.y > 0.3f ? ledge.top_normal : UP;
@@ -1800,7 +1856,30 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 	if (timed) {
 		w = _sample(timed->progress, u);
 		feet = transfer.from_feet.lerp(transfer.to_feet, w) + UP * _sample(timed->lift, u);
-		if (transfer.timing == LEAP_UP) {
+		if (transfer.ballistic) {
+			// Milestone 200 (decision 0342): down a little, the push (a constant acceleration from rest), the flight under
+			// gravity to the dead point, the settle into the hang; along and across, from the push's start to the dead point.
+			const float t = u * float(transfer.duration);
+			const float t_push = transfer.b_dip_time;
+			const float t_fly = t_push + transfer.b_push_time;
+			const float t_top = t_fly + transfer.b_flight_time;
+			float y;
+			if (t < t_push) {
+				y = -transfer.b_dip * smooth(t / t_push);
+			} else if (t < t_fly) {
+				const float k = (t - t_push) / transfer.b_push_time;
+				y = -transfer.b_dip + (transfer.b_push + transfer.b_dip) * k * k;
+			} else if (t < t_top) {
+				const float k = t - t_fly;
+				y = transfer.b_push + transfer.b_speed * k - 0.5f * leap_gravity * k * k;
+			} else {
+				y = (transfer.to_feet.y - transfer.from_feet.y) + transfer.b_settle * (1.0f - smooth(CLAMP((t - t_top) / transfer.b_settle_time, 0.0f, 1.0f)));
+			}
+			w = smooth(CLAMP((t - t_push) / (t_top - t_push), 0.0f, 1.0f));
+			const float fly = CLAMP((t - t_fly) / transfer.b_flight_time, 0.0f, 1.0f);
+			feet = transfer.from_feet.lerp(transfer.to_feet, w) - flat(transfer.from_inward).normalized() * (LEAP_OUT * Math::sin(fly * float(Math::PI)));
+			feet.y = transfer.from_feet.y + y;
+		} else if (transfer.timing == LEAP_UP) {
 			// Up: the hips' height the clip's scaled onto the leap's rise — the more in the middle of the way, the less at
 			// its ends (the push's dip and the rise past the end as the clip's): scaled evenly, the rise had stopped at the
 			// end's height from three times the clip's speed in a frame, at 20 g.
@@ -1859,7 +1938,11 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 		const Vector3 from_left = UP.cross(transfer.from_inward).normalized();
 		const Vector3 from_face = transfer.from_feet + transfer.from_inward * (radius + 0.02f) + UP * brace;
 		const Vector3 to_face = transfer.to_feet + transfer.to.inward * (radius + 0.02f) + UP * brace;
-		const Vector4 hs = timed->hands;
+		Vector4 hs = timed->hands;
+		if (transfer.ballistic) {
+			// (milestone 200: the clip's let-go and catch where its push and flight are played)
+			hs = Vector4(_leap_clip_to_move(hs.x), _leap_clip_to_move(hs.y), _leap_clip_to_move(hs.z), _leap_clip_to_move(hs.w));
+		}
 		const float off_wall = smooth(CLAMP((u - MIN(hs.x, hs.z)) / 0.12f, 0.0f, 1.0f));
 		const float on_wall = smooth(CLAMP((u - MAX(hs.y, hs.w)) / 0.15f, 0.0f, 1.0f));
 		for (int h = 0; h < 2; h++) {
@@ -3365,6 +3448,9 @@ void FellowTraversal3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_leap_timing", "kind", "time", "reach", "progress", "lift", "hands"), &FellowTraversal3D::set_leap_timing);
 	ClassDB::bind_method(D_METHOD("clear_leap_timing", "kind"), &FellowTraversal3D::clear_leap_timing);
 	ClassDB::bind_method(D_METHOD("has_leap_timing", "kind"), &FellowTraversal3D::has_leap_timing);
+	ClassDB::bind_method(D_METHOD("set_leap_gravity", "gravity"), &FellowTraversal3D::set_leap_gravity);
+	ClassDB::bind_method(D_METHOD("get_leap_gravity"), &FellowTraversal3D::get_leap_gravity);
+	ClassDB::bind_method(D_METHOD("get_leap_phases"), &FellowTraversal3D::get_leap_phases);
 	ClassDB::bind_method(D_METHOD("set_hang_clip", "clip"), &FellowTraversal3D::set_hang_clip);
 	ClassDB::bind_method(D_METHOD("get_hang_clip"), &FellowTraversal3D::get_hang_clip);
 	ClassDB::bind_method(D_METHOD("set_clip_root_bone", "bone"), &FellowTraversal3D::set_clip_root_bone);
@@ -3478,6 +3564,7 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_reach_side", PROPERTY_HINT_RANGE, "0,1.5,0.01,suffix:m"), "set_hang_reach_side", "get_hang_reach_side");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hold_min_width", PROPERTY_HINT_RANGE, "0,0.48,0.01,suffix:m"), "set_hold_min_width", "get_hold_min_width");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_leap_windup", PROPERTY_HINT_RANGE, "0,0.4,0.01,suffix:s"), "set_hang_leap_windup", "get_hang_leap_windup");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "leap_gravity", PROPERTY_HINT_RANGE, "0,20,0.1,or_greater,suffix:m/s²"), "set_leap_gravity", "get_leap_gravity");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "drop_to_hang"), "set_drop_to_hang", "is_drop_to_hang");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "drop_max_speed", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:m/s"), "set_drop_max_speed", "get_drop_max_speed");
 	ADD_GROUP("Ladders", "");
