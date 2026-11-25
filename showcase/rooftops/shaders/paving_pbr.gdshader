@@ -36,6 +36,12 @@ uniform sampler2D fan_albedo : source_color, filter_linear_mipmap_anisotropic, r
 uniform sampler2D fan_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D fan_arm : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float fan_size = 2.5;
+// Milestone 199: the streets' cobbles (fan_albedo: Poly Haven's patterned cobblestone, a dark basalt — its mean 0.074)
+// toned to a warm grey stone by fan_tint_strength (from the bell tower the city's streets had been black-brown; its
+// fronts' stone 0.36). 0: the photograph's.
+uniform vec3 fan_tint : source_color = vec3(0.56, 0.52, 0.47);
+uniform float fan_lum = 0.074;
+uniform float fan_tint_strength = 0.0;
 uniform sampler2D cob_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D cob_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D cob_arm : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -142,6 +148,7 @@ void fragment() {
 	} else {
 		uv = p / fan_size;
 		col = sample_set(fan_albedo, fan_normal, fan_arm, uv, p, nrm, arm, 1.0, 0.0);
+		col = mix(col, fan_tint * dot(col, vec3(0.3, 0.55, 0.15)) / fan_lum, fan_tint_strength);
 	}
 	// The stone's tone over the square; dirt and damp by the walls, moss in it; worn paths.
 	col *= 0.9 + 0.2 * rt_fbm(p * 0.05, 3);

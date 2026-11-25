@@ -361,6 +361,8 @@ func _photo_materials(p_plaster: Dictionary) -> void:
 			"slabs_lum": sl[4], "slabs_tint": Color(0.66, 0.58, 0.5) if setts else (Color(0.74, 0.7, 0.64) if _tex.has("ashlar") else Color(0.62, 0.59, 0.54)),
 			"slabs_tint_strength": 0.7 if setts else 0.8,
 			"fan_albedo": fan[0], "fan_normal": fan[1], "fan_arm": fan[2], "fan_size": fan[3],
+			# Milestone 199: the streets' dark basalt toned to a warm grey stone (from the bell tower they had been black).
+			"fan_lum": fan[4], "fan_tint": Color(0.56, 0.52, 0.47), "fan_tint_strength": 0.8,
 			"cob_albedo": cob[0], "cob_normal": cob[1], "cob_arm": cob[2], "cob_size": cob[3],
 			"pave_albedo": pav[0], "pave_normal": pav[1], "pave_arm": pav[2], "pave_size": pav[3]})
 	print("rooftops: photographic materials (Poly Haven, CC0)")
