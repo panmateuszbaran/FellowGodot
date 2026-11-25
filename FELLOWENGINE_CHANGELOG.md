@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 200 — Hands that hold on, a leap up under gravity, the motion capture unstepped (2026-11-25)
+
+- `FellowTraversalPose3D` (with `ledge_grip`; decision 0342): a hand on its hold keeps its fingers over the edge
+  wherever its knuckles are — they had sprung open, both hands' at once after each leap, wherever an arm fell a
+  centimetre short of its hold (climbing, a held hand's fingers off the edge 20.7 → 3.3 % of its frames; no held hand's
+  on it 17.7 → 1.9 %); `hang_fit` follows its goal's steady drift at once (up to 1.2 m/s), only its jumps eased.
+- `FellowTraversal3D.leap_gravity`, `get_leap_phases()`: a timed leap up flies under gravity — a dip, a push from rest
+  to the speed that carries the body to the dead point, the flight slowing at g alone, the hands up ahead of the body
+  and catching at the dead point, the settle into the hang; the clip played over its phases (the showcase: 9.8 m/s²; the
+  2.3 m leap 1.93 → 1.58 s, its sharpest stop −62 → −10 m/s², the wrists 11-43 cm over the shoulders in flight, not 26
+  cm under them).
+- The showcase's motion capture (`mixamo_retarget.py`): the hips of the hops, the reaches and the jump at the wall no
+  longer stepped every other frame (taken out at the nearest of Mixamo's 30 frames a second from hips sampled at 60: up
+  to 10 cm a frame); from hold to hold the hips' acceleration p95 311 → 143 m/s².
+
 ## Milestone 199 — The view from the bell tower: the hills' light, woods, the far city, the haze (2026-11-25)
 
 - The showcase's rooftops (decision 0341; no engine change): the hills' soft shadows on each other under the low sun

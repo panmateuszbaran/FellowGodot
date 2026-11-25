@@ -1217,7 +1217,11 @@ targets eased over at most 15 ms, the hands in twice as fast as the pose, the el
 hands' finger bones) and `hand_flight_weight` homing in over the second half of a hand's way; on `FellowTraversal3D`:
 `set_leap_timing(kind, time, reach, progress, lift, hands)` (`LEAP_UP`, `LEAP_ALONG`; none by default: a leap from hold
 to hold as a clip's — its hips' way and lift, its hands' let-go and catch, slower for a longer leap within 0.8-1.6
-times), `clear_leap_timing()`, `has_leap_timing()`; `FellowFootLock3D`: a foot let go is never eased back from further
+times), `clear_leap_timing()`, `has_leap_timing()`; milestone 200 (decision 0342), on `FellowTraversal3D`: `leap_gravity`
+(0 m/s²: off; a timed leap up flies under it — a dip, a push from rest, the flight slowing by gravity alone, the hands
+up ahead of the body and catching at the dead point, the settle into the hang), `get_leap_phases()` (where the clip's
+push, flight and settle are played); with `ledge_grip`, a hand on its hold keeps its fingers over the edge and
+`hang_fit` follows its goal's steady drift at once (up to 1.2 m/s); `FellowFootLock3D`: a foot let go is never eased back from further
 from the hip than the leg reaches; `release_extension` (milestone 172; 1.0: off): let go when holding the foot needs more
 than this share of the leg's length. Let go without jumps (milestone 173, decision 0315): a held point out of
 the leg's reach is let go from where the foot is shown and brought within reach the shorter way (towards the animated
