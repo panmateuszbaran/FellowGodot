@@ -47,6 +47,17 @@ func _ready() -> void:
 		_brazier(downwind)
 	else:
 		_chimney(downwind)
+	# (tools: --gas_set_<kind>=name:value,... and --emit_set_<kind>=... set the gas's or the emitter's properties)
+	for a in OS.get_cmdline_user_args():
+		for pre in ["--gas_set_%s=" % kind, "--emit_set_%s=" % kind]:
+			if a.begins_with(pre):
+				var target: Node = _volume if pre.begins_with("--gas") else _emitter
+				for kv in a.substr(pre.length()).split(","):
+					var key := kv.get_slice(":", 0)
+					var val := kv.get_slice(":", 1)
+					target.set(key, Color(val) if val.begins_with("#") else float(val))
+					if pre.begins_with("--emit") and key == "smoke":
+						_smoke = float(val)
 
 
 ## A gas volume p_size, its floor p_y above this node, moved p_shift downwind (the emitter kept over the source:
