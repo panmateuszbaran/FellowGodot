@@ -46,6 +46,9 @@ const NAMES := ["fair", "cloudy", "overcast", "rain", "storm", "snow", "blizzard
 ## at 5 % the tower's shadow still lay across PalazzoOcra's front in the snow (its lit part 1.32 times its shaded part's
 ## luminance; 1.17 at 2 %, 1.09 at 1 %).
 const SUN := [-1.0, -1.0, 0.02, 0.015, 0.01, 0.02, 0.01]
+## (milestone 226) The clouds' coverage where the square takes more than FellowWeather3D's preset (keys 1-7; -1 the
+## preset's): an overcast sky closed (its 0.9 left the blue showing between the clouds over the square).
+const COVER := [-1.0, -1.0, 0.97, -1.0, -1.0, -1.0, -1.0]
 const CYCLE := [1, 2, 4, 5, 4, 3, 1, 6, 7, 6, 1] # (keys) fair, cloudy, rain, a storm, rain, overcast, fair, snow...
 const LAMPS_DARK := 2.4
 ## (milestone 214) How many stops darker the square is under each weather than in the fair one (keys 1-7: the RTX's
@@ -153,11 +156,15 @@ func turn_to(p_key: int, p_seconds: float) -> void:
 	else:
 		_weather.call("set_weather", p_key - 1, p_seconds) # WEATHER_CLOUDY .. WEATHER_BLIZZARD
 		var sun_share: float = _sun_set.get(p_key, float(SUN[p_key - 1]))
-		if sun_share >= 0.0:
-			# (the preset's with less sun: a custom weather, turned to over the same time)
+		var cover: float = COVER[p_key - 1]
+		if sun_share >= 0.0 or cover >= 0.0:
+			# (the preset's with less sun, more cloud: a custom weather, turned to over the same time)
 			var tt: float = _weather.get("transition_time")
 			_weather.set("transition_time", p_seconds)
-			_weather.set("sunlight", sun_share)
+			if sun_share >= 0.0:
+				_weather.set("sunlight", sun_share)
+			if cover >= 0.0:
+				_weather.set("cloud_coverage", cover)
 			_weather.set("transition_time", tt)
 	if _rain:
 		var snowing := p_key >= 6
