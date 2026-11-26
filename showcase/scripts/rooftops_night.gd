@@ -1,16 +1,17 @@
 extends Node
 ## Milestone 216: night falls on the square (N; N again: the day comes back). The sun sets — down its azimuth to
-## SUNSET_UNDER degrees under the horizon, its light reddening and gone at the horizon, the sky through its sunset and
-## twilight (FellowEngine's atmosphere draws them from the sun's elevation) — then the moon rises over the roofs: the
-## Sun's light turned to the moon's (MOON_COLOR, moon_energy, from MOON_UP degrees up, MOON_TURN degrees round from where
-## the sun set, a smaller disk), the sky's light dimmed (sky_night) so that its stars show, the houses' windows lit (their
-## rooms' lamps: glass.tres, FellowInteriorMaterial3D); the weather keys (rooftops_weather.gd) take get_night() for the
-## square's lamps and the eye's adapting. The tools: --night=1 (night at once), --night_at=<s> (night falling then).
+## SUNSET_UNDER degrees under the horizon, slowly through it, its light reddening and gone at the horizon, the sky
+## through its sunset and twilight (FellowEngine's atmosphere draws them from the sun's elevation) — then the moon rises
+## over the roofs: the Sun's light turned to the moon's (MOON_COLOR, moon_energy, from MOON_UP degrees up, MOON_TURN
+## degrees round from where the sun set, a smaller disk), the sky's light dimmed (sky_night) so that its stars show, the
+## houses' windows lit (their rooms' lamps: glass.tres, FellowInteriorMaterial3D); the weather keys
+## (rooftops_weather.gd) take get_night() for the square's lamps and the eye's adapting. The tools: --night=1 (night at
+## once), --night_at=<s> (night falling then).
 
-@export var duration := 14.0 # s, either way
+@export var duration := 20.0 # s, either way
 
 const SUNSET_UNDER := 10.0 # degrees
-const SUNSET_SHARE := 0.55 # of the way: the sun setting; the rest the moon rising
+const SUNSET_SHARE := 0.6 # of the way: the sun setting; the rest the moon rising
 const MOON_UP := 28.0 # degrees
 const MOON_TURN := 80.0 # degrees round from the sunset's azimuth (up over the square's west side, seen from its corner)
 const MOON_COLOR := Color(0.62, 0.72, 1.0)
@@ -135,7 +136,7 @@ func _apply() -> void:
 	if _t <= SUNSET_SHARE:
 		# The sun setting: down its azimuth, its light reddening to the horizon and gone under it.
 		var u := smoothstep(0.0, 1.0, _t / SUNSET_SHARE)
-		elevation = lerpf(_sun_up, -SUNSET_UNDER, u)
+		elevation = _sunset_elevation(u)
 		energy = _sun_energy * smoothstep(-1.5, 6.0, elevation)
 		color = _sun_color.lerp(SUNSET_COLOR, smoothstep(14.0, 0.0, elevation) * u)
 	else:
@@ -172,6 +173,24 @@ func _apply() -> void:
 	if _glass:
 		_glass.set("lamp_share", lerpf(_glass_lamps, WINDOW_LAMPS, night))
 		_glass.set("daylight", lerpf(_glass_daylight, WINDOW_DAYLIGHT, night))
+
+
+## The sun's elevation along the sunset (u 0..1): k x^3 + 2 x for x from 1 to x_end — slow through the horizon, where
+## the sky's colours are (half the way within 3 degrees of it), the day's elevation at the start, SUNSET_UNDER under the
+## horizon at the end.
+func _sunset_elevation(p_u: float) -> float:
+	var k := maxf(_sun_up - 2.0, 0.5)
+	var lo := -2.0
+	var hi := 0.0
+	for i in 30:
+		# (x_end: k x^3 + 2 x = -SUNSET_UNDER, by bisection)
+		var mid := (lo + hi) * 0.5
+		if k * mid * mid * mid + 2.0 * mid < -SUNSET_UNDER:
+			lo = mid
+		else:
+			hi = mid
+	var x := lerpf(1.0, (lo + hi) * 0.5, p_u)
+	return k * x * x * x + 2.0 * x
 
 
 ## (tools) where the night is.
