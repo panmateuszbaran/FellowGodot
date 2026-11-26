@@ -24,6 +24,10 @@ const BACK_OUT := -4.6
 const FLOOR_TOP := 4.4
 const LAYER_WORLD := 1
 const FLOOR := 0.08 # the room's floor: the pavement's collider under the house (its top 0.08 m up)
+## Milestone 230: the floor's tiles drawn this much over FLOOR — the raised pavement's slab runs on under the house, its
+## top at FLOOR too: the two coplanar, the depth test took one or the other by the pixel and the camera's jitter, the
+## pavement's grey flags flickering through the cotto (the owner: "the floor flickers here").
+const FLOOR_LIFT := 0.006
 
 var _mats := {}
 var _arches: Array = [] # [x0, x1, top]
@@ -349,7 +353,7 @@ func _commit(p_name: String) -> void:
 
 
 func _room() -> void:
-	var y0 := 0.0
+	var y0 := FLOOR_LIFT
 	# The floor (cotto) and the ceiling (planks).
 	_quad("floor", Vector3(-ROOM_X, y0, ROOM_BACK), Vector3(ROOM_X, y0, ROOM_BACK), Vector3(ROOM_X, y0, ROOM_FRONT), Vector3(-ROOM_X, y0, ROOM_FRONT),
 			Vector3.UP, Vector3.RIGHT, Vector3.BACK)
@@ -410,7 +414,7 @@ func _front_wall() -> void:
 			_quad(mat, Vector3(xa, ya, z), Vector3(xb, ya, z), Vector3(xb, yb, z), Vector3(xa, yb, z), n, u, Vector3.UP)
 	for a in _arches:
 		# (the floor's edge in the arch: down to the reveal's sill)
-		_quad("stone", Vector3(a[0], -FLOOR, z), Vector3(a[1], -FLOOR, z), Vector3(a[1], 0.0, z), Vector3(a[0], 0.0, z), Vector3.BACK, Vector3.RIGHT, Vector3.UP)
+		_quad("stone", Vector3(a[0], -FLOOR, z), Vector3(a[1], -FLOOR, z), Vector3(a[1], FLOOR_LIFT, z), Vector3(a[0], FLOOR_LIFT, z), Vector3.BACK, Vector3.RIGHT, Vector3.UP)
 	for a in _arches:
 		var r: float = (a[1] - a[0]) * 0.5
 		var xm: float = (a[0] + a[1]) * 0.5
