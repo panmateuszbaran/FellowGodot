@@ -496,6 +496,13 @@ func _fireplace() -> void:
 	gas.position = Vector3(0, hearth, zb + depth * 0.5)
 	_rn.add_child(gas)
 	_fire = gas
+	# Milestone 228: its light's shadow a dual paraboloid's, its seam level with the fire (the light's own z up: the
+	# hemispheres the hood over it and the room under its height) — with the seam upright, through the hood's sides,
+	# milestone 219 had found the hood's walls shaded wrongly; level, the room looks as with the cube's six faces.
+	var fl := gas.call("get_fire_light_node") as OmniLight3D
+	if fl:
+		fl.omni_shadow_mode = OmniLight3D.SHADOW_DUAL_PARABOLOID
+		fl.global_basis = Basis(Vector3.RIGHT, -PI * 0.5)
 	var e: Node3D = ClassDB.instantiate(&"FellowGasEmitter3D")
 	e.set("shape", 1)
 	e.set("box_size", Vector3(0.6, 0.1, 0.3))

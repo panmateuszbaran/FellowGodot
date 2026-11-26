@@ -1124,7 +1124,8 @@ func _weather_acts() -> void:
 		if _busy(p):
 			continue
 		var ap: AnimationPlayer = p.ap
-		if p.kind == "stand" and not _is_keeper(p) and not p.get("inside", false):
+		# (milestone 229: at night the stall keepers close up and go home too; in the rain they huddle under their awnings)
+		if p.kind == "stand" and (not _is_keeper(p) or (_night and not raining) or p.act == "away") and not p.get("inside", false):
 			if away and p.act == "" and _rng.randf() < 0.35:
 				_leave(p)
 			elif _rain < RAIN_BACK and not _night and p.act == "away" and _rng.randf() < 0.25:
