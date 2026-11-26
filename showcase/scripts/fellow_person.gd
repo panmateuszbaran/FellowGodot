@@ -14,6 +14,11 @@ const HAIR_ROUGHNESS := 0.8
 const HAIR_SPECULAR := 0.25
 ## The hair's drawing: 1 (milestone 236) blended at its edges after an opaque pre-pass, 0 cut by its alpha (232-235).
 static var hair_mode := 1
+## Milestone 241: the clothes' fabric (suits, felt hats) with a sheen (BaseMaterial3D.sheen, decision 0383): its
+## colour CLOTH_SHEEN times the clothes' tint, its roughness CLOTH_SHEEN_ROUGHNESS.
+static var cloth_sheen := true
+const CLOTH_SHEEN := 0.3
+const CLOTH_SHEEN_ROUGHNESS := 0.5
 
 
 ## p_match_height: the person scaled so that its hips stand at the mannequin's (the player: its hands and feet where
@@ -224,4 +229,8 @@ static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint:
 			m.roughness = maxf(m.roughness, 0.75) # cloth
 			m.metallic = 0.0
 			m.albedo_color *= p_cloth_tint
+			if cloth_sheen and (n.contains("suit") or n.contains("fedora")):
+				m.sheen = true
+				m.sheen_color = Color(CLOTH_SHEEN, CLOTH_SHEEN, CLOTH_SHEEN) * p_cloth_tint
+				m.sheen_roughness = CLOTH_SHEEN_ROUGHNESS
 		p_mesh.set_surface_override_material(i, m)

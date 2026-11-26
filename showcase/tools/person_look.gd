@@ -7,7 +7,7 @@ extends SceneTree
 ##       [--seconds=2] [--every=30] --out=<dir>
 ##   --mannequin=1: the mannequin's own mesh too (the person moved 1 m aside), to compare the poses.
 ##   --look=1: the eyes following a target circling before the face (with --view=face); --mood=happy[:weight]: an
-##   expression held (the built-in ones and "pain").
+##   expression held (the built-in ones and "pain"). --sheen=0: the clothes without their sheen (milestone 241).
 
 var _out := "user://person_look"
 var _person := "giulia"
@@ -53,6 +53,8 @@ func _init() -> void:
 			_hide = a.get_slice("=", 1)
 		elif a.begins_with("--hair="):
 			FellowPerson.hair_mode = int(a.get_slice("=", 1))
+		elif a == "--sheen=0":
+			FellowPerson.cloth_sheen = false
 		elif a.begins_with("--mood="):
 			_mood = a.get_slice("=", 1)
 		elif a.begins_with("--face="):

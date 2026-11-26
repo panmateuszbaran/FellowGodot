@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 241 — Sheen for cloth (2026-11-26)
+
+- Decision 0383. Materials get a sheen lobe (glTF's `KHR_materials_sheen`, Filament's cloth: the "Charlie"
+  distribution, Neubelt's visibility): `SHEEN` and `SHEEN_ROUGHNESS` in a shader's `fragment()`, BaseMaterial3D's
+  Sheen group (`sheen`, `sheen_color`, `sheen_roughness`). Velvet, wool and satin brighten at their rims and folds; the
+  base keeps the energy the sheen does not reflect (a white furnace is exact). Forward+; Mobile and Compatibility
+  compile it and ignore it. The showcase's suits and felt hats wear it.
+
 ## Milestone 240 — Glances (2026-11-26)
 
 - Decision 0382 (showcase). The people standing together glance at each other — mostly at the one talking, the head

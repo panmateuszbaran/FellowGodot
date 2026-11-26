@@ -160,6 +160,21 @@ half V_Kelemen(half LdotH) {
 	return saturateHalf(half(0.25) / (LdotH * LdotH + half(1e-4)));
 }
 
+#ifdef LIGHT_SHEEN_USED
+// FellowEngine sheen (decision 0383).
+float D_Charlie(float roughness, float NoH) {
+	// Estevez and Kulla 2017, "Production Friendly Microfacet Sheen BRDF"
+	float inv_alpha = 1.0 / (roughness * roughness);
+	float sin2h = max(1.0 - NoH * NoH, 0.0078125); // (2^-7: fp16-safe)
+	return (2.0 + inv_alpha) * pow(sin2h, inv_alpha * 0.5) / (2.0 * M_PI);
+}
+
+float V_Neubelt(float NoV, float NoL) {
+	// Neubelt and Pettineo 2013, "Crafting a Next-gen Material Pipeline for The Order: 1886"
+	return clamp(1.0 / (4.0 * (NoL + NoV - NoL * NoV)), 0.0, 1.0);
+}
+#endif
+
 hvec3 f0_Clear_Coat_To_Surface(hvec3 f0) {
 	// Approximation of iorTof0(f0ToIor(f0), 1.5)
 	// This assumes that the clear coat layer has an IOR of 1.5
@@ -273,6 +288,10 @@ void light_compute(hvec3 N, hvec3 L, hvec3 V, half A, hvec3 light_color, bool is
 
 	// We skip checking on attenuation on directional lights to avoid a branch that is not as beneficial for directional lights as the other ones.
 	if (is_directional || attenuation > HALF_FLT_MIN) {
+#ifdef LIGHT_SHEEN_USED
+		hvec3 fellow_sheen_diffuse0 = diffuse_light;
+		hvec3 fellow_sheen_specular0 = specular_light;
+#endif
 		half cNdotL = max(NdotL, half(0.0));
 #if defined(DIFFUSE_BURLEY) || defined(SPECULAR_SCHLICK_GGX) || defined(LIGHT_CLEARCOAT_USED)
 		hvec3 H = normalize(V + L);
@@ -368,6 +387,21 @@ void light_compute(hvec3 N, hvec3 L, hvec3 V, half A, hvec3 light_color, bool is
 			specular_light += specular_brdf_NL * light_color * attenuation * cc_attenuation * specular_amount;
 #endif
 		}
+
+#ifdef LIGHT_SHEEN_USED
+		{
+			// FellowEngine sheen (decision 0383): this light's base contribution scaled by what the sheen leaves it,
+			// the sheen's own lobe added.
+			diffuse_light = fellow_sheen_diffuse0 + (diffuse_light - fellow_sheen_diffuse0) * half(fellow_sheen_scaling);
+			specular_light = fellow_sheen_specular0 + (specular_light - fellow_sheen_specular0) * half(fellow_sheen_scaling);
+			vec3 Hs = normalize(vec3(V) + vec3(L));
+			float sNdotH = clamp(dot(vec3(N), Hs), 0.0, 1.0);
+			float sNdotL = float(cNdotL);
+			float sNdotV = clamp(float(dot(N, V)), 0.0001, 1.0);
+			float sheen_brdf_NL = D_Charlie(fellow_sheen_roughness, sNdotH) * V_Neubelt(sNdotV, sNdotL) * sNdotL;
+			specular_light += hvec3(fellow_sheen * sheen_brdf_NL) * light_color * attenuation * specular_amount;
+		}
+#endif
 
 #ifdef USE_SHADOW_TO_OPACITY
 		alpha = min(alpha, clamp(half(1.0 - attenuation), half(0.0), half(1.0)));

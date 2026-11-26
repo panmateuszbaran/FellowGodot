@@ -2217,6 +2217,8 @@ void main() {
 	float rim_tint = 0.0;
 	float clearcoat = 0.0;
 	float clearcoat_roughness = 0.0;
+	vec3 fellow_sheen = vec3(0.0); // (FellowEngine decision 0383: SHEEN, Forward+ only)
+	float fellow_sheen_roughness = 0.3;
 	float anisotropy = 0.0;
 	vec2 anisotropy_flow = vec2(1.0, 0.0);
 #ifdef PREMUL_ALPHA_USED

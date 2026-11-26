@@ -1725,6 +1725,17 @@ looks at it with the node on and off (milestone 199: and from the bell tower —
 `--timing=1` each view's GPU and CPU time over 120 frames, `--node`, `--env`, `--mat` and `--setting` a node's, the
 environment's, a material's or a project setting's value for the run).
 
+## Cloth sheen (milestone 241)
+
+A `BaseMaterial3D`'s **Sheen** group (decision 0383; Forward+): `sheen` on gives the surface a layer of fibres — velvet,
+wool, felt, satin — that reflects light grazing it back towards the viewer (glTF's `KHR_materials_sheen`, Filament's
+cloth: the "Charlie" distribution with Neubelt's visibility). `sheen_color` (0.5 grey) is its reflection's colour,
+`sheen_roughness` (0.5) how it spreads: low a narrow rim at grazing angles, high a broad glow. The base layer under it
+keeps the energy the sheen does not reflect (1 − max(colour) × the sheen's directional albedo, from Godot's DFG table),
+under every light and the ambient light. A `ShaderMaterial` writes `SHEEN` (vec3) and `SHEEN_ROUGHNESS` (float) in its
+`fragment()`. Mobile and Compatibility take the built-ins and ignore them; a material that does not write them compiles
+as before.
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

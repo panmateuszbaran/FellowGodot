@@ -1221,6 +1221,15 @@ layout(location = 2) out vec2 motion_vector;
 
 #include "../scene_forward_aa_inc.glsl"
 
+#ifdef LIGHT_SHEEN_USED
+// FellowEngine sheen (decision 0383): written by the material (SHEEN, SHEEN_ROUGHNESS), read by light_compute(); declared in every pass (the
+// material writes them in the depth passes too).
+vec3 fellow_sheen = vec3(0.0);
+float fellow_sheen_roughness = 0.3;
+float fellow_sheen_scaling = 1.0; // what the base layer keeps: 1 - max(sheen) * the sheen's directional albedo
+vec3 fellow_sheen_irradiance = vec3(0.0); // the ambient light reaching the sheen (occluded, not yet tinted by the albedo)
+#endif
+
 #if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
 
 // Default to SPECULAR_SCHLICK_GGX.
@@ -3164,6 +3173,9 @@ void fragment_shader(in SceneData scene_data) {
 		indirect_specular_light *= specular_occlusion;
 #endif // BENT_NORMAL_MAP_USED
 #endif // SPECULAR_OCCLUSION_DISABLED
+#ifdef LIGHT_SHEEN_USED
+		fellow_sheen_irradiance = ambient_light;
+#endif
 		ambient_light *= albedo.rgb;
 
 		if (bool(implementation_data.ss_effects_flags & SCREEN_SPACE_EFFECTS_FLAGS_USE_SSIL)) {
@@ -3234,6 +3246,15 @@ void fragment_shader(in SceneData scene_data) {
 	f0 = mix(f0, f0_Clear_Coat_To_Surface(f0), clearcoat);
 #endif
 
+#ifdef LIGHT_SHEEN_USED
+	// FellowEngine sheen (decision 0383): the fibres' lobe over the base (Estevez and Kulla's distribution, its
+	// directional albedo the DFG table's third channel); the base keeps what the sheen does not reflect.
+	fellow_sheen = max(fellow_sheen, vec3(0.0));
+	fellow_sheen_roughness = clamp(fellow_sheen_roughness, 0.07, 1.0);
+	float fellow_sheen_dfg = prefiltered_dfg(fellow_sheen_roughness, clamp(dot(normal, view), 0.0001, 1.0)).z;
+	fellow_sheen_scaling = 1.0 - max(fellow_sheen.r, max(fellow_sheen.g, fellow_sheen.b)) * fellow_sheen_dfg;
+#endif
+
 #ifndef AMBIENT_LIGHT_DISABLED
 	{
 #if defined(DIFFUSE_TOON)
@@ -3264,6 +3285,12 @@ void fragment_shader(in SceneData scene_data) {
 		// Clearcoat Layer
 		// We don't need DFG for clearcoat, so we can use the fresnel directly.
 		indirect_specular_light += cc_specular_light * F;
+#endif
+
+#ifdef LIGHT_SHEEN_USED
+		// (the sheen's lobe is broad: lit by the ambient irradiance, not the reflection)
+		indirect_specular_light = indirect_specular_light * fellow_sheen_scaling + fellow_sheen * fellow_sheen_dfg * fellow_sheen_irradiance;
+		ambient_light *= fellow_sheen_scaling;
 #endif
 
 #endif // DIFFUSE_TOON

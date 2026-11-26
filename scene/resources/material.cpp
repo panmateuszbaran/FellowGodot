@@ -596,6 +596,8 @@ void BaseMaterial3D::init_shaders() {
 	shader_names->wind_bend = "wind_bend";
 	shader_names->wind_flutter = "wind_flutter";
 	shader_names->wind_sheen = "wind_sheen";
+	shader_names->sheen_color = "sheen_color";
+	shader_names->sheen_roughness = "sheen_roughness";
 
 	shader_names->ao_light_affect = "ao_light_affect";
 
@@ -957,6 +959,11 @@ uniform sampler2D texture_albedo : source_color, %s;
 		code += "uniform float wind_bend : hint_range(0.0, 4.0, 0.01);\n";
 		code += "uniform float wind_flutter : hint_range(0.0, 4.0, 0.01);\n";
 		code += "uniform float wind_sheen : hint_range(0.0, 2.0, 0.01);\n";
+	}
+
+	if (sheen_enabled) {
+		code += "uniform vec4 sheen_color : source_color;\n";
+		code += "uniform float sheen_roughness : hint_range(0.0, 1.0, 0.01);\n";
 	}
 
 	if (proximity_fade_enabled) {
@@ -1915,6 +1922,14 @@ void fragment() {)";
 )";
 	}
 
+	if (sheen_enabled) {
+		code += R"(
+	// Sheen: Enabled (FellowEngine: a cloth's fibres; Forward+ only)
+	SHEEN = sheen_color.rgb;
+	SHEEN_ROUGHNESS = sheen_roughness;
+)";
+	}
+
 	if (features[FEATURE_ANISOTROPY]) {
 		code += R"(
 	// Anisotropy: Enabled
@@ -2590,6 +2605,10 @@ void BaseMaterial3D::_validate_property(PropertyInfo &p_property) const {
 			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 		}
 
+		if ((p_property.name == "sheen_color" || p_property.name == "sheen_roughness") && !sheen_enabled) {
+			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		}
+
 		if (p_property.name == "point_size" && !flags[FLAG_USE_POINT_SIZE]) {
 			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 		}
@@ -2991,6 +3010,34 @@ void BaseMaterial3D::set_wind_sheen(float p_sheen) {
 
 float BaseMaterial3D::get_wind_sheen() const {
 	return wind_sheen;
+}
+
+void BaseMaterial3D::set_sheen_enabled(bool p_enable) {
+	sheen_enabled = p_enable;
+	_queue_shader_change();
+	notify_property_list_changed();
+}
+
+bool BaseMaterial3D::is_sheen_enabled() const {
+	return sheen_enabled;
+}
+
+void BaseMaterial3D::set_sheen_color(const Color &p_color) {
+	sheen_color = p_color;
+	_material_set_param(shader_names->sheen_color, sheen_color);
+}
+
+Color BaseMaterial3D::get_sheen_color() const {
+	return sheen_color;
+}
+
+void BaseMaterial3D::set_sheen_roughness(float p_roughness) {
+	sheen_roughness = CLAMP(p_roughness, 0.0f, 1.0f);
+	_material_set_param(shader_names->sheen_roughness, sheen_roughness);
+}
+
+float BaseMaterial3D::get_sheen_roughness() const {
+	return sheen_roughness;
 }
 
 static Vector4 _get_texture_mask(BaseMaterial3D::TextureChannel p_channel) {
@@ -3583,6 +3630,13 @@ void BaseMaterial3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_wind_sheen", "sheen"), &BaseMaterial3D::set_wind_sheen);
 	ClassDB::bind_method(D_METHOD("get_wind_sheen"), &BaseMaterial3D::get_wind_sheen);
 
+	ClassDB::bind_method(D_METHOD("set_sheen_enabled", "enable"), &BaseMaterial3D::set_sheen_enabled);
+	ClassDB::bind_method(D_METHOD("is_sheen_enabled"), &BaseMaterial3D::is_sheen_enabled);
+	ClassDB::bind_method(D_METHOD("set_sheen_color", "color"), &BaseMaterial3D::set_sheen_color);
+	ClassDB::bind_method(D_METHOD("get_sheen_color"), &BaseMaterial3D::get_sheen_color);
+	ClassDB::bind_method(D_METHOD("set_sheen_roughness", "roughness"), &BaseMaterial3D::set_sheen_roughness);
+	ClassDB::bind_method(D_METHOD("get_sheen_roughness"), &BaseMaterial3D::get_sheen_roughness);
+
 	ClassDB::bind_method(D_METHOD("set_metallic_texture_channel", "channel"), &BaseMaterial3D::set_metallic_texture_channel);
 	ClassDB::bind_method(D_METHOD("get_metallic_texture_channel"), &BaseMaterial3D::get_metallic_texture_channel);
 
@@ -3811,6 +3865,11 @@ void BaseMaterial3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_bend", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_wind_bend", "get_wind_bend");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_flutter", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_wind_flutter", "get_wind_flutter");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_sheen", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_wind_sheen", "get_wind_sheen");
+
+	ADD_GROUP("Sheen", "sheen_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sheen", PROPERTY_HINT_GROUP_ENABLE), "set_sheen_enabled", "is_sheen_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "sheen_color", PROPERTY_HINT_COLOR_NO_ALPHA), "set_sheen_color", "get_sheen_color");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sheen_roughness", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_sheen_roughness", "get_sheen_roughness");
 
 	ADD_GROUP("Transform", "");
 	ADD_PROPERTYI(PropertyInfo(Variant::BOOL, "fixed_size"), "set_flag", "get_flag", FLAG_FIXED_SIZE);
@@ -4056,6 +4115,8 @@ BaseMaterial3D::BaseMaterial3D(bool p_orm) :
 	set_wind_bend(0.3);
 	set_wind_flutter(0.0);
 	set_wind_sheen(0.0);
+	set_sheen_color(Color(0.5, 0.5, 0.5));
+	set_sheen_roughness(0.5);
 
 	set_msdf_pixel_range(4.0);
 	set_msdf_outline_size(0.0);

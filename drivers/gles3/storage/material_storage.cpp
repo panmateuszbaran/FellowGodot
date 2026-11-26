@@ -1317,6 +1317,8 @@ MaterialStorage::MaterialStorage() {
 		actions.renames["RIM_TINT"] = "rim_tint";
 		actions.renames["CLEARCOAT"] = "clearcoat";
 		actions.renames["CLEARCOAT_ROUGHNESS"] = "clearcoat_roughness";
+		actions.renames["SHEEN"] = "fellow_sheen"; // (FellowEngine decision 0383: Forward+ only, ignored here)
+		actions.renames["SHEEN_ROUGHNESS"] = "fellow_sheen_roughness";
 		actions.renames["ANISOTROPY"] = "anisotropy";
 		actions.renames["ANISOTROPY_FLOW"] = "anisotropy_flow";
 		actions.renames["SSS_STRENGTH"] = "sss_strength";
