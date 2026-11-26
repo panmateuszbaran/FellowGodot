@@ -639,14 +639,17 @@ func _candle(p_at: Vector3, p_energy: float) -> void:
 	flame.position = p_at + Vector3(0, 0.165, 0)
 	flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_rn.add_child(flame)
-	var light := OmniLight3D.new()
-	light.light_color = Color(1.0, 0.66, 0.34)
-	light.light_energy = 0.45 * p_energy
-	light.omni_range = 2.6
-	light.omni_attenuation = 1.6
-	light.position = p_at + Vector3(0, 0.22, 0)
-	_rn.add_child(light)
-	_candles.append([light, light.light_energy, randf() * 10.0, flame])
+	var light: OmniLight3D = null
+	if p_energy > 0.0:
+		# (a light of its own; the chandelier's candles share one)
+		light = OmniLight3D.new()
+		light.light_color = Color(1.0, 0.66, 0.34)
+		light.light_energy = 0.45 * p_energy
+		light.omni_range = 2.6
+		light.omni_attenuation = 1.6
+		light.position = p_at + Vector3(0, 0.22, 0)
+		_rn.add_child(light)
+	_candles.append([light, light.light_energy if light else 0.0, randf() * 10.0, flame])
 
 
 # ------------------------------------------------------------------ the chandelier, the hams
@@ -713,7 +716,8 @@ func _process(delta: float) -> void:
 		var l: OmniLight3D = c[0]
 		var ph: float = c[2]
 		var f := 0.88 + 0.08 * sin(_t * 9.1 + ph) + 0.05 * sin(_t * 23.7 + ph * 1.7) + 0.03 * sin(_t * 3.3 + ph * 0.6)
-		l.light_energy = float(c[1]) * f if float(c[1]) > 0.0 else 0.0
+		if l:
+			l.light_energy = float(c[1]) * f
 		if c[3]:
 			(c[3] as Node3D).scale = Vector3(1, 0.85 + 0.25 * f, 1)
 

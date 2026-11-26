@@ -26,7 +26,7 @@ extends SceneTree
 ##   godot ... -s res://tools/climb_look.gd -- --program=osteria --view=door|inside|walkin --out=<dir> ...   (milestone
 ##       213: CasaRosa's osteria — from the square through its arch, inside, or the player walking in; its state
 ##       printed)
-## --drop=<node>,...: the scene's top-level nodes left out (an A/B).
+## --drop=<node>,...: the scene's top-level nodes left out (an A/B). --setting=<project setting>:<value> for this run.
 ##   godot ... -s res://tools/climb_look.gd -- --program=talk [--talk_to=<group>] --out=<dir> [--seconds=10] ...
 ##       (milestone 212: the player walks up to one of a group and talks — E at 1.4 s, then every 2.6 s — the camera over
 ##       the player's shoulder; the crowd's social counts printed)
@@ -103,6 +103,12 @@ func _init() -> void:
 			_people_side = float(a.get_slice("=", 1))
 		elif a.begins_with("--hay_from="):
 			_hay_from = float(a.get_slice("=", 1))
+		elif a.begins_with("--setting="):
+			# (a project setting for this run: --setting=rendering/fellow/...:value)
+			var kv := a.get_slice("=", 1)
+			var key := kv.get_slice(":", 0)
+			var val := kv.get_slice(":", 1)
+			ProjectSettings.set_setting(key, (val == "true") if val in ["true", "false"] else float(val))
 		elif a == "--draw_all=1":
 			_draw_all = true
 		elif a.begins_with("--drop="):
