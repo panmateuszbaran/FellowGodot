@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 220 — The gas volumes' steps recorded together (2026-11-26)
+
+- Decision 0362. `rendering/fellow/fluid/gas_batch_steps` (on, exact): the gas volumes' steps of a physics frame are
+  queued and recorded together, the k-th pass of every volume in one compute list — the rooftops' five volumes give the
+  render graph about 80 compute lists a frame instead of 385; on a slow CPU 0.2 ms a frame less, on the RTX laptop no
+  difference measurable.
+
 ## Milestone 219 — The brazier's shadow a dual paraboloid's (2026-11-26)
 
 - Decision 0361. The rooftops brazier's fire light casts a dual paraboloid shadow (two renders a frame instead of a

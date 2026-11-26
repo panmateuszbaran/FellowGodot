@@ -1630,6 +1630,9 @@ effects and the materials its nodes make from code too (they are made when the e
 codes with `FellowBakeShaders::register_provider()`, `servers/rendering/fellow_bake_shaders.h`). `fluid/gas_mg_fine_sweeps` (2): the gas multigrid's sweeps before
 and after the finest level's correction (1 halves that level's smoothing, not exact: on the RTX the slice's pressure
 solve 0.65 → 0.57 ms, its residual 20 times larger; milestone 61).
+`fluid/gas_batch_steps` (on, exact; milestone 220, decision 0362): the gas volumes' steps of a physics frame queued
+and recorded together, the k-th pass of every volume in one compute list (not while `fluid/gas_profile_passes` times
+them; off: each pass its own compute list).
 
 Milestone 63 (decision 0171), **recorded pipelines**: `rendering/fellow/pipelines/record` (off) writes the pipelines
 the scene shaders (Forward+) compile while the game runs — each under a hash of its material shader's code, its key's
