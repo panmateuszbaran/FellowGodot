@@ -832,6 +832,8 @@ Milestone 223 (decision 0365): the clouds' light per weather (`rooftops_weather.
 0.85 a storm, 0 snow, 0.2 a blizzard; tools: `--weather_sky_dim=<share>`).
 Milestone 224 (decision 0366): less sun under a closed deck (`rooftops_weather.gd`: `SUN` 0.02 overcast and snow, 0.015
 rain, 0.01 a storm and a blizzard; `DARKER` with them; tools: `--weather_sun=<key>:<share>,...`).
+Milestone 225 (decision 0367): breath in the cold (`rooftops_crowd.gd`: `BREATH_NEAR` 22 m under `COLD`; tools:
+`--breath=0`).
 
 ## Vehicles' marks, smoke and sounds (milestone 79)
 

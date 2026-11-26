@@ -9,6 +9,11 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 225 — Breath in the cold (2026-11-26)
+
+- Decision 0367. In the rooftops' snow and blizzard everyone near the camera, and the player, breathes out a puff of
+  mist every few seconds, each at its own pace, left in the air as they walk on; up to 0.1 ms on the RTX laptop.
+
 ## Milestone 224 — Less sun under a closed deck (2026-11-26)
 
 - Decision 0366. Under the rooftops' overcast and snow the houses take 2 % of the sun (5 % before; rain 1.5 %, a storm
