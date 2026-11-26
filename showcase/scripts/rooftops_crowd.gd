@@ -1202,7 +1202,8 @@ func _walkers_home() -> void:
 
 
 ## Milestone 227: a FellowSnowTracker3D under each foot (FellowEngine's snow tracks, decision 0130: a print where a
-## foot stands, a groove where it drags) — the square's snow trodden where its people walk and stand.
+## foot stands, a groove where it drags) — the square's snow trodden through to the cobbles where its people walk and
+## stand.
 func _foot_trackers(p_skel: Skeleton3D) -> void:
 	if p_skel == null or not ClassDB.class_exists(&"FellowSnowTracker3D"):
 		return
@@ -1216,6 +1217,9 @@ func _foot_trackers(p_skel: Skeleton3D) -> void:
 		var tr: Node3D = ClassDB.instantiate(&"FellowSnowTracker3D")
 		tr.set("radius", 0.06)
 		tr.set("contact_height", 0.14)
+		# (down to the cobbles: the snow's 8 cm trodden through where people walk — at 0.8 of it, decision 0130's
+		# default, the dents were hardly seen under the snow's flat light)
+		tr.set("depth", 0.1)
 		at.add_child(tr)
 
 
