@@ -111,8 +111,8 @@ func _init() -> void:
 			var key := kv.get_slice(":", 0)
 			var val := kv.get_slice(":", 1)
 			ProjectSettings.set_setting(key, (val == "true") if val in ["true", "false"] else float(val))
-		elif a == "--omni_dp=1":
-			_omni_dp = true
+		elif a.begins_with("--omni_dp="):
+			_omni_dp = a.get_slice("=", 1)
 		elif a.begins_with("--env_set="):
 			_env_set = a.get_slice("=", 1).split(",")
 		elif a == "--perf=1":
@@ -184,14 +184,15 @@ func _init() -> void:
 	_skel = _player.get_node("Model/Mannequin/Skeleton3D")
 	_skel.skeleton_updated.connect(_on_posed)
 	await process_frame
-	if _omni_dp:
-		# (milestone 219: every shadowed omni light — the fire lights of the gas volumes too — dual paraboloid)
-		for l in sc.find_children("*", "OmniLight3D", true, false):
-			(l as OmniLight3D).omni_shadow_mode = OmniLight3D.SHADOW_DUAL_PARABOLOID
+	if _omni_dp != "":
+		# (milestone 219: the shadowed omni lights dual paraboloid — all, the gas volumes' fire lights or the others)
+		if _omni_dp in ["all", "lamps"]:
+			for l in sc.find_children("*", "OmniLight3D", true, false):
+				(l as OmniLight3D).omni_shadow_mode = OmniLight3D.SHADOW_DUAL_PARABOLOID
 		for g in sc.find_children("*", "FellowGasVolume3D", true, false):
 			var fl := g.call("get_fire_light_node") as OmniLight3D
 			if fl:
-				fl.omni_shadow_mode = OmniLight3D.SHADOW_DUAL_PARABOLOID
+				fl.omni_shadow_mode = OmniLight3D.SHADOW_DUAL_PARABOLOID if _omni_dp in ["all", "fire"] else OmniLight3D.SHADOW_CUBE
 	if _cam_mode != "demo":
 		_cam = Camera3D.new()
 		_cam.fov = 50.0
@@ -539,7 +540,7 @@ var _osteria: Node3D # milestone 213
 var _talk_at := Vector3()
 var _drop: PackedStringArray = []
 var _env_set: PackedStringArray = [] # --env_set=name:value,...: the WorldEnvironment's Environment's properties
-var _omni_dp := false # --omni_dp=1 (milestone 219): every shadowed omni light dual paraboloid (an A/B)
+var _omni_dp := "" # --omni_dp=all|fire|lamps (milestone 219): shadowed omni lights dual paraboloid (an A/B)
 var _perf := false # --perf=1: every frame drawn, none saved, vsync off; the GPU's and the CPU's time a frame printed
 ## --passes=1 (milestone 217): --perf and the GPU's time in each of the engine's passes (its RENDER_TIMESTAMP markers, with
 ## --setting=rendering/fellow/profiling/pass_timestamps:true — they fence the passes: the frame's total is not --perf's).
