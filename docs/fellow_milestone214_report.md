@@ -1,7 +1,7 @@
 # FellowEngine — milestone 214 report (the overcast weather's light)
 
 Status: **FINAL** (2026-11-26). Branch `fellow/geometry`. GPU: the RTX filmed the square in each weather before and
-after (jobs f601-f609). Decision 0356.
+after (jobs f601-f609), the main showcase's valley (f615). Decision 0356.
 
 ## 0. Result
 
@@ -20,6 +20,11 @@ picture:
   the fair evening's as it was): an overcast sky a stop darker than the fair evening, a storm a stop and a quarter.
 
 ![The square in each weather, before and after](showcase/overcast_m214.jpg)
+
+The main showcase's valley too (no SDFGI there: the overcast sky's light alone) — its near ground had gone black in a
+storm:
+
+![The valley in a storm and in the snow, before and after](showcase/main_overcast_m214.jpg)
 
 ## 1. Open
 

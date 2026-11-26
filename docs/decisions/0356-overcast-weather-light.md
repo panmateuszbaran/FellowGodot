@@ -74,6 +74,11 @@ SDFGI under the weather 5.1 (the weather's 12 % sun still sharp), with less sun 
 | adapting 0.6 (f608) | 0.1 | 0.1 | −0.1 | −0.2 | 0.1 | 0.1 | 3.6 |
 | **adapting 0.4 (f609)** | 0.2 | 0.9 | 1.1 | 1.2 | 0.7 | 0.8 | — |
 
+* **The main showcase** (its valley at 10:30, no SDFGI: the overcast sky's light and the air; job f615, the last frame of
+  5 s, the frame's mean sRGB and its lower half's — the near ground): clear weather identical (121.5, 126.7, 95.0
+  both); overcast 62, 63, 49 → 80, 82, 62 (the ground 36, 37, 19 → 64, 66, 39); a storm 36, 37, 34 → 50, 52, 43 (the
+  ground 15, 15, 8 → 37, 38, 23: it had been black); snow 64, 65, 61 → 93, 95, 87 (the ground 43, 44, 37 → 86, 89, 75):
+  the clear sky's light, greyed, had lit the ground from the horizon; the overcast sky's comes from above.
 * `clouds/sky_light` 0 (the overcast light off) under the snow: the ground (140, 138, 147) bluer than with it (151, 143,
   137): the clear golden-hour sky's blue in the shade.
 * The regression suite (lavapipe): 39 of its 40 scenes identical; ledge_corners differed already (the climber's legs at
