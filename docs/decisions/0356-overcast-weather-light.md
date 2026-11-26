@@ -2,6 +2,7 @@
 
 Status: **KEEP** · Branch `fellow/geometry` · Code: `servers/rendering/renderer_rd/environment/gi.cpp` (SDFGI's and
 VoxelGI's sun), `servers/rendering/renderer_rd/effects/fellow_weather.h` (`indirect_light_factor()`),
+`tools/fellow_regression` (`base/weather_gi`, new);
 `servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.{h,cpp}` (`_fellow_process_cloud_shadow`:
 `fellow_weather_overcast`; `_fellow_update_atmosphere`: the aerial perspective's sun); `showcase/shaders/atmosphere_sky.gdshader`
 (the overcast sky's light), `showcase/project.godot` (the global), `showcase/scripts/rooftops_weather.gd` (the sky's
@@ -76,8 +77,10 @@ SDFGI under the weather 5.1 (the weather's 12 % sun still sharp), with less sun 
 * `clouds/sky_light` 0 (the overcast light off) under the snow: the ground (140, 138, 147) bluer than with it (151, 143,
   137): the clear golden-hour sky's blue in the shade.
 * The regression suite (lavapipe): 39 of its 40 scenes identical; ledge_corners differed already (the climber's legs at
-  the corner since milestones 198-208, blessed again); none of its scenes has SDFGI, VoxelGI or the shader global. The
-  demo's path unchanged (0.1 mm over 60 s). The overcast light costs nothing while the coverage holds (the radiance map
+  the corner since milestones 198-208, blessed again); none of its scenes had SDFGI under a weather — a new one,
+  `base/weather_gi` (two walls and a red block in SDFGI's light, a FellowWeather3D overcast on the sun only): with
+  `indirect_light_factor()` returning 1 (the bug put back, a check) 10.4 % of its pixels differ from its golden by more
+  than 8 levels (at most 30: the walls lit by the fair day's bounce). The demo's path unchanged (0.1 mm over 60 s). The overcast light costs nothing while the coverage holds (the radiance map
   is redrawn only as it changes by a hundredth).
 
 ## Decision

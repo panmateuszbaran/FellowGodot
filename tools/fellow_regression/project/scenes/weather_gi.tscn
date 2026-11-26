@@ -1,0 +1,63 @@
+[gd_scene format=3]
+
+[sub_resource type="PlaneMesh" id="Ground"]
+size = Vector2(16, 16)
+
+[sub_resource type="BoxMesh" id="Wall"]
+size = Vector3(6, 3, 0.3)
+
+[sub_resource type="BoxMesh" id="Side"]
+size = Vector3(0.3, 3, 4)
+
+[sub_resource type="StandardMaterial3D" id="Red"]
+albedo_color = Color(0.8, 0.15, 0.1, 1)
+
+[sub_resource type="BoxMesh" id="Block"]
+material = SubResource("Red")
+size = Vector3(1.2, 1.2, 1.2)
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky")
+tonemap_mode = 2
+sdfgi_enabled = true
+sdfgi_cascades = 2
+sdfgi_min_cell_size = 0.2
+
+[node name="WeatherGI" type="Node3D"]
+
+[node name="Env" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 2.2, 7)
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("Ground")
+
+[node name="Wall" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -1.5)
+mesh = SubResource("Wall")
+
+[node name="Side" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 1.5, 0.5)
+mesh = SubResource("Side")
+
+[node name="Block" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.94, 0, 0.342, 0, 1, 0, -0.342, 0, 0.94, -1.2, 0.6, 0.2)
+mesh = SubResource("Block")
+
+[node name="Weather" type="FellowWeather3D" parent="."]
+weather = 2
+transition_time = 0.0
+controls = 32
+sun_path = NodePath("../Sun")

@@ -40,7 +40,8 @@
     "stress",
     "hair",
     "interiors",
-    "weathering"
+    "weathering",
+    "weather_gi"
    ]
   },
   "stock": {

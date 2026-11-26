@@ -27,4 +27,4 @@ picture:
   own sun the weather keys dim for the clouds' sake).
 * A sky shader that does not read `fellow_weather_overcast` keeps the clear sky's light (decision 0133's greying on the
   surfaces that take the radiance map themselves).
-* The regression suite has no scene with SDFGI or VoxelGI under a weather.
+* VoxelGI under a weather is not in the regression suite (its new scene `base/weather_gi` is SDFGI's).
