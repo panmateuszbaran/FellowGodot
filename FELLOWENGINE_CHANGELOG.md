@@ -9,6 +9,11 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 230 — The osteria's floor no longer flickers (2026-11-26)
+
+- Decision 0372. The rooftops osteria's floor drawn 6 mm over the raised pavement's slab that runs on under the house at
+  its height (the two coplanar: the floor flickered with the pavement's flags).
+
 ## Milestone 229 — The stall keepers go home at night (2026-11-26)
 
 - Decision 0371. At night the rooftops' stall keepers close up and go home (in the rain they still huddle under their
