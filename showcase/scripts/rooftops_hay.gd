@@ -217,15 +217,16 @@ func _straw_colour() -> Color:
 func _straw_material() -> ShaderMaterial:
 	var sh := Shader.new()
 	sh.code = """shader_type spatial;
-render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
+render_mode cull_disabled, diffuse_burley, specular_schlick_ggx, fellow_wind;
 varying vec4 straw;
 varying float along;
 void vertex() {
 	straw = INSTANCE_CUSTOM;
 	along = UV.y;
-	// Milestone 215: the scene's wind (FellowEngine's, decision 0125: a FellowWind3D's gusts) stirs the straws — those
-	// standing out of the heap or hanging over its boards (upright, up or down) most, those lying in it hardly (held by
-	// the others). Each straw a stem of its own length (the blade is 1 m along +Y, scaled), swaying from its foot.
+	// Milestone 215: the scene's wind (FellowEngine's, decision 0125, render_mode fellow_wind: a FellowWind3D's gusts)
+	// stirs the straws — those standing out of the heap or hanging over its boards (upright, up or down) most, those
+	// lying in it hardly (held by the others). Each straw a stem of its own length (the blade is 1 m along +Y, scaled),
+	// swaying from its foot.
 	float upright = abs(normalize(MODEL_MATRIX[1].xyz).y);
 	WIND_HEIGHT = 1.0;
 	WIND_BEND = mix(0.04, 0.6, upright * upright);

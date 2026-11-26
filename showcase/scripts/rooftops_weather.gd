@@ -35,10 +35,10 @@ const SUN := [-1.0, -1.0, 0.05, 0.03, 0.015, 0.05, 0.02]
 const CYCLE := [1, 2, 4, 5, 4, 3, 1, 6, 7, 6, 1] # (keys) fair, cloudy, rain, a storm, rain, overcast, fair, snow...
 const LAMPS_DARK := 2.4
 ## (milestone 214) How many stops darker the square is under each weather than in the fair one (keys 1-7: the RTX's
-## frames from the square's corner, their mean luminance under the sky; the blizzard's between the snow's and the
-## storm's), and the share of that the eye makes up for (a storm still darker than a fair evening).
-const DARKER := [0.0, 0.27, 1.44, 2.74, 3.22, 1.3, 2.2]
-const EXPOSURE_ADAPT := 0.55
+## frames from the square's corner, their mean luminance under the sky, the eye not adapting), and the share of that the
+## eye makes up for (a storm still darker than a fair evening).
+const DARKER := [0.0, 0.27, 2.42, 3.51, 3.91, 1.85, 2.12]
+const EXPOSURE_ADAPT := 0.6
 var _adapt := EXPOSURE_ADAPT # (tools: --weather_adapt=<share>, 0 the frames' own darkness measured)
 ## (milestone 216) The eye under the moon (rooftops_night.gd): this many stops more (its light 5 stops under the
 ## sun's, the sky's more: the night darker than the evening, the lamps and the windows bright in it).

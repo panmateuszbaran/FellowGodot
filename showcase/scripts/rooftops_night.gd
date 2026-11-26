@@ -17,9 +17,9 @@ const MOON_COLOR := Color(0.62, 0.72, 1.0)
 const MOON_SIZE := 1.2 # degrees across (the disk drawn and the shadows' softness)
 ## The moon's light on the square (the sun's 4), the share of it the sky and the clouds are lit by (their sun's), the
 ## sky's intensity under it (its stars show where it is dark). Tools: --night_set=moon:<e>,sky_share:<s>,sky:<i>.
-var moon_energy := 0.12
-var moon_sky_share := 0.3
-var sky_night := 0.08
+var moon_energy := 0.15
+var moon_sky_share := 0.1
+var sky_night := 0.12
 const SUNSET_COLOR := Color(1.0, 0.52, 0.3) # the sun's light at the horizon
 const WINDOW_LAMPS := 0.55 # the share of the rooms with a lamp on at night
 const WINDOW_DAYLIGHT := 0.05 # the moonlight through the windows
@@ -37,6 +37,8 @@ var _sun_color := Color(1, 1, 1)
 var _sun_size := 2.5
 var _sky_mat: ShaderMaterial
 var _sky_intensity := 1.0
+var _disk := -1.0 # the sky's sun_disk_energy by day
+const MOON_DISK := 0.1 # the moon's disk this much of the sun's (its glow at night's exposure)
 var _glass: Resource
 var _glass_lamps := 0.0
 var _glass_daylight := 1.0
@@ -86,8 +88,7 @@ func _ready() -> void:
 						moon_sky_share = v
 					"sky":
 						sky_night = v
-	if _t > 0.0:
-		_apply()
+	# (applied from the first frame: rooftops.gd sets the sky's disk after this node is ready)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -162,7 +163,12 @@ func _apply() -> void:
 		_sun.light_color = color
 	var night := get_night()
 	if _sky_mat:
-		_sky_mat.set_shader_parameter("intensity", lerpf(_sky_intensity, _sky_intensity * sky_night, smoothstep(SUNSET_SHARE, 1.0, _t)))
+		var moon := smoothstep(SUNSET_SHARE, 1.0, _t)
+		_sky_mat.set_shader_parameter("intensity", lerpf(_sky_intensity, _sky_intensity * sky_night, moon))
+		if _disk < 0.0:
+			var v: Variant = _sky_mat.get_shader_parameter("sun_disk_energy")
+			_disk = float(v) if v != null else 1.0
+		_sky_mat.set_shader_parameter("sun_disk_energy", _disk * (MOON_DISK if _t > SUNSET_SHARE else 1.0))
 	if _glass:
 		_glass.set("lamp_share", lerpf(_glass_lamps, WINDOW_LAMPS, night))
 		_glass.set("daylight", lerpf(_glass_daylight, WINDOW_DAYLIGHT, night))
