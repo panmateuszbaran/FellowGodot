@@ -135,6 +135,9 @@ var _inertia: Node = null
 const LEDGE_GRIP := 1.0
 
 
+const PLAYER_PERSON := "res://people/luca.glb" # (milestone 233)
+
+
 func _ready() -> void:
 	_ensure_actions()
 	_camera = get_node_or_null(camera_path)
@@ -166,6 +169,10 @@ func _ready() -> void:
 	_last_pos = global_position
 	traversal.connect("climb_jumped", func(_d): _play("climb_jump"))
 	traversal.connect("hang_transfer_started", _on_transfer)
+	# Milestone 233: the player a person (FellowPerson over the mannequin, at the mannequin's height so that the hands
+	# and feet land where the traversal puts them); --player_person=0: the mannequin.
+	if not "--player_person=0" in OS.get_cmdline_user_args() and ResourceLoader.exists(PLAYER_PERSON):
+		FellowPerson.dress(get_node("Model") as Node3D, load(PLAYER_PERSON) as PackedScene, null, true)
 
 
 ## Milestone 192: Mixamo's motion-captured clips (tools/build_mocap_clips.gd's library, not in the repository: Mixamo's

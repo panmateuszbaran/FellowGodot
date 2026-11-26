@@ -1,5 +1,5 @@
 {
- "comment": "The rooftops square's people (milestone 232), for make_characters.py: MakeHuman's macros (gender 0 female - 1 male; age 0.5 = 25 years, 0.875 = 70; the rest 0-1, 0.5 average) and the system assets pack's skins, eyes, eyebrows, eyelashes, hair and clothes (CC0).",
+ "comment": "The rooftops square's people (milestone 232) and the player, luca (milestone 233), for make_characters.py: MakeHuman's macros (gender 0 female - 1 male; age 0.5 = 25 years, 0.875 = 70; the rest 0-1, 0.5 average) and the system assets pack's skins, eyes, eyebrows, eyelashes, hair and clothes (CC0).",
  "people": [
   {"name": "giulia", "gender": 0.0, "age": 0.5, "muscle": 0.5, "weight": 0.45, "height": 0.45, "proportions": 0.6, "african": 0.05, "asian": 0.0, "caucasian": 0.95,
    "skin": "young_caucasian_female", "eyebrows": "eyebrow010", "eyelashes": "eyelashes02", "hair": "ponytail01", "clothes": ["female_casualsuit02", "shoes02"]},
@@ -12,6 +12,8 @@
   {"name": "amara", "gender": 0.0, "age": 0.55, "muscle": 0.55, "weight": 0.5, "height": 0.6, "proportions": 0.55, "african": 0.9, "asian": 0.0, "caucasian": 0.1,
    "skin": "young_african_female", "eyebrows": "eyebrow009", "eyelashes": "eyelashes03", "hair": "afro01", "clothes": ["female_sportsuit01", "shoes06"]},
   {"name": "kenji", "gender": 1.0, "age": 0.62, "muscle": 0.5, "weight": 0.45, "height": 0.45, "proportions": 0.55, "african": 0.0, "asian": 0.95, "caucasian": 0.05,
-   "skin": "middleage_asian_male", "eyebrows": "eyebrow002", "eyelashes": "eyelashes01", "hair": "short01", "clothes": ["male_elegantsuit01", "shoes04"]}
+   "skin": "middleage_asian_male", "eyebrows": "eyebrow002", "eyelashes": "eyelashes01", "hair": "short01", "clothes": ["male_elegantsuit01", "shoes04"]},
+  {"name": "luca", "gender": 1.0, "age": 0.52, "muscle": 0.72, "weight": 0.42, "height": 0.6, "proportions": 0.7, "african": 0.0, "asian": 0.0, "caucasian": 1.0,
+   "skin": "young_caucasian_male2", "eyebrows": "eyebrow004", "eyelashes": "eyelashes01", "hair": "short03", "clothes": ["male_casualsuit06", "shoes01"]}
  ]
 }

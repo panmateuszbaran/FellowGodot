@@ -12,7 +12,9 @@ const SKIN_SSS := 0.35
 const ALPHA_CUT := 0.45
 
 
-static func dress(p_npc: Node3D, p_person: PackedScene, p_rng: RandomNumberGenerator = null) -> Node3D:
+## p_match_height: the person scaled so that its hips stand at the mannequin's (the player: its hands and feet where
+## the traversal puts the mannequin's, on the holds and ledges); otherwise its own height.
+static func dress(p_npc: Node3D, p_person: PackedScene, p_rng: RandomNumberGenerator = null, p_match_height := false) -> Node3D:
 	var skel := p_npc.find_child("Skeleton3D", true, false) as Skeleton3D
 	if skel == null or p_person == null:
 		return null
@@ -40,12 +42,16 @@ static func dress(p_npc: Node3D, p_person: PackedScene, p_rng: RandomNumberGener
 		var hp := pskel.get_bone_global_rest(hips_p).origin.y
 		if hm > 0.01 and hp > 0.01:
 			pskel.motion_scale = skel.motion_scale * hp / hm
+			if p_match_height:
+				pskel.scale = Vector3.ONE * (hm / hp)
 	var retarget := RetargetModifier3D.new()
 	retarget.name = "Person"
 	retarget.profile = profile
 	skel.add_child(retarget)
-	pskel.transform = Transform3D.IDENTITY
+	pskel.transform = Transform3D(Basis.from_scale(pskel.scale), Vector3())
 	retarget.add_child(pskel)
+	if p_match_height:
+		_contact_ik(pskel, skel)
 	# One tint for its clothes, one for its hair (from p_rng: twins in a crowd dressed apart).
 	var cloth_tint := Color.WHITE
 	var hair_tint := Color.WHITE
@@ -57,12 +63,24 @@ static func dress(p_npc: Node3D, p_person: PackedScene, p_rng: RandomNumberGener
 	return pskel
 
 
+## The player's hands and feet put where the mannequin's are (milestone 233): the arms' and legs' proportions differ (the
+## hands hanging from a ledge 11-16 cm off it), so right after the pose is handed over a two-bone IK takes each of the
+## person's limbs to the mannequin's hand or foot (fellow_person_contacts.gd, on the mannequin's skeleton after the
+## RetargetModifier3D).
+static func _contact_ik(p_person: Skeleton3D, p_mannequin: Skeleton3D) -> void:
+	var contacts: SkeletonModifier3D = load("res://scripts/fellow_person_contacts.gd").new()
+	contacts.name = "PersonContacts"
+	contacts.call("setup", p_person, p_mannequin)
+	p_mannequin.add_child(contacts)
+
+
 ## The person's retargeting runs after the mannequin's other modifiers (added later: a head's look, the falling bodies):
 ## moved back to the last place.
 static func keep_last(p_skeleton: Skeleton3D) -> void:
-	var r := p_skeleton.get_node_or_null(^"Person")
-	if r:
-		p_skeleton.move_child(r, -1)
+	for n in [^"Person", ^"PersonContacts"]:
+		var r := p_skeleton.get_node_or_null(n)
+		if r:
+			p_skeleton.move_child(r, -1)
 
 
 ## The person's limbs' rests turned bone by bone (parents first) so that each points where the mannequin's does: MPFB's

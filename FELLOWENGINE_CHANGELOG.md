@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 233 — The player a person (2026-11-26)
+
+- Decision 0375. The rooftops' player worn by a seventh MakeHuman person (Luca), scaled to the mannequin's hips; a
+  two-bone IK right after the retargeting (a modifier on the mannequin's skeleton) puts the person's hands and feet on
+  the mannequin's — on the holds and ledges the traversal finds —, a limb stretched up to 10 % where it falls short:
+  over the player's 54 clips from 15.9 cm off to 0.01 cm (1.6 cm in one jump). `--player_person=0`: the mannequin.
+
 ## Milestone 232 — People instead of mannequins: a MakeHuman pipeline (2026-11-26)
 
 - Decision 0374. `tools/fellow_characters/make_characters.py`: people made with MakeHuman's MPFB 2 in Blender as a

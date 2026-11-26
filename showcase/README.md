@@ -114,7 +114,8 @@ clouds, light shafts, bloom and contact shadows, `FellowPipelineWarmer3D`; since
 behind the windows, lit at night), the people's talk, looks and shelter, and CasaRosa's osteria to walk into. From
 milestone 232 the people are people — MakeHuman bodies with their skins, hair and clothes (`people/*.glb`, CC0, made by
 `tools/fellow_characters/make_characters.py`), worn over the mannequins (`scripts/fellow_person.gd`: the mannequin's
-skeleton drives them through a `RetargetModifier3D`); `--people=0` brings the mannequins back.
+skeleton drives them through a `RetargetModifier3D`); `--people=0` brings the mannequins back. From milestone 233 the
+player too (Luca, his hands and feet put on the mannequin's by a two-bone IK; `--player_person=0`).
 
 Everything in it is made by code, in two steps:
 
