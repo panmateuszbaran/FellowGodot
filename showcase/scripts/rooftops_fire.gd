@@ -3,7 +3,8 @@ extends Node3D
 ## from a chimney, made at run time on this node, FellowEngine's gas (FellowGasVolume3D: fire and smoke simulated on the
 ## GPU, blown by the scene's wind; asleep, frozen, beyond SLEEP metres from the camera).
 ##  * kind "brazier": an iron brazier on three legs, three logs burning in it (FellowBurnable3D: they char), its flames
-##    lighting the square (the gas's fire light, with shadows); it does not take the player through it (a collider).
+##    lighting the square (the gas's fire light, with shadows: a dual paraboloid's, milestone 219); it does not take the
+##    player through it (a collider).
 ##    The rain or the snow on it damps it — less fuel, more smoke — as FellowRain3D's rain says.
 ##  * kind "chimney": a hearth's smoke from a chimney's top (this node there): warm, grey, carried off by the wind.
 ## Each box is moved downwind of its source (the scene's Wind): the plume carried off has room to go before the box's
@@ -135,6 +136,12 @@ func _brazier(p_downwind: Vector3) -> void:
 	_volume.set("fire_intensity", 16.0)
 	_volume.set("closed_faces", 4) # the floor
 	_volume.set("fire_light_shadows", true)
+	# Its shadow a dual paraboloid's (milestone 219): two renders a frame instead of a cube's six — in the open the
+	# square looks the same (its houses, the stalls and the people metres from the flames); the osteria's fireplace,
+	# under its hood, keeps the cube's.
+	var fl := _volume.call("get_fire_light_node") as OmniLight3D
+	if fl:
+		fl.omni_shadow_mode = OmniLight3D.SHADOW_DUAL_PARABOLOID
 	_volume.set("fire_light_range", 9.0)
 	_volume.set("fire_light_smoothing", 0.15)
 	_emitter = _source(0.1)

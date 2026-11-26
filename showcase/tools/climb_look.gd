@@ -185,10 +185,11 @@ func _init() -> void:
 	_skel.skeleton_updated.connect(_on_posed)
 	await process_frame
 	if _omni_dp != "":
-		# (milestone 219: the shadowed omni lights dual paraboloid — all, the gas volumes' fire lights or the others)
-		if _omni_dp in ["all", "lamps"]:
+		# (milestone 219: the shadowed omni lights dual paraboloid — all, the gas volumes' fire lights or the others —
+		# or "cube": every one a cube's, the brazier's too)
+		if _omni_dp in ["all", "lamps", "cube"]:
 			for l in sc.find_children("*", "OmniLight3D", true, false):
-				(l as OmniLight3D).omni_shadow_mode = OmniLight3D.SHADOW_DUAL_PARABOLOID
+				(l as OmniLight3D).omni_shadow_mode = OmniLight3D.SHADOW_CUBE if _omni_dp == "cube" else OmniLight3D.SHADOW_DUAL_PARABOLOID
 		for g in sc.find_children("*", "FellowGasVolume3D", true, false):
 			var fl := g.call("get_fire_light_node") as OmniLight3D
 			if fl:
