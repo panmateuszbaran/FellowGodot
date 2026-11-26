@@ -32,6 +32,7 @@
 
 #include "core/config/project_settings.h"
 #include "core/math/geometry_3d.h"
+#include "servers/rendering/renderer_rd/effects/fellow_weather.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
@@ -1942,6 +1943,7 @@ void GI::SDFGI::pre_process_gi(const Transform3D &p_transform, RenderDataRD *p_r
 			if (RendererSceneRenderRD::get_singleton()->is_using_physical_light_units()) {
 				lights[idx].energy *= RSG::light_storage->light_get_param(light, RSE::LIGHT_PARAM_INTENSITY);
 			}
+			lights[idx].energy *= RendererRD::FellowWeather::indirect_light_factor(light); // FellowEngine (milestone 214)
 
 			if (p_render_data->camera_attributes.is_valid()) {
 				lights[idx].energy *= RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
@@ -2989,6 +2991,7 @@ void GI::VoxelGIInstance::update(bool p_update_light_instances, const Vector<RID
 
 				l.attenuation = RSG::light_storage->light_get_param(light, RSE::LIGHT_PARAM_ATTENUATION);
 				l.energy = RSG::light_storage->light_get_param(light, RSE::LIGHT_PARAM_ENERGY) * RSG::light_storage->light_get_param(light, RSE::LIGHT_PARAM_INDIRECT_ENERGY);
+				l.energy *= RendererRD::FellowWeather::indirect_light_factor(light); // FellowEngine (milestone 214)
 
 				if (RendererSceneRenderRD::get_singleton()->is_using_physical_light_units()) {
 					l.energy *= RSG::light_storage->light_get_param(light, RSE::LIGHT_PARAM_INTENSITY);
