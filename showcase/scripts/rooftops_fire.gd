@@ -195,6 +195,7 @@ func _chimney(p_downwind: Vector3) -> void:
 	_volume.set("closed_faces", 0)
 	_volume.set("wind_rate", 0.3)
 	_volume.set("smoke_color", Color(0.82, 0.82, 0.84))
+	_volume.set("sleep_offscreen", 1.0) # (milestone 217: asleep a second after it leaves the view — no fire light here)
 	_emitter = _source(0.25) # (in the flue, under the cap: the smoke comes out from under it)
 	_emitter.set("shape", 0) # a sphere in the flue
 	_emitter.set("radius", 0.22)

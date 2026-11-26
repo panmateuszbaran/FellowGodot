@@ -96,7 +96,10 @@ private:
 	// Simulation.
 	bool simulation_enabled = true;
 	float sleep_distance = 0.0f; // milestone 68: no steps while the camera is farther from the box (0: never)
+	float sleep_offscreen = 0.0f; // milestone 217: no steps once the box has been out of the camera's view this long (s; 0: never)
+	double offscreen_time = 0.0;
 	bool sleeping = false;
+	bool sleeping_offscreen = false;
 	int substeps = 1;
 	float time_scale = 1.0f;
 	int prewarm_steps = 0;
@@ -191,6 +194,7 @@ private:
 	void _update_grid();
 	Transform3D _grid_to_world() const;
 	bool _beyond_sleep_distance() const;
+	bool _out_of_view() const;
 	Basis _world_to_grid_axes() const; // world vectors (m/s) to the grid's axes (local units)
 	Vector3 _snapped_origin() const;
 	void _configure();
@@ -229,6 +233,8 @@ public:
 	bool is_simulation_enabled() const { return simulation_enabled; }
 	void set_sleep_distance(float p_distance) { sleep_distance = MAX(p_distance, 0.0f); }
 	float get_sleep_distance() const { return sleep_distance; }
+	void set_sleep_offscreen(float p_seconds) { sleep_offscreen = MAX(p_seconds, 0.0f); }
+	float get_sleep_offscreen() const { return sleep_offscreen; }
 	bool is_sleeping() const { return sleeping; }
 	void set_substeps(int p_substeps) { substeps = CLAMP(p_substeps, 1, 8); }
 	int get_substeps() const { return substeps; }

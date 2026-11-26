@@ -106,6 +106,38 @@ bool FellowGasVolume3D::_beyond_sleep_distance() const {
 	return p.distance_squared_to(nearest) > sleep_distance * sleep_distance;
 }
 
+// Milestone 217: the box (grown by a tenth of its size and a metre, so that a plume coming into view is already
+// moving) wholly outside the viewport's camera's frustum.
+bool FellowGasVolume3D::_out_of_view() const {
+	if (!configured || !is_inside_tree()) {
+		return false;
+	}
+	const Viewport *vp = get_viewport();
+	const Camera3D *cam = vp ? vp->get_camera_3d() : nullptr;
+	if (!cam) {
+		return false;
+	}
+	const Transform3D g2w = _grid_to_world();
+	AABB box;
+	for (int c = 0; c < 8; c++) {
+		const Vector3 w = g2w.xform(Vector3((c & 1) ? grid_res.x : 0, (c & 2) ? grid_res.y : 0, (c & 4) ? grid_res.z : 0));
+		if (c == 0) {
+			box = AABB(w, Vector3());
+		} else {
+			box.expand_to(w);
+		}
+	}
+	box = box.grow(box.get_longest_axis_size() * 0.1f + 1.0f);
+	const Vector<Plane> planes = cam->get_frustum();
+	for (const Plane &pl : planes) {
+		// The planes face out: the box is outside when every corner is in front of one of them.
+		if (pl.distance_to(box.get_support(-pl.normal)) > 0.0f) {
+			return true;
+		}
+	}
+	return false;
+}
+
 Basis FellowGasVolume3D::_world_to_grid_axes() const {
 	if (space == SPACE_WORLD) {
 		return Basis();
@@ -794,6 +826,14 @@ void FellowGasVolume3D::_notification(int p_what) {
 			// Asleep beyond sleep_distance (milestone 68): its state kept, no steps (Frontier Lab's campfire was the
 			// largest pass of a frame with the camera kilometres away); its burning objects wait with it.
 			sleeping = _beyond_sleep_distance();
+			// Out of view (milestone 217): asleep once the box has been out of the camera's view for sleep_offscreen
+			// seconds — its state kept and drawn (its shadow, its light), its burning objects waiting, its sound on.
+			sleeping_offscreen = false;
+			if (!sleeping && sleep_offscreen > 0.0f && !Engine::get_singleton()->is_editor_hint()) {
+				offscreen_time = _out_of_view() ? offscreen_time + get_physics_process_delta_time() : 0.0;
+				sleeping_offscreen = offscreen_time >= double(sleep_offscreen);
+				sleeping = sleeping_offscreen;
+			}
 			if (sleeping) {
 				return;
 			}
@@ -829,7 +869,7 @@ void FellowGasVolume3D::_notification(int p_what) {
 // Milestone 179 (decision 0321): the flames heard where they burn — their heat release from the simulated fire's
 // emission (its flames' volume: the emission summed over the cells, over the fire's intensity), its flicker with it.
 void FellowGasVolume3D::_sound_update(double p_dt) {
-	const bool want = sound_enabled && configured && !sleeping && is_visible_in_tree() && !Engine::get_singleton()->is_editor_hint() && AudioServer::get_singleton();
+	const bool want = sound_enabled && configured && (!sleeping || sleeping_offscreen) && is_visible_in_tree() && !Engine::get_singleton()->is_editor_hint() && AudioServer::get_singleton();
 	float power = 0.0f;
 	float fire_size = 0.5f;
 	if (want) {
@@ -961,6 +1001,8 @@ void FellowGasVolume3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_simulation_enabled"), &FellowGasVolume3D::is_simulation_enabled);
 	ClassDB::bind_method(D_METHOD("set_sleep_distance", "distance"), &FellowGasVolume3D::set_sleep_distance);
 	ClassDB::bind_method(D_METHOD("get_sleep_distance"), &FellowGasVolume3D::get_sleep_distance);
+	ClassDB::bind_method(D_METHOD("set_sleep_offscreen", "seconds"), &FellowGasVolume3D::set_sleep_offscreen);
+	ClassDB::bind_method(D_METHOD("get_sleep_offscreen"), &FellowGasVolume3D::get_sleep_offscreen);
 	ClassDB::bind_method(D_METHOD("is_sleeping"), &FellowGasVolume3D::is_sleeping);
 	ClassDB::bind_method(D_METHOD("set_substeps", "substeps"), &FellowGasVolume3D::set_substeps);
 	ClassDB::bind_method(D_METHOD("get_substeps"), &FellowGasVolume3D::get_substeps);
@@ -1089,6 +1131,7 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_GROUP("Simulation", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "simulation_enabled"), "set_simulation_enabled", "is_simulation_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sleep_distance", PROPERTY_HINT_RANGE, "0,2000,1,or_greater,suffix:m"), "set_sleep_distance", "get_sleep_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sleep_offscreen", PROPERTY_HINT_RANGE, "0,10,0.1,or_greater,suffix:s"), "set_sleep_offscreen", "get_sleep_offscreen");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "substeps", PROPERTY_HINT_RANGE, "1,8,1"), "set_substeps", "get_substeps");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "time_scale", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_time_scale", "get_time_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "prewarm_steps", PROPERTY_HINT_RANGE, "0,10000,1"), "set_prewarm_steps", "get_prewarm_steps");

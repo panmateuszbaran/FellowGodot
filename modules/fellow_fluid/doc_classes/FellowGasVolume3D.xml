@@ -84,7 +84,7 @@
 		<method name="is_sleeping" qualifiers="const">
 			<return type="bool" />
 			<description>
-				[code]true[/code] while the camera is farther than [member sleep_distance] from the box: the gas is not stepped.
+				[code]true[/code] while the camera is farther than [member sleep_distance] from the box, or the box has been out of its view for [member sleep_offscreen] seconds: the gas is not stepped.
 			</description>
 		</method>
 		<method name="request_debug_data">
@@ -206,6 +206,9 @@
 		</member>
 		<member name="sleep_distance" type="float" setter="set_sleep_distance" getter="get_sleep_distance" default="0.0">
 			While the viewport's camera is farther than this from the box, the gas is not stepped: it keeps its state (still drawn, frozen) and goes on when the camera comes back; the [FellowBurnable3D]s burning in it wait with it. 0: never asleep. A volume far from where the player is costs nothing on the GPU (Frontier Lab's campfire was the largest pass of the frame from kilometres away, decision 0176).
+		</member>
+		<member name="sleep_offscreen" type="float" setter="set_sleep_offscreen" getter="get_sleep_offscreen" default="0.0">
+			Once the box (grown by a tenth of its size and a metre) has been wholly outside the viewport's camera's view for this many seconds, the gas is not stepped: it keeps its state (still drawn — its shadow on the scene — frozen; its sound on) and goes on as soon as the box comes into view; the [FellowBurnable3D]s burning in it wait with it. 0: never (by default). For smoke whose light does not matter out of view — a chimney's plume: a fire's light, which comes from its simulated flames, would stop flickering on what is in view. Not in the editor.
 		</member>
 		<member name="smoke_color" type="Color" setter="set_smoke_color" getter="get_smoke_color" default="Color(0.75, 0.75, 0.75, 1)">
 			The smoke's scattering colour.
