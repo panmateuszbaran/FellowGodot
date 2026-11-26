@@ -9,6 +9,18 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 229 — The stall keepers go home at night (2026-11-26)
+
+- Decision 0371. At night the rooftops' stall keepers close up and go home (in the rain they still huddle under their
+  awnings), and come back by day.
+
+## Milestone 228 — The osteria fireplace's shadow, its seam level (2026-11-26)
+
+- Decision 0370. The osteria fireplace's light casts a dual paraboloid shadow with its seam level with the fire (its
+  own z up): the room as with the cube (milestone 219's upright seam had shaded the hood wrongly), 0.4-0.5 ms of GPU and
+  of the render thread less inside on the RTX laptop; the chandelier keeps its cube. `climb_look.gd --omni_dp_level=1`,
+  `--omni_dp=fire_cube`.
+
 ## Milestone 227 — Footprints in the snow (2026-11-26)
 
 - Decision 0369. In the rooftops' snow everyone leaves footprints (FellowEngine's snow tracks under the 63 people's

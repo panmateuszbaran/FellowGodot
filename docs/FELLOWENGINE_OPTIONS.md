@@ -837,6 +837,9 @@ Milestone 225 (decision 0367): breath in the cold (`rooftops_crowd.gd`: `BREATH_
 Milestone 226 (decision 0368): an overcast sky closed (`rooftops_weather.gd`: `COVER` 0.97 overcast; `DARKER` 2.45).
 Milestone 227 (decision 0369): footprints in the snow (`rooftops_crowd.gd`: `FellowSnowTracker3D` under every foot,
 radius 0.06 m, depth 0.1 m; tools: `--tracks=0`).
+Milestone 228 (decision 0370): the osteria fireplace's light dual paraboloid, its seam level (`rooftops_osteria.gd`;
+tools: `climb_look.gd --omni_dp_level=1`, `--omni_dp=fire_cube`). Milestone 229 (decision 0371): the stall keepers home
+at night (`rooftops_crowd.gd`).
 
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
