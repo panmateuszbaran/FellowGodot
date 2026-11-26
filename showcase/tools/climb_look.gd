@@ -115,6 +115,9 @@ func _init() -> void:
 			_env_set = a.get_slice("=", 1).split(",")
 		elif a == "--perf=1":
 			_perf = true
+		elif a == "--passes=1":
+			_perf = true
+			_passes = true
 			_draw_all = true
 		elif a == "--draw_all=1":
 			_draw_all = true
@@ -279,6 +282,15 @@ func _init() -> void:
 			_cam.current = true
 		await process_frame
 		_record(i)
+		if _passes and i >= _skip:
+			var rd := RenderingServer.get_rendering_device()
+			var n := rd.get_captured_timestamps_count() if rd else 0
+			if n > 1:
+				_pass_frames += 1
+				for k in range(1, n):
+					var name := rd.get_captured_timestamp_name(k - 1)
+					var dt := float(rd.get_captured_timestamp_gpu_time(k) - rd.get_captured_timestamp_gpu_time(k - 1)) / 1e6
+					_pass_sum[name] = float(_pass_sum.get(name, 0.0)) + dt
 		if _perf and i >= _skip:
 			_perf_gpu.append(RenderingServer.viewport_get_measured_render_time_gpu(vp))
 			_perf_cpu.append(RenderingServer.viewport_get_measured_render_time_cpu(vp) + RenderingServer.get_frame_setup_time_cpu())
@@ -301,6 +313,15 @@ func _init() -> void:
 		var mean := func(a: Array) -> float: return a.reduce(func(x, y): return x + y, 0.0) / maxf(a.size(), 1)
 		print("climb_look: perf %d frames: GPU mean %.2f ms, median %.2f, p95 %.2f; render CPU mean %.2f ms, median %.2f" % [g.size(),
 				mean.call(g), g[g.size() / 2], g[int(g.size() * 0.95)], mean.call(c), c[c.size() / 2]])
+	if _passes and _pass_frames > 0:
+		var names := _pass_sum.keys()
+		names.sort_custom(func(x, y): return float(_pass_sum[x]) > float(_pass_sum[y]))
+		var all_ms := 0.0
+		for nm in names:
+			all_ms += float(_pass_sum[nm]) / _pass_frames
+		print("climb_look: passes %d frames, %.2f ms the GPU between the first and the last marker" % [_pass_frames, all_ms])
+		for nm in names.slice(0, 40):
+			print("climb_look: pass %7.3f ms  %s" % [float(_pass_sum[nm]) / _pass_frames, nm])
 	var crowd := _player.get_parent().get_node_or_null("Crowd")
 	if crowd and crowd.has_method("get_reaction_stats"):
 		print("climb_look: the people ", crowd.call("get_reaction_stats"))
@@ -508,6 +529,11 @@ var _talk_at := Vector3()
 var _drop: PackedStringArray = []
 var _env_set: PackedStringArray = [] # --env_set=name:value,...: the WorldEnvironment's Environment's properties
 var _perf := false # --perf=1: every frame drawn, none saved, vsync off; the GPU's and the CPU's time a frame printed
+## --passes=1 (milestone 217): --perf and the GPU's time in each of the engine's passes (its RENDER_TIMESTAMP markers, with
+## --setting=rendering/fellow/profiling/pass_timestamps:true — they fence the passes: the frame's total is not --perf's).
+var _passes := false
+var _pass_sum := {}
+var _pass_frames := 0
 var _perf_gpu: PackedFloat64Array = []
 var _perf_cpu: PackedFloat64Array = []
 var _draw_all := false # --draw_all=1: every frame drawn, every --every-th saved (what the GPU runs while drawing — the
