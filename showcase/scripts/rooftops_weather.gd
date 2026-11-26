@@ -9,7 +9,9 @@ extends Node
 ## leaves, milestone 211: 2.5 km in the rain, 1.2 km in a storm, 300 m in a blizzard). The sky's own sun
 ## (rooftops.gd's SkySun, which lights the clouds and, through the sky, the square) dims with the weather's sunlight as
 ## the Sun does on the ground (sky_dim of it) and greys (the golden hour's light gone under the cloud); the square's
-## lamps glow brighter as it darkens (LAMPS_DARK times their light under the darkest sky). The rain and the snow drawn
+## lamps glow brighter as it darkens (LAMPS_DARK times their light under the darkest sky). The sky's light on the square
+## (its radiance map) is not dimmed with the SkySun (milestone 214: the sky's shader's radiance_scale makes up for it):
+## the weather's own ambient light dims it, and the engine turns it to an overcast sky's. The rain and the snow drawn
 ## to be seen (wider streaks than the main showcase's, more and larger flakes in a smaller box when it snows); a weather
 ## turned to at once (--weather) leaves the ground as it would have — wet in the rain, white in the snow.
 
@@ -37,6 +39,9 @@ var _sky_sun_energy := 0.0
 var _sky_set := -1.0
 var _lamps: Array = [] # [OmniLight3D, its energy]
 var _sky_sun_color := Color(1, 1, 1)
+var _sky_mat: ShaderMaterial
+var _radiance_base := -1.0
+var _radiance_set := -1.0
 var _rain: Node
 const SKY_GREY := Color(0.78, 0.82, 0.9)
 var _label: Label
@@ -136,9 +141,22 @@ func _process(delta: float) -> void:
 		if _sky_set < 0.0 or not is_equal_approx(_sky_sun.light_energy, _sky_set):
 			_sky_sun_energy = _sky_sun.light_energy
 			_sky_sun_color = _sky_sun.light_color
-		_sky_set = _sky_sun_energy * lerpf(1.0, sun, sky_dim)
+		var dim := lerpf(1.0, sun, sky_dim)
+		_sky_set = _sky_sun_energy * dim
 		_sky_sun.light_energy = _sky_set
 		_sky_sun.light_color = _sky_sun_color.lerp(SKY_GREY, clampf(1.0 - sun, 0.0, 1.0))
+		# (milestone 214: the sky's light on the square not dimmed with the clouds' light — its radiance scaled back up)
+		if _sky_mat == null:
+			var we := get_node_or_null(^"../WorldEnvironment") as WorldEnvironment
+			if we and we.environment and we.environment.sky and we.environment.sky.sky_material is ShaderMaterial:
+				_sky_mat = we.environment.sky.sky_material as ShaderMaterial
+				var base: Variant = _sky_mat.get_shader_parameter("radiance_scale")
+				_radiance_base = float(base) if base != null else 1.0
+		if _sky_mat:
+			var rs := _radiance_base / maxf(dim, 0.05)
+			if absf(rs - _radiance_set) > 0.001 * rs:
+				_radiance_set = rs
+				_sky_mat.set_shader_parameter("radiance_scale", rs)
 	if _hint_t > 0.0:
 		_hint_t -= delta
 		if _hint_t <= 0.0:

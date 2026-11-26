@@ -4943,6 +4943,7 @@ void RenderForwardClustered::_fellow_process_cloud_shadow(RenderDataRD *p_render
 	RendererRD::FellowWeather::CloudShadowState cs;
 	const float shadows = MIN(Fellow::clouds_shadows(), 1.0f);
 	const float sky_light = MIN(Fellow::clouds_sky_light(), 1.0f);
+	float overcast = 0.0f; // milestone 214
 	if (p_allowed && Fellow::clouds_enabled() && (shadows > 0.0f || sky_light > 0.0f) && p_render_data->lights) {
 		// The layer the clouds pass will draw.
 		float coverage = Fellow::clouds_coverage();
@@ -4958,6 +4959,10 @@ void RenderForwardClustered::_fellow_process_cloud_shadow(RenderDataRD *p_render
 		// tenths.
 		const float c = CLAMP((coverage - 0.3f) / 0.6f, 0.0f, 1.0f);
 		cs.sky_cover = sky_light * c * c * (3.0f - 2.0f * c);
+		// The sky overcast (milestone 214): none with half of it covered (broken clouds: the clear sky's light between
+		// them), all of it at 95 %.
+		const float o = CLAMP((coverage - 0.5f) / 0.45f, 0.0f, 1.0f);
+		overcast = sky_light * o * o * (3.0f - 2.0f * o);
 		RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 		RID light_instance;
 		uint32_t light_index = 0;
@@ -5012,6 +5017,24 @@ void RenderForwardClustered::_fellow_process_cloud_shadow(RenderDataRD *p_render
 		weather->set_cloud_shadow(cs);
 	}
 	fellow_cloud_shadow_frame = cs.active;
+	// FellowEngine (milestone 214): how overcast the sky is, for the sky's shader — when the project declares
+	// fellow_weather_overcast (a float shader global), as it declares the atmosphere's tables — and the sky's radiance
+	// map (the scene's light from the sky: its ambient light, its reflections, SDFGI's and DDGI's sky, the smoke's) redrawn
+	// as it changes: the sky's shader turns its light to an overcast sky's (showcase/shaders/atmosphere_sky.gdshader).
+	if (p_allowed) {
+		RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+		const StringName overcast_name = SNAME("fellow_weather_overcast");
+		const bool changed = Math::abs(overcast - fellow_overcast_set) > 0.01f || (overcast != fellow_overcast_set && (overcast == 0.0f || overcast >= sky_light));
+		if (changed && material_storage->global_shader_parameter_get_type_internal(overcast_name) == RSE::GLOBAL_VAR_TYPE_FLOAT) {
+			material_storage->global_shader_parameter_set(overcast_name, overcast);
+			fellow_overcast_set = overcast;
+			RID sky_rid = environment_get_sky(p_render_data->environment);
+			RendererRD::SkyRD::Sky *sky_data = sky_rid.is_valid() ? sky.get_sky(sky_rid) : nullptr;
+			if (sky_data) {
+				sky_data->reflection.dirty = true;
+			}
+		}
+	}
 	// Showers (decision 0137): while a raining node asks, the rain the clouds let fall at the camera (the layer the
 	// clouds pass draws), read back for it. Without the clouds the node rains as it is set.
 	if (p_allowed && weather && weather->get_state().enabled && weather->get_state().showers > 0.0f && Fellow::clouds_enabled()) {

@@ -12,6 +12,10 @@ global uniform sampler2D fellow_atmosphere_transmittance : filter_linear, repeat
 // The camera's height above the ground (km), set by FellowEngine every frame: reading POSITION instead would make Godot
 // redraw the sky's radiance every frame (0.25 ms on an RTX 5070 Ti laptop at 1080p).
 global uniform float fellow_atmosphere_camera_height;
+// Milestone 214: how overcast the sky is (0..1: the clouds' coverage from half to 95 %, a FellowWeather3D's or the
+// project's), set by FellowEngine as it changes, the sky's radiance redrawn with it: the sky's light on the scene (its
+// radiance map: the ambient light, the reflections, SDFGI's sky, the smoke's) turns to an overcast sky's.
+global uniform float fellow_weather_overcast;
 
 uniform float intensity = 1.0;
 uniform float sun_disk_scale = 1.0;
@@ -64,13 +68,10 @@ vec2 transmittance_uv(float r, float mu) {
 	return vec2((d - d_min) / max(d_max - d_min, 1e-6), rho / H);
 }
 
-void sky() {
-	vec3 d = EYEDIR;
-	float r = clamp(BOTTOM_RADIUS + max(fellow_atmosphere_camera_height, 0.0), BOTTOM_RADIUS + 0.0005, TOP_RADIUS - 0.0005);
-	float beta = acos(clamp(sqrt(max(0.0, r * r - BOTTOM_RADIUS * BOTTOM_RADIUS)) / r, -1.0, 1.0));
-	float horizon_zenith = PI - beta;
+// The sky-view table's coordinates of a direction (its elevation mapping denser at the horizon, which is at v = 0.5;
+// the azimuth from the sun's).
+vec2 sky_view_uv(vec3 d, float horizon_zenith, float beta) {
 	float zenith = acos(clamp(d.y, -1.0, 1.0));
-	// The sky-view table's elevation mapping (denser at the horizon, which is at v = 0.5).
 	float v;
 	if (zenith < horizon_zenith) {
 		v = (1.0 - sqrt(max(0.0, 1.0 - zenith / horizon_zenith))) * 0.5;
@@ -79,9 +80,46 @@ void sky() {
 	}
 	float az = atan(d.z, d.x) - atan(LIGHT0_DIRECTION.z, LIGHT0_DIRECTION.x);
 	az = mod(az + PI, 2.0 * PI) - PI;
-	float u = az / (2.0 * PI) + 0.5;
+	return vec2(az / (2.0 * PI) + 0.5, v);
+}
+
+// Milestone 214: an overcast sky's light from a direction — grey, three times as bright overhead as at the horizon (the
+// CIE's standard overcast sky, 1 + 2 sin(elevation)), the ground under the horizon lit by it (an albedo of 0.3) — as
+// much light on the ground as the clear sky's (its table summed over the sky, 32 directions) and a third of the sun's
+// through the air (a cloud deck lets through about that much of the light over it, scattered: a fixed exposure keeps
+// an overcast scene seen).
+vec3 overcast_light(vec3 d, vec3 sun, float r, float horizon_zenith, float beta) {
+	vec3 e = vec3(0.0);
+	for (int i = 0; i < 4; i++) {
+		float mu = (float(i) + 0.5) * 0.25;
+		float s = sqrt(1.0 - mu * mu);
+		for (int j = 0; j < 8; j++) {
+			float phi = (float(j) + 0.5) * (PI * 0.25);
+			vec3 w = vec3(s * cos(phi), mu, s * sin(phi));
+			e += textureLod(fellow_atmosphere_sky_view, sky_view_uv(w, horizon_zenith, beta), 0.0).rgb * mu;
+		}
+	}
+	e *= sun * (0.25 * PI * 0.25); // dmu dphi
+	if (LIGHT0_ENABLED && LIGHT0_DIRECTION.y > 0.0) {
+		e += sun * texture(fellow_atmosphere_transmittance, transmittance_uv(r, LIGHT0_DIRECTION.y)).rgb * (LIGHT0_DIRECTION.y / 3.0);
+	}
+	float illuminance = dot(e, vec3(0.2126, 0.7152, 0.0722));
+	float zenith_luminance = illuminance * 9.0 / (7.0 * PI);
+	float l = d.y >= 0.0 ? zenith_luminance * (1.0 + 2.0 * d.y) / 3.0 : 0.3 * illuminance / PI;
+	return vec3(l);
+}
+
+void sky() {
+	vec3 d = EYEDIR;
+	float r = clamp(BOTTOM_RADIUS + max(fellow_atmosphere_camera_height, 0.0), BOTTOM_RADIUS + 0.0005, TOP_RADIUS - 0.0005);
+	float beta = acos(clamp(sqrt(max(0.0, r * r - BOTTOM_RADIUS * BOTTOM_RADIUS)) / r, -1.0, 1.0));
+	float horizon_zenith = PI - beta;
+	float zenith = acos(clamp(d.y, -1.0, 1.0));
 	vec3 sun = LIGHT0_COLOR * LIGHT0_ENERGY * energy_scale;
-	vec3 col = texture(fellow_atmosphere_sky_view, vec2(u, v)).rgb * sun;
+	vec3 col = texture(fellow_atmosphere_sky_view, sky_view_uv(d, horizon_zenith, beta)).rgb * sun;
+	if (AT_CUBEMAP_PASS && fellow_weather_overcast > 0.0) {
+		col = mix(col, overcast_light(d, sun, r, horizon_zenith, beta), fellow_weather_overcast);
+	}
 	if (sky_saturation != 1.0 && !AT_CUBEMAP_PASS) {
 		float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
 		col = max(mix(vec3(luma), col, sky_saturation), vec3(0.0));

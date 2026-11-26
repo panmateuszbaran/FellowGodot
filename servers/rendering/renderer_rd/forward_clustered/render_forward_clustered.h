@@ -1497,6 +1497,7 @@ private:
 	bool fellow_atmosphere_globals_set = false;
 	float fellow_atmosphere_height_set = -1.0f; // the camera height last given to the sky shader (km)
 	float fellow_atmosphere_sky_height = -1.0f; // the height the sky's radiance was last redrawn for (km)
+	float fellow_overcast_set = -1.0f; // how overcast the sky last was for the sky's shader (milestone 214)
 	bool fellow_atmosphere_valid = false;
 	RendererRD::FellowAtmosphere::Params fellow_atmosphere_params;
 	void _fellow_update_atmosphere(RenderDataRD *p_render_data);

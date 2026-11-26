@@ -57,3 +57,7 @@ fellow_atmosphere_camera_height={
 "type": "float",
 "value": 0.0
 }
+fellow_weather_overcast={
+"type": "float",
+"value": 0.0
+}
