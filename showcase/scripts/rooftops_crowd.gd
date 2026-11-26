@@ -1205,7 +1205,7 @@ func _walkers_home() -> void:
 ## foot stands, a groove where it drags) — the square's snow trodden through to the cobbles where its people walk and
 ## stand.
 func _foot_trackers(p_skel: Skeleton3D) -> void:
-	if p_skel == null or not ClassDB.class_exists(&"FellowSnowTracker3D"):
+	if p_skel == null or not ClassDB.class_exists(&"FellowSnowTracker3D") or "--tracks=0" in OS.get_cmdline_user_args():
 		return
 	for bone in ["LeftFoot", "RightFoot"]:
 		if p_skel.find_bone(bone) < 0:
