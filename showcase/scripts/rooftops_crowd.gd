@@ -13,6 +13,11 @@ extends Node3D
 ## and lie as a ragdoll, then get up (the clip "get_up_back" or "get_up_front", placed where the body lies, the bodies
 ## blended into it: `get_up_from_animation`). Then a walker walks on back into its way, the others walk back to their
 ## place. The people sitting are only shoved.
+##
+## Milestone 232 (the gap analysis after milestone 230: the mannequins are the largest visible gap): the mannequins worn
+## by MakeHuman people (showcase/people/*.glb, tools/fellow_characters: CC0 bodies, skins, hair and clothes; FellowPerson)
+## — the mannequin's skeleton still what everything drives, its pose handed to the person's skeleton; each person's
+## clothes and hair tinted a little of its own. --people=0: the mannequins as before.
 
 @export var npc_scene: PackedScene
 @export var routes: Array = [] ## each [PackedVector3Array points, loop (bool), walkers (int)]
@@ -45,6 +50,8 @@ var _people: Array = [] # milestone 208: everyone — {node, ap, skel, shape, ki
 var _bumps := 0 # (tools: how many reactions so far)
 var _held: Array = [] # the clothes' meshes and materials, held until the people are gone (freed after them)
 var _player: Node3D
+const PEOPLE := ["giulia", "marco", "rosa", "aldo", "amara", "kenji"] # (milestone 232)
+var _people_scenes: Array = []
 
 
 func _ready() -> void:
@@ -53,6 +60,11 @@ func _ready() -> void:
 		return
 	_rng.seed = seed
 	_player = get_node_or_null(player_path)
+	if not "--people=0" in OS.get_cmdline_user_args():
+		for n in PEOPLE:
+			var path := "res://people/%s.glb" % n
+			if ResourceLoader.exists(path):
+				_people_scenes.append(load(path))
 	for r in routes:
 		var pts: PackedVector3Array = r[0]
 		var loop: bool = r[1]
@@ -97,6 +109,16 @@ func _person(p_clip: String, p_speed: float) -> Node3D:
 	add_child(node)
 	var s := _rng.randf_range(0.93, 1.06)
 	node.scale = Vector3(s, s, s)
+	if not _people_scenes.is_empty():
+		var body := FellowPerson.dress(node, _people_scenes[_rng.randi() % _people_scenes.size()], _rng)
+		if body:
+			node.set_meta(&"body_skeleton", body)
+			var ap0 := node.get_node_or_null("AnimationPlayer") as AnimationPlayer
+			if ap0:
+				ap0.play(p_clip)
+				ap0.speed_scale = p_speed
+				ap0.seek(_rng.randf() * ap0.current_animation_length, true)
+			return node
 	var tunic := StandardMaterial3D.new()
 	_held.append(tunic)
 	tunic.albedo_color = PALETTE[_rng.randi() % PALETTE.size()]
@@ -350,6 +372,8 @@ func _register(p_node: Node3D, p_kind: String, p_clip: String, p_speed: float) -
 			"shape": cs, "kind": p_kind, "clip": p_clip, "speed": p_speed, "home": p_node.position, "face": p_node.rotation.y,
 			"react": "", "t": 0.0, "shove": Vector3(), "nudged": -1.0, "turn_to": 0.0, "pa": null, "wait": 0, "knock_v": Vector3(), "down_t": 0.0,
 			"act": "", "look": null, "look_w": 0.0, "knocked": 0}
+	# (milestone 232: the skeleton seen — the person's when one is worn, the mannequin's otherwise: breath, footprints)
+	p["body"] = p_node.get_meta(&"body_skeleton", p.skel)
 	_people.append(p)
 	return p
 
@@ -429,6 +453,7 @@ func _knock(p: Dictionary, p_velocity: Vector3) -> void:
 		pa.set("collision_layer", LAYER_RAGDOLL)
 		pa.set("collision_mask", LAYER_WORLD)
 		skel.add_child(pa)
+		FellowPerson.keep_last(skel) # (the person's pose taken from the falling bodies)
 		p.pa = pa
 	pa.call("build")
 	# (knocked down once the bodies stand where the animation has them: the next physics steps)
@@ -705,7 +730,7 @@ func _social_ready() -> void:
 		_look_setup(p)
 	# Milestone 227: footprints in the snow — everyone's feet and the player's.
 	for p in _people:
-		_foot_trackers(p.skel)
+		_foot_trackers(p.body)
 	if _player_skel:
 		_foot_trackers(_player_skel)
 
@@ -736,6 +761,7 @@ func _look_setup(p: Dictionary) -> void:
 	look.active = false
 	skel.add_child(look)
 	look.target_node = look.get_path_to(target)
+	FellowPerson.keep_last(skel) # (the person's pose taken after the head's turn)
 	p.look = look
 	p.look_target = target
 	p.look_w = 0.0
@@ -1304,7 +1330,7 @@ func _make_breaths() -> void:
 	_held.append_array([tex, soft, mat, quad, ramp, ramp_tex, grow, grow_tex, pm])
 	var heads: Array = []
 	for p in _people:
-		heads.append([p.skel, p])
+		heads.append([p.body, p])
 	if _player_skel:
 		heads.append([_player_skel, null])
 	for h in heads:

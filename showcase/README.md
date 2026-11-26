@@ -111,7 +111,10 @@ wall over the clips), `FellowCloth3D` (banners, awnings, laundry, the people's r
 clouds, light shafts, bloom and contact shadows, `FellowPipelineWarmer3D`; since milestone 211 `FellowWeather3D` with
 `FellowRain3D` and `FellowLightning3D` (the weather keys; milestone 214: its overcast light), `FellowGasVolume3D` and
 `FellowBurnable3D` (the brazier, the chimneys' smoke, the osteria's fireplace), `FellowInteriorMaterial3D` (the rooms
-behind the windows, lit at night), the people's talk, looks and shelter, and CasaRosa's osteria to walk into.
+behind the windows, lit at night), the people's talk, looks and shelter, and CasaRosa's osteria to walk into. From
+milestone 232 the people are people — MakeHuman bodies with their skins, hair and clothes (`people/*.glb`, CC0, made by
+`tools/fellow_characters/make_characters.py`), worn over the mannequins (`scripts/fellow_person.gd`: the mannequin's
+skeleton drives them through a `RetargetModifier3D`); `--people=0` brings the mannequins back.
 
 Everything in it is made by code, in two steps:
 

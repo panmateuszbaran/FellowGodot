@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""FellowEngine's character pipeline (milestone 232): people made with MakeHuman's MPFB 2 in Blender, exported as glTF.
+
+Runs in Python with Blender as a module (`pip install bpy`, Blender 5.x; Pillow) and MPFB 2 from its source
+(https://github.com/makehumancommunity/mpfb2, GPLv3: it stays outside this repository, installed into a Blender profile
+of the tool's own). Its assets are MakeHuman's system assets pack (CC0: the base mesh, its targets, skins, eyes, hair,
+clothes; https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_assets.html), so the characters it
+writes are CC0 too.
+
+    python3 tools/fellow_characters/make_characters.py --mpfb <mpfb2>/src/mpfb --assets <unpacked system assets> \
+        --out showcase/people [--spec tools/fellow_characters/people.json] [--only name,...] [--profile <dir>]
+
+Each character of the spec: the body's macros (gender 0 female - 1 male, age 0.5 = 25 years - 1 = 90, muscle, weight,
+height, proportions, the three ethnic mixes), a skin, eyes, eyebrows, eyelashes, hair and clothes from the pack, the
+"game_engine" rig (53 bones, Unreal Engine's mannequin's names: Godot's bone mapper maps them to its humanoid profile)
+and the faces hidden under the clothes removed; the bones renamed to Godot's humanoid profile, the materials opaque but
+for hair, eyebrows and eyelashes, the textures at most 2048 (the skin) and 1024 px. One <name>.glb each, its textures
+in it.
+"""
+
+import argparse
+import importlib
+import json
+import os
+import sys
+import tempfile
+
+
+def parse_args():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--mpfb", required=True, help="MPFB 2's package folder (mpfb2/src/mpfb)")
+    ap.add_argument("--assets", required=True, help="MakeHuman's system assets, unpacked (skins/, eyes/, hair/, clothes/ ...)")
+    ap.add_argument("--out", required=True, help="where the .glb files go")
+    ap.add_argument("--spec", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "people.json"))
+    ap.add_argument("--only", default="", help="comma-separated names of the spec's characters")
+    ap.add_argument("--profile", default="", help="a Blender user folder for MPFB (default: a new temporary one)")
+    ap.add_argument("--blend", action="store_true", help="also save each character's .blend (to look at)")
+    return ap.parse_args()
+
+
+def setup_mpfb(args):
+    # Blender's user folder (its extensions, MPFB's settings and data) before bpy is imported.
+    profile = os.path.abspath(args.profile) if args.profile else tempfile.mkdtemp(prefix="fellow_mpfb_")
+    os.environ["BLENDER_USER_RESOURCES"] = profile
+    import bpy  # noqa: E402  (Blender as a module)
+    import addon_utils  # noqa: E402
+
+    ext = bpy.utils.user_resource("EXTENSIONS", path="user_default", create=True)
+    link = os.path.join(ext, "mpfb")
+    if not os.path.exists(link):
+        os.symlink(os.path.abspath(args.mpfb), link)
+    # MPFB looks for assets in its user data folder.
+    data = os.path.join(ext, ".user", "user_default", "mpfb", "data")
+    os.makedirs(data, exist_ok=True)
+    for sub in os.listdir(args.assets):
+        src = os.path.join(os.path.abspath(args.assets), sub)
+        dst = os.path.join(data, sub)
+        if os.path.isdir(src) and not os.path.exists(dst):
+            os.symlink(src, dst)
+    errors = []
+    addon_utils.enable("bl_ext.user_default.mpfb", default_set=True, handle_error=errors.append)
+    if errors:
+        raise RuntimeError("MPFB did not load: %s" % errors)
+
+    def service(name, cls):
+        return getattr(importlib.import_module("bl_ext.user_default.mpfb." + name), cls)
+
+    return bpy, service
+
+
+# MPFB's "game_engine" rig (Unreal Engine's mannequin's names) to Godot's SkeletonProfileHumanoid: the characters' bones
+# carry the profile's names, so a RetargetModifier3D (or an AnimationPlayer's humanoid tracks) drives them as it is.
+HUMANOID = {"pelvis": "Hips", "spine_01": "Spine", "spine_02": "Chest", "spine_03": "UpperChest", "neck_01": "Neck",
+            "head": "Head"}
+for _s, _side in (("_l", "Left"), ("_r", "Right")):
+    HUMANOID.update({"clavicle" + _s: _side + "Shoulder", "upperarm" + _s: _side + "UpperArm",
+                     "lowerarm" + _s: _side + "LowerArm", "hand" + _s: _side + "Hand",
+                     "thumb_01" + _s: _side + "ThumbMetacarpal", "thumb_02" + _s: _side + "ThumbProximal",
+                     "thumb_03" + _s: _side + "ThumbDistal", "thigh" + _s: _side + "UpperLeg",
+                     "calf" + _s: _side + "LowerLeg", "foot" + _s: _side + "Foot", "ball" + _s: _side + "Toes"})
+    for _f, _g in (("index", "Index"), ("middle", "Middle"), ("ring", "Ring"), ("pinky", "Little")):
+        for _n, _k in (("01", "Proximal"), ("02", "Intermediate"), ("03", "Distal")):
+            HUMANOID["%s_%s%s" % (_f, _n, _s)] = _side + _g + _k
+
+# Texture sizes kept (the longest side): the body's skin, the rest.
+BODY_TEXTURE = 2048
+OTHER_TEXTURE = 1024
+def game_materials(bpy, root, cut_names):
+    """The export's materials for a game: opaque unless they are hair, eyebrows or eyelashes (alpha unlinked, so the
+    exporter writes them opaque and as JPEG), textures no larger than BODY_TEXTURE / OTHER_TEXTURE."""
+    done = set()
+    for ob in [root] + list(root.children_recursive):
+        if ob.type != "MESH":
+            continue
+        for slot in ob.material_slots:
+            m = slot.material
+            if m is None or m.name in done or m.node_tree is None:
+                continue
+            done.add(m.name)
+            cut = any(k in m.name for k in cut_names)
+            for link in list(m.node_tree.links):
+                if link.to_socket.name == "Alpha" and not cut:
+                    m.node_tree.links.remove(link)
+            for n in m.node_tree.nodes:
+                if n.type == "TEX_IMAGE" and n.image is not None:
+                    limit = BODY_TEXTURE if m.name.endswith(".body") else OTHER_TEXTURE
+                    w, h = n.image.size
+                    if max(w, h) > limit:
+                        n.image.scale(max(1, w * limit // max(w, h)), max(1, h * limit // max(w, h)))
+
+
+def repack_images(path, quality=88):
+    """Blender writes its JPEGs with an ICC segment Godot's JPEG loader refuses: every image of the .glb encoded again
+    with Pillow (JPEG without metadata, PNG with a palette), the binary chunk rebuilt."""
+    import io
+    import struct
+
+    from PIL import Image
+
+    with open(path, "rb") as f:
+        data = f.read()
+    json_len = struct.unpack("<I", data[12:16])[0]
+    gltf = json.loads(data[20 : 20 + json_len])
+    bin_start = 20 + json_len + 8
+    blob = data[bin_start:]
+    views = gltf["bufferViews"]
+    image_views = {im["bufferView"]: im for im in gltf.get("images", []) if "bufferView" in im}
+    out = bytearray()
+    for i, view in enumerate(views):
+        chunk = blob[view.get("byteOffset", 0) : view.get("byteOffset", 0) + view["byteLength"]]
+        if i in image_views:
+            im = Image.open(io.BytesIO(chunk))
+            buf = io.BytesIO()
+            if image_views[i].get("mimeType") == "image/jpeg":
+                im.convert("RGB").save(buf, "JPEG", quality=quality, optimize=True)
+            else:
+                # (the hair's, eyebrows' and eyelashes' cards: their alpha only cuts — a palette of 256 colours and
+                # alphas keeps them, at an eighth of the size)
+                im.convert("RGBA").quantize(256, method=Image.Quantize.FASTOCTREE).save(buf, "PNG", optimize=True)
+            chunk = buf.getvalue()
+        while len(out) % 4:
+            out.append(0)
+        view["byteOffset"] = len(out)
+        view["byteLength"] = len(chunk)
+        out += chunk
+    while len(out) % 4:
+        out.append(0)
+    gltf["buffers"][0]["byteLength"] = len(out)
+    js = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
+    js += b" " * ((4 - len(js) % 4) % 4)
+    total = 12 + 8 + len(js) + 8 + len(out)
+    with open(path, "wb") as f:
+        f.write(struct.pack("<III", 0x46546C67, 2, total))
+        f.write(struct.pack("<II", len(js), 0x4E4F534A) + js)
+        f.write(struct.pack("<II", len(out), 0x004E4942) + bytes(out))
+
+
+def apply_shape_keys(bpy, root):
+    """MPFB keeps the body's macros (gender, age, weight...) as shape keys over the neutral base mesh; the exporter
+    would write the base mesh. Their mix applied to the mesh, the keys removed."""
+    for ob in [root] + list(root.children_recursive):
+        if ob.type == "MESH" and ob.data.shape_keys is not None:
+            bpy.ops.object.select_all(action="DESELECT")
+            ob.select_set(True)
+            bpy.context.view_layer.objects.active = ob
+            bpy.ops.object.shape_key_remove(all=True, apply_mix=True)
+
+
+def humanoid_bones(root):
+    arm = root if root.type == "ARMATURE" else next((c for c in root.children_recursive if c.type == "ARMATURE"), None)
+    if arm is None:
+        raise RuntimeError("no armature in the export copy")
+    for bone in arm.data.bones:
+        if bone.name in HUMANOID:
+            bone.name = HUMANOID[bone.name]  # (Blender renames the meshes' vertex groups with it)
+
+
+def find(asset_service, name, subdir, ext):
+    path = asset_service.find_asset_absolute_path(name + ext, asset_subdir=subdir)
+    if path is None:
+        raise FileNotFoundError("%s/%s%s not in the assets" % (subdir, name, ext))
+    return path
+
+
+def make(bpy, service, spec, out, save_blend):
+    HumanService = service("services.humanservice", "HumanService")
+    TargetService = service("services.targetservice", "TargetService")
+    AssetService = service("services.assetservice", "AssetService")
+    ExportService = service("services.exportservice", "ExportService")
+    ObjectService = service("services.objectservice", "ObjectService")
+    HumanObjectProperties = service("entities.objectproperties", "HumanObjectProperties")
+
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    body = HumanService.create_human()
+    for macro in ("gender", "age", "muscle", "weight", "height", "proportions", "african", "asian", "caucasian", "cupsize", "firmness"):
+        if macro in spec:
+            HumanObjectProperties.set_value(macro, float(spec[macro]), entity_reference=body)
+    TargetService.reapply_macro_details(body)
+
+    HumanService.set_character_skin(find(AssetService, spec["skin"], "skins", ".mhmat"), body, skin_type="GAMEENGINE")
+    HumanService.add_builtin_rig(body, "game_engine")
+    parts = [("eyes", spec.get("eyes_mesh", "low-poly"), "Eyes"), ("eyebrows", spec.get("eyebrows"), "Eyebrows"),
+             ("eyelashes", spec.get("eyelashes"), "Eyelashes"), ("hair", spec.get("hair"), "Hair")]
+    parts += [("clothes", c, "Clothes") for c in spec.get("clothes", [])]
+    for subdir, name, kind in parts:
+        if name:
+            HumanService.add_mhclo_asset(find(AssetService, name, subdir, ".mhclo"), body, asset_type=kind,
+                                         subdiv_levels=0, material_type="GAMEENGINE")
+
+    # The export copy: the hidden faces under the clothes and the helper geometry gone, modifiers applied.
+    root = ExportService.create_character_copy(body, name_suffix="_export")
+    export_body = ObjectService.find_object_of_type_amongst_nearest_relatives(root, "Basemesh")
+    ExportService.bake_modifiers_remove_helpers(export_body, bake_masks=True, bake_subdiv=True, remove_helpers=True, also_proxy=True)
+    # (the hair's, eyebrows' and eyelashes' alpha cuts the surface; the others are opaque)
+    game_materials(bpy, root, [n for n in (spec.get("hair"), spec.get("eyebrows"), spec.get("eyelashes")) if n])
+    apply_shape_keys(bpy, root)
+    humanoid_bones(root)
+    bpy.ops.object.select_all(action="DESELECT")
+    root.select_set(True)
+    for child in ObjectService.get_list_of_children(root):
+        child.select_set(True)
+    bpy.context.view_layer.objects.active = root
+    os.makedirs(out, exist_ok=True)
+    path = os.path.join(out, spec["name"] + ".glb")
+    bpy.ops.export_scene.gltf(filepath=path, use_selection=True, export_format="GLB", export_skins=True,
+                              export_animations=False, export_morph=False, export_image_format="JPEG",
+                              export_jpeg_quality=88, export_apply=False)
+    repack_images(path)
+    if save_blend:
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.join(out, spec["name"] + ".blend"))
+    return path
+
+
+def main():
+    args = parse_args()
+    with open(args.spec, encoding="utf-8") as f:
+        people = json.load(f)["people"]
+    only = [n for n in args.only.split(",") if n]
+    bpy, service = setup_mpfb(args)
+    for spec in people:
+        if only and spec["name"] not in only:
+            continue
+        path = make(bpy, service, spec, os.path.abspath(args.out), args.blend)
+        print("make_characters: %s (%d KB)" % (path, os.path.getsize(path) // 1024))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

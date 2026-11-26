@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 232 — People instead of mannequins: a MakeHuman pipeline (2026-11-26)
+
+- Decision 0374. `tools/fellow_characters/make_characters.py`: people made with MakeHuman's MPFB 2 in Blender as a
+  Python module (in the cloud, nothing on the owner's machine) from MakeHuman's CC0 system assets — six for the rooftops
+  (`showcase/people/*.glb`: about 33 000 triangles, 53 bones named after Godot's humanoid profile, 2 MB each).
+  `FellowPerson` (showcase) wears one over a mannequin: the mannequin's skeleton keeps everything that drives it, a
+  `RetargetModifier3D` hands its pose to the person (the person's limbs' rests first turned to the mannequin's T-pose),
+  skin with subsurface scattering, hair cut by its alpha, clothes and hair tinted per person. The rooftops' crowd wears
+  them (`--people=0`: the mannequins); `tools/person_look.gd` renders the cast.
+
 ## Milestone 231 — Omni and spot lights' shadows: the static casters cached (2026-11-26)
 
 - Decision 0373. `rendering/fellow/shadows/positional_cache` (on): when an omni or spot light's shadow is drawn again
