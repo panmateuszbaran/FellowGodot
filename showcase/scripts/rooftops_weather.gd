@@ -11,7 +11,9 @@ extends Node
 ## the Sun does on the ground (sky_dim of it) and greys (the golden hour's light gone under the cloud); the square's
 ## lamps glow brighter as it darkens (LAMPS_DARK times their light under the darkest sky). The sky's light on the square
 ## (its radiance map) is not dimmed with the SkySun (milestone 214: the sky's shader's radiance_scale makes up for it):
-## the weather's own ambient light dims it, and the engine turns it to an overcast sky's. The rain and the snow drawn
+## the weather's own ambient light dims it, and the engine turns it to an overcast sky's. The eye adapts to the
+## weather's light (milestone 214): the exposure raised by EXPOSURE_ADAPT of the stops the square darkens by under each
+## weather (DARKER), as the weather turns; the fair weather's exposure as it was. The rain and the snow drawn
 ## to be seen (wider streaks than the main showcase's, more and larger flakes in a smaller box when it snows); a weather
 ## turned to at once (--weather) leaves the ground as it would have — wet in the rain, white in the snow.
 
@@ -28,6 +30,11 @@ const FAIR := {"cloud_coverage": 0.45, "cloud_density": 2.6, "wind_speed": 3.5, 
 const NAMES := ["fair", "cloudy", "overcast", "rain", "storm", "snow", "blizzard"]
 const CYCLE := [1, 2, 4, 5, 4, 3, 1, 6, 7, 6, 1] # (keys) fair, cloudy, rain, a storm, rain, overcast, fair, snow...
 const LAMPS_DARK := 2.4
+## (milestone 214) How many stops darker the square is under each weather than in the fair one (keys 1-7: the RTX's
+## frames from the square's corner, their mean luminance under the sky; the blizzard's between the snow's and the
+## storm's), and the share of that the eye makes up for (a storm still darker than a fair evening).
+const DARKER := [0.0, 0.27, 1.44, 2.74, 3.22, 1.3, 2.2]
+const EXPOSURE_ADAPT := 0.55
 
 var _weather: Node
 var _key := 1
@@ -40,6 +47,13 @@ var _sky_set := -1.0
 var _lamps: Array = [] # [OmniLight3D, its energy]
 var _sky_sun_color := Color(1, 1, 1)
 var _sky_mat: ShaderMaterial
+var _attrs: CameraAttributes
+var _exposure_base := 1.0
+var _stops := 0.0
+var _stops_from := 0.0
+var _stops_to := 0.0
+var _stops_t := 0.0
+var _stops_dur := 0.0
 var _radiance_base := -1.0
 var _radiance_set := -1.0
 var _rain: Node
@@ -87,6 +101,13 @@ func _ready() -> void:
 ## The weather of key p_key (1 the scene's fair weather) over p_seconds.
 func turn_to(p_key: int, p_seconds: float) -> void:
 	_key = p_key
+	_stops_from = _stops
+	_stops_to = float(DARKER[p_key - 1]) * EXPOSURE_ADAPT
+	_stops_t = 0.0
+	_stops_dur = p_seconds
+	if p_seconds <= 0.0:
+		_stops = _stops_to
+		_apply_exposure()
 	if p_key == 1:
 		for k in FAIR:
 			_weather.set(k, FAIR[k])
@@ -130,6 +151,11 @@ func _process(delta: float) -> void:
 			_cycle_t = 0.0
 			_cycle_i = (_cycle_i + 1) % CYCLE.size()
 			turn_to(CYCLE[_cycle_i], transition)
+	if _stops_t < _stops_dur:
+		# (the eye adapting as the weather turns, eased as FellowWeather3D eases it)
+		_stops_t = minf(_stops_t + delta, _stops_dur)
+		_stops = lerpf(_stops_from, _stops_to, smoothstep(0.0, 1.0, _stops_t / _stops_dur))
+		_apply_exposure()
 	var state: Dictionary = _weather.call("get_current_state")
 	var sun: float = state.get("sunlight", 1.0)
 	for l in _lamps:
@@ -161,6 +187,17 @@ func _process(delta: float) -> void:
 		_hint_t -= delta
 		if _hint_t <= 0.0:
 			_show()
+
+
+## (milestone 214) The scene's exposure: the fair weather's times 2 ^ the stops made up for.
+func _apply_exposure() -> void:
+	if _attrs == null:
+		var we := get_node_or_null(^"../WorldEnvironment") as WorldEnvironment
+		if we == null or we.camera_attributes == null:
+			return
+		_attrs = we.camera_attributes
+		_exposure_base = _attrs.exposure_multiplier
+	_attrs.exposure_multiplier = _exposure_base * pow(2.0, _stops)
 
 
 func _show() -> void:

@@ -234,10 +234,10 @@ public:
 	const LightningState &get_lightning_state() const { return lightning; }
 	void set_sky_state(const SkyState &p_sky) { sky = p_sky; }
 	const SkyState &get_sky_state() const { return sky; }
-	// The share of a light's energy the weather's clouds leave it (decision 0132's sun_factor) for the indirect light that
-	// takes the scene's lights itself — SDFGI's and VoxelGI's (milestone 214): their sun had stayed whole under an
-	// overcast sky. 1 for any other light, or without a weather. (The clouds' shadow map, when they cast one, is for the
-	// surfaces; the indirect light takes the weather's mean share.)
+	// The share of a light's energy the weather's clouds leave it (decision 0132's sun_factor) for what takes the scene's
+	// lights itself — SDFGI's and VoxelGI's light, the atmosphere's aerial perspective (milestone 214): their sun had
+	// stayed whole under an overcast sky. 1 for any other light, or without a weather. (The clouds' shadow map, when they
+	// cast one, is for the surfaces; these take the weather's mean share.)
 	static float indirect_light_factor(RID p_light) {
 		const FellowWeather *w = get_singleton_if_exists();
 		if (!w || !w->sky.sun_light.is_valid() || w->sky.sun_light != p_light) {

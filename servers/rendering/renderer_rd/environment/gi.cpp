@@ -1935,6 +1935,12 @@ void GI::SDFGI::pre_process_gi(const Transform3D &p_transform, RenderDataRD *p_r
 			lights[idx].direction[2] = dir.z;
 			Color color = RSG::light_storage->light_get_color(light);
 			color = color.srgb_to_linear();
+			if (light_instance == light_storage->fellow_sun_tint_instance) {
+				// FellowEngine (milestone 214): the sun through the atmosphere (decision 0108), as the surfaces have it.
+				color.r *= light_storage->fellow_sun_tint.r;
+				color.g *= light_storage->fellow_sun_tint.g;
+				color.b *= light_storage->fellow_sun_tint.b;
+			}
 			lights[idx].color[0] = color.r;
 			lights[idx].color[1] = color.g;
 			lights[idx].color[2] = color.b;
@@ -3012,6 +3018,12 @@ void GI::VoxelGIInstance::update(bool p_update_light_instances, const Vector<RID
 
 				l.radius = to_cell.basis.xform(Vector3(RSG::light_storage->light_get_param(light, RSE::LIGHT_PARAM_RANGE), 0, 0)).length();
 				Color color = RSG::light_storage->light_get_color(light).srgb_to_linear();
+				if (light_instance == light_storage->fellow_sun_tint_instance) {
+					// FellowEngine (milestone 214): the sun through the atmosphere (decision 0108), as the surfaces have it.
+					color.r *= light_storage->fellow_sun_tint.r;
+					color.g *= light_storage->fellow_sun_tint.g;
+					color.b *= light_storage->fellow_sun_tint.b;
+				}
 				l.color[0] = color.r;
 				l.color[1] = color.g;
 				l.color[2] = color.b;

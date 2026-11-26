@@ -4752,6 +4752,9 @@ void RenderForwardClustered::_fellow_update_atmosphere(RenderDataRD *p_render_da
 		energy *= Math::PI; // the colour passes' directional light (light_storage.cpp): the sky's tables are per unit illuminance
 	}
 	params.sun_illuminance = light_storage->light_get_color(light).srgb_to_linear() * energy;
+	// The air's sunlight under a FellowWeather3D's clouds (milestone 214), as the surfaces have it (the aerial
+	// perspective's in-scattering; the tables are per unit illuminance, the sky drawn from them keeps the whole sun).
+	params.sun_illuminance *= RendererRD::FellowWeather::indirect_light_factor(light);
 	params.camera_position = p_render_data->scene_data->cam_transform.origin;
 	params.ground_height = 0.0f;
 	if (Fellow::atmosphere_sun_transmittance()) {

@@ -17,7 +17,7 @@ extends SceneTree
 ##       (milestone 208: from 6 m at one of the talkers in the square's middle, into them and on; its reactions printed)
 ##   godot ... -s res://tools/climb_look.gd -- --program=people --out=<dir> [--dist=2.6] ...
 ##       (milestone 209: beside a walker in a skirt — the cloth — the player out of the way; --people_side=-1)
-##   godot ... -s res://tools/climb_look.gd -- --program=hay --out=<dir> [--dist=4.2] [--hay_from=<deg>] ...
+##   godot ... -s res://tools/climb_look.gd -- --program=hay --out=<dir> [--dist=4.2] [--hay_from=<deg>] [--hay_turn=<deg/s>] ...
 ##       (milestone 210: round the hay cart)
 ##   godot ... -s res://tools/climb_look.gd -- --program=weather --view=square|brazier|chimney [--weather=<1-7>] \
 ##       [--weather_seq=<key>@<s>,...] [--weather_transition=<s>] --out=<dir> ...   (milestone 211: the weather, the
@@ -103,6 +103,8 @@ func _init() -> void:
 			_people_side = float(a.get_slice("=", 1))
 		elif a.begins_with("--hay_from="):
 			_hay_from = float(a.get_slice("=", 1))
+		elif a.begins_with("--hay_turn="):
+			_hay_turn = float(a.get_slice("=", 1))
 		elif a.begins_with("--setting="):
 			# (a project setting for this run: --setting=rendering/fellow/...:value)
 			var kv := a.get_slice("=", 1)
@@ -515,6 +517,7 @@ var _weather_transition := -1.0 # s (-1: WeatherKeys' own)
 var _weather_keys: Node
 var _brazier: Node3D
 var _hay_from := 0.0 # --hay_from=<deg>: where round the cart the camera starts
+var _hay_turn := 16.0 # --hay_turn=<deg/s>: how fast it goes round (0: still, milestone 215's straws in the wind)
 
 func _people_setup(sc: Node) -> void:
 	_player.set("autopilot", true)
@@ -770,7 +773,7 @@ func _place_camera(p_first: bool) -> void:
 	if _program == "hay" and _hay_cart:
 		# (milestone 210: round the hay cart, slowly, at a person's height and from above)
 		var t := float(_frames.size()) / 60.0
-		var a := deg_to_rad(_hay_from + 16.0 * t)
+		var a := deg_to_rad(_hay_from + _hay_turn * t)
 		var c := _hay_cart.global_position + Vector3.UP * 1.3
 		_cam.global_position = c + Vector3(cos(a), 0.0, sin(a)) * _dist + Vector3.UP * (0.4 + 0.35 * _dist * 0.3)
 		_cam.look_at(c + Vector3.UP * 0.1, Vector3.UP)
