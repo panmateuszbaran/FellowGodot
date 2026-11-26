@@ -76,6 +76,8 @@
 #define RB_TEX_VOXEL_GI SNAME("voxel_gi")
 #define RB_TEX_VOXEL_GI_MSAA SNAME("voxel_gi_msaa")
 
+struct FellowClusterDag; // (geometry/cluster_dag: storage_rd/fellow_cluster_dag.h)
+
 namespace RendererSceneRenderImplementation {
 
 class RenderForwardClustered : public RendererSceneRenderRD {
@@ -320,6 +322,10 @@ private:
 		bool fellow_cluster_lod = false;
 		// geometry/cluster_dag (decision 0379): large surfaces drawn as their hierarchy's cut from fellow_lod_eye.
 		bool fellow_cluster_dag = false;
+		// geometry/cluster_dag_indirect (decision 0381): per element, (first command << 32 | command count) in
+		// fellow_dag_cmd_buffer, or UINT64_MAX (set by _fellow_dag_prepare()).
+		const uint64_t *fellow_dag_cmds = nullptr;
+		RID fellow_dag_cmd_buffer;
 		// The camera render these camera passes belong to (geometry/cluster_lod: the per-level ranges a surface's walk
 		// found in the first of them are reused by the others; 0: not shared, as the shadow passes).
 		uint64_t fellow_lod_epoch = 0;
@@ -627,6 +633,20 @@ private:
 	bool _fellow_render_list_parallel(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
 	static void _fellow_record_chunk(void *p_self, uint32_t p_index);
 	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2());
+	// geometry/cluster_dag (decisions 0379, 0381).
+	const LocalVector<uint32_t> *_fellow_dag_cut(const RenderListParameters *p_params, const GeometryInstanceSurfaceDataCache *p_surf, const FellowClusterDag *p_dag, const Plane *p_local_planes, int p_plane_count);
+	void _fellow_dag_prepare(RenderListParameters *p_params);
+	static constexpr uint32_t FELLOW_DAG_CMD_BYTES = 5 * sizeof(uint32_t);
+	static constexpr uint32_t FELLOW_DAG_CMD_SLOTS = 4;
+	struct FellowDagCmdSlot {
+		RID buffer;
+		uint32_t capacity = 0; // commands
+		uint32_t used = 0;
+		uint64_t frame = UINT64_MAX;
+	};
+	FellowDagCmdSlot fellow_dag_cmd_slots[FELLOW_DAG_CMD_SLOTS];
+	LocalVector<uint32_t> fellow_dag_staging;
+	LocalVector<uint64_t> fellow_dag_cmd_of_element;
 
 	void _fill_instance_data(RenderListType p_render_list, int *p_render_info = nullptr, uint32_t p_offset = 0, int32_t p_max_elements = -1, bool p_update_buffer = true);
 	void _fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_using_sdfgi = false, bool p_using_opaque_gi = false, bool p_using_motion_pass = false, bool p_append = false);

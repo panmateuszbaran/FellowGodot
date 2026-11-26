@@ -35,7 +35,9 @@ It is an option (`rendering/fellow/geometry/cluster_dag`, off): like any LOD it 
 | close | 15.98 M | 9.03 M, 43.0 dB | **4.95 M, 53.4 dB** |
 | high | 10.17 M | 1.96 M, 36.4 dB | **2.09 M, 36.9 dB** |
 
-(dB: PSNR against full detail.) No cracks: the few pixels where the sky shows through in one image and not in the
+(dB: PSNR against full detail. Correction from milestone 239: these counts are of the clustered draws only — most of
+the rocks were drawn as one instanced run, untouched and uncounted; milestone 239 cuts such runs too: 5.88 / 6.18 /
+1.36 million triangles against stock's 31.6 / 29.0 / 9.78 million.) No cracks: the few pixels where the sky shows through in one image and not in the
 other all lie on the horizon. The build: 8.1 s on the worker threads for 2.74 million triangles, 0.5 s from the cache;
 1.9 times the surfaces' indices in GPU memory. The walks: 70-90 µs each on this CPU.
 

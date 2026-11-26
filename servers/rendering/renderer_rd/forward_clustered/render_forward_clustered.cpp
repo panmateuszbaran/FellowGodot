@@ -850,10 +850,19 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				// Shaders that can move vertices (VERTEX/POSITION writes, custom matrices, grow, billboards) may leave the
 				// cluster bounds, which are computed from the mesh data: such elements are drawn whole.
 				const bool fellow_static_vertices = !(shader->uses_vertex || shader->uses_position || shader->writes_modelview_or_projection || shader->uses_z_clip_scale || shader->uses_particle_trails);
-				if (p_params->fellow_cluster_plane_count > 0 && fellow_static_vertices && instance_count == 1 && index_array_rd.is_valid() && !surf->owner->mesh_instance.is_valid() && !(surf->owner->base_flags & (INSTANCE_DATA_FLAG_MULTIMESH | INSTANCE_DATA_FLAG_PARTICLES))) {
+				// geometry/cluster_dag (decision 0381): a run of instances Godot draws as one instanced draw (the same mesh and
+				// material) is drawn instance by instance, each its own cut, when the mesh has a hierarchy.
+				const bool fellow_run = p_params->fellow_cluster_dag && p_params->screen_mesh_lod_threshold > 0.0 && instance_count > 1 && instance_count == element_info.repeat && surf->owner->instance_count <= 1;
+				if (p_params->fellow_cluster_plane_count > 0 && fellow_static_vertices && (instance_count == 1 || fellow_run) && index_array_rd.is_valid() && !surf->owner->mesh_instance.is_valid() && !(surf->owner->base_flags & (INSTANCE_DATA_FLAG_MULTIMESH | INSTANCE_DATA_FLAG_PARTICLES))) {
 					fellow_clusters = mesh_storage->fellow_mesh_surface_get_clusters(mesh_surface);
 					if (fellow_clusters && (element_info.lod_index >= fellow_clusters->levels.size() || (fellow_clusters->preserves_order && !Fellow::mesh_clusters_blended()))) {
 						fellow_clusters = nullptr;
+					}
+					if (fellow_clusters && instance_count > 1) {
+						RID fellow_run_dag;
+						if (fellow_clusters->preserves_order || mesh_storage->fellow_mesh_surface_get_dag(mesh_surface, fellow_run_dag) == nullptr || fellow_run_dag.is_null()) {
+							fellow_clusters = nullptr; // (the run drawn instanced, as stock)
+						}
 					}
 				}
 				if constexpr (p_pass_mode == PASS_MODE_COLOR) {
@@ -931,59 +940,48 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 					RID fellow_dag_indices;
 					const FellowClusterDag *fellow_dag = (p_params->fellow_cluster_dag && !fellow_clusters->preserves_order && p_params->screen_mesh_lod_threshold > 0.0) ? mesh_storage->fellow_mesh_surface_get_dag(mesh_surface, fellow_dag_indices) : nullptr;
 					if (fellow_dag != nullptr && fellow_dag_indices.is_valid()) {
-						GeometryInstanceSurfaceDataCache::FellowLodCache *fellow_lc = surf->fellow_lod_cache;
-						const LocalVector<uint32_t> *fellow_dag_used;
-						uint32_t dag_drawn = 0;
-						uint32_t dag_clusters = 0;
-						Fellow::ClusterDagStats &dag_stats = Fellow::cluster_dag_stats();
-						if (p_params->fellow_lod_epoch != 0 && fellow_lc != nullptr && fellow_lc->dag && fellow_lc->epoch == p_params->fellow_lod_epoch) {
-							// (the camera passes of one render: the cut the first of them walked)
-							fellow_dag_used = &fellow_lc->ranges[0];
-							dag_drawn = fellow_lc->drawn;
-							dag_clusters = fellow_lc->level_count;
-						} else {
-							FellowClusterDag::Params dp;
-							dp.eye = xf.affine_inverse().xform(p_params->fellow_lod_eye);
-							dp.min_scale = MIN(xf.basis.get_column(0).length(), MIN(xf.basis.get_column(1).length(), xf.basis.get_column(2).length()));
-							dp.model_scale = surf->owner->lod_model_scale * surf->owner->lod_bias;
-							dp.distance_multiplier = p_params->lod_distance_multiplier;
-							dp.distance_bias = p_params->fellow_lod_distance_bias;
-							dp.threshold = p_params->screen_mesh_lod_threshold;
-							thread_local LocalVector<uint32_t> fellow_dag_ranges;
-							LocalVector<uint32_t> *out = &fellow_dag_ranges;
-							if (p_params->fellow_lod_epoch != 0) {
-								if (fellow_lc == nullptr) {
-									fellow_lc = memnew(GeometryInstanceSurfaceDataCache::FellowLodCache);
-									surf->fellow_lod_cache = fellow_lc;
+						if (fellow_dag_indices != prev_index_array_rd) {
+							RD::get_singleton()->draw_list_bind_index_array(draw_list, fellow_dag_indices);
+							prev_index_array_rd = fellow_dag_indices;
+						}
+						// (a run of instances: each its own element, its own cut, its own base index)
+						for (uint32_t k = 0; k < instance_count; k++) {
+							const uint32_t e = i + k;
+							const GeometryInstanceSurfaceDataCache *es = p_params->elements[e];
+							if (k > 0) {
+								push_constant.base_index = e + p_params->element_offset;
+								RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, push_constant_size);
+							}
+							const uint64_t fellow_cmd = p_params->fellow_dag_cmds != nullptr ? p_params->fellow_dag_cmds[e] : UINT64_MAX;
+							if (fellow_cmd != UINT64_MAX) {
+								// geometry/cluster_dag_indirect (decision 0381): the cut's ranges as one indirect draw, written
+								// before the pass.
+								const uint32_t fellow_cmd_count = uint32_t(fellow_cmd & 0xFFFFFFFFu);
+								if (fellow_cmd_count > 0) {
+									RD::get_singleton()->draw_list_draw_indirect(draw_list, true, p_params->fellow_dag_cmd_buffer, uint32_t(fellow_cmd >> 32) * FELLOW_DAG_CMD_BYTES, fellow_cmd_count, FELLOW_DAG_CMD_BYTES);
+									Fellow::cluster_dag_stats().indirect_draws.increment();
 								}
-								out = &fellow_lc->ranges[0];
-							}
-							out->clear();
-							const uint64_t walk_from = OS::get_singleton()->get_ticks_usec();
-							dag_drawn = fellow_dag->select(local_planes, plane_count, dp, *out, &dag_clusters);
-							dag_stats.walk_usec.add(OS::get_singleton()->get_ticks_usec() - walk_from);
-							dag_stats.walks.increment();
-							if (p_params->fellow_lod_epoch != 0) {
-								fellow_lc->epoch = p_params->fellow_lod_epoch;
-								fellow_lc->dag = true;
-								fellow_lc->min_level = 0;
-								fellow_lc->level_count = dag_clusters;
-								fellow_lc->drawn = dag_drawn;
-							}
-							fellow_dag_used = out;
-						}
-						if (!fellow_dag_used->is_empty()) {
-							if (fellow_dag_indices != prev_index_array_rd) {
-								RD::get_singleton()->draw_list_bind_index_array(draw_list, fellow_dag_indices);
-								prev_index_array_rd = fellow_dag_indices;
-							}
-							for (uint32_t r = 0; r < fellow_dag_used->size(); r += 2) {
-								RD::get_singleton()->draw_list_draw_indexed_range(draw_list, (*fellow_dag_used)[r], (*fellow_dag_used)[r + 1], 1);
+							} else {
+								Plane es_planes[8];
+								const Plane *use_planes = local_planes;
+								if (k > 0) {
+									const Transform3D &exf = es->owner->transform;
+									for (int p = 0; p < plane_count; p++) {
+										const Plane &wp = p_params->fellow_cluster_planes[p];
+										es_planes[p] = Plane(exf.basis.xform_inv(wp.normal), wp.d - wp.normal.dot(exf.origin));
+									}
+									use_planes = es_planes;
+								}
+								const LocalVector<uint32_t> &fellow_dag_used = *_fellow_dag_cut(p_params, es, fellow_dag, use_planes, plane_count);
+								for (uint32_t r = 0; r < fellow_dag_used.size(); r += 2) {
+									RD::get_singleton()->draw_list_draw_indexed_range(draw_list, fellow_dag_used[r], fellow_dag_used[r + 1], 1);
+								}
+								Fellow::cluster_dag_stats().draws.add(fellow_dag_used.size() / 2);
 							}
 						}
-						dag_stats.draws.add(fellow_dag_used->size() / 2);
-						dag_stats.clusters_drawn.add(dag_clusters);
-						dag_stats.triangles_drawn.add(dag_drawn / 3);
+						if (instance_count > 1) {
+							Fellow::cluster_dag_stats().run_instances.add(instance_count);
+						}
 						i += element_info.repeat - 1;
 						continue;
 					}
@@ -1238,9 +1236,149 @@ void RenderForwardClustered::_render_list_serial(RenderingDevice::DrawListID p_d
 	}
 }
 
+// geometry/cluster_dag (decision 0379): a surface instance's cut in a pass — (first index, index count) ranges in the
+// hierarchy's index array; the camera passes of one render share the first one's walk. The pointer is valid until the
+// next call on this thread.
+const LocalVector<uint32_t> *RenderForwardClustered::_fellow_dag_cut(const RenderListParameters *p_params, const GeometryInstanceSurfaceDataCache *p_surf, const FellowClusterDag *p_dag, const Plane *p_local_planes, int p_plane_count) {
+	GeometryInstanceSurfaceDataCache::FellowLodCache *fellow_lc = p_surf->fellow_lod_cache;
+	Fellow::ClusterDagStats &dag_stats = Fellow::cluster_dag_stats();
+	if (p_params->fellow_lod_epoch != 0 && fellow_lc != nullptr && fellow_lc->dag && fellow_lc->epoch == p_params->fellow_lod_epoch) {
+		dag_stats.clusters_drawn.add(fellow_lc->level_count);
+		dag_stats.triangles_drawn.add(fellow_lc->drawn / 3);
+		return &fellow_lc->ranges[0];
+	}
+	const Transform3D &xf = p_surf->owner->transform;
+	FellowClusterDag::Params dp;
+	dp.eye = xf.affine_inverse().xform(p_params->fellow_lod_eye);
+	dp.min_scale = MIN(xf.basis.get_column(0).length(), MIN(xf.basis.get_column(1).length(), xf.basis.get_column(2).length()));
+	dp.model_scale = p_surf->owner->lod_model_scale * p_surf->owner->lod_bias;
+	dp.distance_multiplier = p_params->lod_distance_multiplier;
+	dp.distance_bias = p_params->fellow_lod_distance_bias;
+	dp.threshold = p_params->screen_mesh_lod_threshold;
+	thread_local LocalVector<uint32_t> fellow_dag_ranges;
+	LocalVector<uint32_t> *out = &fellow_dag_ranges;
+	if (p_params->fellow_lod_epoch != 0) {
+		if (fellow_lc == nullptr) {
+			fellow_lc = memnew(GeometryInstanceSurfaceDataCache::FellowLodCache);
+			p_surf->fellow_lod_cache = fellow_lc;
+		}
+		out = &fellow_lc->ranges[0];
+	}
+	out->clear();
+	uint32_t clusters = 0;
+	const uint64_t walk_from = OS::get_singleton()->get_ticks_usec();
+	const uint32_t drawn = p_dag->select(p_local_planes, p_plane_count, dp, *out, &clusters);
+	dag_stats.walk_usec.add(OS::get_singleton()->get_ticks_usec() - walk_from);
+	dag_stats.walks.increment();
+	dag_stats.clusters_drawn.add(clusters);
+	dag_stats.triangles_drawn.add(drawn / 3);
+	if (p_params->fellow_lod_epoch != 0) {
+		fellow_lc->epoch = p_params->fellow_lod_epoch;
+		fellow_lc->dag = true;
+		fellow_lc->min_level = 0;
+		fellow_lc->level_count = clusters;
+		fellow_lc->drawn = drawn;
+	}
+	return out;
+}
+
+// geometry/cluster_dag_indirect (decision 0381): before a pass's draw list, the cuts of its surfaces with a hierarchy
+// walked and their ranges written as indirect draw commands (one buffer per frame in flight, each pass its own part):
+// each such element is then one indirect draw of its ranges instead of one draw per range. An element the draw loop
+// finds it cannot draw so (another condition of the clusters' draw fails) draws its ranges as before.
+void RenderForwardClustered::_fellow_dag_prepare(RenderListParameters *p_params) {
+	p_params->fellow_dag_cmds = nullptr;
+	if (!p_params->fellow_cluster_dag || p_params->fellow_cluster_plane_count <= 0 || p_params->screen_mesh_lod_threshold <= 0.0 || !Fellow::cluster_dag_indirect() || p_params->element_info == nullptr) {
+		return;
+	}
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+	const bool depth_like = p_params->pass_mode == PASS_MODE_SHADOW || p_params->pass_mode == PASS_MODE_SHADOW_DP || p_params->pass_mode == PASS_MODE_DEPTH;
+	fellow_dag_staging.clear();
+	bool any = false;
+	for (int i = 0; i < p_params->element_count; i++) {
+		const GeometryInstanceSurfaceDataCache *surf = p_params->elements[i];
+		const RenderElementInfo &element_info = p_params->element_info[i];
+		// (each element on its own: an instanced run's are drawn one by one, decision 0381)
+		if (surf->owner->instance_count != 1 || surf->owner->mesh_instance.is_valid() || (surf->owner->base_flags & (INSTANCE_DATA_FLAG_MULTIMESH | INSTANCE_DATA_FLAG_PARTICLES))) {
+			continue;
+		}
+		void *mesh_surface = depth_like ? surf->surface_shadow : surf->surface;
+		const SceneShaderForwardClustered::ShaderData *shader = depth_like ? surf->shader_shadow : surf->shader;
+		if (mesh_surface == nullptr || shader == nullptr || shader->uses_vertex || shader->uses_position || shader->writes_modelview_or_projection || shader->uses_z_clip_scale || shader->uses_particle_trails) {
+			continue;
+		}
+		const FellowMeshClusters *clusters = mesh_storage->fellow_mesh_surface_get_clusters(mesh_surface);
+		if (clusters == nullptr || clusters->preserves_order || element_info.lod_index >= clusters->levels.size()) {
+			continue;
+		}
+		RID dag_indices;
+		const FellowClusterDag *dag = mesh_storage->fellow_mesh_surface_get_dag(mesh_surface, dag_indices);
+		if (dag == nullptr || dag_indices.is_null()) {
+			continue;
+		}
+		const Transform3D &xf = surf->owner->transform;
+		Plane local_planes[8];
+		const int plane_count = MIN(p_params->fellow_cluster_plane_count, 8);
+		for (int p = 0; p < plane_count; p++) {
+			const Plane &wp = p_params->fellow_cluster_planes[p];
+			local_planes[p] = Plane(xf.basis.xform_inv(wp.normal), wp.d - wp.normal.dot(xf.origin));
+		}
+		const LocalVector<uint32_t> &ranges = *_fellow_dag_cut(p_params, surf, dag, local_planes, plane_count);
+		if (!any) {
+			fellow_dag_cmd_of_element.resize(p_params->element_count);
+			for (uint64_t &c : fellow_dag_cmd_of_element) {
+				c = UINT64_MAX;
+			}
+			any = true;
+		}
+		const uint32_t first = fellow_dag_staging.size() / 5;
+		for (uint32_t r = 0; r < ranges.size(); r += 2) {
+			fellow_dag_staging.push_back(ranges[r + 1]); // index count
+			fellow_dag_staging.push_back(1); // instance count
+			fellow_dag_staging.push_back(ranges[r]); // first index
+			fellow_dag_staging.push_back(0); // vertex offset
+			fellow_dag_staging.push_back(0); // first instance
+		}
+		fellow_dag_cmd_of_element[i] = (uint64_t(first) << 32) | uint64_t(ranges.size() / 2);
+		Fellow::cluster_dag_stats().draws.add(ranges.size() / 2);
+	}
+	if (!any) {
+		return;
+	}
+	// This frame's buffer (one per frame in flight: a buffer the GPU may still read is not written).
+	const uint64_t frame = RSG::rasterizer->get_frame_number();
+	const uint32_t slot = uint32_t(frame % FELLOW_DAG_CMD_SLOTS);
+	FellowDagCmdSlot &cs = fellow_dag_cmd_slots[slot];
+	if (cs.frame != frame) {
+		cs.frame = frame;
+		cs.used = 0;
+	}
+	const uint32_t need = fellow_dag_staging.size() / 5;
+	if (cs.used + need > cs.capacity) {
+		if (cs.buffer.is_valid()) {
+			RD::get_singleton()->free_rid(cs.buffer); // (released once the frames using it are done)
+		}
+		cs.capacity = MAX(65536u, Math::next_power_of_2(cs.used + need));
+		cs.buffer = RD::get_singleton()->storage_buffer_create(uint64_t(cs.capacity) * FELLOW_DAG_CMD_BYTES, Span<uint8_t>(), RD::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
+		cs.used = 0;
+	}
+	if (need > 0) {
+		RD::get_singleton()->buffer_update(cs.buffer, uint64_t(cs.used) * FELLOW_DAG_CMD_BYTES, uint64_t(need) * FELLOW_DAG_CMD_BYTES, fellow_dag_staging.ptr());
+	}
+	for (uint64_t &c : fellow_dag_cmd_of_element) {
+		if (c != UINT64_MAX) {
+			c += uint64_t(cs.used) << 32;
+		}
+	}
+	cs.used += need;
+	p_params->fellow_dag_cmds = fellow_dag_cmd_of_element.ptr();
+	p_params->fellow_dag_cmd_buffer = cs.buffer;
+}
+
 void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region) {
 	RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
 	p_params->framebuffer_format = fb_format;
+	_fellow_dag_prepare(p_params);
 
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, p_draw_flags, p_clear_color_values, p_clear_depth_value, p_clear_stencil_value, p_region);
 	if (p_params->fellow_depth_filter != 0) {
@@ -11717,6 +11855,12 @@ RenderForwardClustered::~RenderForwardClustered() {
 	fellow_baking_codes.clear();
 	FellowParallelFor::shared_release();
 	fellow_parallel = nullptr;
+	for (FellowDagCmdSlot &cs : fellow_dag_cmd_slots) {
+		if (cs.buffer.is_valid()) {
+			RD::get_singleton()->free_rid(cs.buffer);
+			cs.buffer = RID();
+		}
+	}
 	if (ss_effects != nullptr) {
 		memdelete(ss_effects);
 		ss_effects = nullptr;

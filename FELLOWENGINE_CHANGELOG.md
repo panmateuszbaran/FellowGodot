@@ -9,6 +9,15 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 239 — The hierarchy's cuts as indirect draws, instanced runs cut (2026-11-26)
+
+- Decision 0381, `geometry/cluster_dag_indirect` (on). With the cluster hierarchy (0379) each surface instance's cut
+  is one indirect draw of its ranges, the commands written before each pass: the render thread 27-29 % shorter, the
+  same image. Godot's instanced runs (the same mesh and material) of a mesh with a hierarchy are now drawn instance by
+  instance with their own cuts — they were drawn whole (0379's rock field: correction in the record). On its test
+  scene the hierarchy draws 81-86 % fewer triangles than stock submits. The Vulkan driver draws indexed indirect
+  commands one by one on a device without `multiDrawIndirect`.
+
 ## Milestone 238 — A budget for the lights' shadows (2026-11-26)
 
 - Decision 0380, `shadows/positional_update_budget` (0, off) and `positional_update_max_wait` (8): at most N omni and

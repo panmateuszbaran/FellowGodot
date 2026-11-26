@@ -284,6 +284,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_lod", false); // decision 0063 (changes the image; off until measured)
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag", false); // decision 0379 (changes the image, as LOD does)
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag_cache", true); // decision 0379
+	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag_indirect", true); // decision 0381
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_min_surface_triangles", PROPERTY_HINT_RANGE, "256,1048576,1"), 32768);
 	GLOBAL_DEF("rendering/fellow/lights/enabled", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", true);
@@ -711,6 +712,8 @@ Dictionary Fellow::get_stats_dictionary() {
 		d["geometry_cluster_dag_clusters_drawn"] = cs.clusters_drawn.get();
 		d["geometry_cluster_dag_triangles_drawn"] = cs.triangles_drawn.get();
 		d["geometry_cluster_dag_draws"] = cs.draws.get();
+		d["geometry_cluster_dag_indirect_draws"] = cs.indirect_draws.get();
+		d["geometry_cluster_dag_run_instances"] = cs.run_instances.get();
 		d["geometry_cluster_dag_walk_usec"] = cs.walk_usec.get();
 		d["geometry_cluster_dag_cache_hits"] = cs.cache_hits.get();
 		d["geometry_cluster_dag_cache_writes"] = cs.cache_writes.get();

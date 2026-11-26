@@ -3364,6 +3364,9 @@
 		<member name="rendering/fellow/geometry/cluster_dag_cache" type="bool" setter="" getter="" default="true">
 			With geometry/cluster_dag: each hierarchy built is kept in user://fellow_dag_cache under a hash of its surface's positions, normals and indices, and loaded from there the next time the surface is seen instead of built again (Unreal's derived data cache). Read when a hierarchy is built. Decision 0379.
 		</member>
+		<member name="rendering/fellow/geometry/cluster_dag_indirect" type="bool" setter="" getter="" default="true">
+			With geometry/cluster_dag: each surface instance's cut drawn as one indirect draw of its ranges (the commands written before each pass) instead of one draw call per range. The same image. Read every frame. Decision 0381.
+		</member>
 		<member name="rendering/fellow/geometry/cluster_front_to_back" type="int" setter="" getter="" default="0">
 			Measured and rejected (no frame gain): large surfaces' clusters drawn front to back. Decision 0058.
 		</member>

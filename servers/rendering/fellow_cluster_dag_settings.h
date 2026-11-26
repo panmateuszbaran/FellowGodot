@@ -52,6 +52,12 @@ inline bool cluster_dag_cache() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/cluster_dag_cache");
 }
 
+// Each surface instance's cut drawn as one indirect draw of its ranges, the commands written before the pass
+// (decision 0381); off: one draw call per range. The same image. Read every frame.
+inline bool cluster_dag_indirect() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/cluster_dag_indirect");
+}
+
 struct ClusterDagStats {
 	SafeNumeric<uint64_t> surfaces; // surfaces with a hierarchy in use
 	SafeNumeric<uint64_t> build_usec; // CPU time of the hierarchies' builds (worker threads)
@@ -60,7 +66,9 @@ struct ClusterDagStats {
 	SafeNumeric<uint64_t> walks; // cuts walked (a surface instance in a pass; the camera passes of one render share one)
 	SafeNumeric<uint64_t> clusters_drawn; // clusters drawn (summed over the passes)
 	SafeNumeric<uint64_t> triangles_drawn;
-	SafeNumeric<uint64_t> draws; // draw calls (adjacent clusters drawn as one)
+	SafeNumeric<uint64_t> draws; // ranges drawn (adjacent clusters drawn as one): draw calls, or indirect commands
+	SafeNumeric<uint64_t> indirect_draws; // indirect draw calls (geometry/cluster_dag_indirect: one a surface instance)
+	SafeNumeric<uint64_t> run_instances; // instances of Godot's instanced runs drawn one by one with their own cuts
 	SafeNumeric<uint64_t> walk_usec; // CPU time of the walks
 	SafeNumeric<uint64_t> cache_hits; // hierarchies loaded from user://fellow_dag_cache
 	SafeNumeric<uint64_t> cache_writes; // hierarchies written to it

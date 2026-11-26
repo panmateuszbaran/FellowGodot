@@ -69,6 +69,13 @@ The image against full detail (PSNR; pixels more than 2 levels apart):
 | close | 43.0 dB, 1.26 % | **53.4 dB**, 0.25 % |
 | high | 36.4 dB, 24.9 % | **36.9 dB**, 23.3 % |
 
+**Correction (milestone 239, decision 0381):** these counts are of the clustered draws only. The rocks share their
+mesh and material, so Godot drew most of them as one instanced run, which neither the k-d clusters nor the hierarchy
+touched: those rocks were at full detail in every column and missing from the counts. Since 0381 such runs are drawn
+instance by instance, each with its own cut. Against everything stock submits (its primitive count, every pass):
+31.6 / 29.0 / 9.78 million triangles a frame against the hierarchy's 5.88 / 6.18 / 1.36 million (−81 / −79 / −86 %),
+44.2 / 44.2 / 36.5 dB against full detail.
+
 The differences are where LOD puts them: the far terrain's shading and its self-shadowing (side by side the images
 are alike). Cracks: none — the pixels where the sky shows through in one image and not the other (0-29 a view) all lie
 within 3 pixels of the horizon (silhouettes moved, as by any LOD).

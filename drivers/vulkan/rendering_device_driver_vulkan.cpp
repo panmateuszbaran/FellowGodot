@@ -6378,6 +6378,13 @@ void RenderingDeviceDriverVulkan::command_render_draw_indexed(CommandBufferID p_
 void RenderingDeviceDriverVulkan::command_render_draw_indexed_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	const BufferInfo *buf_info = (const BufferInfo *)p_indirect_buffer.id;
+	if (p_draw_count > 1 && !requested_device_features.multiDrawIndirect) {
+		// FellowEngine (decision 0381): a device without multiDrawIndirect takes the draws one by one.
+		for (uint32_t i = 0; i < p_draw_count; i++) {
+			vkCmdDrawIndexedIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset + uint64_t(i) * p_stride, 1, p_stride);
+		}
+		return;
+	}
 	vkCmdDrawIndexedIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_draw_count, p_stride);
 }
 
