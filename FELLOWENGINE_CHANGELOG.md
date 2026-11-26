@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 237 — A hierarchy of clusters (Nanite's level of detail) (2026-11-26)
+
+- Decision 0379, `geometry/cluster_dag` (off). Large static surfaces get a hierarchy of 128-triangle clusters simplified
+  from each other with meshoptimizer (groups of neighbours simplified to half with their borders locked) and are drawn
+  as the cut through it just fine enough on screen from the main camera — Godot's own LOD test per cluster — in the
+  camera and shadow passes, with ordinary indexed draws from one more index buffer. No cracks, no overlaps. On a
+  2-million-triangle terrain and twelve 640 000-triangle rocks (lavapipe): 69-79 % fewer triangles than full detail,
+  36.9-53.4 dB against it; fewer triangles near the camera and a closer image than 0063's cluster LOD. The build runs
+  in parallel and is kept in `user://fellow_dag_cache` (`geometry/cluster_dag_cache`): 8.1 s, then 0.5 s.
+
 ## Milestone 236 — Hair (2026-11-26)
 
 - Decision 0378. The people's hair drawn opaque first and blended at its edges (soft strands), duller (black hair no

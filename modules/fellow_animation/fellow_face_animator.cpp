@@ -784,7 +784,7 @@ void FellowFaceAnimator::set_blend_shapes(const Dictionary &p_shapes) {
 	mesh_cache.unref();
 }
 
-void FellowFaceAnimator::set_follower_paths(const Array &p_paths) {
+void FellowFaceAnimator::set_follower_paths(const TypedArray<NodePath> &p_paths) {
 	follower_paths = p_paths;
 	followers.clear();
 }
@@ -947,7 +947,7 @@ void FellowFaceAnimator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "voice_stream", PROPERTY_HINT_RESOURCE_TYPE, "AudioStream"), "set_voice_stream", "get_voice_stream");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "voice_time", PROPERTY_HINT_RANGE, "-1,600,0.001,or_greater,suffix:s"), "set_voice_time", "get_voice_time");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "blend_shapes"), "set_blend_shapes", "get_blend_shapes");
-	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "follower_paths", PROPERTY_HINT_ARRAY_TYPE, MAKE_RESOURCE_TYPE_HINT("NodePath")), "set_follower_paths", "get_follower_paths");
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "follower_paths", PROPERTY_HINT_ARRAY_TYPE, "NodePath"), "set_follower_paths", "get_follower_paths");
 	ADD_GROUP("Lip Sync", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "lip_sync"), "set_lip_sync", "is_lip_sync");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "strength", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_strength", "get_strength");

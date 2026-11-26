@@ -36,6 +36,7 @@
 #include "core/object/callable_mp.h"
 #include "core/os/os.h"
 #include "servers/rendering/fellow_bake_shaders.h"
+#include "servers/rendering/fellow_cluster_dag_settings.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/fellow_settings_look.h"
 #include "servers/rendering/renderer_rd/effects/fellow_gas.h"
@@ -926,6 +927,66 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 						const Plane &wp = p_params->fellow_cluster_planes[p];
 						local_planes[p] = Plane(xf.basis.xform_inv(wp.normal), wp.d - wp.normal.dot(xf.origin));
 					}
+					// geometry/cluster_dag (decision 0379): the surface's hierarchy's cut, from its own index array (all levels).
+					RID fellow_dag_indices;
+					const FellowClusterDag *fellow_dag = (p_params->fellow_cluster_dag && !fellow_clusters->preserves_order && p_params->screen_mesh_lod_threshold > 0.0) ? mesh_storage->fellow_mesh_surface_get_dag(mesh_surface, fellow_dag_indices) : nullptr;
+					if (fellow_dag != nullptr && fellow_dag_indices.is_valid()) {
+						GeometryInstanceSurfaceDataCache::FellowLodCache *fellow_lc = surf->fellow_lod_cache;
+						const LocalVector<uint32_t> *fellow_dag_used;
+						uint32_t dag_drawn = 0;
+						uint32_t dag_clusters = 0;
+						Fellow::ClusterDagStats &dag_stats = Fellow::cluster_dag_stats();
+						if (p_params->fellow_lod_epoch != 0 && fellow_lc != nullptr && fellow_lc->dag && fellow_lc->epoch == p_params->fellow_lod_epoch) {
+							// (the camera passes of one render: the cut the first of them walked)
+							fellow_dag_used = &fellow_lc->ranges[0];
+							dag_drawn = fellow_lc->drawn;
+							dag_clusters = fellow_lc->level_count;
+						} else {
+							FellowClusterDag::Params dp;
+							dp.eye = xf.affine_inverse().xform(p_params->fellow_lod_eye);
+							dp.min_scale = MIN(xf.basis.get_column(0).length(), MIN(xf.basis.get_column(1).length(), xf.basis.get_column(2).length()));
+							dp.model_scale = surf->owner->lod_model_scale * surf->owner->lod_bias;
+							dp.distance_multiplier = p_params->lod_distance_multiplier;
+							dp.distance_bias = p_params->fellow_lod_distance_bias;
+							dp.threshold = p_params->screen_mesh_lod_threshold;
+							thread_local LocalVector<uint32_t> fellow_dag_ranges;
+							LocalVector<uint32_t> *out = &fellow_dag_ranges;
+							if (p_params->fellow_lod_epoch != 0) {
+								if (fellow_lc == nullptr) {
+									fellow_lc = memnew(GeometryInstanceSurfaceDataCache::FellowLodCache);
+									surf->fellow_lod_cache = fellow_lc;
+								}
+								out = &fellow_lc->ranges[0];
+							}
+							out->clear();
+							const uint64_t walk_from = OS::get_singleton()->get_ticks_usec();
+							dag_drawn = fellow_dag->select(local_planes, plane_count, dp, *out, &dag_clusters);
+							dag_stats.walk_usec.add(OS::get_singleton()->get_ticks_usec() - walk_from);
+							dag_stats.walks.increment();
+							if (p_params->fellow_lod_epoch != 0) {
+								fellow_lc->epoch = p_params->fellow_lod_epoch;
+								fellow_lc->dag = true;
+								fellow_lc->min_level = 0;
+								fellow_lc->level_count = dag_clusters;
+								fellow_lc->drawn = dag_drawn;
+							}
+							fellow_dag_used = out;
+						}
+						if (!fellow_dag_used->is_empty()) {
+							if (fellow_dag_indices != prev_index_array_rd) {
+								RD::get_singleton()->draw_list_bind_index_array(draw_list, fellow_dag_indices);
+								prev_index_array_rd = fellow_dag_indices;
+							}
+							for (uint32_t r = 0; r < fellow_dag_used->size(); r += 2) {
+								RD::get_singleton()->draw_list_draw_indexed_range(draw_list, (*fellow_dag_used)[r], (*fellow_dag_used)[r + 1], 1);
+							}
+						}
+						dag_stats.draws.add(fellow_dag_used->size() / 2);
+						dag_stats.clusters_drawn.add(dag_clusters);
+						dag_stats.triangles_drawn.add(dag_drawn / 3);
+						i += element_info.repeat - 1;
+						continue;
+					}
 					thread_local LocalVector<uint32_t> fellow_ranges;
 					fellow_ranges.clear();
 					uint32_t drawn;
@@ -937,7 +998,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 						// tree with the same planes and eye: the first stores its ranges with the surface, the others reuse them.
 						GeometryInstanceSurfaceDataCache::FellowLodCache *fellow_lc = surf->fellow_lod_cache;
 						LocalVector<uint32_t> *fellow_level_ranges_used;
-						if (p_params->fellow_lod_epoch != 0 && fellow_lc != nullptr && fellow_lc->epoch == p_params->fellow_lod_epoch && fellow_lc->min_level == uint32_t(element_info.lod_index) && fellow_lc->level_count == fellow_level_count) {
+						if (p_params->fellow_lod_epoch != 0 && fellow_lc != nullptr && !fellow_lc->dag && fellow_lc->epoch == p_params->fellow_lod_epoch && fellow_lc->min_level == uint32_t(element_info.lod_index) && fellow_lc->level_count == fellow_level_count) {
 							fellow_level_ranges_used = fellow_lc->ranges;
 							drawn = fellow_lc->drawn;
 							Fellow::stats().geometry_cluster_lod_reused.increment();
@@ -970,6 +1031,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 							drawn = fellow_clusters->cull_lod(local_planes, plane_count, lp, fellow_level_ranges_used);
 							if (fellow_lc != nullptr && p_params->fellow_lod_epoch != 0) {
 								fellow_lc->epoch = p_params->fellow_lod_epoch;
+								fellow_lc->dag = false;
 								fellow_lc->min_level = element_info.lod_index;
 								fellow_lc->level_count = fellow_level_count;
 								fellow_lc->drawn = drawn;
@@ -6796,7 +6858,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	const uint32_t fellow_cluster_f2b = (fellow_cluster_planes.size() > 0 && !p_render_data->scene_data->cam_orthogonal) ? uint32_t(Fellow::cluster_front_to_back()) * 3 : 0;
 	// geometry/cluster_lod (decision 0063): with stock's LOD selection (main camera, perspective).
 	const bool fellow_cluster_lod = fellow_cluster_planes.size() > 0 && Fellow::cluster_lod() && !p_render_data->scene_data->cam_orthogonal && p_render_data->scene_data->fellow_lod_ortho_extent <= 0.0;
-	const uint64_t fellow_lod_epoch = fellow_cluster_lod ? ++fellow_lod_epoch_counter : 0; // this render's camera passes share the walks
+	// geometry/cluster_dag (decision 0379): the same conditions (the cut from the main camera, perspective).
+	const bool fellow_cluster_dag = fellow_cluster_planes.size() > 0 && Fellow::cluster_dag() && !p_render_data->scene_data->cam_orthogonal && p_render_data->scene_data->fellow_lod_ortho_extent <= 0.0;
+	const uint64_t fellow_lod_epoch = (fellow_cluster_lod || fellow_cluster_dag) ? ++fellow_lod_epoch_counter : 0; // this render's camera passes share the walks
 	const uint32_t fellow_prepare_flips = Fellow::autotune_prepare_flips(); // decision 0068
 	fellow_prepare_all_passes = fellow_prepare_flips & 8u;
 	const Vector3 fellow_lod_eye = p_render_data->scene_data->main_cam_transform.origin;
@@ -7150,6 +7214,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		render_list_params.fellow_cluster_eye = fellow_cluster_eye;
 		render_list_params.fellow_cluster_f2b = fellow_cluster_f2b;
 		render_list_params.fellow_cluster_lod = fellow_cluster_lod;
+		render_list_params.fellow_cluster_dag = fellow_cluster_dag;
 		render_list_params.fellow_lod_epoch = fellow_lod_epoch;
 		render_list_params.fellow_lod_eye = fellow_lod_eye;
 		render_list_params.fellow_lod_distance_bias = fellow_lod_distance_bias;
@@ -7415,6 +7480,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			render_list_params.fellow_cluster_eye = fellow_cluster_eye;
 			render_list_params.fellow_cluster_f2b = fellow_cluster_f2b;
 			render_list_params.fellow_cluster_lod = fellow_cluster_lod;
+			render_list_params.fellow_cluster_dag = fellow_cluster_dag;
 			render_list_params.fellow_lod_epoch = fellow_lod_epoch;
 			render_list_params.fellow_lod_eye = fellow_lod_eye;
 			render_list_params.fellow_lod_distance_bias = fellow_lod_distance_bias;
@@ -7469,6 +7535,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			render_list_params.fellow_cluster_eye = fellow_cluster_eye;
 			render_list_params.fellow_cluster_f2b = fellow_cluster_f2b;
 			render_list_params.fellow_cluster_lod = fellow_cluster_lod;
+			render_list_params.fellow_cluster_dag = fellow_cluster_dag;
 			render_list_params.fellow_lod_epoch = fellow_lod_epoch;
 			render_list_params.fellow_lod_eye = fellow_lod_eye;
 			render_list_params.fellow_lod_distance_bias = fellow_lod_distance_bias;
@@ -8856,6 +8923,8 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 		// geometry/cluster_lod (decision 0063): stock's LOD for a shadow pass is from the main camera's distance, except
 		// in orthogonal shadow cameras (a constant distance).
 		shadow_pass.fellow_cluster_lod = Fellow::cluster_lod() && !p_projection.is_orthogonal() && p_fellow_lod_ortho_extent <= 0.0;
+		// geometry/cluster_dag (decision 0379): the camera's cut (from the main camera), whatever the shadow camera.
+		shadow_pass.fellow_cluster_dag = Fellow::cluster_dag();
 		shadow_pass.fellow_lod_eye = p_main_cam_transform.origin;
 		shadow_pass.fellow_lod_distance_bias = p_fellow_lod_distance_bias;
 		if ((Fellow::mesh_clusters() || Fellow::multimesh_culling()) && !p_use_dp) {
@@ -8951,6 +9020,7 @@ void RenderForwardClustered::_render_shadow_end() {
 		render_list_parameters.fellow_cluster_planes = shadow_pass.fellow_cluster_planes;
 		render_list_parameters.fellow_cluster_plane_count = shadow_pass.fellow_cluster_plane_count;
 		render_list_parameters.fellow_cluster_lod = shadow_pass.fellow_cluster_lod;
+		render_list_parameters.fellow_cluster_dag = shadow_pass.fellow_cluster_dag;
 		render_list_parameters.fellow_lod_eye = shadow_pass.fellow_lod_eye;
 		render_list_parameters.fellow_lod_distance_bias = shadow_pass.fellow_lod_distance_bias;
 		_fellow_multimesh_cull_params(1, RENDER_LIST_SECONDARY, shadow_pass.element_from, render_list_parameters);

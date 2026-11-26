@@ -33,6 +33,7 @@
 #include "core/config/engine.h"
 #include "core/os/os.h"
 #include "core/variant/dictionary.h"
+#include "servers/rendering/fellow_cluster_dag_settings.h"
 #include "servers/rendering/fellow_hitch_sampler.h"
 #include "servers/rendering/fellow_memory_counters.h"
 #include "servers/rendering/fellow_parallel.h"
@@ -279,6 +280,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_ss_split", PROPERTY_HINT_ENUM, "Stock,SSIL On Main Queue,SSIL And SSR On Main Queue,Autotune"), 3); // decision 0060 (3 from fellow147)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_front_to_back", PROPERTY_HINT_RANGE, "0,1048576,1"), 0); // decision 0058 (rejected, off)
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_lod", false); // decision 0063 (changes the image; off until measured)
+	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag", false); // decision 0379 (changes the image, as LOD does)
+	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag_cache", true); // decision 0379
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_min_surface_triangles", PROPERTY_HINT_RANGE, "256,1048576,1"), 32768);
 	GLOBAL_DEF("rendering/fellow/lights/enabled", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", true);
@@ -645,6 +648,17 @@ Fellow::PositionalShadowCacheStats &Fellow::positional_shadow_cache_stats() {
 	return s;
 }
 
+Fellow::ClusterDagStats &Fellow::cluster_dag_stats() {
+	static ClusterDagStats s;
+	return s;
+}
+
+FellowMeshopt::BuildMeshletsBound FellowMeshopt::build_meshlets_bound = nullptr;
+FellowMeshopt::BuildMeshlets FellowMeshopt::build_meshlets = nullptr;
+FellowMeshopt::PartitionClusters FellowMeshopt::partition_clusters = nullptr;
+FellowMeshopt::Simplify FellowMeshopt::simplify = nullptr;
+FellowMeshopt::SimplifyWithAttributes FellowMeshopt::simplify_with_attributes = nullptr;
+
 Fellow::CostScope::CostScope(SafeNumeric<uint64_t> &p_usec, SafeNumeric<uint64_t> &p_count) :
 		usec(p_usec), from(OS::get_singleton()->get_ticks_usec()) {
 	p_count.increment();
@@ -680,6 +694,20 @@ Dictionary Fellow::get_stats_dictionary() {
 		d["shadow_pos_cache_camera_rebuilds"] = ps.camera_rebuilds.get();
 		d["shadow_pos_cache_static_casters"] = ps.static_casters.get();
 		d["shadow_pos_cache_dynamic_casters"] = ps.dynamic_casters.get();
+	}
+	{
+		const ClusterDagStats &cs = cluster_dag_stats(); // decision 0379
+		d["geometry_cluster_dag_surfaces"] = cs.surfaces.get();
+		d["geometry_cluster_dag_build_usec"] = cs.build_usec.get();
+		d["geometry_cluster_dag_clusters"] = cs.clusters.get();
+		d["geometry_cluster_dag_index_bytes"] = cs.index_bytes.get();
+		d["geometry_cluster_dag_walks"] = cs.walks.get();
+		d["geometry_cluster_dag_clusters_drawn"] = cs.clusters_drawn.get();
+		d["geometry_cluster_dag_triangles_drawn"] = cs.triangles_drawn.get();
+		d["geometry_cluster_dag_draws"] = cs.draws.get();
+		d["geometry_cluster_dag_walk_usec"] = cs.walk_usec.get();
+		d["geometry_cluster_dag_cache_hits"] = cs.cache_hits.get();
+		d["geometry_cluster_dag_cache_writes"] = cs.cache_writes.get();
 	}
 	d["geometry_cluster_surfaces"] = s.geometry_cluster_surfaces.get();
 	d["geometry_cluster_surfaces_active"] = s.geometry_cluster_surfaces_active.get();

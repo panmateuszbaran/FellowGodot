@@ -34,6 +34,7 @@
 #include "core/templates/hash_map.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/pair.h"
+#include "core/variant/typed_array.h"
 #include "scene/main/node.h"
 #include "scene/resources/mesh.h"
 #include "servers/audio/audio_stream.h"
@@ -136,7 +137,7 @@ private:
 	int64_t seed = 0;
 	// Milestone 234 (decision 0376): meshes that take the face mesh's blend shapes by name (eyebrows, eyelashes,
 	// teeth); and a mouth talking without a voice (a crowd's conversations): syllables in phrases at random.
-	Array follower_paths; // NodePaths
+	TypedArray<NodePath> follower_paths;
 	struct Follower {
 		ObjectID id;
 		Ref<Mesh> mesh;
@@ -285,8 +286,8 @@ public:
 	float get_speech_brows() const { return speech_brows; }
 	void set_speech_emphasis_db(float p_db) { speech_emphasis_db = CLAMP(p_db, 1.0f, 30.0f); }
 	float get_speech_emphasis_db() const { return speech_emphasis_db; }
-	void set_follower_paths(const Array &p_paths);
-	Array get_follower_paths() const { return follower_paths; }
+	void set_follower_paths(const TypedArray<NodePath> &p_paths);
+	TypedArray<NodePath> get_follower_paths() const { return follower_paths; }
 	void set_talking(bool p_talking) { talking = p_talking; }
 	bool is_talking() const { return talking; }
 	void set_talk_rate(float p_rate) { talk_rate = CLAMP(p_rate, 1.0f, 10.0f); }

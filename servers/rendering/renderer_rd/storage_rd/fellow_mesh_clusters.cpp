@@ -30,6 +30,8 @@
 
 #include "fellow_mesh_clusters.h"
 
+#include "fellow_cluster_dag.h"
+
 #include "core/os/os.h"
 #include "core/templates/sort_array.h"
 #include "servers/rendering/rendering_server_enums.h"
@@ -654,11 +656,16 @@ static void _fellow_mesh_clusters_build_task(void *p_userdata) {
 	FellowMeshClusterBuild *b = static_cast<FellowMeshClusterBuild *>(p_userdata);
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	b->clusters = fellow_mesh_clusters_build(b->format, b->vertex_data, b->vertex_count, b->aabb, b->index_data, b->index_count, b->lods, b->max_leaf_triangles, &b->ordered);
+	b->build_usec = OS::get_singleton()->get_ticks_usec() - t0;
+	if (b->build_dag && b->clusters) {
+		const uint64_t t1 = OS::get_singleton()->get_ticks_usec();
+		b->dag = fellow_cluster_dag_build(b->format, b->vertex_data, b->vertex_count, b->aabb, b->index_data, b->index_count);
+		b->dag_usec = OS::get_singleton()->get_ticks_usec() - t1;
+	}
 	// Release the references to the surface data as soon as possible.
 	b->vertex_data = Vector<uint8_t>();
 	b->index_data = Vector<uint8_t>();
 	b->lods.clear();
-	b->build_usec = OS::get_singleton()->get_ticks_usec() - t0;
 }
 
 FellowMeshClusterBuild::~FellowMeshClusterBuild() {
@@ -667,6 +674,9 @@ FellowMeshClusterBuild::~FellowMeshClusterBuild() {
 	}
 	if (ordered) {
 		memdelete(ordered);
+	}
+	if (dag) {
+		memdelete(dag);
 	}
 }
 

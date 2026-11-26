@@ -31,6 +31,7 @@
 #include "mesh_storage.h"
 
 #include "core/os/os.h"
+#include "servers/rendering/fellow_cluster_dag_settings.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/fellow_texture_streaming.h"
 #include "servers/rendering/renderer_viewport.h"
@@ -483,6 +484,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 		}
 		// Built later on the WorkerThreadPool (fellow_update_clusters()); the render thread never waits for it.
 		s->fellow_build = fellow_mesh_clusters_build_create(new_surface.format, new_surface.vertex_data, new_surface.vertex_count, new_surface.aabb, new_surface.index_data, new_surface.index_count, lod_indices, Fellow::mesh_cluster_triangles(), RSG::rasterizer->get_frame_number());
+		s->fellow_build->build_dag = Fellow::cluster_dag(); // decision 0379
 		fellow_pending_surfaces.push_back(s);
 	}
 
@@ -607,6 +609,7 @@ void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 		memdelete(s.fellow_clusters);
 		s.fellow_clusters = nullptr;
 	}
+	_fellow_free_dag(&s);
 
 	memdelete(p_mesh->surfaces[p_surface]);
 }
@@ -813,6 +816,21 @@ bool MeshStorage::_fellow_try_apply(Mesh::Surface *p_surface) {
 		c->pending_lods.clear();
 		c->active = true;
 		Fellow::stats().geometry_cluster_surfaces_active.increment();
+		if (b->dag && b->dag->index_count > 0) {
+			// geometry/cluster_dag (decision 0379): its own index buffer, all its levels (the vertices are the surface's).
+			_fellow_free_dag(p_surface);
+			FellowClusterDag *dag = b->dag;
+			b->dag = nullptr;
+			p_surface->fellow_dag_index_buffer = RD::get_singleton()->index_buffer_create(dag->index_count, format, dag->pending_indices);
+			p_surface->fellow_dag_index_array = RD::get_singleton()->index_array_create(p_surface->fellow_dag_index_buffer, 0, dag->index_count);
+			dag->pending_indices = Vector<uint8_t>();
+			p_surface->fellow_dag = dag;
+			Fellow::ClusterDagStats &ds = Fellow::cluster_dag_stats();
+			ds.surfaces.increment();
+			ds.build_usec.add(b->dag_usec);
+			ds.clusters.add(dag->clusters.size());
+			ds.index_bytes.add(uint64_t(dag->index_count) * (is_16 ? 2 : 4));
+		}
 	} else if (b->decision == FellowMeshClusterBuild::KEEP_ORDER && b->ordered) {
 		c = b->ordered;
 		b->ordered = nullptr;
@@ -914,6 +932,21 @@ void MeshStorage::_fellow_drop_clusters(Mesh::Surface *p_surface) {
 		memdelete(p_surface->fellow_clusters);
 		p_surface->fellow_clusters = nullptr;
 		Fellow::stats().geometry_cluster_surfaces_dropped.increment();
+	}
+	_fellow_free_dag(p_surface);
+}
+
+void MeshStorage::_fellow_free_dag(Mesh::Surface *p_surface) {
+	if (p_surface->fellow_dag_index_buffer.is_valid()) {
+		RD::get_singleton()->free_rid(p_surface->fellow_dag_index_buffer); // (and its index array)
+		Fellow::cluster_dag_stats().surfaces.sub(1);
+		Fellow::cluster_dag_stats().index_bytes.sub(uint64_t(p_surface->fellow_dag->index_count) * (p_surface->fellow_dag->is_16 ? 2 : 4));
+	}
+	p_surface->fellow_dag_index_buffer = RID();
+	p_surface->fellow_dag_index_array = RID();
+	if (p_surface->fellow_dag) {
+		memdelete(p_surface->fellow_dag);
+		p_surface->fellow_dag = nullptr;
 	}
 }
 

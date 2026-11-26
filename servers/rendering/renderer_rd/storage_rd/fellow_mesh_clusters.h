@@ -141,6 +141,8 @@ FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<u
 // recreated every frame never pay for it) and runs on the WorkerThreadPool; the render thread never waits for it: the
 // result is applied by the per-frame update once the task has completed and the renderer has decided how the surface
 // is drawn (cluster order, or stock order with the order-preserving variant).
+struct FellowClusterDag;
+
 struct FellowMeshClusterBuild {
 	enum Decision {
 		UNDECIDED,
@@ -165,6 +167,10 @@ struct FellowMeshClusterBuild {
 	FellowMeshClusters *clusters = nullptr;
 	FellowMeshClusters *ordered = nullptr;
 	uint64_t build_usec = 0; // CPU time of the build (worker thread).
+	// geometry/cluster_dag (decision 0379): the hierarchy of simplified clusters too, when asked for at creation.
+	bool build_dag = false;
+	FellowClusterDag *dag = nullptr;
+	uint64_t dag_usec = 0;
 	WorkerThreadPool::TaskID task = WorkerThreadPool::INVALID_TASK_ID;
 
 	~FellowMeshClusterBuild();

@@ -33,11 +33,12 @@
 #include "core/templates/local_vector.h"
 #include "core/templates/rid_owner.h"
 #include "core/templates/self_list.h"
-#include "servers/rendering/renderer_compositor.h"
-#include "servers/rendering/renderer_rd/storage_rd/fellow_mesh_clusters.h"
 #include "servers/rendering/fellow_settings.h"
+#include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/renderer_rd/shaders/fellow_blas_decode.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/skeleton.glsl.gen.h"
+#include "servers/rendering/renderer_rd/storage_rd/fellow_cluster_dag.h"
+#include "servers/rendering/renderer_rd/storage_rd/fellow_mesh_clusters.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/storage/mesh_storage.h"
 #include "servers/rendering/storage/utilities.h"
@@ -158,6 +159,10 @@ private:
 
 			FellowMeshClusters *fellow_clusters = nullptr; // FellowEngine mesh clusters in use (nullptr: none).
 			FellowMeshClusterBuild *fellow_build = nullptr; // Clusters not built or not applied yet.
+			// geometry/cluster_dag (decision 0379): the hierarchy of simplified clusters and its index buffer (all levels).
+			FellowClusterDag *fellow_dag = nullptr;
+			RID fellow_dag_index_buffer;
+			RID fellow_dag_index_array;
 			// FellowEngine ray tracing (decision 0080): the surface's bottom-level acceleration structure, built on first
 			// use; the positions decoded to floats where the device cannot build from compressed ones.
 			RID fellow_blas;
@@ -578,6 +583,12 @@ public:
 	_FORCE_INLINE_ const FellowMeshClusters *fellow_mesh_surface_get_clusters(void *p_surface) const {
 		return reinterpret_cast<Mesh::Surface *>(p_surface)->fellow_clusters;
 	}
+	// geometry/cluster_dag (decision 0379): the surface's hierarchy (nullptr: none) and the index array of all its levels.
+	_FORCE_INLINE_ const FellowClusterDag *fellow_mesh_surface_get_dag(void *p_surface, RID &r_index_array) const {
+		const Mesh::Surface *surface = reinterpret_cast<Mesh::Surface *>(p_surface);
+		r_index_array = surface->fellow_dag_index_array;
+		return surface->fellow_dag;
+	}
 	// Records how a surface with pending clusters is drawn: p_cluster_order reorders its index buffers into cluster
 	// order; otherwise it keeps stock's triangle order and uses the order-preserving clusters (chunks of consecutive
 	// triangles). Applied as soon as the build is done (possibly right away).
@@ -624,6 +635,7 @@ private:
 	bool _fellow_try_apply(Mesh::Surface *p_surface);
 	void _fellow_forget_build(Mesh::Surface *p_surface);
 	void _fellow_drop_clusters(Mesh::Surface *p_surface);
+	void _fellow_free_dag(Mesh::Surface *p_surface);
 
 public:
 

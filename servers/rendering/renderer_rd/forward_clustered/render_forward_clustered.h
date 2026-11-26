@@ -318,6 +318,8 @@ private:
 		// geometry/cluster_lod (decision 0063): large surfaces' clusters each at their own LOD, from their distance to
 		// fellow_lod_eye (the main camera, as stock's LOD selection).
 		bool fellow_cluster_lod = false;
+		// geometry/cluster_dag (decision 0379): large surfaces drawn as their hierarchy's cut from fellow_lod_eye.
+		bool fellow_cluster_dag = false;
 		// The camera render these camera passes belong to (geometry/cluster_lod: the per-level ranges a surface's walk
 		// found in the first of them are reused by the others; 0: not shared, as the shadow passes).
 		uint64_t fellow_lod_epoch = 0;
@@ -563,6 +565,7 @@ private:
 			Plane fellow_cluster_planes[6];
 			int fellow_cluster_plane_count = 0;
 			bool fellow_cluster_lod = false; // decision 0063
+			bool fellow_cluster_dag = false; // decision 0379
 			Vector3 fellow_lod_eye;
 			float fellow_lod_distance_bias = 0.0;
 			// FellowEngine MultiMesh culling (decision 0034): the pass's view volume (as the clusters', also without them).
@@ -1092,8 +1095,9 @@ private:
 		struct FellowLodCache {
 			uint64_t epoch = 0;
 			uint32_t min_level = 0;
-			uint32_t level_count = 0;
+			uint32_t level_count = 0; // (geometry/cluster_dag: the clusters drawn)
 			uint32_t drawn = 0;
+			bool dag = false; // written by geometry/cluster_dag (decision 0379): ranges[0] in the hierarchy's index array
 			LocalVector<uint32_t> ranges[9];
 		};
 		mutable FellowLodCache *fellow_lod_cache = nullptr;
