@@ -55,9 +55,9 @@ const LAMPS_DARK := 2.4
 ## frames from the square's corner, their mean luminance under the sky, the eye not adapting), and the share of that the
 ## eye makes up for — of the frame's stops, which the tone curve spreads 1.7 times wider than the light's: 0.6 had made
 ## a storm as bright as the fair evening; at 0.4 it is a stop and a quarter darker, an overcast sky three quarters.
-## (milestone 224: each the darker by what its less sun takes, measured on the RTX — overcast +0.23, snow +0.21 — and
-## estimated for the others from those.)
-const DARKER := [0.0, 0.27, 2.65, 3.66, 3.96, 2.06, 2.22]
+## (milestone 224: each the darker by what its less sun takes, measured on the RTX — snow +0.21 — and estimated for
+## the others from it; milestone 226: overcast measured again, closed, 2.45.)
+const DARKER := [0.0, 0.27, 2.45, 3.66, 3.96, 2.06, 2.22]
 const EXPOSURE_ADAPT := 0.4
 var _adapt := EXPOSURE_ADAPT # (tools: --weather_adapt=<share>, 0 the frames' own darkness measured)
 ## (milestone 216) The eye under the moon (rooftops_night.gd): this many stops more (its light 5 stops under the

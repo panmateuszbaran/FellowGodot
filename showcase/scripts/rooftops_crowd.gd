@@ -657,7 +657,7 @@ var _lanterns: Array = [] # [BoneAttachment3D]
 ## mist every few seconds (a GPUParticles3D at the mouth: BREATH_NEAR metres, the puffs left in the air, lit by the
 ## scene), and stops in the warm.
 const BREATH_NEAR := 22.0
-var _breaths: Array = [] # [GPUParticles3D, the person's Dictionary or null for the player]
+var _breaths: Array = [] # [GPUParticles3D, the person's Dictionary or null for the player, its pace]
 var _breath_on := false
 var _sample_t := 0.0
 var _point_t := 0.0
@@ -1212,6 +1212,17 @@ func _breathe() -> void:
 		var on := _cold and e.is_visible_in_tree() and e.global_position.distance_to(eye) < BREATH_NEAR
 		if e.emitting != on:
 			e.emitting = on
+		# (milestone 226: faster breathing walking, hurrying away or talking)
+		var p = b[1]
+		var pace := 1.0
+		if p != null:
+			if p.act == "talk" or p.act == "point":
+				pace = 1.5
+			elif p.act == "leave" or p.act == "back":
+				pace = 1.4
+			elif p.kind == "walk":
+				pace = 1.25
+		e.speed_scale = float(b[2]) * pace
 
 
 func _make_breaths() -> void:
@@ -1282,7 +1293,8 @@ func _make_breaths() -> void:
 		e.explosiveness = 0.75
 		e.randomness = 0.3
 		e.local_coords = false
-		e.speed_scale = _rng.randf_range(0.6, 0.75) # (a breath every 3-3.7 s, each its own)
+		var pace := _rng.randf_range(0.6, 0.75) # (a breath every 3-3.7 s standing, each its own)
+		e.speed_scale = pace
 		e.preprocess = _rng.randf_range(0.0, 2.2)
 		e.process_material = pm
 		e.draw_pass_1 = quad
@@ -1291,7 +1303,7 @@ func _make_breaths() -> void:
 		e.emitting = false
 		e.position = Vector3(0.0, 0.05, 0.11)
 		at.add_child(e)
-		_breaths.append([e, h[1]])
+		_breaths.append([e, h[1], pace])
 
 
 ## Milestone 222: a walker come back to its way walks on along it (from where it came out, its lane eased in).

@@ -9,6 +9,11 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 226 — An overcast sky closed; the breath's pace (2026-11-26)
+
+- Decision 0368. The rooftops' overcast sky closed (coverage 0.97: no blue between the clouds); the breath in the cold
+  quicker as people walk, hurry home or talk.
+
 ## Milestone 225 — Breath in the cold (2026-11-26)
 
 - Decision 0367. In the rooftops' snow and blizzard everyone near the camera, and the player, breathes out a puff of
