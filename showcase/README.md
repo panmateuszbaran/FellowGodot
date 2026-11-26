@@ -115,7 +115,9 @@ behind the windows, lit at night), the people's talk, looks and shelter, and Cas
 milestone 232 the people are people — MakeHuman bodies with their skins, hair and clothes (`people/*.glb`, CC0, made by
 `tools/fellow_characters/make_characters.py`), worn over the mannequins (`scripts/fellow_person.gd`: the mannequin's
 skeleton drives them through a `RetargetModifier3D`); `--people=0` brings the mannequins back. From milestone 233 the
-player too (Luca, his hands and feet put on the mannequin's by a two-bone IK; `--player_person=0`).
+player too (Luca, his hands and feet put on the mannequin's by a two-bone IK; `--player_person=0`). Their faces blink
+and talk (milestone 234), their eyes turn to the player before their heads, and they show moods — glad, surprised,
+in pain, cross (milestone 235: `scripts/fellow_person_eyes.gd`, `rooftops_crowd.gd`'s `_mood`).
 
 Everything in it is made by code, in two steps:
 

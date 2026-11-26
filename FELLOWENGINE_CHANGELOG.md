@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 235 — Eyes and moods (2026-11-26)
+
+- Decision 0377. The people's eyes turn: eye bones from the generator (and their own iris colours), turned by
+  FellowFaceAnimator's gaze in the head (a modifier after the retargeting, within 1.4° of the target); the crowd's
+  people look at the player with their eyes first, and their faces show moods — glad to talk, surprised when run into,
+  in pain on the ground, cross after getting up. Fixed: a person walking back to its place after a reaction (milestone
+  234's face under the key of its facing) failed every frame.
+
 ## Milestone 234 — Faces for the people (2026-11-26)
 
 - Decision 0376. `FellowFaceAnimator`: `follower_paths` (meshes taking the face's blend shapes by name) and `talking` /

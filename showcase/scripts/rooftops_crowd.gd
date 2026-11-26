@@ -378,9 +378,13 @@ func _register(p_node: Node3D, p_kind: String, p_clip: String, p_speed: float) -
 			"act": "", "look": null, "look_w": 0.0, "knocked": 0}
 	# (milestone 232: the skeleton seen — the person's when one is worn, the mannequin's otherwise: breath, footprints)
 	p["body"] = p_node.get_meta(&"body_skeleton", p.skel)
-	# (milestone 234: its face, when its person has one — talking in a talking group and while its bubble is read)
-	p["face"] = (p.body as Node).get_node_or_null(^"Face") if p.body != p.skel else null
+	# (milestone 234: its face, when its person has one — talking in a talking group and while its bubble is read; from
+	# milestone 235 under its own key: "face" is the way it faces at its place)
+	p["face_anim"] = (p.body as Node).get_node_or_null(^"Face") if p.body != p.skel else null
 	p["talk_until"] = 0.0
+	p["mood"] = ""
+	p["mood_until"] = 0.0
+	p["gazing"] = false
 	_by_node[p_node] = p
 	_people.append(p)
 	return p
@@ -436,6 +440,7 @@ func _stagger(p: Dictionary, p_push: Vector3) -> void:
 	var back := front.dot(p_push) < 0.0
 	p.turn_to = atan2(-p_push.x, -p_push.z) if back else atan2(p_push.x, p_push.z)
 	_begin(p, "stagger")
+	_mood(p, "surprised", 0.8, 1.4, 0.1)
 	_root_motion(p, true)
 	var ap: AnimationPlayer = p.ap
 	ap.speed_scale = 1.0
@@ -446,6 +451,7 @@ func _knock(p: Dictionary, p_velocity: Vector3) -> void:
 	var skel: Skeleton3D = p.skel
 	var ap: AnimationPlayer = p.ap
 	_begin(p, "knock")
+	_mood(p, "surprised", 1.0, 30.0, 0.08)
 	(p.shape as CollisionShape3D).disabled = true
 	_root_motion(p, false)
 	skel.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
@@ -493,6 +499,7 @@ func _physics_process(_delta: float) -> void:
 				(p.ap as AnimationPlayer).pause()
 				p.pa.call("knock_down", p.knock_v)
 				p.react = "down"
+				_mood(p, "pain", 0.9, 30.0, 0.35)
 
 
 func _react(p: Dictionary, delta: float) -> void:
@@ -593,6 +600,7 @@ func _get_up(p: Dictionary) -> void:
 	pa.call("get_up_from_animation", GET_UP_BLEND)
 	p.react = "getup"
 	p.t = 0.0
+	_mood(p, "angry", 0.75, 5.0, 0.6)
 	_say(node, ["Ow... my back.", "Maleducato!", "Are you mad?!", "Santo cielo..."][_rng.randi() % 4], 2.4, 1.3)
 
 
@@ -833,6 +841,12 @@ func _social(delta: float) -> void:
 		look.active = p.look_w > 0.001
 		if look.active:
 			(p.look_target as Node3D).global_position = eyes
+		# (milestone 235: the eyes on the player as soon as the head is to turn — the eyes lead it — and off it with it)
+		var gazing := goal > 0.5 or float(p.look_w) > 0.5
+		var fa: Node = p.face_anim
+		if fa and gazing != bool(p.gazing):
+			p.gazing = gazing
+			fa.set("look_target_path", fa.get_path_to(p.look_target) if gazing else NodePath())
 	# Someone pointing up at the player.
 	_point_t -= delta
 	if up and _point_t <= 0.0:
@@ -923,6 +937,7 @@ func _point_at_player(p_at: Vector3) -> void:
 	p.pointed = _now
 	p.act = "point"
 	p.t = 0.0
+	_mood(p, "surprised", 0.7, 2.5, 0.2)
 	var to := p_at - (p.node as Node3D).global_position
 	p.turn_to = atan2(to.x, to.z)
 	var ap: AnimationPlayer = p.ap
@@ -1004,6 +1019,11 @@ func _talk_start(p: Dictionary) -> void:
 		ap.speed_scale = 1.0
 		ap.play("wave", 0.25)
 	_talk = {"p": p, "lines": _lines(p), "i": -1, "t": 0.0}
+	# (milestone 235: glad of the company — or cross, if the player knocked them down)
+	if int(p.get("knocked", 0)) > 0:
+		_mood(p, "angry", 0.5, 7.0, 0.4)
+	else:
+		_mood(p, "happy", 0.8, 7.0, 0.4)
 	_talk_next()
 
 
@@ -1017,6 +1037,8 @@ func _talk_next() -> void:
 		return
 	var last := int(_talk.i) == lines.size() - 1
 	_say(p.node, lines[_talk.i], 0.0, _head_height(p), not last)
+	if p.mood != "":
+		p.mood_until = maxf(float(p.mood_until), _clock + 8.0) # (the talk's mood kept while it goes on)
 
 
 ## Milestone 234: the faces — talking while a talking group's clip plays or a bubble is read; their animators run only
@@ -1031,14 +1053,29 @@ func _faces(delta: float) -> void:
 	if check:
 		_faces_wait = 0.5
 	for p in _people:
-		var face: Node = p.face
+		var face: Node = p.face_anim
 		if face == null:
 			continue
+		if p.mood != "" and _clock >= float(p.mood_until):
+			p.mood = ""
+			face.call("clear_expressions", 0.8)
 		if check and cam:
 			var near := (p.node as Node3D).global_position.distance_to(cam.global_position) < FACES_NEAR
 			face.process_mode = Node.PROCESS_MODE_INHERIT if near else Node.PROCESS_MODE_DISABLED
 		var ap: AnimationPlayer = p.ap
 		face.set("talking", _clock < float(p.talk_until) or (ap != null and ap.current_animation == "talk"))
+
+
+## Milestone 235: a mood on the face (FellowFaceAnimator's expressions — happy, sad, angry, surprised, afraid,
+## disgusted, and FellowPerson's "pain") for p_seconds, faded in over p_fade; the one before it faded out.
+func _mood(p: Dictionary, p_name: String, p_weight: float, p_seconds: float, p_fade := 0.25) -> void:
+	var face: Node = p.get("face_anim")
+	if face == null:
+		return
+	face.call("clear_expressions", p_fade)
+	face.call("set_expression", p_name, p_weight, p_fade)
+	p.mood = p_name
+	p.mood_until = _clock + p_seconds
 
 
 ## A bubble said (FellowBubbles' say(), the same arguments) and, from milestone 234, the person's mouth talking while it

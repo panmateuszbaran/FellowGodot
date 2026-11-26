@@ -6,6 +6,8 @@ extends SceneTree
 ##   godot --path showcase -s res://tools/person_look.gd -- --person=giulia [--clip=walk] [--view=front|side|face|cast]
 ##       [--seconds=2] [--every=30] --out=<dir>
 ##   --mannequin=1: the mannequin's own mesh too (the person moved 1 m aside), to compare the poses.
+##   --look=1: the eyes following a target circling before the face (with --view=face); --mood=happy[:weight]: an
+##   expression held (the built-in ones and "pain").
 
 var _out := "user://person_look"
 var _person := "giulia"
@@ -18,6 +20,9 @@ var _global := false
 var _raw := false
 var _talk := false # --talk=1 (milestone 234): the person's face talking
 var _face := {} # --face=jawOpen:1,mouthSmileLeft:0.8 (milestone 234): blend shapes set on the person
+var _look := false # --look=1 (milestone 235): a target circling before the face, the eyes following it
+var _mood := "" # --mood=happy[:0.8] (milestone 235): an expression held on the face
+var _target: Node3D
 const CAST := ["giulia", "marco", "rosa", "aldo", "amara", "kenji"]
 
 
@@ -41,6 +46,10 @@ func _init() -> void:
 			_global = true
 		elif a == "--talk=1":
 			_talk = true
+		elif a == "--look=1":
+			_look = true
+		elif a.begins_with("--mood="):
+			_mood = a.get_slice("=", 1)
 		elif a.begins_with("--face="):
 			for pair in a.get_slice("=", 1).split(","):
 				_face[pair.get_slice(":", 0)] = float(pair.get_slice(":", 1))
@@ -67,6 +76,14 @@ func _npc(p_name: String, p_at: Vector3) -> Node3D:
 					(mi as MeshInstance3D).set_blend_shape_value(bi, _face[k])
 	if pskel and _talk and pskel.get_node_or_null(^"Face"):
 		pskel.get_node(^"Face").set("talking", true)
+	if pskel and _mood != "" and pskel.get_node_or_null(^"Face"):
+		pskel.get_node(^"Face").call("set_expression", _mood.get_slice(":", 0), float(_mood.get_slice(":", 1)) if _mood.contains(":") else 1.0, 0.0)
+	if pskel and _look and pskel.get_node_or_null(^"Face"):
+		if _target == null:
+			_target = Node3D.new()
+			root.add_child(_target)
+		var f := pskel.get_node(^"Face")
+		f.set("look_target_path", f.get_path_to(_target))
 	if pskel and _mannequin:
 		for c in (npc.find_child("Skeleton3D", true, false) as Skeleton3D).get_children():
 			if c is MeshInstance3D:
@@ -137,6 +154,10 @@ func _run() -> void:
 					head = ps.global_transform * ps.get_bone_global_pose(ps.find_bone("Head")).origin + Vector3(0, 0.07, 0)
 				cam.position = head + Vector3(0.12, 0.02, 0.62)
 				cam.look_at(head)
+				if _target:
+					# (the target circling 0.8 m before the face: 25 degrees to each side, 15 up and down)
+					var a := TAU * float(i) / float(maxi(frames, 1))
+					_target.global_position = head + Vector3(sin(a) * 0.37, cos(a) * 0.21, 0.8)
 			else:
 				cam.position = at + Vector3(0.4, 1.1, 3.4)
 				cam.look_at(at + Vector3(0, 0.9, 0))

@@ -60,14 +60,20 @@ static func dress(p_npc: Node3D, p_person: PackedScene, p_rng: RandomNumberGener
 		hair_tint = Color.from_hsv(0.08, p_rng.randf_range(0.0, 0.3), p_rng.randf_range(0.55, 1.0))
 	for mi in pskel.find_children("*", "MeshInstance3D", true, false):
 		_materials(mi as MeshInstance3D, cloth_tint, hair_tint)
-	_face(pskel, p_rng)
+	_face(pskel, skel, p_rng)
 	return pskel
 
 
 ## Milestone 234: a face for a person made with the face's shapes (ARKit's 52, MakeHuman's Faceunits): a
 ## FellowFaceAnimator named "Face" on the body, the eyebrows, eyelashes, teeth and tongue following it; blinking, its
-## mouth talking when `talking` is set (no eye bones in the rig: no gaze).
-static func _face(p_person: Skeleton3D, p_rng: RandomNumberGenerator) -> void:
+## mouth talking when `talking` is set. Milestone 235: with the rig's eye bones, its gaze (the face's `look_target_path`,
+## saccades without one) turns the eyes (fellow_person_eyes.gd on the mannequin's skeleton, after the hand-over), and
+## a "pain" expression beside the built-in ones.
+const PAIN := {"brow_down_left": 0.8, "brow_down_right": 0.8, "brow_inner_up": 0.35, "eye_squint_left": 0.7,
+		"eye_squint_right": 0.7, "cheek_squint_left": 0.6, "cheek_squint_right": 0.6, "nose_sneer_left": 0.5,
+		"nose_sneer_right": 0.5, "mouth_wide": 0.45}
+
+static func _face(p_person: Skeleton3D, p_mannequin: Skeleton3D, p_rng: RandomNumberGenerator) -> void:
 	var body: MeshInstance3D = null
 	var followers: Array = []
 	for mi in p_person.find_children("*", "MeshInstance3D", true, false):
@@ -89,8 +95,16 @@ static func _face(p_person: Skeleton3D, p_rng: RandomNumberGenerator) -> void:
 	for f in followers:
 		paths.append(face.get_path_to(f))
 	face.set("follower_paths", paths)
-	face.set("gaze", false)
 	face.set("seed", p_rng.randi() if p_rng else 0)
+	face.set("expressions", {"pain": PAIN})
+	var eyes: SkeletonModifier3D = load("res://scripts/fellow_person_eyes.gd").new()
+	eyes.name = "PersonEyes"
+	if eyes.call("setup", p_person, face):
+		face.set("gaze", true)
+		p_mannequin.add_child(eyes)
+	else:
+		face.set("gaze", false)
+		eyes.free()
 
 
 ## The player's hands and feet put where the mannequin's are (milestone 233): the arms' and legs' proportions differ (the
@@ -107,7 +121,7 @@ static func _contact_ik(p_person: Skeleton3D, p_mannequin: Skeleton3D) -> void:
 ## The person's retargeting runs after the mannequin's other modifiers (added later: a head's look, the falling bodies):
 ## moved back to the last place.
 static func keep_last(p_skeleton: Skeleton3D) -> void:
-	for n in [^"Person", ^"PersonContacts"]:
+	for n in [^"Person", ^"PersonContacts", ^"PersonEyes"]:
 		var r := p_skeleton.get_node_or_null(n)
 		if r:
 			p_skeleton.move_child(r, -1)

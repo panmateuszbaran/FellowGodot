@@ -226,6 +226,64 @@ def face_units(bpy, service, body, face_dir, followers):
     return names
 
 
+def eye_colour(bpy, eyes, find_eye, colour):
+    """Milestone 235: the irises' colour (the spec's `eye_colour`: one of the pack's eye textures, eyes/materials/
+    <colour>_eye.png; or "darkbrown": the pack's brown — a red-brown — turned towards a neutral dark brown)."""
+    from PIL import Image
+
+    src = find_eye(("brown" if colour == "darkbrown" else colour) + "_eye")
+    if colour == "darkbrown":
+        im = Image.open(src).convert("RGB")
+        h, sat, v = im.convert("HSV").split()
+        # (the iris's hue, ~10 degrees, to 25; its saturation two thirds; the white and the skin's tones barely move)
+        h = h.point(lambda x: x + int(10 * (1.0 - abs(x - 8) / 40.0)) if x < 40 else x)
+        sat = sat.point(lambda x: int(x * 0.68))
+        dst = os.path.join(tempfile.mkdtemp(prefix="fellow_eyes_"), "darkbrown_eye.png")
+        Image.merge("HSV", (h, sat, v)).convert("RGB").save(dst)
+        src = dst
+    image = bpy.data.images.load(src)
+    for slot in eyes.material_slots:
+        if slot.material and slot.material.node_tree:
+            for n in slot.material.node_tree.nodes:
+                if n.type == "TEX_IMAGE" and n.image is not None and n.image.filepath.endswith("_eye.png"):
+                    n.image = image
+
+
+def eye_bones(bpy, root, eyes_name):
+    """Milestone 235: Godot's humanoid LeftEye and RightEye bones under the head, at the eyeballs' centres (MPFB's game
+    rig has none), the eyes' mesh weighted to them (each eyeball wholly to its own): the eyes can turn."""
+    from mathutils import Vector
+
+    arm = root if root.type == "ARMATURE" else next((c for c in root.children_recursive if c.type == "ARMATURE"), None)
+    eyes = next((c for c in root.children_recursive if c.type == "MESH" and eyes_name in c.name), None)
+    if arm is None or eyes is None or "Head" not in arm.data.bones:
+        return
+    world = [eyes.matrix_world @ v.co for v in eyes.data.vertices]
+    sides = {"LeftEye": [w for w in world if w.x > 0.0], "RightEye": [w for w in world if w.x <= 0.0]}
+    if not sides["LeftEye"] or not sides["RightEye"]:
+        return
+    bpy.ops.object.select_all(action="DESELECT")
+    arm.select_set(True)
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+    to_arm = arm.matrix_world.inverted()
+    for name, pts in sides.items():
+        lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
+        hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+        centre = to_arm @ ((lo + hi) * 0.5)
+        bone = arm.data.edit_bones.new(name)
+        bone.head = centre
+        bone.tail = centre + Vector((0.0, -0.02, 0.0))  # (forward: the people face -Y)
+        bone.parent = arm.data.edit_bones["Head"]
+        bone.use_deform = True
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for g in list(eyes.vertex_groups):
+        eyes.vertex_groups.remove(g)
+    groups = {n: eyes.vertex_groups.new(name=n) for n in sides}
+    for v, w in zip(eyes.data.vertices, world):
+        groups["LeftEye" if w.x > 0.0 else "RightEye"].add([v.index], 1.0, "REPLACE")
+
+
 def humanoid_bones(root):
     arm = root if root.type == "ARMATURE" else next((c for c in root.children_recursive if c.type == "ARMATURE"), None)
     if arm is None:
@@ -269,6 +327,8 @@ def make(bpy, service, spec, out, save_blend, face_dir):
         if name:
             ob = HumanService.add_mhclo_asset(find(AssetService, name, subdir, ".mhclo"), body, asset_type=kind,
                                               subdiv_levels=0, material_type="GAMEENGINE")
+            if ob is not None and kind == "Eyes" and spec.get("eye_colour"):
+                eye_colour(bpy, ob, lambda n: find(AssetService, n, "eyes/materials", ".png"), spec["eye_colour"])
             if ob is not None and kind in ("Eyebrows", "Eyelashes"):
                 followers.append((ob, ("eye", "brow", "cheek")))
             elif ob is not None and kind in ("Teeth", "Tongue"):
@@ -283,6 +343,7 @@ def make(bpy, service, spec, out, save_blend, face_dir):
     game_materials(bpy, root, [n for n in (spec.get("hair"), spec.get("eyebrows"), spec.get("eyelashes")) if n])
     apply_shape_keys(bpy, root, set(face))
     humanoid_bones(root)
+    eye_bones(bpy, root, spec.get("eyes_mesh", "low-poly"))
     bpy.ops.object.select_all(action="DESELECT")
     root.select_set(True)
     for child in ObjectService.get_list_of_children(root):
