@@ -9,6 +9,33 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 216 — Night falls on the square (2026-11-26)
+
+- Decision 0358. N on the rooftops square (`rooftops_night.gd`): over 20 s the sun sets down its azimuth, slowly through
+  the horizon — its light reddening and gone at the horizon, FellowEngine's atmosphere drawing the sunset and the
+  twilight — and the moon rises over the roofs (the Sun's light a pale blue 0.15 from 28° up, the sky and its clouds
+  dimmed, its stars out, the moon's disk drawn); the rooms behind the windows light their lamps (decision 0330's
+  material: 55 % of them), the eye adapts 2.5 stops; the square's lamps, the brazier and the osteria bright in the
+  night; the weather keys go on working. N again: the day. The showcase's sky shader draws its stars where the sky is
+  dark as it is seen (by day as before). `climb_look.gd --night=1`, `--night_at=<s>`.
+
+## Milestone 215 — The hay's straws stir in the wind (2026-11-26)
+
+- Decision 0357. The cart's 26,000 straws (milestone 210) swayed by the scene's wind (FellowEngine's material wind,
+  decision 0125: `render_mode fellow_wind`): those standing out of the heap or hanging over the boards most, those lying
+  in it hardly. `climb_look.gd --hay_turn=0` (the camera still).
+
+## Milestone 214 — The overcast weather's light (2026-11-26)
+
+- Decision 0356. Under snow, rain or a storm the rooftops square had stayed lit as on a fair evening. Engine: SDFGI and
+  VoxelGI take a FellowWeather3D's sunlight (they lit with the whole sun under any sky) and the atmosphere's colour of
+  the sun, as the surfaces do; the atmosphere's aerial perspective takes the weather's sunlight; FellowEngine tells the
+  sky's shader how overcast the sky is (`fellow_weather_overcast`, a float shader global the project declares; the
+  radiance map redrawn as it changes) and the showcase's atmosphere sky turns its light on the scene to an overcast
+  sky's (grey, brightest overhead). The rooftops: the sky's light no longer dimmed with the clouds' own sun, less sun
+  under a closed deck, the eye adapting to the weather (the fair evening's exposure as it was). The regression suite's
+  ledge_corners golden blessed again (milestones 198-208's climbing).
+
 ## Milestone 213 — An osteria open to the square (2026-11-26)
 
 - The owner: "and maybe some open buildings with a real interior?" (decision 0355). CasaRosa's ground floor on the

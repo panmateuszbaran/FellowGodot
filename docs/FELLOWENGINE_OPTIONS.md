@@ -523,11 +523,17 @@ environment's fog (added to its own, in `fog_color` as bright as the sky; milest
 in instead — its end no further than the visibility, 3 / `fog_density`, its begin a twentieth of that at most, its
 colour turning to `fog_color`, the sky veiled) and its background energy (the sky, its ambient light and
 reflections); milestone 211: the sun's share on FellowEngine's smoke, ray-traced bounces and screen gather as on the
-surfaces; and the ground — wet in the rain, drying after it, covered by falling snow below 1 °C,
+surfaces; milestone 214: on SDFGI's and VoxelGI's light and the atmosphere's aerial perspective too (and SDFGI's and
+VoxelGI's sun takes the atmosphere's colour, decision 0108, as the surfaces' does), and how overcast the sky is for the
+sky's shader — `fellow_weather_overcast`, a float shader global the project declares (Project Settings > Shader
+Globals, as the atmosphere's tables): the clouds' coverage from half to 95 % times `clouds/sky_light`, the sky's
+radiance map redrawn as it changes (the showcase's `atmosphere_sky.gdshader` turns its light on the scene to an
+overcast sky's: grey, brightest overhead, as bright on the ground as the clear sky's plus a third of the sun's);
+and the ground — wet in the rain, drying after it, covered by falling snow below 1 °C,
 melting above 0 °C, its water freezing and frosted below 0 °C when nothing falls (decision 0136) (`ground_speed`
 speeds it up; `settle_ground` starts it as the weather leaves it). It does nothing
 in the editor. Without the node nothing changes (bit for bit); with it, the cost is that of the parts it turns on.
-Decision 0132.
+Decisions 0132, 0356.
 
 ## Neural motion (milestone 43)
 
@@ -805,6 +811,13 @@ run time (`rooftops_hay.gd` on the cart: `straws` 26,000, `ground_straws` 500, `
 `climb_look.gd --program=talk`, `--program=lookup`, `--crowd=1`. Milestone 213 (decision 0355): CasaRosa's osteria
 (`rooftops_osteria.gd` on the building: `get_people()`, `get_shelter()`, `get_stats()`), `climb_look.gd
 --program=osteria` (`--view=door|inside|walkin`).
+Milestone 214 (decision 0356): the weather keys' sky light not dimmed with the SkySun (the sky shader's
+`radiance_scale`), less sun under a closed deck (`SUN`), the eye adapting (`DARKER`, `EXPOSURE_ADAPT` 0.6; tools:
+`--weather_adapt=<share>`). Milestone 215 (decision 0357): the straws in the wind (`render_mode fellow_wind`;
+`climb_look.gd --hay_turn=<deg/s>`). Milestone 216 (decision 0358): N for the night (`rooftops_night.gd`: `duration` 20
+s, `SUNSET_SHARE` 0.6, `moon_energy` 0.15, `moon_sky_share` 0.1, `sky_night` 0.12, `MOON_UP` 28°, `MOON_TURN` 80°,
+`WINDOW_LAMPS` 0.55; `toggle()`, `get_night()`; tools: `--night=1`, `--night_at=<s>`,
+`--night_set=moon:,sky_share:,sky:`; rooftops.gd's `set_sun_own_color()`; `rooftops_weather.gd`'s `NIGHT_STOPS` 2.5).
 
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
