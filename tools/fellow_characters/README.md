@@ -20,6 +20,15 @@ glTF for the engine (milestone 232, decision 0374).
 * **Eyes** (milestone 235): `LeftEye` and `RightEye` bones under the head at the eyeballs' centres, each eyeball
   weighted to its own (55 bones); the irises from the spec's `eye_colour` (the pack's `blue`, `bluegreen`, `brown`,
   `brownlight`, `deepblue`, `green`, `grey`, `ice`, `lightblue`, or `darkbrown`: its brown less red).
+* **Skin and eyes** (milestone 243): the asset pack's high-poly eyes (their cornea cut by the texture's alpha, kept
+  in a full-colour PNG). `make_skin_maps.py` makes the maps every person's skin and eyes share (MPFB's CC0 region
+  masks: `--textures <mpfb2>/src/mpfb/data/textures --eyes <assets>/eyes/high-poly/high-poly.obj --out showcase/people`):
+  the skin's roughness by region, its oily second lobe (the clearcoat), the light through the ears, the eyes' shading
+  towards the lids.
+* **Strand guides** (milestone 244, `hair_guides.py`; numpy and scipy): each person's hair traced into strand guides
+  for FellowHair3D — roots where the hair covers the scalp, then along the painted strands' direction over the hair's
+  surface — written to `<name>_hair.json` beside the `.glb` (`--hair_dump <dir>`: the traced data too, to try the
+  tracer alone).
 * **Hats** (milestone 236): with a hat among the clothes (fedora, hat, cap, helmet, hood) the hair's faces above the
   hat's underside are removed (MPFB fits the hair to the head: it came through the hat).
 

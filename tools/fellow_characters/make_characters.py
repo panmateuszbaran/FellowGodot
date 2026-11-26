@@ -25,6 +25,9 @@ import os
 import sys
 import tempfile
 
+# Milestone 243: the pack's high-poly eyes (1 064 vertices, a round eyeball and cornea; 232-242: low-poly, 96).
+EYES_MESH = "high-poly"
+
 
 def parse_args():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -35,6 +38,8 @@ def parse_args():
     ap.add_argument("--only", default="", help="comma-separated names of the spec's characters")
     ap.add_argument("--profile", default="", help="a Blender user folder for MPFB (default: a new temporary one)")
     ap.add_argument("--blend", action="store_true", help="also save each character's .blend (to look at)")
+    ap.add_argument("--hair_dump", default="", help="milestone 244: also save the hair's traced data (.npz) here, to try "
+                    "hair_guides.py alone; 'skip': no strand guides")
     ap.add_argument("--faces", default="", help="MakeHuman's face units (the Faceunits 01 pack's targets/faceunits, CC0: "
                     "ARKit's 52 shapes); default <assets>/targets/faceunits if there; 'none': no face shapes")
     return ap.parse_args()
@@ -135,6 +140,10 @@ def repack_images(path, quality=88):
             buf = io.BytesIO()
             if image_views[i].get("mimeType") == "image/jpeg":
                 im.convert("RGB").save(buf, "JPEG", quality=quality, optimize=True)
+            elif image_views[i].get("name", "").endswith("_eye"):
+                # (milestone 243: the high-poly eyes' texture — its cornea's island transparent — in full colour: a
+                # palette bands the iris)
+                im.convert("RGBA").save(buf, "PNG", optimize=True)
             else:
                 # (the hair's, eyebrows' and eyelashes' cards: their alpha only cuts — a palette of 256 colours and
                 # alphas keeps them, at an eighth of the size)
@@ -279,13 +288,16 @@ def eye_colour(bpy, eyes, find_eye, colour):
 
     src = find_eye(("brown" if colour == "darkbrown" else colour) + "_eye")
     if colour == "darkbrown":
-        im = Image.open(src).convert("RGB")
+        rgba = Image.open(src).convert("RGBA")
+        im = rgba.convert("RGB")
         h, sat, v = im.convert("HSV").split()
         # (the iris's hue, ~10 degrees, to 25; its saturation two thirds; the white and the skin's tones barely move)
         h = h.point(lambda x: x + int(10 * (1.0 - abs(x - 8) / 40.0)) if x < 40 else x)
         sat = sat.point(lambda x: int(x * 0.68))
         dst = os.path.join(tempfile.mkdtemp(prefix="fellow_eyes_"), "darkbrown_eye.png")
-        Image.merge("HSV", (h, sat, v)).convert("RGB").save(dst)
+        out = Image.merge("HSV", (h, sat, v)).convert("RGB")
+        out.putalpha(rgba.getchannel("A"))  # (the high-poly eyes' cornea is transparent: milestone 243)
+        out.save(dst)
         src = dst
     image = bpy.data.images.load(src)
     for slot in eyes.material_slots:
@@ -330,6 +342,54 @@ def eye_bones(bpy, root, eyes_name):
         groups["LeftEye" if w.x > 0.0 else "RightEye"].add([v.index], 1.0, "REPLACE")
 
 
+def hair_strands(bpy, root, body, hair_name, path_json, dump=""):
+    """Milestone 244: the person's hair traced into strand guides (hair_guides.py) for FellowHair3D, written to
+    <name>_hair.json beside the .glb; `dump`: the traced data also saved (.npz) to try the tracer on alone."""
+    import numpy as np
+    from PIL import Image
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import hair_guides
+
+    hair = next((c for c in root.children_recursive if c.type == "MESH" and hair_name and hair_name in c.name), None)
+    arm = root if root.type == "ARMATURE" else next((c for c in root.children_recursive if c.type == "ARMATURE"), None)
+    if hair is None or arm is None or "Head" not in arm.data.bones:
+        return 0
+    image = None
+    for slot in hair.material_slots:
+        if slot.material and slot.material.node_tree:
+            for n in slot.material.node_tree.nodes:
+                if n.type == "TEX_IMAGE" and n.image is not None:
+                    image = n.image
+    if image is None:
+        return 0
+    rgba = np.asarray(Image.open(bpy.path.abspath(image.filepath)).convert("RGBA")).astype(np.float32) / 255.0
+    me = hair.data
+    me.calc_loop_triangles()
+    uv = me.uv_layers.active.data
+    mw = hair.matrix_world
+    co = [mw @ v.co for v in me.vertices]
+    tris = np.array([[list(co[i]) for i in t.vertices] for t in me.loop_triangles])
+    uvs = np.array([[list(uv[l].uv) for l in t.loops] for t in me.loop_triangles])
+    bw = body.matrix_world
+    bn = bw.to_3x3().inverted().transposed()
+    bverts = np.array([list(bw @ v.co) for v in body.data.vertices])
+    bnorm = np.array([list((bn @ v.normal).normalized()) for v in body.data.vertices])
+    head = arm.data.bones["Head"]
+    hw = arm.matrix_world
+    h0, h1 = hw @ head.head_local, hw @ head.tail_local
+    axis = (h1 - h0).normalized()
+    centre = np.array(list(h0 + axis * 0.085))
+    radius = 0.085
+    if dump:
+        os.makedirs(dump, exist_ok=True)
+        np.savez_compressed(os.path.join(dump, os.path.basename(path_json).replace(".json", ".npz")), tris=tris, uvs=uvs,
+                            rgba=rgba, body_verts=bverts, body_normals=bnorm, head_center=centre, head_radius=radius)
+    guides, root_c, tip_c = hair_guides.trace(tris, uvs, rgba, bverts, bnorm, centre, radius)
+    hair_guides.write_json(path_json, guides, root_c, tip_c, centre, radius, True)
+    return len(guides)
+
+
 def humanoid_bones(root):
     arm = root if root.type == "ARMATURE" else next((c for c in root.children_recursive if c.type == "ARMATURE"), None)
     if arm is None:
@@ -346,7 +406,7 @@ def find(asset_service, name, subdir, ext):
     return path
 
 
-def make(bpy, service, spec, out, save_blend, face_dir):
+def make(bpy, service, spec, out, save_blend, face_dir, hair_dump=""):
     HumanService = service("services.humanservice", "HumanService")
     TargetService = service("services.targetservice", "TargetService")
     AssetService = service("services.assetservice", "AssetService")
@@ -363,7 +423,7 @@ def make(bpy, service, spec, out, save_blend, face_dir):
 
     HumanService.set_character_skin(find(AssetService, spec["skin"], "skins", ".mhmat"), body, skin_type="GAMEENGINE")
     HumanService.add_builtin_rig(body, "game_engine")
-    parts = [("eyes", spec.get("eyes_mesh", "low-poly"), "Eyes"), ("eyebrows", spec.get("eyebrows"), "Eyebrows"),
+    parts = [("eyes", spec.get("eyes_mesh", EYES_MESH), "Eyes"), ("eyebrows", spec.get("eyebrows"), "Eyebrows"),
              ("eyelashes", spec.get("eyelashes"), "Eyelashes"), ("hair", spec.get("hair"), "Hair")]
     if face_dir:
         parts += [("teeth", spec.get("teeth", "teeth_base"), "Teeth"), ("tongue", spec.get("tongue", "tongue01"), "Tongue")]
@@ -386,11 +446,19 @@ def make(bpy, service, spec, out, save_blend, face_dir):
     export_body = ObjectService.find_object_of_type_amongst_nearest_relatives(root, "Basemesh")
     ExportService.bake_modifiers_remove_helpers(export_body, bake_masks=True, bake_subdiv=True, remove_helpers=True, also_proxy=True)
     # (the hair's, eyebrows' and eyelashes' alpha cuts the surface; the others are opaque)
-    game_materials(bpy, root, [n for n in (spec.get("hair"), spec.get("eyebrows"), spec.get("eyelashes")) if n])
+    # (milestone 243: and the high-poly eyes' cornea, transparent in their texture)
+    cut = [n for n in (spec.get("hair"), spec.get("eyebrows"), spec.get("eyelashes")) if n]
+    if spec.get("eyes_mesh", EYES_MESH) == "high-poly":
+        cut.append("high-poly")
+    game_materials(bpy, root, cut)
     apply_shape_keys(bpy, root, set(face))
     trim_under_hat(bpy, root, spec.get("hair"), spec.get("clothes", []))
     humanoid_bones(root)
-    eye_bones(bpy, root, spec.get("eyes_mesh", "low-poly"))
+    eye_bones(bpy, root, spec.get("eyes_mesh", EYES_MESH))
+    os.makedirs(out, exist_ok=True)
+    if spec.get("hair") and hair_dump != "skip":
+        n = hair_strands(bpy, root, export_body, spec["hair"], os.path.join(out, spec["name"] + "_hair.json"), hair_dump)
+        print("make_characters: %s's hair: %d strand guides" % (spec["name"], n))
     bpy.ops.object.select_all(action="DESELECT")
     root.select_set(True)
     for child in ObjectService.get_list_of_children(root):
@@ -423,7 +491,7 @@ def main():
     for spec in people:
         if only and spec["name"] not in only:
             continue
-        path = make(bpy, service, spec, os.path.abspath(args.out), args.blend, face_dir)
+        path = make(bpy, service, spec, os.path.abspath(args.out), args.blend, face_dir, args.hair_dump)
         print("make_characters: %s (%d KB)" % (path, os.path.getsize(path) // 1024))
     return 0
 

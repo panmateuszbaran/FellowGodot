@@ -19,6 +19,14 @@ static var hair_mode := 1
 static var cloth_sheen := true
 const CLOTH_SHEEN := 0.3
 const CLOTH_SHEEN_ROUGHNESS := 0.5
+## Milestone 243: the skin by region (tools/fellow_characters/make_skin_maps.py, decision 0385) — its roughness (lips,
+## eyelids, the T-zone glossier than the body), a second sharper lobe for its oil (the clearcoat), the light through the
+## ears from behind. Off: one roughness for the whole body (232-242).
+static var skin_maps := true
+const SKIN_OIL := 0.2 # the clearcoat's strength at the map's full value
+const SKIN_OIL_ROUGHNESS := 0.5
+const SKIN_TRANSMITTANCE := Color(0.95, 0.32, 0.22)
+static var _skin_textures: Array[Texture2D] = []
 
 
 ## p_match_height: the person scaled so that its hips stand at the mannequin's (the player: its hands and feet where
@@ -70,7 +78,90 @@ static func dress(p_npc: Node3D, p_person: PackedScene, p_rng: RandomNumberGener
 	for mi in pskel.find_children("*", "MeshInstance3D", true, false):
 		_materials(mi as MeshInstance3D, cloth_tint, hair_tint)
 	_face(pskel, skel, p_rng)
+	if strand_hair:
+		_strands(pskel, p_person.resource_path.get_basename() + "_hair.json", hair_tint, p_match_height)
 	return pskel
+
+
+## Milestone 244: the hair as strands (FellowHair3D, decision 0386) over its cards, from the guides traced from the
+## person's MakeHuman hair (<name>_hair.json: tools/fellow_characters/hair_guides.py). The guides are in the model's
+## space; the head bone's bind pose takes them into its own, so that they ride the head as its skin does. The cards stay
+## under them, darker (the hair's inner layers, which the strands shade), and are what is left of it far away
+## (STRAND_LOD: the strands thin out beyond it).
+static var strand_hair := false # (milestone 244: on once the strands are tuned)
+const STRANDS := 14000
+const STRAND_LOD := 3.0 # m
+const STRAND_SIMULATION := 12.0 # m
+const CARD_UNDER := 0.6 # the cards' albedo under the strands
+static var _hair_cache := {}
+
+static func _strands(p_person: Skeleton3D, p_json: String, p_tint: Color, p_player: bool) -> void:
+	if not ClassDB.class_exists(&"FellowHair3D") or not FileAccess.file_exists(p_json):
+		return
+	var data: Dictionary = _hair_cache.get(p_json, {})
+	if data.is_empty():
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(p_json))
+		if not parsed is Dictionary or int(parsed.get("points", 0)) < 2:
+			return
+		data = parsed
+		_hair_cache[p_json] = data
+	var head := p_person.find_bone("Head")
+	if head < 0:
+		return
+	# The head's bind pose (model space to the bone's) from a skinned mesh of the person.
+	var bind := Transform3D()
+	var found := false
+	for mi in p_person.find_children("*", "MeshInstance3D", true, false):
+		var skin := (mi as MeshInstance3D).skin
+		if skin == null:
+			continue
+		for i in skin.get_bind_count():
+			if skin.get_bind_name(i) == &"Head" or skin.get_bind_bone(i) == head:
+				bind = skin.get_bind_pose(i)
+				found = true
+				break
+		if found:
+			break
+	if not found:
+		return
+	var pts := PackedVector3Array()
+	for g in data["guides"]:
+		for q in g:
+			pts.append(bind * Vector3(q[0], q[1], q[2]))
+	var att := BoneAttachment3D.new()
+	att.name = "HairAttachment"
+	att.bone_name = "Head"
+	p_person.add_child(att)
+	var hair: Node3D = ClassDB.instantiate(&"FellowHair3D")
+	hair.name = "Strands"
+	var hc: Array = data["head_center"]
+	hair.set("scalp_center", bind * Vector3(hc[0], hc[1], hc[2]))
+	hair.set("scalp_radius", float(data.get("head_radius", 0.085)))
+	hair.set("collision_margin", 0.004)
+	hair.set("segments", int(data["points"]) - 1)
+	hair.set("guide_shape_points", int(data["points"]))
+	hair.set("guide_shapes", pts)
+	hair.set("strand_count", STRANDS)
+	hair.set("spread", 1.0)
+	hair.set("length_variation", 0.15)
+	hair.set("stiffness", 0.7)
+	hair.set("lod_distance", STRAND_LOD)
+	hair.set("simulation_distance", STRAND_SIMULATION)
+	var rc: Array = data["root_color"]
+	var tc: Array = data["tip_color"]
+	hair.set("root_color", Color(rc[0], rc[1], rc[2]) * p_tint * 0.8)
+	hair.set("tip_color", Color(tc[0], tc[1], tc[2]) * p_tint)
+	hair.set("root_width", 0.12)
+	hair.set("tip_width", 0.05)
+	hair.set("self_shadow", 0.6 if p_player else 0.0)
+	att.add_child(hair)
+	# The cards under the strands, darker.
+	for mi in p_person.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		for i in m.get_surface_override_material_count():
+			var mat := m.get_surface_override_material(i) as StandardMaterial3D
+			if mat and mat.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS:
+				mat.albedo_color *= Color(CARD_UNDER, CARD_UNDER, CARD_UNDER)
 
 
 ## Milestone 234: a face for a person made with the face's shapes (ARKit's 52, MakeHuman's Faceunits): a
@@ -208,6 +299,8 @@ static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint:
 			m.subsurf_scatter_strength = SKIN_SSS
 			m.roughness = 0.55
 			m.metallic_specular = 0.4
+			if skin_maps:
+				_skin_regions(m)
 		elif m.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
 			# Hair cards, eyebrows, eyelashes: both sides drawn. The eyebrows and eyelashes cut by their alpha; the hair
 			# (milestone 236) drawn where it is opaque before the other passes and blended at its edges after them
@@ -225,6 +318,8 @@ static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint:
 			m.albedo_color *= p_hair_tint
 		elif n.contains("eye") or n.contains("low-poly") or n.contains("high-poly"):
 			m.roughness = 0.12
+			if n.contains("high-poly"):
+				_wet_eyes(m)
 		else:
 			m.roughness = maxf(m.roughness, 0.75) # cloth
 			m.metallic = 0.0
@@ -234,3 +329,42 @@ static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint:
 				m.sheen_color = Color(CLOTH_SHEEN, CLOTH_SHEEN, CLOTH_SHEEN) * p_cloth_tint
 				m.sheen_roughness = CLOTH_SHEEN_ROUGHNESS
 		p_mesh.set_surface_override_material(i, m)
+
+
+## Milestone 243: the high-poly eyes — their cornea's island is transparent in the texture (cut), the eyeball wet (a
+## sharp clearcoat over a duller sclera), darkened towards the lids (eye_occlusion.png, also for the direct light).
+static func _wet_eyes(p_mat: StandardMaterial3D) -> void:
+	p_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	p_mat.alpha_scissor_threshold = 0.5
+	p_mat.roughness = 0.3
+	p_mat.clearcoat_enabled = true
+	p_mat.clearcoat = 1.0
+	p_mat.clearcoat_roughness = 0.04
+	var occ := load("res://people/eye_occlusion.png") as Texture2D
+	if occ:
+		p_mat.ao_enabled = true
+		p_mat.ao_texture = occ
+		p_mat.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+		p_mat.ao_light_affect = 0.85
+
+
+static func _skin_regions(p_mat: StandardMaterial3D) -> void:
+	if _skin_textures.is_empty():
+		for f in ["skin_roughness", "skin_oil", "skin_transmittance"]:
+			_skin_textures.append(load("res://people/%s.png" % f) as Texture2D)
+	if _skin_textures[0] == null:
+		return
+	p_mat.roughness = 1.0 # (the map's values are the roughness)
+	p_mat.roughness_texture = _skin_textures[0]
+	p_mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+	if _skin_textures[1] != null:
+		p_mat.clearcoat_enabled = true
+		p_mat.clearcoat = SKIN_OIL
+		p_mat.clearcoat_roughness = SKIN_OIL_ROUGHNESS
+		p_mat.clearcoat_texture = _skin_textures[1]
+	if _skin_textures[2] != null:
+		p_mat.subsurf_scatter_transmittance_enabled = true
+		p_mat.subsurf_scatter_transmittance_color = SKIN_TRANSMITTANCE
+		p_mat.subsurf_scatter_transmittance_texture = _skin_textures[2]
+		p_mat.subsurf_scatter_transmittance_depth = 0.25
+		p_mat.subsurf_scatter_transmittance_boost = 0.2

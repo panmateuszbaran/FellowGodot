@@ -8,6 +8,8 @@ extends SceneTree
 ##   --mannequin=1: the mannequin's own mesh too (the person moved 1 m aside), to compare the poses.
 ##   --look=1: the eyes following a target circling before the face (with --view=face); --mood=happy[:weight]: an
 ##   expression held (the built-in ones and "pain"). --sheen=0: the clothes without their sheen (milestone 241).
+##   --skin=0: the skin without its regions' maps (milestone 243). --light=key: a low sun, a light behind, a dim ambient.
+##   --strands=0: the hair's cards alone, without the strands (milestone 244).
 
 var _out := "user://person_look"
 var _person := "giulia"
@@ -24,6 +26,7 @@ var _look := false # --look=1 (milestone 235): a target circling before the face
 var _mood := "" # --mood=happy[:0.8] (milestone 235): an expression held on the face
 var _target: Node3D
 var _hide := "" # --hide=<name>: the person's meshes whose name has it hidden (what pokes through what)
+var _light := "" # --light=key (milestone 243): a low sun from the side, a light behind (rim, the ears), a dim ambient
 const CAST := ["giulia", "marco", "rosa", "aldo", "amara", "kenji"]
 
 
@@ -55,6 +58,12 @@ func _init() -> void:
 			FellowPerson.hair_mode = int(a.get_slice("=", 1))
 		elif a == "--sheen=0":
 			FellowPerson.cloth_sheen = false
+		elif a == "--skin=0":
+			FellowPerson.skin_maps = false
+		elif a == "--strands=0":
+			FellowPerson.strand_hair = false
+		elif a.begins_with("--light="):
+			_light = a.get_slice("=", 1)
 		elif a.begins_with("--mood="):
 			_mood = a.get_slice("=", 1)
 		elif a.begins_with("--face="):
@@ -126,6 +135,15 @@ func _run() -> void:
 	sun.light_energy = 2.2
 	sun.shadow_enabled = true
 	root.add_child(sun)
+	if _light == "key":
+		env.ambient_light_energy = 0.35
+		sun.rotation_degrees = Vector3(-22, 50, 0)
+		sun.light_energy = 3.0
+		var back := DirectionalLight3D.new()
+		back.rotation_degrees = Vector3(-12, 200, 0)
+		back.light_energy = 2.0
+		back.shadow_enabled = true
+		root.add_child(back)
 	var ground := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(30, 30)
