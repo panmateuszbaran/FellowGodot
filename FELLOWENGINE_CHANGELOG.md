@@ -9,6 +9,11 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 227 — Footprints in the snow (2026-11-26)
+
+- Decision 0369. In the rooftops' snow everyone leaves footprints (FellowEngine's snow tracks under the 63 people's
+  and the player's feet): after a minute the walkers' ways are lines of prints down to the cobbles; no cost measurable.
+
 ## Milestone 226 — An overcast sky closed; the breath's pace (2026-11-26)
 
 - Decision 0368. The rooftops' overcast sky closed (coverage 0.97: no blue between the clouds); the breath in the cold

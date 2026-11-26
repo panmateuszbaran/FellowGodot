@@ -835,6 +835,8 @@ rain, 0.01 a storm and a blizzard; `DARKER` with them; tools: `--weather_sun=<ke
 Milestone 225 (decision 0367): breath in the cold (`rooftops_crowd.gd`: `BREATH_NEAR` 22 m under `COLD`; tools:
 `--breath=0`).
 Milestone 226 (decision 0368): an overcast sky closed (`rooftops_weather.gd`: `COVER` 0.97 overcast; `DARKER` 2.45).
+Milestone 227 (decision 0369): footprints in the snow (`rooftops_crowd.gd`: `FellowSnowTracker3D` under every foot,
+radius 0.06 m, depth 0.1 m; tools: `--tracks=0`).
 
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
