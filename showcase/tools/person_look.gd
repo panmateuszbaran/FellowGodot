@@ -9,7 +9,8 @@ extends SceneTree
 ##   --look=1: the eyes following a target circling before the face (with --view=face); --mood=happy[:weight]: an
 ##   expression held (the built-in ones and "pain"). --sheen=0: the clothes without their sheen (milestone 241).
 ##   --skin=0: the skin without its regions' maps (milestone 243). --light=key: a low sun, a light behind, a dim ambient.
-##   --strands=0: the hair's cards alone, without the strands (milestone 244).
+##   --strands=1: the hair's strands over its cards (milestone 244, off by default); --flow=0: the hair's highlights
+##   without its flow map.
 
 var _out := "user://person_look"
 var _person := "giulia"
@@ -62,6 +63,10 @@ func _init() -> void:
 			FellowPerson.skin_maps = false
 		elif a == "--strands=0":
 			FellowPerson.strand_hair = false
+		elif a == "--strands=1":
+			FellowPerson.strand_hair = true
+		elif a == "--flow=0":
+			FellowPerson.hair_flow = false
 		elif a.begins_with("--light="):
 			_light = a.get_slice("=", 1)
 		elif a.begins_with("--mood="):

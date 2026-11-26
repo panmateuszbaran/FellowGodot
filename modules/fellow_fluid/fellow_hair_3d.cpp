@@ -261,7 +261,8 @@ void FellowHair3D::_build() {
 	auto on_scalp = [&](const Vector3 &p_dir) {
 		return p_dir.y >= cap && !(forehead_angle > 0.0f && p_dir.dot(Vector3(0, 0, -1)) > face);
 	};
-	const bool mesh_scalp = _scalp_mesh_triangles();
+	const bool shaped = _shaped();
+	const bool mesh_scalp = !shaped && _scalp_mesh_triangles();
 	// The guides' roots: on the mesh's painted faces, spread by farthest-point sampling over random points on them
 	// (milestone 125); or on a Fibonacci spiral over the sphere's cap.
 	if (mesh_scalp) {
@@ -300,7 +301,7 @@ void FellowHair3D::_build() {
 	}
 	LocalVector<Vector3> dirs;
 	const int tries = MAX(16, guide_count * 8);
-	for (int i = 0; !mesh_scalp && i < tries && int(dirs.size()) < guide_count * 4; i++) {
+	for (int i = 0; !mesh_scalp && !shaped && i < tries && int(dirs.size()) < guide_count * 4; i++) {
 		const float y = 1.0f - 2.0f * (float(i) + 0.5f) / float(tries);
 		const float r = Math::sqrt(MAX(0.0f, 1.0f - y * y));
 		const float phi = float(i) * 2.39996323f;
@@ -309,7 +310,41 @@ void FellowHair3D::_build() {
 			dirs.push_back(d);
 		}
 	}
-	if (!mesh_scalp) {
+	if (shaped) {
+		// Milestone 244: the given shapes, each resampled to segments + 1 points of equal length along it.
+		const int g = guide_shapes.size() / guide_shape_points;
+		points = segments + 1;
+		seg_rest.resize(g);
+		rest.resize(g * points);
+		const Vector3 *src = guide_shapes.ptr();
+		shaped_aabb = AABB(src[0], Vector3());
+		for (int i = 0; i < g; i++) {
+			const Vector3 *q = src + i * guide_shape_points;
+			float total = 0.0f;
+			for (int k = 1; k < guide_shape_points; k++) {
+				total += q[k].distance_to(q[k - 1]);
+			}
+			total = MAX(total, 1e-4f);
+			const float seg = total / float(segments);
+			seg_rest[i] = seg;
+			int k = 1;
+			float walked = 0.0f; // along the shape to q[k - 1]
+			for (int j = 0; j < points; j++) {
+				const float want = MIN(seg * float(j), total);
+				while (k < guide_shape_points - 1 && walked + q[k].distance_to(q[k - 1]) < want) {
+					walked += q[k].distance_to(q[k - 1]);
+					k++;
+				}
+				const float l = q[k].distance_to(q[k - 1]);
+				const float f = l > 1e-7f ? CLAMP((want - walked) / l, 0.0f, 1.0f) : 0.0f;
+				rest[i * points + j] = q[k - 1].lerp(q[k], f);
+				shaped_aabb.expand_to(rest[i * points + j]);
+			}
+			guide_root.push_back(rest[i * points]);
+			const Vector3 out = rest[i * points + 1] - rest[i * points];
+			guide_normal.push_back(out.length_squared() > 1e-12f ? out.normalized() : Vector3(0, 1, 0));
+		}
+	} else if (!mesh_scalp) {
 		if (dirs.is_empty()) {
 			return;
 		}
@@ -325,53 +360,55 @@ void FellowHair3D::_build() {
 	if (g == 0) {
 		return;
 	}
-	points = segments + 1;
-	const float seg = length / float(segments);
-	seg_rest.resize(g);
-	for (int i = 0; i < g; i++) {
-		seg_rest[i] = seg;
-	}
-	// The styled shape: each guide combed along the scalp — down and back (+Z), a little out from it — then falling;
-	// relaxed with gravity, the sphere and the lengths.
-	rest.resize(g * points);
-	for (int i = 0; i < g; i++) {
-		const Vector3 n = guide_normal[i];
-		Vector3 comb = Vector3(0, -1, 0.7f);
-		comb = (comb - n * comb.dot(n));
-		comb = comb.length_squared() > 1e-6f ? comb.normalized() : Vector3(0, 0, 1);
-		const Vector3 start = (comb + n * 0.25f).normalized();
-		Vector3 p = guide_root[i];
-		for (int k = 0; k < points; k++) {
-			const float f = float(k) / float(segments);
-			Vector3 dir = start.lerp(Vector3(0, -1, 0.15f).normalized(), CLAMP(f * 1.2f, 0.0f, 1.0f)).normalized();
-			if (curl > 0.0f) {
-				const float a = float(k) * seg * curl_frequency * Math::TAU + float(i) * 1.7f;
-				const Vector3 side = dir.cross(Vector3(0, 0, 1)).normalized();
-				dir = (dir + (side * Math::cos(a) + dir.cross(side) * Math::sin(a)) * (curl * Math::TAU * curl_frequency)).normalized();
-			}
-			rest[i * points + k] = p;
-			p += dir * seg;
-		}
-	}
-	const float keep_out = scalp_radius + collision_margin;
-	for (int it = 0; it < 120; it++) {
+	if (!shaped) {
+		points = segments + 1;
+		const float seg = length / float(segments);
+		seg_rest.resize(g);
 		for (int i = 0; i < g; i++) {
-			for (int k = 1; k < points; k++) {
-				Vector3 &q = rest[i * points + k];
-				q.y -= 0.002f * (1.0f - float(it) / 120.0f); // a little gravity
-				const Vector3 rel = q - scalp_center;
-				const float d = rel.length();
-				if (d < keep_out && d > 1e-6f) {
-					q = scalp_center + rel / d * keep_out;
+			seg_rest[i] = seg;
+		}
+		// The styled shape: each guide combed along the scalp — down and back (+Z), a little out from it — then falling;
+		// relaxed with gravity, the sphere and the lengths.
+		rest.resize(g * points);
+		for (int i = 0; i < g; i++) {
+			const Vector3 n = guide_normal[i];
+			Vector3 comb = Vector3(0, -1, 0.7f);
+			comb = (comb - n * comb.dot(n));
+			comb = comb.length_squared() > 1e-6f ? comb.normalized() : Vector3(0, 0, 1);
+			const Vector3 start = (comb + n * 0.25f).normalized();
+			Vector3 p = guide_root[i];
+			for (int k = 0; k < points; k++) {
+				const float f = float(k) / float(segments);
+				Vector3 dir = start.lerp(Vector3(0, -1, 0.15f).normalized(), CLAMP(f * 1.2f, 0.0f, 1.0f)).normalized();
+				if (curl > 0.0f) {
+					const float a = float(k) * seg * curl_frequency * Math::TAU + float(i) * 1.7f;
+					const Vector3 side = dir.cross(Vector3(0, 0, 1)).normalized();
+					dir = (dir + (side * Math::cos(a) + dir.cross(side) * Math::sin(a)) * (curl * Math::TAU * curl_frequency)).normalized();
 				}
+				rest[i * points + k] = p;
+				p += dir * seg;
 			}
-			for (int k = 1; k < points; k++) {
-				const Vector3 a = rest[i * points + k - 1];
-				Vector3 &b = rest[i * points + k];
-				const Vector3 ab = b - a;
-				const float l = ab.length();
-				if (l > 1e-7f) {
-					b = a + ab * (seg / l);
+		}
+		const float keep_out = scalp_radius + collision_margin;
+		for (int it = 0; it < 120; it++) {
+			for (int i = 0; i < g; i++) {
+				for (int k = 1; k < points; k++) {
+					Vector3 &q = rest[i * points + k];
+					q.y -= 0.002f * (1.0f - float(it) / 120.0f); // a little gravity
+					const Vector3 rel = q - scalp_center;
+					const float d = rel.length();
+					if (d < keep_out && d > 1e-6f) {
+						q = scalp_center + rel / d * keep_out;
+					}
+				}
+				for (int k = 1; k < points; k++) {
+					const Vector3 a = rest[i * points + k - 1];
+					Vector3 &b = rest[i * points + k];
+					const Vector3 ab = b - a;
+					const float l = ab.length();
+					if (l > 1e-7f) {
+						b = a + ab * (seg / l);
+					}
 				}
 			}
 		}
@@ -381,7 +418,61 @@ void FellowHair3D::_build() {
 	instance_data.resize(s_count * FLOATS_PER_STRAND);
 	float *w = instance_data.ptrw();
 	int made = 0;
-	for (int attempt = 0; made < s_count && attempt < s_count * 20; attempt++) {
+	if (shaped) {
+		// Milestone 244: each strand between a guide and the two nearest it along their whole length (the mean squared
+		// distance of their points: neighbours by the roots alone may part — two sides of a parting — and a strand
+		// between them would cross the gap), anywhere in their triangle by spread.
+		LocalVector<int> near;
+		near.resize(g * 2);
+		for (int i = 0; i < g; i++) {
+			int b0 = i, b1 = i;
+			float d0 = 1e30f, d1 = 1e30f;
+			for (int j = 0; j < g; j++) {
+				if (j == i) {
+					continue;
+				}
+				float dd = 0.0f;
+				for (int k = 0; k < points && dd < d1 * float(points); k++) {
+					dd += rest[i * points + k].distance_squared_to(rest[j * points + k]);
+				}
+				dd /= float(points);
+				if (dd < d0) {
+					d1 = d0;
+					b1 = b0;
+					d0 = dd;
+					b0 = j;
+				} else if (dd < d1) {
+					d1 = dd;
+					b1 = j;
+				}
+			}
+			near[i * 2] = b0;
+			near[i * 2 + 1] = b1;
+		}
+		const float sp = CLAMP(spread, 0.0f, 1.0f);
+		for (; made < s_count; made++) {
+			const int a = MIN(int(rng.randf() * float(g)), g - 1);
+			float u = rng.randf();
+			float v = rng.randf();
+			if (u + v > 1.0f) {
+				u = 1.0f - u;
+				v = 1.0f - v;
+			}
+			float *o = w + made * FLOATS_PER_STRAND;
+			o[0] = 1.0f, o[1] = 0.0f, o[2] = 0.0f, o[3] = 0.0f;
+			o[4] = 0.0f, o[5] = 1.0f, o[6] = 0.0f, o[7] = 0.0f;
+			o[8] = 0.0f, o[9] = 0.0f, o[10] = 1.0f, o[11] = 0.0f;
+			o[12] = float(near[a * 2]);
+			o[13] = float(near[a * 2 + 1]);
+			o[14] = u * sp;
+			o[15] = v * sp;
+			o[16] = float(a);
+			o[17] = rng.randf() * 100.0f;
+			o[18] = CLAMP(1.0f - length_variation * rng.randf(), 0.05f, 1.0f);
+			o[19] = 0.0f;
+		}
+	}
+	for (int attempt = 0; !shaped && made < s_count && attempt < s_count * 20; attempt++) {
 		Vector3 root;
 		if (mesh_scalp) {
 			Vector3 n;
@@ -509,7 +600,11 @@ void FellowHair3D::_build() {
 	guide_texture = ImageTexture::create_from_image(guide_image);
 	_update_material();
 	// The multimesh's culling box: the scalp and the hair's length about it, in the node's space.
-	multimesh->set_custom_aabb(AABB(scalp_center - Vector3(1, 1, 1) * (scalp_radius + length * 1.2f), Vector3(2, 2, 2) * (scalp_radius + length * 1.2f)));
+	if (shaped) {
+		multimesh->set_custom_aabb(shaped_aabb.grow(0.05f).merge(AABB(scalp_center - Vector3(1, 1, 1) * scalp_radius, Vector3(2, 2, 2) * scalp_radius)));
+	} else {
+		multimesh->set_custom_aabb(AABB(scalp_center - Vector3(1, 1, 1) * (scalp_radius + length * 1.2f), Vector3(2, 2, 2) * (scalp_radius + length * 1.2f)));
+	}
 	built = true;
 	global_stats.guides = g;
 	global_stats.strands = made;
@@ -1054,6 +1149,9 @@ void FellowHair3D::_notification(int p_what) {
 }
 
 AABB FellowHair3D::get_aabb() const {
+	if (_shaped() && built) {
+		return shaped_aabb.grow(0.05f).merge(AABB(scalp_center - Vector3(1, 1, 1) * scalp_radius, Vector3(2, 2, 2) * scalp_radius));
+	}
 	const float r = scalp_radius + length * 1.2f;
 	return AABB(scalp_center - Vector3(r, r, r), Vector3(r, r, r) * 2.0f);
 }
@@ -1266,6 +1364,16 @@ FELLOW_HAIR_LOOK_SETTER(specular_sharpness, float, MAX(1.0f, p_value))
 FELLOW_HAIR_LOOK_SETTER(transmission, float, MAX(0.0f, p_value))
 FELLOW_HAIR_LOOK_SETTER(root_occlusion, float, CLAMP(p_value, 0.0f, 1.0f))
 
+void FellowHair3D::set_guide_shapes(const PackedVector3Array &p_points) {
+	guide_shapes = p_points;
+	_rebuild();
+}
+
+void FellowHair3D::set_guide_shape_points(int p_points) {
+	guide_shape_points = MAX(0, p_points);
+	_rebuild();
+}
+
 void FellowHair3D::set_self_shadow(float p_self_shadow) {
 	const float v = CLAMP(p_self_shadow, 0.0f, 1.0f);
 	const bool switched = (v > 0.0f) != (self_shadow > 0.0f);
@@ -1310,6 +1418,10 @@ void FellowHair3D::_bind_methods() {
 	ClassDB::bind_static_method("FellowHair3D", D_METHOD("reset_global_stats"), &FellowHair3D::reset_global_stats);
 	ClassDB::bind_method(D_METHOD("set_scalp_mesh", "mesh"), &FellowHair3D::set_scalp_mesh);
 	ClassDB::bind_method(D_METHOD("get_scalp_mesh"), &FellowHair3D::get_scalp_mesh);
+	ClassDB::bind_method(D_METHOD("set_guide_shapes", "points"), &FellowHair3D::set_guide_shapes);
+	ClassDB::bind_method(D_METHOD("get_guide_shapes"), &FellowHair3D::get_guide_shapes);
+	ClassDB::bind_method(D_METHOD("set_guide_shape_points", "points"), &FellowHair3D::set_guide_shape_points);
+	ClassDB::bind_method(D_METHOD("get_guide_shape_points"), &FellowHair3D::get_guide_shape_points);
 	ClassDB::bind_method(D_METHOD("set_lod_distance", "distance"), &FellowHair3D::set_lod_distance);
 	ClassDB::bind_method(D_METHOD("get_lod_distance"), &FellowHair3D::get_lod_distance);
 	ClassDB::bind_method(D_METHOD("set_min_strand_share", "share"), &FellowHair3D::set_min_strand_share);
@@ -1365,6 +1477,8 @@ void FellowHair3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "scalp_mesh", PROPERTY_HINT_RESOURCE_TYPE, "Mesh"), "set_scalp_mesh", "get_scalp_mesh");
 	ADD_GROUP("Strands", "");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "guide_count", PROPERTY_HINT_RANGE, "3,1024,1,or_greater"), "set_guide_count", "get_guide_count");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_VECTOR3_ARRAY, "guide_shapes"), "set_guide_shapes", "get_guide_shapes");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "guide_shape_points", PROPERTY_HINT_RANGE, "0,256,1,or_greater"), "set_guide_shape_points", "get_guide_shape_points");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "strand_count", PROPERTY_HINT_RANGE, "0,50000,1,or_greater"), "set_strand_count", "get_strand_count");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "segments", PROPERTY_HINT_RANGE, "2,64,1"), "set_segments", "get_segments");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "length", PROPERTY_HINT_RANGE, "0.01,2,0.001,or_greater,suffix:m"), "set_length", "get_length");

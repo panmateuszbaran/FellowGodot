@@ -200,7 +200,7 @@ def trace(p_tris, p_uvs, p_rgba, p_body_verts, p_body_normals, p_head_center, p_
             if hit is None:
                 break
             loc2, nrm2, idx2, d2 = hit
-            if d2 > below + 0.012:  # off the surface's edge
+            if d2 > below + 0.004:  # off the surface's edge (the step left it: its nearest point is on the edge)
                 break
             uv2 = mesh.uv_at(idx2, loc2)
             if _texel(alpha, uv2) < 0.3:  # the painted strands' end

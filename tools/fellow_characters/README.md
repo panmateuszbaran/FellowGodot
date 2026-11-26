@@ -25,6 +25,9 @@ glTF for the engine (milestone 232, decision 0374).
   masks: `--textures <mpfb2>/src/mpfb/data/textures --eyes <assets>/eyes/high-poly/high-poly.obj --out showcase/people`):
   the skin's roughness by region, its oily second lobe (the clearcoat), the light through the ears, the eyes' shading
   towards the lids.
+* **Hair highlights** (milestone 244): `make_skin_maps.py --hair <assets>/hair --hair_names <styles>` writes each
+  hairstyle's flow map (`hair_<name>_flow.png`: the direction across its painted strands) for its anisotropic
+  highlights.
 * **Strand guides** (milestone 244, `hair_guides.py`; numpy and scipy): each person's hair traced into strand guides
   for FellowHair3D — roots where the hair covers the scalp, then along the painted strands' direction over the hair's
   surface — written to `<name>_hair.json` beside the `.glb` (`--hair_dump <dir>`: the traced data too, to try the

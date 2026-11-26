@@ -88,11 +88,11 @@ static func dress(p_npc: Node3D, p_person: PackedScene, p_rng: RandomNumberGener
 ## space; the head bone's bind pose takes them into its own, so that they ride the head as its skin does. The cards stay
 ## under them, darker (the hair's inner layers, which the strands shade), and are what is left of it far away
 ## (STRAND_LOD: the strands thin out beyond it).
-static var strand_hair := false # (milestone 244: on once the strands are tuned)
-const STRANDS := 14000
+static var strand_hair := false # (milestone 244: FellowHair3D with traced guides — not yet better than the cards at play distances)
+const STRANDS := 24000
 const STRAND_LOD := 3.0 # m
 const STRAND_SIMULATION := 12.0 # m
-const CARD_UNDER := 0.6 # the cards' albedo under the strands
+const CARD_UNDER := 0.75 # the cards' albedo under the strands
 static var _hair_cache := {}
 
 static func _strands(p_person: Skeleton3D, p_json: String, p_tint: Color, p_player: bool) -> void:
@@ -151,8 +151,8 @@ static func _strands(p_person: Skeleton3D, p_json: String, p_tint: Color, p_play
 	var tc: Array = data["tip_color"]
 	hair.set("root_color", Color(rc[0], rc[1], rc[2]) * p_tint * 0.8)
 	hair.set("tip_color", Color(tc[0], tc[1], tc[2]) * p_tint)
-	hair.set("root_width", 0.12)
-	hair.set("tip_width", 0.05)
+	hair.set("root_width", 0.2)
+	hair.set("tip_width", 0.08)
 	hair.set("self_shadow", 0.6 if p_player else 0.0)
 	att.add_child(hair)
 	# The cards under the strands, darker.
@@ -310,6 +310,8 @@ static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint:
 				m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
 				m.roughness = HAIR_ROUGHNESS
 				m.metallic_specular = HAIR_SPECULAR
+				if hair_flow:
+					_hair_highlights(m, n.get_extension() if n.contains(".") else n)
 			else:
 				m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 				m.alpha_scissor_threshold = ALPHA_CUT
@@ -329,6 +331,25 @@ static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint:
 				m.sheen_color = Color(CLOTH_SHEEN, CLOTH_SHEEN, CLOTH_SHEEN) * p_cloth_tint
 				m.sheen_roughness = CLOTH_SHEEN_ROUGHNESS
 		p_mesh.set_surface_override_material(i, m)
+
+
+## Milestone 244: the hair's highlights stretched along its painted strands — BaseMaterial3D's anisotropy with the
+## hairstyle's flow map (hair_<name>_flow.png, make_skin_maps.py: the texture's own strand direction), a little
+## glossier than 236's flat hair (a highlight that runs across the strands reads as hair; a round one as plastic).
+static var hair_flow := true
+const HAIR_FLOW_ROUGHNESS := 0.5
+const HAIR_FLOW_SPECULAR := 0.4
+const HAIR_ANISOTROPY := 0.85
+
+static func _hair_highlights(p_mat: StandardMaterial3D, p_style: String) -> void:
+	var path := "res://people/hair_%s_flow.png" % p_style
+	if not ResourceLoader.exists(path):
+		return
+	p_mat.anisotropy_enabled = true
+	p_mat.anisotropy = HAIR_ANISOTROPY
+	p_mat.anisotropy_flowmap = load(path) as Texture2D
+	p_mat.roughness = HAIR_FLOW_ROUGHNESS
+	p_mat.metallic_specular = HAIR_FLOW_SPECULAR
 
 
 ## Milestone 243: the high-poly eyes — their cornea's island is transparent in the texture (cut), the eyeball wet (a

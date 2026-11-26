@@ -9,6 +9,15 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 244 — The hair's highlights across its strands; strands traced from it (2026-11-27)
+
+- Decision 0386. The people's hair shines in a band across its painted strands: each hairstyle's flow map (the
+  direction across its strands, from its texture's structure tensor: `make_skin_maps.py --hair`) drives
+  BaseMaterial3D's anisotropy. `FellowHair3D.guide_shapes` and `guide_shape_points`: a hairstyle's guides given
+  (resampled; each strand between the two guides nearest along their length); `tools/fellow_characters/hair_guides.py`
+  traces them from a MakeHuman hair (`<name>_hair.json`). On the people the strands were a haze at the showcase's
+  distances: off there (`person_look.gd --strands=1`).
+
 ## RTX measurements of milestones 231-242 (2026-11-27)
 
 - The owner allowed the GPU again. On the RTX laptop at 1920×1080 (milestone 242's build): the lamps' shadow cache

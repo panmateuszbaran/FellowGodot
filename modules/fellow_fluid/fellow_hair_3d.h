@@ -101,6 +101,15 @@ private:
 	LocalVector<float> scalp_cdf;
 	bool _scalp_mesh_triangles();
 	void _scalp_mesh_sample(RandomPCG &p_rng, Vector3 &r_position, Vector3 &r_normal) const;
+	// Milestone 244 (decision 0386): the guides' styled shapes given — a hairstyle traced from a hair mesh (the
+	// showcase's people: tools/fellow_characters/make_characters.py). guide_shapes holds guide_shape_points points a
+	// guide, root first, in the node's space; each is resampled to segments + 1 points of equal length. guide_count,
+	// length and the comb's shape then come from them; each strand lies between a guide and the two nearest it along
+	// their length, anywhere in their triangle by spread. The scalp's sphere stays the collider.
+	PackedVector3Array guide_shapes;
+	int guide_shape_points = 0;
+	AABB shaped_aabb; // the shapes' bounds (node space)
+	bool _shaped() const { return guide_shape_points >= 2 && guide_shapes.size() >= guide_shape_points * 3; }
 	// The strands.
 	int guide_count = 160;
 	int strand_count = 10000;
@@ -269,6 +278,10 @@ public:
 	void set_substeps(int p_substeps) { substeps = CLAMP(p_substeps, 1, 16); }
 	void set_scalp_mesh(const Ref<Mesh> &p_mesh);
 	Ref<Mesh> get_scalp_mesh() const { return scalp_mesh; }
+	void set_guide_shapes(const PackedVector3Array &p_points);
+	PackedVector3Array get_guide_shapes() const { return guide_shapes; }
+	void set_guide_shape_points(int p_points);
+	int get_guide_shape_points() const { return guide_shape_points; }
 	void set_lod_distance(float p_distance) { lod_distance = MAX(0.0f, p_distance); }
 	float get_lod_distance() const { return lod_distance; }
 	void set_min_strand_share(float p_share) { min_strand_share = CLAMP(p_share, 0.001f, 1.0f); }

@@ -92,6 +92,12 @@
 		<member name="guide_count" type="int" setter="set_guide_count" getter="get_guide_count" default="160">
 			The guide strands simulated (more: the hair's motion in finer detail; each costs the CPU).
 		</member>
+		<member name="guide_shape_points" type="int" setter="set_guide_shape_points" getter="get_guide_shape_points" default="0">
+			The points of each guide in [member guide_shapes] (at least 2 to use them; 0: the guides combed from the scalp).
+		</member>
+		<member name="guide_shapes" type="PackedVector3Array" setter="set_guide_shapes" getter="get_guide_shapes" default="PackedVector3Array()">
+			A hairstyle's guides given (milestone 244): [member guide_shape_points] points a guide, root first, in the node's space (for example traced from a hair mesh). Each is resampled to [member segments] + 1 points of equal length and is its guide's styled shape; [member guide_count], [member length], [member coverage], [member forehead_angle] and [member scalp_mesh] are then not used. Each strand lies between a guide and the two nearest it along their whole length (not only at their roots: guides on either side of a parting are not paired), anywhere in their triangle by [member spread]. The scalp's sphere ([member scalp_center], [member scalp_radius]) stays the strands' collider.
+		</member>
 		<member name="length" type="float" setter="set_length" getter="get_length" default="0.32">
 			A guide's length (metres).
 		</member>

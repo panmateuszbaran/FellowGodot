@@ -1098,7 +1098,10 @@ how opaque the strands are to light crossing them); `get_stats()` adds `self_sha
 `self_shadow_min`, `self_shadow_mean`, `get_global_stats()` `self_shadow_usec`. `hair_check.gd --self_shadow=1`,
 `hair_crowd_check.gd --self_shadow=1`. Milestone 149 (decision 0280): `self_shadow_light` may be an `OmniLight3D` or a
 `SpotLight3D` (the map along the direction towards it from the hair's centre, the material dimming the light that is
-not directional within about 18° of it); `hair_check.gd --lamp=<m>`.
+not directional within about 18° of it); `hair_check.gd --lamp=<m>`. Milestone 244 (decision 0386): `guide_shapes`
+(`guide_shape_points` points a guide, root first, in the node's space) — a hairstyle's guides given instead of combed
+from the scalp (each resampled to `segments` + 1 points; `guide_count`, `length`, `coverage`, `forehead_angle` and
+`scalp_mesh` then unused); each strand lies between a guide and the two nearest it along their length.
 
 ## Characters up and down steps (milestone 169)
 

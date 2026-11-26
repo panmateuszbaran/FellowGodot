@@ -11,6 +11,8 @@ mesh's default UV layout, which every MakeHuman skin shares, so one set of maps 
   factor of its roughness) — skin's oily film: the T-zone and the lips most, the face some, the body barely.
 * skin_transmittance.png (R): where light shows through from behind (the ears, a little the nose's wings).
 * eye_occlusion.png (with --eyes): the eyeballs darkened towards the lids (the high-poly eyes' UVs).
+* hair_<name>_flow.png (with --hair, --hair_names; milestone 244): each hairstyle's flow map — the direction across
+  its painted strands, for the hair's anisotropic highlights (which run across the strands).
 
     python3 make_skin_maps.py --textures <mpfb2/src/mpfb/data/textures> --out showcase/people [--size 1024] \
         [--eyes <assets>/eyes/high-poly/high-poly.obj]
@@ -113,12 +115,41 @@ def eye_occlusion(p_obj, p_size):
     return out
 
 
+def hair_flow(p_png, p_size=512, p_flip_v=False):
+    """Milestone 244: a hairstyle's flow map for BaseMaterial3D's anisotropy — at every texel the direction across the
+    painted strands (hair_guides.flow_field: the texture's structure tensor) in the texture's own axes (R along u, G
+    along v as the image's rows go: Godot's tangent and binormal), A how sure it is (the anisotropy's strength), the
+    hair's alpha counted. A line's direction: its sign does not matter to the highlight."""
+    import sys
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import hair_guides
+
+    rgba = np.asarray(Image.open(p_png).convert("RGBA")).astype(np.float32) / 255.0
+    flow, sure = hair_guides.flow_field(rgba, 4.0)
+    sx = flow[..., 0]
+    sy = -flow[..., 1]  # (UV's v up to the image's rows down)
+    if p_flip_v:
+        sy = -sy
+    # Across the strands: Godot's anisotropic GGX is rough along its tangent and smooth across it, and a hair's
+    # highlight runs across its strands (each strand a cylinder: smooth along it, every normal round it).
+    fx, fy = -sy, sx
+    strength = np.sqrt(sure) * np.clip(rgba[..., 3] * 1.5, 0.0, 1.0)
+    out = np.stack([fx * 0.5 + 0.5, fy * 0.5 + 0.5, np.zeros_like(fx), strength], axis=-1)
+    im = Image.fromarray((np.clip(out, 0.0, 1.0) * 255 + 0.5).astype(np.uint8), "RGBA")
+    return im.resize((p_size, p_size), Image.BILINEAR)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--textures", required=True, help="MPFB's data/textures (the mpfb_*.jpg region masks)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--size", type=int, default=1024)
     ap.add_argument("--eyes", default="", help="the pack's eyes/high-poly/high-poly.obj: also eye_occlusion.png")
+    ap.add_argument("--hair", default="", help="milestone 244: the pack's hair/ folder; with --hair_names, each one's "
+                    "hair_<name>_flow.png")
+    ap.add_argument("--hair_names", default="", help="comma-separated hairstyles (the people's)")
+    ap.add_argument("--flip_v", action="store_true", help="the flow maps' G mirrored (a test of the tangent frame)")
     a = ap.parse_args()
     n = a.size
     face = mask(a.textures, "face", n)
@@ -169,6 +200,12 @@ def main():
     if a.eyes:
         occ = eye_occlusion(a.eyes, 512)
         Image.fromarray((occ * 255 + 0.5).astype(np.uint8)).save(os.path.join(a.out, "eye_occlusion.png"), optimize=True)
+    for name in [h for h in a.hair_names.split(",") if h]:
+        import glob
+
+        found = sorted(glob.glob(os.path.join(a.hair, name, "*diffuse*.png")))
+        if found:
+            hair_flow(found[0], 512, a.flip_v).save(os.path.join(a.out, "hair_%s_flow.png" % name), optimize=True)
     print("make_skin_maps: %d² — eyes at u %.3f, mouth at u %.3f, midline v %.3f" % (n, eyes_u, mouth_u, mid_v))
 
 
