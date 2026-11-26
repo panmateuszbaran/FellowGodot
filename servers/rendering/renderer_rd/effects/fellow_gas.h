@@ -355,7 +355,45 @@ private:
 		RID solid;
 	};
 
+	struct MGPush { // fellow_gas_sim.glsl's Push (the pressure's levels)
+		int32_t size[4];
+		float level[4];
+		int32_t coarse_size[4];
+		float open_lo[4]; // the open faces' weights in the level's stencil
+		float open_hi[4];
+		int32_t offsets[4]; // x the level's offset in the atlas (RESTRICT, PROLONG: the finer's), y the coarser's
+	};
+	// Milestone 220 (decision 0362): a volume's step queued as its operations — its passes and the buffer updates,
+	// clears and read-backs between them — while the steps of one physics frame are recorded together
+	// (_flush_sim_batch()).
+	struct SimOp {
+		enum Type : uint8_t {
+			OP_DISPATCH,
+			OP_BUFFER_UPDATE,
+			OP_TEXTURE_CLEAR,
+			OP_READ_BUFFER,
+		};
+		enum Dispatch : uint8_t {
+			DISPATCH_THREADS,
+			DISPATCH_GROUPS,
+			DISPATCH_INDIRECT,
+		};
+		Type type = OP_DISPATCH;
+		Dispatch dispatch = DISPATCH_THREADS;
+		bool has_push = false;
+		RID pipeline;
+		RID set;
+		RID resource; // the indirect dispatch's arguments; the buffer updated or read; the texture cleared
+		uint32_t x = 0; // threads, workgroups; the indirect arguments' offset; the buffer update's offset
+		uint32_t y = 0;
+		uint32_t z = 0;
+		MGPush push = {};
+		LocalVector<uint8_t> data; // OP_BUFFER_UPDATE
+		Callable callback; // OP_READ_BUFFER
+	};
+
 	struct Volume {
+		LocalVector<SimOp> ops; // the step's operations queued (milestone 220)
 		LocalVector<Level> levels; // the multigrid's coarser levels, the coarsest last
 		RID mg_pressure; // the coarser levels side by side along x (one texture each: the small levels in one pass)
 		RID mg_rhs;
@@ -435,14 +473,6 @@ private:
 	void _allocate(Volume &r_v);
 	void _clear(Volume &r_v);
 	void _run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step);
-	struct MGPush { // fellow_gas_sim.glsl's Push (the pressure's levels)
-		int32_t size[4];
-		float level[4];
-		int32_t coarse_size[4];
-		float open_lo[4]; // the open faces' weights in the level's stencil
-		float open_hi[4];
-		int32_t offsets[4]; // x the level's offset in the atlas (RESTRICT, PROLONG: the finer's), y the coarser's
-	};
 	static void _open_weights(const Vector3i &p_res, int p_level, float *r_lo, float *r_hi);
 	void _open_weights(const Vector3i &p_res, int p_level, MGPush &r_push) const;
 	enum BrickList {
@@ -452,6 +482,17 @@ private:
 		LIST_L1, // the first coarser level's bricks with a cell of A's below
 	};
 	void _dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Uniform> &p_uniforms, const Vector3i &p_threads, const MGPush *p_push = nullptr, bool p_groups = false, BrickList p_list = LIST_NONE);
+	// Milestone 220 (decision 0362): while sim_batching the volumes' steps are queued (Volume::ops), then recorded
+	// together: the k-th operation of every queued volume in one compute list (the volumes share no resource it writes),
+	// the render graph given a step's worth of compute lists instead of one per pass and volume.
+	bool sim_batching = false;
+	LocalVector<uint32_t> sim_batch; // the volumes queued, in their steps' order
+	LocalVector<RD::Uniform> sim_uniforms; // _dispatch_sim()'s set, reused
+	void _sim_buffer_update(Volume &r_v, RID p_buffer, uint32_t p_offset, uint32_t p_size, const void *p_data);
+	void _sim_texture_clear(Volume &r_v, RID p_texture);
+	void _sim_read_buffer(Volume &r_v, RID p_buffer, const Callable &p_callback);
+	void _record_sim_op(RD::ComputeListID p_list, const SimOp &p_op);
+	void _flush_sim_batch();
 	void _smooth(Volume &r_v, const Vector3i &p_size, int p_level, RID p_pressure, RID p_rhs, RID p_solid, float p_dx2, float p_omega, int p_iterations);
 	static void _emission_read(const Vector<uint8_t> &p_data, Callable p_callback, uint32_t p_id);
 	void _ensure_burn();

@@ -211,6 +211,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_mg_tail_cells", PROPERTY_HINT_RANGE, "0,65536,1"), 0);
 	// Milestone 61: the multigrid's red-black sweeps before and after the finest level's correction (2: decision 0117's).
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_mg_fine_sweeps", PROPERTY_HINT_RANGE, "1,4,1"), 2);
+	// Milestone 220 (decision 0362): the gas volumes' steps of a physics frame recorded together (the same passes; fewer
+	// compute lists for the render thread and the render graph).
+	GLOBAL_DEF("rendering/fellow/fluid/gas_batch_steps", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_sparse", PROPERTY_HINT_ENUM, "Node's,Off,On"), 0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_sparse_margin", PROPERTY_HINT_RANGE, "0,4,1"), 0);
 	GLOBAL_DEF("rendering/fellow/fluid/gas_profile_passes", false);

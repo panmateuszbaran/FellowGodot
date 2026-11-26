@@ -203,6 +203,7 @@ D = {
     "fluid/gas_scene_shadows": "The sun's shadow map darkens the smoke.",
     "fluid/gas_solver": "For measurements: the gas's pressure solver, 0 each node's own, 1 SOR, 2 multigrid.",
     "fluid/gas_mg_tail_cells": "For measurements: multigrid levels of at most this many cells solved in one workgroup (0: off; measured slower). Decision 0119.",
+    "fluid/gas_batch_steps": "The gas volumes' steps of one physics frame recorded together: each volume's passes queued, then the k-th pass of every volume in one compute list (the volumes share no resource a pass writes), so that the render thread and the render graph handle a step's worth of compute lists instead of one per pass and volume. The same passes in the same order for each volume: exact. Off records each pass in its own compute list as before; not while [code]gas_profile_passes[/code] times them. Milestone 220.",
     "fluid/gas_mg_fine_sweeps": "The gas multigrid's red-black Gauss-Seidel sweeps before and after the finest level's correction (2 as decision 0117; 1 halves the finest level's smoothing, the cost at small grids, for a larger residual). Not exact unless 2. Milestone 61.",
     "fluid/gas_sparse": "For measurements: 0 each node's own sparse setting, 1 every gas cell simulated, 2 only the bricks near smoke, heat or an emitter. Decision 0119.",
     "fluid/gas_sparse_margin": "For measurements: the sparse simulation's margin in bricks (0: each node's own).",

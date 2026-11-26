@@ -383,7 +383,8 @@ void FellowGas::_emission_read(const Vector<uint8_t> &p_data, Callable p_callbac
 void FellowGas::_dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Uniform> &p_uniforms, const Vector3i &p_threads, const MGPush *p_push, bool p_groups, BrickList p_list) {
 	const int p = r_v.high_precision ? 1 : 0;
 	RID shader = sim_shader[p].version_get_shader(sim_version[p], p_mode);
-	LocalVector<RD::Uniform> u;
+	LocalVector<RD::Uniform> &u = sim_uniforms; // (reused: no allocation per pass)
+	u.clear();
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, r_v.ubo));
 	bool has_mask = false;
 	bool has_list = false;
@@ -403,21 +404,144 @@ void FellowGas::_dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Unif
 	if ((p_mode == SIM_OBSTACLES || p_mode == SIM_EMIT || p_mode == SIM_SPARSE_SOURCE) && !step_burn_uniforms.is_empty()) {
 		u.push_back(step_burn_uniforms[0]);
 	}
-	RID set = UniformSetCacheRD::get_singleton()->get_cache_vec(shader, 0, u);
-	RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
-	RD::get_singleton()->compute_list_bind_compute_pipeline(list, sim_pipelines[p][p_mode]);
-	RD::get_singleton()->compute_list_bind_uniform_set(list, set, 0);
+	SimOp op;
+	op.pipeline = sim_pipelines[p][p_mode];
+	op.set = UniformSetCacheRD::get_singleton()->get_cache_vec(shader, 0, u);
 	if (p_push) {
-		RD::get_singleton()->compute_list_set_push_constant(list, p_push, sizeof(MGPush));
+		op.has_push = true;
+		op.push = *p_push;
 	}
 	if (p_list != LIST_NONE && r_v.sparse_now) {
-		RD::get_singleton()->compute_list_dispatch_indirect(list, r_v.brick_args, p_list == LIST_A ? 0 : (p_list == LIST_F ? 12 : 24));
-	} else if (p_groups) {
-		RD::get_singleton()->compute_list_dispatch(list, p_threads.x, p_threads.y, p_threads.z);
+		op.dispatch = SimOp::DISPATCH_INDIRECT;
+		op.resource = r_v.brick_args;
+		op.x = p_list == LIST_A ? 0 : (p_list == LIST_F ? 12 : 24);
 	} else {
-		RD::get_singleton()->compute_list_dispatch_threads(list, p_threads.x, p_threads.y, p_threads.z);
+		op.dispatch = p_groups ? SimOp::DISPATCH_GROUPS : SimOp::DISPATCH_THREADS;
+		op.x = p_threads.x;
+		op.y = p_threads.y;
+		op.z = p_threads.z;
 	}
+	if (sim_batching) {
+		r_v.ops.push_back(op);
+		return;
+	}
+	RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
+	_record_sim_op(list, op);
 	RD::get_singleton()->compute_list_end();
+}
+
+void FellowGas::_record_sim_op(RD::ComputeListID p_list, const SimOp &p_op) {
+	RD *rd = RD::get_singleton();
+	rd->compute_list_bind_compute_pipeline(p_list, p_op.pipeline);
+	rd->compute_list_bind_uniform_set(p_list, p_op.set, 0);
+	if (p_op.has_push) {
+		rd->compute_list_set_push_constant(p_list, &p_op.push, sizeof(MGPush));
+	}
+	switch (p_op.dispatch) {
+		case SimOp::DISPATCH_INDIRECT: {
+			rd->compute_list_dispatch_indirect(p_list, p_op.resource, p_op.x);
+		} break;
+		case SimOp::DISPATCH_GROUPS: {
+			rd->compute_list_dispatch(p_list, p_op.x, p_op.y, p_op.z);
+		} break;
+		default: {
+			rd->compute_list_dispatch_threads(p_list, p_op.x, p_op.y, p_op.z);
+		} break;
+	}
+}
+
+void FellowGas::_sim_buffer_update(Volume &r_v, RID p_buffer, uint32_t p_offset, uint32_t p_size, const void *p_data) {
+	if (!sim_batching) {
+		RD::get_singleton()->buffer_update(p_buffer, p_offset, p_size, p_data);
+		return;
+	}
+	SimOp op;
+	op.type = SimOp::OP_BUFFER_UPDATE;
+	op.resource = p_buffer;
+	op.x = p_offset;
+	op.data.resize(p_size);
+	memcpy(op.data.ptr(), p_data, p_size);
+	r_v.ops.push_back(op);
+}
+
+void FellowGas::_sim_texture_clear(Volume &r_v, RID p_texture) {
+	if (!sim_batching) {
+		RD::get_singleton()->texture_clear(p_texture, Color(0, 0, 0, 0), 0, 1, 0, 1);
+		return;
+	}
+	SimOp op;
+	op.type = SimOp::OP_TEXTURE_CLEAR;
+	op.resource = p_texture;
+	r_v.ops.push_back(op);
+}
+
+void FellowGas::_sim_read_buffer(Volume &r_v, RID p_buffer, const Callable &p_callback) {
+	if (!sim_batching) {
+		RD::get_singleton()->buffer_get_data_async(p_buffer, p_callback);
+		return;
+	}
+	SimOp op;
+	op.type = SimOp::OP_READ_BUFFER;
+	op.resource = p_buffer;
+	op.callback = p_callback;
+	r_v.ops.push_back(op);
+}
+
+void FellowGas::_flush_sim_batch() {
+	// The queued steps' k-th operations together: first those that are not passes (outside a compute list), then the
+	// passes in one compute list — each volume's operations in its order (its k-th after its (k-1)-th's list), the
+	// volumes' passes side by side (they share no resource a pass writes: dummy_3d and the samplers are only read).
+	sim_batching = false;
+	uint32_t rounds = 0;
+	for (uint32_t id : sim_batch) {
+		rounds = MAX(rounds, volumes[id].ops.size());
+	}
+	RD *rd = RD::get_singleton();
+	if (rounds > 0) {
+		rd->draw_command_begin_label("FellowEngine Gas Steps");
+	}
+	for (uint32_t k = 0; k < rounds; k++) {
+		bool passes = false;
+		for (uint32_t id : sim_batch) {
+			const Volume &v = volumes[id];
+			if (k >= v.ops.size()) {
+				continue;
+			}
+			const SimOp &op = v.ops[k];
+			switch (op.type) {
+				case SimOp::OP_BUFFER_UPDATE: {
+					rd->buffer_update(op.resource, op.x, op.data.size(), op.data.ptr());
+				} break;
+				case SimOp::OP_TEXTURE_CLEAR: {
+					rd->texture_clear(op.resource, Color(0, 0, 0, 0), 0, 1, 0, 1);
+				} break;
+				case SimOp::OP_READ_BUFFER: {
+					rd->buffer_get_data_async(op.resource, op.callback);
+				} break;
+				default: {
+					passes = true;
+				} break;
+			}
+		}
+		if (!passes) {
+			continue;
+		}
+		RD::ComputeListID list = rd->compute_list_begin();
+		for (uint32_t id : sim_batch) {
+			const Volume &v = volumes[id];
+			if (k < v.ops.size() && v.ops[k].type == SimOp::OP_DISPATCH) {
+				_record_sim_op(list, v.ops[k]);
+			}
+		}
+		rd->compute_list_end();
+	}
+	if (rounds > 0) {
+		rd->draw_command_end_label();
+	}
+	for (uint32_t id : sim_batch) {
+		volumes[id].ops.clear();
+	}
+	sim_batch.clear();
 }
 
 void FellowGas::_open_weights(const Vector3i &p_res, int p_level, float *r_lo, float *r_hi) {
@@ -546,7 +670,7 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 	if (u.misc[3] <= 0.0f && burn_count > 0) {
 		u.misc[3] = BURN_FLAME_LIMIT; // no limit set: with burning objects in it a flame's (their fuel would run it away)
 	}
-	RD::get_singleton()->buffer_update(r_v.ubo, 0, sizeof(SimUBO), &u);
+	_sim_buffer_update(r_v, r_v.ubo, 0, sizeof(SimUBO), &u);
 	// rendering/fellow/fluid/gas_profile_passes (measurements): a timestamp before each group of passes.
 	const bool profile = GLOBAL_GET_CACHED(bool, "rendering/fellow/fluid/gas_profile_passes");
 	if (profile) {
@@ -559,7 +683,7 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 		const uint32_t c = r_v.current;
 		MGPush push = { { p_step.shift[0], p_step.shift[1], p_step.shift[2], 0 }, { 0.0f, 0.0f, 0.0f, 0.0f }, { 0, 0, 0, 0 }, {}, {}, {} };
 		_dispatch_sim(r_v, SIM_SHIFT, { RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 1, r_v.scalars[c]), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 2, r_v.velocity[c]), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 3, r_v.scalars[c ^ 1u]), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 4, r_v.velocity[c ^ 1u]) }, n + Vector3i(1, 1, 1), &push);
-		RD::get_singleton()->texture_clear(r_v.pressure, Color(0, 0, 0, 0), 0, 1, 0, 1);
+		_sim_texture_clear(r_v, r_v.pressure);
 		r_v.current = c ^ 1u;
 	}
 	const uint32_t cur = r_v.current;
@@ -569,7 +693,9 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 	auto sampled = [this](int p_binding, RID p_tex) { return RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, p_binding, Vector<RID>({ linear_sampler, p_tex })); };
 	auto buffer = [](int p_binding, RID p_buf) { return RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, p_binding, p_buf); };
 
-	RD::get_singleton()->draw_command_begin_label("FellowEngine Gas Step");
+	if (!sim_batching) {
+		RD::get_singleton()->draw_command_begin_label("FellowEngine Gas Step");
+	}
 	if (sparse) {
 		// Sparse bricks (decision 0117): after a shift the bricks' maxima again from the shifted state (all bricks);
 		// the sources, then A and F (what left them ambient), listed for the indirect dispatches below.
@@ -578,7 +704,7 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 			_dispatch_sim(r_v, SIM_COARSE, { image(1, r_v.scalars[cur]), image(4, r_v.coarse), buffer(6, r_v.emission_buffer) }, _fellow_gas_coarse_size(n), &all);
 		}
 		const uint32_t args[9] = { 0, 1, 1, 0, 1, 1, 0, 1, 1 };
-		RD::get_singleton()->buffer_update(r_v.brick_args, 0, sizeof(args), args);
+		_sim_buffer_update(r_v, r_v.brick_args, 0, sizeof(args), args);
 		_dispatch_sim(r_v, SIM_SPARSE_SOURCE, { image(1, r_v.coarse), image(2, r_v.brick_source) }, _fellow_gas_coarse_size(n));
 		_dispatch_sim(r_v, SIM_SPARSE_ACTIVATE, { image(1, r_v.brick_source), image(2, r_v.brick_mask), image(3, r_v.scalars[0]), image(4, r_v.scalars[1]), image(5, r_v.velocity[0]), image(6, r_v.velocity[1]), image(7, r_v.scalars_hat), image(8, r_v.velocity_hat), image(9, r_v.pressure), image(11, r_v.solid), image(12, r_v.coarse), buffer(14, r_v.brick_list), buffer(15, r_v.brick_args) }, Vector3i((n.x + 4) / 4, (n.y + 4) / 4, (n.z + 4) / 4));
 		if (u.sparse[3] != 0) {
@@ -700,14 +826,16 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 		MGPush push = { { 0, 0, 0, 0 }, { 1.0f / r_v.velocity_export_scale, 0.0f, 0.0f, 0.0f }, { 0, 0, 0, 0 }, {}, {}, {} };
 		_dispatch_sim(r_v, SIM_EXPORT, { image(1, r_v.velocity[nxt]), image(4, r_v.velocity_export) }, n, &push);
 	}
-	RD::get_singleton()->draw_command_end_label();
+	if (!sim_batching) {
+		RD::get_singleton()->draw_command_end_label();
+	}
 
 	r_v.current = nxt;
 	r_v.steps++;
 	r_v.sparse_last = sparse;
 	if (p_step.read_emission && r_v.emission_callback.is_valid() && !r_v.emission_in_flight) {
 		r_v.emission_in_flight = true;
-		RD::get_singleton()->buffer_get_data_async(r_v.emission_buffer, callable_mp_static(&FellowGas::_emission_read).bind(r_v.emission_callback, p_id));
+		_sim_read_buffer(r_v, r_v.emission_buffer, callable_mp_static(&FellowGas::_emission_read).bind(r_v.emission_callback, p_id));
 	}
 }
 
@@ -803,8 +931,12 @@ void FellowGas::process_pending() {
 	// rendering/fellow/fluid/gas_profile_passes (measurements): a timestamp where the steps switch between the volumes'
 	// and the burning objects'.
 	const bool profile = GLOBAL_GET_CACHED(bool, "rendering/fellow/fluid/gas_profile_passes");
+	// rendering/fellow/fluid/gas_batch_steps (milestone 220, decision 0362): the volumes' steps of a physics frame
+	// queued and recorded together (not while their passes are timed one by one).
+	const bool batch = !profile && GLOBAL_GET_CACHED(bool, "rendering/fellow/fluid/gas_batch_steps");
 	uint32_t last_kind = 0;
-	for (const Item &it : items) {
+	for (uint32_t i = 0; i < items.size(); i++) {
+		const Item &it = items[i];
 		if (profile && it.kind != last_kind) {
 			if (it.kind == 1) {
 				RENDER_TIMESTAMP("FellowEngine Burn Steps");
@@ -815,7 +947,17 @@ void FellowGas::process_pending() {
 		}
 		if (it.kind == 0) {
 			Volume &v = volumes[it.id];
+			if (batch) {
+				if (!v.ops.is_empty()) {
+					_flush_sim_batch(); // (a second step of the volume in this physics frame: after its first)
+				}
+				sim_batching = true;
+				sim_batch.push_back(it.id);
+			}
 			_run_step(it.id, v, v.pending[it.index]);
+			if (sim_batching && (i + 1 == items.size() || items[i + 1].kind != 0 || items[i + 1].tick != it.tick)) {
+				_flush_sim_batch(); // the physics frame's last volume: its burning objects read the gas after it
+			}
 		} else {
 			Burnable &b = burnables[it.id];
 			_run_burn_step(it.id, b, b.pending[it.index]);
