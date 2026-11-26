@@ -653,6 +653,12 @@ const LANTERN_EVERY := 3
 var _night := false
 var _night_node: Node
 var _lanterns: Array = [] # [BoneAttachment3D]
+## Milestone 225: breath in the cold — under COLD everyone near the camera (and the player) breathes out a small puff of
+## mist every few seconds (a GPUParticles3D at the mouth: BREATH_NEAR metres, the puffs left in the air, lit by the
+## scene), and stops in the warm.
+const BREATH_NEAR := 22.0
+var _breaths: Array = [] # [GPUParticles3D, the person's Dictionary or null for the player]
+var _breath_on := false
 var _sample_t := 0.0
 var _point_t := 0.0
 var _up_t := -1e9 # when the player was last seen up there (s)
@@ -1134,6 +1140,7 @@ func _weather_acts() -> void:
 	for w in _walkers:
 		w.pace = HURRY if raining else 1.0
 	_walkers_home()
+	_breathe()
 
 
 ## Milestone 222: at night the walkers without a lantern go home — WALKERS_HOME of them, each down the street nearest it
@@ -1187,6 +1194,103 @@ func _walkers_home() -> void:
 			var ap: AnimationPlayer = p.ap
 			ap.speed_scale = 1.35 / 1.6
 			ap.play("walk", 0.35)
+
+
+## Milestone 225: the breaths made the first time it is cold (one emitter on each person's head and the player's),
+## then each breathing while it is cold, seen and within BREATH_NEAR of the camera.
+var _breath_off := "--breath=0" in OS.get_cmdline_user_args() # (tools: an A/B)
+func _breathe() -> void:
+	if _breath_off or (not _cold and not _breath_on):
+		return
+	if _cold and _breaths.is_empty():
+		_make_breaths()
+	_breath_on = _cold
+	var cam := get_viewport().get_camera_3d()
+	var eye := cam.global_position if cam else Vector3(1e6, 0.0, 1e6)
+	for b in _breaths:
+		var e := b[0] as GPUParticles3D
+		var on := _cold and e.is_visible_in_tree() and e.global_position.distance_to(eye) < BREATH_NEAR
+		if e.emitting != on:
+			e.emitting = on
+
+
+func _make_breaths() -> void:
+	var tex := GradientTexture2D.new()
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	tex.width = 32
+	tex.height = 32
+	var soft := Gradient.new()
+	soft.set_color(0, Color(1, 1, 1, 1))
+	soft.set_color(1, Color(1, 1, 1, 0))
+	tex.gradient = soft
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	mat.albedo_texture = tex
+	mat.roughness = 1.0
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.16, 0.16)
+	quad.material = mat
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(0.93, 0.95, 0.98, 0.0))
+	ramp.set_color(1, Color(0.93, 0.95, 0.98, 0.0))
+	ramp.add_point(0.12, Color(0.93, 0.95, 0.98, 0.3))
+	ramp.add_point(0.45, Color(0.93, 0.95, 0.98, 0.14))
+	var ramp_tex := GradientTexture1D.new()
+	ramp_tex.gradient = ramp
+	var grow := Curve.new()
+	grow.add_point(Vector2(0.0, 0.35))
+	grow.add_point(Vector2(1.0, 1.0))
+	var grow_tex := CurveTexture.new()
+	grow_tex.curve = grow
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.015
+	pm.direction = Vector3(0.0, -0.2, 1.0)
+	pm.spread = 14.0
+	pm.initial_velocity_min = 0.35
+	pm.initial_velocity_max = 0.55
+	pm.gravity = Vector3(0.0, 0.05, 0.0)
+	pm.damping_min = 0.5
+	pm.damping_max = 0.8
+	pm.scale_min = 0.8
+	pm.scale_max = 1.2
+	pm.scale_curve = grow_tex
+	pm.color_ramp = ramp_tex
+	_held.append_array([tex, soft, mat, quad, ramp, ramp_tex, grow, grow_tex, pm])
+	var heads: Array = []
+	for p in _people:
+		heads.append([p.skel, p])
+	if _player_skel:
+		heads.append([_player_skel, null])
+	for h in heads:
+		var skel := h[0] as Skeleton3D
+		if skel == null or skel.find_bone("Head") < 0:
+			continue
+		var at := BoneAttachment3D.new()
+		at.name = "Breath"
+		at.bone_name = "Head"
+		skel.add_child(at)
+		var e := GPUParticles3D.new()
+		e.amount = 6
+		e.lifetime = 2.2
+		e.explosiveness = 0.75
+		e.randomness = 0.3
+		e.local_coords = false
+		e.speed_scale = _rng.randf_range(0.6, 0.75) # (a breath every 3-3.7 s, each its own)
+		e.preprocess = _rng.randf_range(0.0, 2.2)
+		e.process_material = pm
+		e.draw_pass_1 = quad
+		e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		e.visibility_aabb = AABB(Vector3(-1.5, -1.5, -1.5), Vector3(3.0, 3.0, 3.0))
+		e.emitting = false
+		e.position = Vector3(0.0, 0.05, 0.11)
+		at.add_child(e)
+		_breaths.append([e, h[1]])
 
 
 ## Milestone 222: a walker come back to its way walks on along it (from where it came out, its lane eased in).
