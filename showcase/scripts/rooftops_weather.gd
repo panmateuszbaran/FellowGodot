@@ -4,7 +4,7 @@ extends Node
 ## ground wet, snowy or frozen):
 ##   1 the scene's own fair weather (its towering cumulus, FAIR), 2 cloudy, 3 overcast, 4 rain, 5 a storm (lightning),
 ##   6 snow, 7 a blizzard; 0 the weather changing by itself (CYCLE, each held CYCLE_HOLD seconds); F1 the keys shown.
-## The tools: --weather=<1-7> (at once), --weather_cycle=1; turn_to().
+## The tools: --weather=<1-7> (at once), --weather_cycle=1, --weather_sky_dim=<share>; turn_to().
 ## The scene's depth fog closes in with the weather's (FellowWeather3D draws a depth fog in to the visibility its fog
 ## leaves, milestone 211: 2.5 km in the rain, 1.2 km in a storm, 300 m in a blizzard). The sky's own sun
 ## (rooftops.gd's SkySun, which lights the clouds and, through the sky, the square) dims with the weather's sunlight as
@@ -86,6 +86,8 @@ func _ready() -> void:
 			_cycle = true
 		elif a.begins_with("--weather_adapt="):
 			_adapt = float(a.get_slice("=", 1))
+		elif a.begins_with("--weather_sky_dim="):
+			sky_dim = float(a.get_slice("=", 1))
 	_rain = _weather.call("get_rain_node") if _weather.has_method("get_rain_node") else null
 	turn_to(start, 0.0)
 	var town := get_node_or_null(^"../Town")
