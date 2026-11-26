@@ -60,7 +60,37 @@ static func dress(p_npc: Node3D, p_person: PackedScene, p_rng: RandomNumberGener
 		hair_tint = Color.from_hsv(0.08, p_rng.randf_range(0.0, 0.3), p_rng.randf_range(0.55, 1.0))
 	for mi in pskel.find_children("*", "MeshInstance3D", true, false):
 		_materials(mi as MeshInstance3D, cloth_tint, hair_tint)
+	_face(pskel, p_rng)
 	return pskel
+
+
+## Milestone 234: a face for a person made with the face's shapes (ARKit's 52, MakeHuman's Faceunits): a
+## FellowFaceAnimator named "Face" on the body, the eyebrows, eyelashes, teeth and tongue following it; blinking, its
+## mouth talking when `talking` is set (no eye bones in the rig: no gaze).
+static func _face(p_person: Skeleton3D, p_rng: RandomNumberGenerator) -> void:
+	var body: MeshInstance3D = null
+	var followers: Array = []
+	for mi in p_person.find_children("*", "MeshInstance3D", true, false):
+		var m := (mi as MeshInstance3D)
+		if m.mesh == null or m.find_blend_shape_by_name(&"jawOpen") < 0 and m.find_blend_shape_by_name(&"eyeBlinkLeft") < 0:
+			continue
+		var mat := m.mesh.surface_get_material(0)
+		if body == null and mat and mat.resource_name.ends_with(".body"):
+			body = m
+		else:
+			followers.append(m)
+	if body == null or not ClassDB.class_exists(&"FellowFaceAnimator"):
+		return
+	var face: Node = ClassDB.instantiate(&"FellowFaceAnimator")
+	face.name = "Face"
+	p_person.add_child(face)
+	face.set("mesh_path", face.get_path_to(body))
+	var paths: Array[NodePath] = []
+	for f in followers:
+		paths.append(face.get_path_to(f))
+	face.set("follower_paths", paths)
+	face.set("gaze", false)
+	face.set("seed", p_rng.randi() if p_rng else 0)
 
 
 ## The player's hands and feet put where the mannequin's are (milestone 233): the arms' and legs' proportions differ (the

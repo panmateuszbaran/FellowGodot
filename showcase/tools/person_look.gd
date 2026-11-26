@@ -16,6 +16,8 @@ var _every := 30
 var _mannequin := false
 var _global := false
 var _raw := false
+var _talk := false # --talk=1 (milestone 234): the person's face talking
+var _face := {} # --face=jawOpen:1,mouthSmileLeft:0.8 (milestone 234): blend shapes set on the person
 const CAST := ["giulia", "marco", "rosa", "aldo", "amara", "kenji"]
 
 
@@ -37,6 +39,11 @@ func _init() -> void:
 			_mannequin = true
 		elif a == "--global=1":
 			_global = true
+		elif a == "--talk=1":
+			_talk = true
+		elif a.begins_with("--face="):
+			for pair in a.get_slice("=", 1).split(","):
+				_face[pair.get_slice(":", 0)] = float(pair.get_slice(":", 1))
 		elif a == "--raw=1":
 			_raw = true # the glTF scene as it is, at rest, beside the dressed mannequin
 	DirAccess.make_dir_recursive_absolute(_out)
@@ -52,7 +59,15 @@ func _npc(p_name: String, p_at: Vector3) -> Node3D:
 		(pskel.get_parent() as RetargetModifier3D).use_global_pose = true
 	if pskel == null:
 		push_error("person_look: %s not dressed" % p_name)
-	elif _mannequin:
+	if pskel and not _face.is_empty():
+		for mi in pskel.find_children("*", "MeshInstance3D", true, false):
+			for k in _face:
+				var bi := (mi as MeshInstance3D).find_blend_shape_by_name(k)
+				if bi >= 0:
+					(mi as MeshInstance3D).set_blend_shape_value(bi, _face[k])
+	if pskel and _talk and pskel.get_node_or_null(^"Face"):
+		pskel.get_node(^"Face").set("talking", true)
+	if pskel and _mannequin:
 		for c in (npc.find_child("Skeleton3D", true, false) as Skeleton3D).get_children():
 			if c is MeshInstance3D:
 				(c as MeshInstance3D).visible = true
@@ -115,8 +130,13 @@ func _run() -> void:
 				cam.position = at + Vector3(3.2, 1.0, 0)
 				cam.look_at(at + Vector3(0, 0.9, 0))
 			elif _view == "face":
-				cam.position = at + Vector3(0, 1.6, 0.75)
-				cam.look_at(at + Vector3(0, 1.55, 0))
+				# (at the person's head: its height its own)
+				var head := at + Vector3(0, 1.5, 0)
+				var ps := sk.find_child("Skeleton3D", true, false) as Skeleton3D if sk else null
+				if ps and ps.find_bone("Head") >= 0:
+					head = ps.global_transform * ps.get_bone_global_pose(ps.find_bone("Head")).origin + Vector3(0, 0.07, 0)
+				cam.position = head + Vector3(0.12, 0.02, 0.62)
+				cam.look_at(head)
 			else:
 				cam.position = at + Vector3(0.4, 1.1, 3.4)
 				cam.look_at(at + Vector3(0, 0.9, 0))

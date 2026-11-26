@@ -1374,6 +1374,9 @@ Expressions (milestone 100, decision 0208): `set_expression(name, weight = 1, fa
 `speech_brows` (0.5: the brows on the voice's stressed syllables), `speech_emphasis_db` (6 dB); `get_emphasis()`,
 the signal `emphasized(strength)`; milestone 104: `get_emphasis_count()`, `get_last_emphasis_strength()`,
 `get_speech_activity()` (0-1).
+Milestone 234 (decision 0376): `follower_paths` (meshes that take the face's blend shapes by name: eyebrows, eyelashes,
+teeth, tongue); `talking` (off: the mouth talks without a voice — phrases of syllables and pauses at random, from
+`seed`) and `talk_rate` (4.5 syllables a second).
 The head (milestone 104, decision 0212): `FellowHeadMotion3D` (a `SkeletonModifier3D` under the character's skeleton):
 `face_animator_path`, `head_bone` (`Head`), `neck_bone` (`Neck`), `neck_share` (0.4), `forward` (+Z, the skeleton's
 space); nods `nod_degrees` (6°) at each stressed syllable, `nod_time` (0.12 s); sway `idle_sway_degrees` (0.5°),

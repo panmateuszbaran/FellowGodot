@@ -171,6 +171,9 @@
 		<member name="eye_spacing" type="float" setter="set_eye_spacing" getter="get_eye_spacing" default="0.0">
 			The distance between the eyes, in metres (milestone 94): each eye turns in by half the angle the target subtends between them, so the eyes converge on a near target (0.6 m away with 0.064 m: 3° each). 0: the eyes parallel.
 		</member>
+		<member name="follower_paths" type="NodePath[]" setter="set_follower_paths" getter="get_follower_paths" default="[]">
+			Meshes that take the face mesh's blend shapes by name (milestone 234): eyebrows, eyelashes, teeth and tongue made with the face's shapes (MakeHuman's people: [code]tools/fellow_characters[/code]) close with the lids and open with the jaw. A shape a follower does not have is left alone.
+		</member>
 		<member name="gaze" type="bool" setter="set_gaze" getter="is_gaze" default="true">
 			The eyes look at [member look_target_path] (within [member gaze_range_horizontal] and [member gaze_range_vertical]), with [member saccades], through the eyeLook channels (milestone 89).
 		</member>
@@ -221,6 +224,12 @@
 		</member>
 		<member name="strength" type="float" setter="set_strength" getter="get_strength" default="1.0">
 			The mouth's channels times this (not [code]mouth_closed[/code]).
+		</member>
+		<member name="talk_rate" type="float" setter="set_talk_rate" getter="get_talk_rate" default="4.5">
+			With [member talking], syllables a second (each 0.7 to 1.3 of its length).
+		</member>
+		<member name="talking" type="bool" setter="set_talking" getter="is_talking" default="false">
+			The mouth talks without a voice (milestone 234: a crowd's conversations seen, not heard): while no voice plays, phrases of 1 to 3.2 s of syllables at [member talk_rate] — an open, wide or round vowel at a random strength, a third of them beginning closed, a sixth ending on the teeth — with pauses of 0.25 to 1.1 s; the brows raised at some phrases' starts ([member speech_brows]). From [member seed]: the same every run.
 		</member>
 		<member name="voice_path" type="NodePath" setter="set_voice_path" getter="get_voice_path" default="NodePath(&quot;&quot;)">
 			The player of the voice: [AudioStreamPlayer], [AudioStreamPlayer2D] or [AudioStreamPlayer3D]. Its stream is analysed as it plays, at its playback position (what is heard: the mix's position, the time since the mix and the output's latency; under Movie Maker the position).

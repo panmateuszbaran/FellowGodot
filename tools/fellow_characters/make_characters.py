@@ -35,6 +35,8 @@ def parse_args():
     ap.add_argument("--only", default="", help="comma-separated names of the spec's characters")
     ap.add_argument("--profile", default="", help="a Blender user folder for MPFB (default: a new temporary one)")
     ap.add_argument("--blend", action="store_true", help="also save each character's .blend (to look at)")
+    ap.add_argument("--faces", default="", help="MakeHuman's face units (the Faceunits 01 pack's targets/faceunits, CC0: "
+                    "ARKit's 52 shapes); default <assets>/targets/faceunits if there; 'none': no face shapes")
     return ap.parse_args()
 
 
@@ -155,15 +157,73 @@ def repack_images(path, quality=88):
         f.write(struct.pack("<II", len(out), 0x004E4942) + bytes(out))
 
 
-def apply_shape_keys(bpy, root):
+def apply_shape_keys(bpy, root, keep):
     """MPFB keeps the body's macros (gender, age, weight...) as shape keys over the neutral base mesh; the exporter
-    would write the base mesh. Their mix applied to the mesh, the keys removed."""
+    would write the base mesh. Their mix applied to the mesh; the face's shapes (`keep`) kept as shape keys over it,
+    their offsets as they were."""
+    import numpy as np
+
     for ob in [root] + list(root.children_recursive):
-        if ob.type == "MESH" and ob.data.shape_keys is not None:
-            bpy.ops.object.select_all(action="DESELECT")
-            ob.select_set(True)
-            bpy.context.view_layer.objects.active = ob
-            bpy.ops.object.shape_key_remove(all=True, apply_mix=True)
+        if ob.type != "MESH" or ob.data.shape_keys is None:
+            continue
+        blocks = ob.data.shape_keys.key_blocks
+        n = len(ob.data.vertices)
+
+        def coords(block):
+            a = np.empty(n * 3, dtype=np.float32)
+            block.data.foreach_get("co", a)
+            return a
+
+        offsets = {}
+        for kb in blocks:
+            if kb.name in keep:
+                offsets[kb.name] = coords(kb) - coords(kb.relative_key)
+                kb.value = 0.0
+        bpy.ops.object.select_all(action="DESELECT")
+        ob.select_set(True)
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.shape_key_remove(all=True, apply_mix=True)
+        if offsets:
+            shaped = np.empty(n * 3, dtype=np.float32)
+            ob.data.vertices.foreach_get("co", shaped)
+            ob.shape_key_add(name="Basis", from_mix=False)
+            for name in sorted(offsets):
+                kb = ob.shape_key_add(name=name, from_mix=False)
+                kb.data.foreach_set("co", shaped + offsets[name])
+                kb.value = 0.0
+
+
+def face_units(bpy, service, body, face_dir, followers):
+    """ARKit's 52 face shapes (MakeHuman's Faceunits 01, CC0) loaded on the body as shape keys at 0; the eyebrows,
+    eyelashes, teeth and tongue given the same shapes (each fitted again to the body with one shape at 1: they follow
+    the lids, the brows and the jaw). Returns the shapes' names."""
+    import numpy as np
+
+    TargetService = service("services.targetservice", "TargetService")
+    ClothesService = service("services.clothesservice", "ClothesService")
+    names = sorted(f[: -len(".target")] for f in os.listdir(face_dir) if f.endswith(".target"))
+    for name in names:
+        TargetService.load_target(body, os.path.join(face_dir, name + ".target"), weight=0.0, name=name)
+    blocks = body.data.shape_keys.key_blocks
+    for ob, prefixes in followers:
+        n = len(ob.data.vertices)
+        shapes = {}
+        for name in names:
+            if not name.startswith(prefixes):
+                continue
+            blocks[name].value = 1.0
+            ClothesService.fit_clothes_to_human(ob, body)
+            a = np.empty(n * 3, dtype=np.float32)
+            ob.data.vertices.foreach_get("co", a)
+            shapes[name] = a
+            blocks[name].value = 0.0
+        ClothesService.fit_clothes_to_human(ob, body)
+        if shapes:
+            ob.shape_key_add(name="Basis", from_mix=False)
+            for name in sorted(shapes):
+                kb = ob.shape_key_add(name=name, from_mix=False)
+                kb.data.foreach_set("co", shapes[name])
+    return names
 
 
 def humanoid_bones(root):
@@ -182,7 +242,7 @@ def find(asset_service, name, subdir, ext):
     return path
 
 
-def make(bpy, service, spec, out, save_blend):
+def make(bpy, service, spec, out, save_blend, face_dir):
     HumanService = service("services.humanservice", "HumanService")
     TargetService = service("services.targetservice", "TargetService")
     AssetService = service("services.assetservice", "AssetService")
@@ -201,11 +261,19 @@ def make(bpy, service, spec, out, save_blend):
     HumanService.add_builtin_rig(body, "game_engine")
     parts = [("eyes", spec.get("eyes_mesh", "low-poly"), "Eyes"), ("eyebrows", spec.get("eyebrows"), "Eyebrows"),
              ("eyelashes", spec.get("eyelashes"), "Eyelashes"), ("hair", spec.get("hair"), "Hair")]
+    if face_dir:
+        parts += [("teeth", spec.get("teeth", "teeth_base"), "Teeth"), ("tongue", spec.get("tongue", "tongue01"), "Tongue")]
     parts += [("clothes", c, "Clothes") for c in spec.get("clothes", [])]
+    followers = []
     for subdir, name, kind in parts:
         if name:
-            HumanService.add_mhclo_asset(find(AssetService, name, subdir, ".mhclo"), body, asset_type=kind,
-                                         subdiv_levels=0, material_type="GAMEENGINE")
+            ob = HumanService.add_mhclo_asset(find(AssetService, name, subdir, ".mhclo"), body, asset_type=kind,
+                                              subdiv_levels=0, material_type="GAMEENGINE")
+            if ob is not None and kind in ("Eyebrows", "Eyelashes"):
+                followers.append((ob, ("eye", "brow", "cheek")))
+            elif ob is not None and kind in ("Teeth", "Tongue"):
+                followers.append((ob, ("jaw", "mouth", "tongue")))
+    face = face_units(bpy, service, body, face_dir, followers) if face_dir else []
 
     # The export copy: the hidden faces under the clothes and the helper geometry gone, modifiers applied.
     root = ExportService.create_character_copy(body, name_suffix="_export")
@@ -213,7 +281,7 @@ def make(bpy, service, spec, out, save_blend):
     ExportService.bake_modifiers_remove_helpers(export_body, bake_masks=True, bake_subdiv=True, remove_helpers=True, also_proxy=True)
     # (the hair's, eyebrows' and eyelashes' alpha cuts the surface; the others are opaque)
     game_materials(bpy, root, [n for n in (spec.get("hair"), spec.get("eyebrows"), spec.get("eyelashes")) if n])
-    apply_shape_keys(bpy, root)
+    apply_shape_keys(bpy, root, set(face))
     humanoid_bones(root)
     bpy.ops.object.select_all(action="DESELECT")
     root.select_set(True)
@@ -223,7 +291,8 @@ def make(bpy, service, spec, out, save_blend):
     os.makedirs(out, exist_ok=True)
     path = os.path.join(out, spec["name"] + ".glb")
     bpy.ops.export_scene.gltf(filepath=path, use_selection=True, export_format="GLB", export_skins=True,
-                              export_animations=False, export_morph=False, export_image_format="JPEG",
+                              export_animations=False, export_morph=bool(face), export_morph_normal=False,
+                              export_image_format="JPEG",
                               export_jpeg_quality=88, export_apply=False)
     repack_images(path)
     if save_blend:
@@ -237,10 +306,16 @@ def main():
         people = json.load(f)["people"]
     only = [n for n in args.only.split(",") if n]
     bpy, service = setup_mpfb(args)
+    face_dir = ""
+    if args.faces != "none":
+        face_dir = os.path.abspath(args.faces) if args.faces else os.path.join(os.path.abspath(args.assets), "targets", "faceunits")
+        if not os.path.isdir(face_dir):
+            print("make_characters: no face units at %s (the people without face shapes)" % face_dir)
+            face_dir = ""
     for spec in people:
         if only and spec["name"] not in only:
             continue
-        path = make(bpy, service, spec, os.path.abspath(args.out), args.blend)
+        path = make(bpy, service, spec, os.path.abspath(args.out), args.blend, face_dir)
         print("make_characters: %s (%d KB)" % (path, os.path.getsize(path) // 1024))
     return 0
 

@@ -134,6 +134,28 @@ private:
 	float saccade_interval_min = 0.4f;
 	float saccade_interval_max = 1.6f;
 	int64_t seed = 0;
+	// Milestone 234 (decision 0376): meshes that take the face mesh's blend shapes by name (eyebrows, eyelashes,
+	// teeth); and a mouth talking without a voice (a crowd's conversations): syllables in phrases at random.
+	Array follower_paths; // NodePaths
+	struct Follower {
+		ObjectID id;
+		Ref<Mesh> mesh;
+		LocalVector<int> remap; // the face mesh's blend shape index -> the follower's (-1: none)
+		LocalVector<float> written;
+	};
+	LocalVector<Follower> followers;
+	bool talking = false;
+	float talk_rate = 4.5f; // syllables a second
+	RandomPCG talk_rng;
+	bool talk_in_phrase = false;
+	double talk_phrase_end = 0.0;
+	double talk_pause_end = 0.0;
+	double talk_syllable_start = 0.0;
+	double talk_syllable_length = 0.2;
+	int talk_vowel = 0; // 0 open, 1 wide, 2 round
+	float talk_amp = 0.0f;
+	bool talk_closure = false;
+	bool talk_hiss = false;
 
 	float channels[CHANNEL_MAX] = {};
 	// Milestone 100 (decision 0208): expressions — named sets of channels faded in and out, layered — and the brows
@@ -186,6 +208,8 @@ private:
 	bool _resolve_expression(const StringName &p_name, LocalVector<Pair<int, float>> &r_values) const;
 	MeshInstance3D *_mesh();
 	void _resolve_shapes(MeshInstance3D *p_mesh);
+	void _resolve_followers(MeshInstance3D *p_face);
+	bool _talk(float r_target[MOUTH_CHANNELS], float &r_activity);
 	void _update(double p_delta);
 	double _next_interval();
 
@@ -261,6 +285,12 @@ public:
 	float get_speech_brows() const { return speech_brows; }
 	void set_speech_emphasis_db(float p_db) { speech_emphasis_db = CLAMP(p_db, 1.0f, 30.0f); }
 	float get_speech_emphasis_db() const { return speech_emphasis_db; }
+	void set_follower_paths(const Array &p_paths);
+	Array get_follower_paths() const { return follower_paths; }
+	void set_talking(bool p_talking) { talking = p_talking; }
+	bool is_talking() const { return talking; }
+	void set_talk_rate(float p_rate) { talk_rate = CLAMP(p_rate, 1.0f, 10.0f); }
+	float get_talk_rate() const { return talk_rate; }
 	void set_expression(const StringName &p_name, float p_weight = 1.0f, float p_fade = 0.3f);
 	void clear_expressions(float p_fade = 0.3f);
 	float get_expression_weight(const StringName &p_name) const;

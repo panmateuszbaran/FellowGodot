@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 234 — Faces for the people (2026-11-26)
+
+- Decision 0376. `FellowFaceAnimator`: `follower_paths` (meshes taking the face's blend shapes by name) and `talking` /
+  `talk_rate` (a mouth talking without a voice: syllables in phrases at random, from `seed`; off by default). The
+  people get ARKit's 52 face shapes from MakeHuman's CC0 face units (their lashes, brows, teeth and tongue following);
+  the rooftops' people blink and talk in their groups and while their speech bubbles show.
+
 ## Milestone 233 — The player a person (2026-11-26)
 
 - Decision 0375. The rooftops' player worn by a seventh MakeHuman person (Luca), scaled to the mannequin's hips; a

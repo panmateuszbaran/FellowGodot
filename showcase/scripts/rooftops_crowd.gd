@@ -52,6 +52,9 @@ var _held: Array = [] # the clothes' meshes and materials, held until the people
 var _player: Node3D
 const PEOPLE := ["giulia", "marco", "rosa", "aldo", "amara", "kenji"] # (milestone 232)
 var _people_scenes: Array = []
+var _by_node := {} # (milestone 234) a person's node -> its dictionary
+var _clock := 0.0
+var _faces_wait := 0.0
 
 
 func _ready() -> void:
@@ -308,6 +311,7 @@ static func _at(p_pts: PackedVector3Array, p_loop: bool, p_length: float, p_s: f
 
 
 func _process(delta: float) -> void:
+	_faces(delta)
 	var pp := _player.global_position if _player else Vector3(1e6, 0.0, 1e6)
 	for p in _people:
 		if p.react != "" and p.react != "walk_on":
@@ -374,6 +378,10 @@ func _register(p_node: Node3D, p_kind: String, p_clip: String, p_speed: float) -
 			"act": "", "look": null, "look_w": 0.0, "knocked": 0}
 	# (milestone 232: the skeleton seen — the person's when one is worn, the mannequin's otherwise: breath, footprints)
 	p["body"] = p_node.get_meta(&"body_skeleton", p.skel)
+	# (milestone 234: its face, when its person has one — talking in a talking group and while its bubble is read)
+	p["face"] = (p.body as Node).get_node_or_null(^"Face") if p.body != p.skel else null
+	p["talk_until"] = 0.0
+	_by_node[p_node] = p
 	_people.append(p)
 	return p
 
@@ -414,7 +422,7 @@ func bump(p_collider: Object, p_velocity: Vector3, p_normal: Vector3) -> int:
 	if speed < KNOCK_MIN and not from_above:
 		_stagger(p, push)
 		if _rng.randf() < 0.7:
-			_bubbles.call("say", p.node, ["Ehi!", "Attento!", "Watch it!", "Oof!"][_rng.randi() % 4], 1.6, _head_height(p))
+			_say(p.node, ["Ehi!", "Attento!", "Watch it!", "Oof!"][_rng.randi() % 4], 1.6, _head_height(p))
 		return REACT_STAGGER
 	_knock(p, push * clampf(speed * 0.7, 2.5, 4.5))
 	p.knocked = int(p.knocked) + 1
@@ -585,7 +593,7 @@ func _get_up(p: Dictionary) -> void:
 	pa.call("get_up_from_animation", GET_UP_BLEND)
 	p.react = "getup"
 	p.t = 0.0
-	_bubbles.call("say", node, ["Ow... my back.", "Maleducato!", "Are you mad?!", "Santo cielo..."][_rng.randi() % 4], 2.4, 1.3)
+	_say(node, ["Ow... my back.", "Maleducato!", "Are you mad?!", "Santo cielo..."][_rng.randi() % 4], 2.4, 1.3)
 
 
 ## Standing after the get-up: the bodies cleared (they follow the animation within millimetres), the capsule back.
@@ -921,7 +929,7 @@ func _point_at_player(p_at: Vector3) -> void:
 	ap.speed_scale = 1.0
 	ap.play("point_up", 0.25)
 	_points += 1
-	_bubbles.call("say", p.node, ["Guarda! Up there!", "Look — on the roof!", "Madonna, he'll break his neck!",
+	_say(p.node, ["Guarda! Up there!", "Look — on the roof!", "Madonna, he'll break his neck!",
 			"Hey! Get down from there!", "Mamma mia, look at him climb!"][_rng.randi() % 5], 2.8, _head_height(p))
 
 
@@ -1008,14 +1016,45 @@ func _talk_next() -> void:
 		_talk_end(true)
 		return
 	var last := int(_talk.i) == lines.size() - 1
-	_bubbles.call("say", p.node, lines[_talk.i], 0.0, _head_height(p), not last)
+	_say(p.node, lines[_talk.i], 0.0, _head_height(p), not last)
+
+
+## Milestone 234: the faces — talking while a talking group's clip plays or a bubble is read; their animators run only
+## within FACES_NEAR of the camera (checked twice a second).
+const FACES_NEAR := 25.0
+
+func _faces(delta: float) -> void:
+	_clock += delta
+	var cam := get_viewport().get_camera_3d()
+	_faces_wait -= delta
+	var check := _faces_wait <= 0.0
+	if check:
+		_faces_wait = 0.5
+	for p in _people:
+		var face: Node = p.face
+		if face == null:
+			continue
+		if check and cam:
+			var near := (p.node as Node3D).global_position.distance_to(cam.global_position) < FACES_NEAR
+			face.process_mode = Node.PROCESS_MODE_INHERIT if near else Node.PROCESS_MODE_DISABLED
+		var ap: AnimationPlayer = p.ap
+		face.set("talking", _clock < float(p.talk_until) or (ap != null and ap.current_animation == "talk"))
+
+
+## A bubble said (FellowBubbles' say(), the same arguments) and, from milestone 234, the person's mouth talking while it
+## is read: a twentieth of a second a character, 1-5 s.
+func _say(...args: Array) -> void:
+	_bubbles.callv("say", args)
+	var p = _by_node.get(args[0])
+	if p != null:
+		p.talk_until = _clock + clampf(String(args[1]).length() * 0.065, 1.0, 5.0)
 
 
 func _talk_end(p_farewell: bool) -> void:
 	var p: Dictionary = _talk.p
 	_talk = {}
 	if p_farewell:
-		_bubbles.call("say", p.node, ["Arrivederci!", "A presto!", "Ciao, ciao.", "Buona serata!", "Go with God."][_rng.randi() % 5], 2.2, _head_height(p))
+		_say(p.node, ["Arrivederci!", "A presto!", "Ciao, ciao.", "Buona serata!", "Go with God."][_rng.randi() % 5], 2.2, _head_height(p))
 	else:
 		_bubbles.call("hush", p.node)
 	_act_done(p)
@@ -1202,7 +1241,7 @@ func _walkers_home() -> void:
 			ap.play("walk", 0.35)
 			if _rng.randf() < 0.3:
 				var lines: Array = ["Buonanotte!", "A domani!", "Home, before the lamps go out."]
-				_bubbles.call("say", p.node, lines[_rng.randi() % lines.size()], 2.2, _head_height(p))
+				_say(p.node, lines[_rng.randi() % lines.size()], 2.2, _head_height(p))
 		elif not _night and p.act == "away" and p.get("exit") != null and _rng.randf() < 0.25:
 			# (out of the street it went down, to the nearest point of its way)
 			var e: Array = p.exit
@@ -1417,7 +1456,7 @@ func _leave(p: Dictionary) -> void:
 		if _night and _rain <= RAIN_LEAVE:
 			# (milestone 218: going home, or for a glass, at night)
 			lines = ["Buonanotte!", "Time for a glass, then bed.", "A domani!"]
-		_bubbles.call("say", p.node, lines[_rng.randi() % lines.size()], 2.2, _head_height(p))
+		_say(p.node, lines[_rng.randi() % lines.size()], 2.2, _head_height(p))
 
 
 func _come_back(p: Dictionary) -> void:

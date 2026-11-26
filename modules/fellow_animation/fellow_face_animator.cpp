@@ -429,6 +429,80 @@ void FellowFaceAnimator::_resolve_shapes(MeshInstance3D *p_mesh) {
 	}
 }
 
+void FellowFaceAnimator::_resolve_followers(MeshInstance3D *p_face) {
+	// Milestone 234: each follower's blend shapes found by the face mesh's names (re-resolved when a follower or its
+	// mesh changes).
+	const int count = mesh_cache.is_valid() ? mesh_cache->get_blend_shape_count() : 0;
+	followers.resize(follower_paths.size());
+	for (int f = 0; f < follower_paths.size(); f++) {
+		Follower &fo = followers[f];
+		MeshInstance3D *mi = Object::cast_to<MeshInstance3D>(get_node_or_null(follower_paths[f]));
+		if (!mi || mi == p_face) {
+			fo.id = ObjectID();
+			fo.mesh.unref();
+			fo.remap.clear();
+			continue;
+		}
+		if (fo.id == mi->get_instance_id() && fo.mesh == mi->get_mesh() && int(fo.remap.size()) == count) {
+			continue;
+		}
+		fo.id = mi->get_instance_id();
+		fo.mesh = mi->get_mesh();
+		fo.remap.resize(count);
+		for (int i = 0; i < count; i++) {
+			fo.remap[i] = mi->find_blend_shape_by_name(mesh_cache->get_blend_shape_name(i));
+		}
+		fo.written.resize(fo.mesh.is_valid() ? fo.mesh->get_blend_shape_count() : 0);
+		for (float &w : fo.written) {
+			w = -1.0f;
+		}
+	}
+}
+
+bool FellowFaceAnimator::_talk(float r_target[MOUTH_CHANNELS], float &r_activity) {
+	// Milestone 234 (decision 0376): talking without a voice — phrases of 1-3 s of syllables (talk_rate a second, each
+	// 0.7-1.3 of its length), pauses of 0.25-1.1 s between them. A syllable: an open, wide or round vowel at a random
+	// strength, the jaw following an arch over it; a third begin closed (p, b, m), a sixth end on the teeth (f, s).
+	if (talk_in_phrase) {
+		if (clock >= talk_syllable_start + talk_syllable_length) {
+			if (clock >= talk_phrase_end) {
+				talk_in_phrase = false;
+				talk_pause_end = clock + talk_rng.random(0.25f, 1.1f);
+			} else {
+				talk_syllable_start = clock;
+				talk_syllable_length = talk_rng.random(0.7f, 1.3f) / talk_rate;
+				const float v = talk_rng.randf();
+				talk_vowel = v < 0.45f ? 0 : (v < 0.75f ? 1 : 2);
+				talk_amp = talk_rng.random(0.45f, 1.0f);
+				talk_closure = talk_rng.randf() < 0.33f;
+				talk_hiss = talk_rng.randf() < 0.17f;
+			}
+		}
+	} else if (clock >= talk_pause_end) {
+		talk_in_phrase = true;
+		talk_phrase_end = clock + talk_rng.random(1.0f, 3.2f);
+		talk_syllable_start = clock - 1.0; // a syllable starts at once
+		talk_syllable_length = 0.0;
+		if (talk_rng.randf() < 0.5f) {
+			emphasis = MAX(emphasis, talk_rng.random(0.3f, 0.7f)); // the brows on some phrases' first syllable
+		}
+		return _talk(r_target, r_activity);
+	}
+	if (!talk_in_phrase) {
+		r_activity = 0.0f;
+		return true; // a pause: the target's mouth closed
+	}
+	const float u = CLAMP(float((clock - talk_syllable_start) / MAX(talk_syllable_length, 1e-3)), 0.0f, 1.0f);
+	const float arch = Math::pow(Math::sin(float(Math::PI) * u), 0.8f) * talk_amp;
+	r_target[CHANNEL_JAW_OPEN] = arch * (talk_vowel == 0 ? 0.75f : 0.35f);
+	r_target[CHANNEL_MOUTH_WIDE] = arch * (talk_vowel == 1 ? 0.7f : 0.1f);
+	r_target[CHANNEL_MOUTH_ROUND] = arch * (talk_vowel == 2 ? 0.8f : 0.0f);
+	r_target[CHANNEL_MOUTH_CLOSED] = talk_closure && u < 0.25f ? 1.0f - u / 0.25f : 0.0f;
+	r_target[CHANNEL_TEETH] = talk_hiss && u > 0.6f ? 0.6f : 0.0f;
+	r_activity = 0.4f + 0.6f * arch;
+	return true;
+}
+
 double FellowFaceAnimator::_next_interval() {
 	const float lo = MIN(blink_interval_min, blink_interval_max);
 	const float hi = MAX(blink_interval_min, blink_interval_max);
@@ -481,6 +555,8 @@ void FellowFaceAnimator::_update(double p_delta) {
 			}
 		}
 	}
+	float talk_activity = 0.0f;
+	const bool talk_on = talking && !voice_on && _talk(target, talk_activity);
 	for (int c = 0; c < MOUTH_CHANNELS; c++) {
 		const float goal = c == CHANNEL_MOUTH_CLOSED ? target[c] : target[c] * strength;
 		const float tau = goal > channels[c] ? attack : release;
@@ -504,7 +580,7 @@ void FellowFaceAnimator::_update(double p_delta) {
 	level_slow += ((voice_on ? MAX(level_db, level_floor_db) : level_floor_db) - level_slow) * (1.0f - Math::exp(-dt / 0.5f));
 	// Milestone 104 (decision 0212): how much the face is speaking (the voice's level between the floor and full, eased
 	// over a quarter second), for the head's motion.
-	const float activity = voice_on ? CLAMP((level_db - level_floor_db) / MAX(level_full_db - level_floor_db, 1.0f), 0.0f, 1.0f) : 0.0f;
+	const float activity = voice_on ? CLAMP((level_db - level_floor_db) / MAX(level_full_db - level_floor_db, 1.0f), 0.0f, 1.0f) : (talk_on ? talk_activity : 0.0f);
 	speech_activity += (activity - speech_activity) * (1.0f - Math::exp(-dt / 0.25f));
 	emphasis *= Math::exp(-dt / 0.3f);
 	// The expressions, each faded towards its weight; their channels and the brows' pulse added up.
@@ -603,6 +679,9 @@ void FellowFaceAnimator::_update(double p_delta) {
 	channels[CHANNEL_LOOK_DOWN_LEFT] = channels[CHANNEL_LOOK_DOWN_RIGHT] = MAX(0.0f, -pitch);
 	// The face: each blend shape the sum of its channels' (at most 1), written when it changed.
 	if (MeshInstance3D *mi = _mesh()) {
+		if (!follower_paths.is_empty()) {
+			_resolve_followers(mi);
+		}
 		LocalVector<float> values;
 		values.resize(written.size());
 		for (float &v : values) {
@@ -625,6 +704,17 @@ void FellowFaceAnimator::_update(double p_delta) {
 				if (Math::abs(v - written[idx]) > 1e-4f) {
 					mi->set_blend_shape_value(idx, v);
 					written[idx] = v;
+				}
+				// Milestone 234: the followers take the same value (their lashes close with the lids).
+				for (Follower &fo : followers) {
+					const int fi = idx < int(fo.remap.size()) ? fo.remap[idx] : -1;
+					if (fi < 0 || fi >= int(fo.written.size()) || Math::abs(v - fo.written[fi]) <= 1e-4f) {
+						continue;
+					}
+					if (MeshInstance3D *fm = Object::cast_to<MeshInstance3D>(ObjectDB::get_instance(fo.id))) {
+						fm->set_blend_shape_value(fi, v);
+						fo.written[fi] = v;
+					}
 				}
 			}
 		}
@@ -694,10 +784,16 @@ void FellowFaceAnimator::set_blend_shapes(const Dictionary &p_shapes) {
 	mesh_cache.unref();
 }
 
+void FellowFaceAnimator::set_follower_paths(const Array &p_paths) {
+	follower_paths = p_paths;
+	followers.clear();
+}
+
 void FellowFaceAnimator::set_seed(int64_t p_seed) {
 	seed = p_seed;
 	rng.seed(uint64_t(seed));
 	saccade_rng.seed(uint64_t(seed) + 1);
+	talk_rng.seed(uint64_t(seed) + 2);
 	next_blink = clock + _next_interval();
 	next_saccade = clock;
 }
@@ -832,6 +928,12 @@ void FellowFaceAnimator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_emphasis_count"), &FellowFaceAnimator::get_emphasis_count);
 	ClassDB::bind_method(D_METHOD("get_last_emphasis_strength"), &FellowFaceAnimator::get_last_emphasis_strength);
 	ClassDB::bind_method(D_METHOD("get_speech_activity"), &FellowFaceAnimator::get_speech_activity);
+	ClassDB::bind_method(D_METHOD("set_follower_paths", "paths"), &FellowFaceAnimator::set_follower_paths);
+	ClassDB::bind_method(D_METHOD("get_follower_paths"), &FellowFaceAnimator::get_follower_paths);
+	ClassDB::bind_method(D_METHOD("set_talking", "talking"), &FellowFaceAnimator::set_talking);
+	ClassDB::bind_method(D_METHOD("is_talking"), &FellowFaceAnimator::is_talking);
+	ClassDB::bind_method(D_METHOD("set_talk_rate", "rate"), &FellowFaceAnimator::set_talk_rate);
+	ClassDB::bind_method(D_METHOD("get_talk_rate"), &FellowFaceAnimator::get_talk_rate);
 	ClassDB::bind_method(D_METHOD("get_channel", "channel"), &FellowFaceAnimator::get_channel);
 	ClassDB::bind_method(D_METHOD("get_channels"), &FellowFaceAnimator::get_channels);
 	ClassDB::bind_method(D_METHOD("sample_voice", "stream", "time"), &FellowFaceAnimator::sample_voice);
@@ -845,6 +947,7 @@ void FellowFaceAnimator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "voice_stream", PROPERTY_HINT_RESOURCE_TYPE, "AudioStream"), "set_voice_stream", "get_voice_stream");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "voice_time", PROPERTY_HINT_RANGE, "-1,600,0.001,or_greater,suffix:s"), "set_voice_time", "get_voice_time");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "blend_shapes"), "set_blend_shapes", "get_blend_shapes");
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "follower_paths", PROPERTY_HINT_ARRAY_TYPE, MAKE_RESOURCE_TYPE_HINT("NodePath")), "set_follower_paths", "get_follower_paths");
 	ADD_GROUP("Lip Sync", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "lip_sync"), "set_lip_sync", "is_lip_sync");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "strength", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_strength", "get_strength");
@@ -854,6 +957,8 @@ void FellowFaceAnimator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "level_floor_db", PROPERTY_HINT_RANGE, "-80,0,0.1,suffix:dB"), "set_level_floor_db", "get_level_floor_db");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "level_full_db", PROPERTY_HINT_RANGE, "-80,0,0.1,suffix:dB"), "set_level_full_db", "get_level_full_db");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_analysis_seconds", PROPERTY_HINT_RANGE, "1,600,1,suffix:s"), "set_max_analysis_seconds", "get_max_analysis_seconds");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "talking"), "set_talking", "is_talking");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "talk_rate", PROPERTY_HINT_RANGE, "1,10,0.1,suffix:/s"), "set_talk_rate", "get_talk_rate");
 	ADD_GROUP("Blinks", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "blinks"), "set_blinks", "is_blinks");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "blink_interval_min", PROPERTY_HINT_RANGE, "0.1,30,0.01,suffix:s"), "set_blink_interval_min", "get_blink_interval_min");
