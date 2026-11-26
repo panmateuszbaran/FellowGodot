@@ -113,6 +113,8 @@ func _init() -> void:
 			ProjectSettings.set_setting(key, (val == "true") if val in ["true", "false"] else float(val))
 		elif a.begins_with("--omni_dp="):
 			_omni_dp = a.get_slice("=", 1)
+		elif a == "--omni_dp_level=1":
+			_omni_dp_level = true
 		elif a.begins_with("--env_set="):
 			_env_set = a.get_slice("=", 1).split(",")
 		elif a == "--perf=1":
@@ -194,6 +196,16 @@ func _init() -> void:
 			var fl := g.call("get_fire_light_node") as OmniLight3D
 			if fl:
 				fl.omni_shadow_mode = OmniLight3D.SHADOW_DUAL_PARABOLOID if _omni_dp in ["all", "fire"] else OmniLight3D.SHADOW_CUBE
+		if _omni_dp_level:
+			# (milestone 228: the dual paraboloids' seam level — the lights' own z up, the hemispheres the space over and
+			# under them)
+			for l in sc.find_children("*", "OmniLight3D", true, false):
+				if (l as OmniLight3D).shadow_enabled and (l as OmniLight3D).omni_shadow_mode == OmniLight3D.SHADOW_DUAL_PARABOLOID:
+					(l as OmniLight3D).global_basis = Basis(Vector3.RIGHT, -PI * 0.5)
+			for g in sc.find_children("*", "FellowGasVolume3D", true, false):
+				var fl := g.call("get_fire_light_node") as OmniLight3D
+				if fl and fl.omni_shadow_mode == OmniLight3D.SHADOW_DUAL_PARABOLOID:
+					fl.global_basis = Basis(Vector3.RIGHT, -PI * 0.5)
 	if _cam_mode != "demo":
 		_cam = Camera3D.new()
 		_cam.fov = 50.0
@@ -540,6 +552,7 @@ var _talk_target: Node3D
 var _osteria: Node3D # milestone 213
 var _talk_at := Vector3()
 var _drop: PackedStringArray = []
+var _omni_dp_level := false
 var _env_set: PackedStringArray = [] # --env_set=name:value,...: the WorldEnvironment's Environment's properties
 var _omni_dp := "" # --omni_dp=all|fire|lamps (milestone 219): shadowed omni lights dual paraboloid (an A/B)
 var _perf := false # --perf=1: every frame drawn, none saved, vsync off; the GPU's and the CPU's time a frame printed
