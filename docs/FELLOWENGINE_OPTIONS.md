@@ -830,6 +830,8 @@ Milestone 221 (decision 0363): the moon's face (`atmosphere_sky.gdshader`: `moon
 `WALKERS_HOME` 0.75).
 Milestone 223 (decision 0365): the clouds' light per weather (`rooftops_weather.gd`: `SKY_DIM` 0.4 overcast, 0.7 rain,
 0.85 a storm, 0 snow, 0.2 a blizzard; tools: `--weather_sky_dim=<share>`).
+Milestone 224 (decision 0366): less sun under a closed deck (`rooftops_weather.gd`: `SUN` 0.02 overcast and snow, 0.015
+rain, 0.01 a storm and a blizzard; `DARKER` with them; tools: `--weather_sun=<key>:<share>,...`).
 
 ## Vehicles' marks, smoke and sounds (milestone 79)
 

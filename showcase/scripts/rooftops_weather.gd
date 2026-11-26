@@ -42,14 +42,19 @@ const NAMES := ["fair", "cloudy", "overcast", "rain", "storm", "snow", "blizzard
 ## (milestone 214) The sun's share under each weather's clouds, where the square takes less than FellowWeather3D's preset
 ## (keys 1-7; -1 the preset's): under a closed deck no sun's shadow is seen — the presets' 20 % (overcast) to 5 % (a
 ## storm) had left the bell tower's shadow sharp across the houses once the eye adapted to the dark.
-const SUN := [-1.0, -1.0, 0.05, 0.03, 0.015, 0.05, 0.02]
+## Milestone 224: less again under the closed decks (overcast and snow 2 %, rain 1.5 %, a storm and a blizzard 1 %):
+## at 5 % the tower's shadow still lay across PalazzoOcra's front in the snow (its lit part 1.32 times its shaded part's
+## luminance; 1.17 at 2 %, 1.09 at 1 %).
+const SUN := [-1.0, -1.0, 0.02, 0.015, 0.01, 0.02, 0.01]
 const CYCLE := [1, 2, 4, 5, 4, 3, 1, 6, 7, 6, 1] # (keys) fair, cloudy, rain, a storm, rain, overcast, fair, snow...
 const LAMPS_DARK := 2.4
 ## (milestone 214) How many stops darker the square is under each weather than in the fair one (keys 1-7: the RTX's
 ## frames from the square's corner, their mean luminance under the sky, the eye not adapting), and the share of that the
 ## eye makes up for — of the frame's stops, which the tone curve spreads 1.7 times wider than the light's: 0.6 had made
 ## a storm as bright as the fair evening; at 0.4 it is a stop and a quarter darker, an overcast sky three quarters.
-const DARKER := [0.0, 0.27, 2.42, 3.51, 3.91, 1.85, 2.12]
+## (milestone 224: each the darker by what its less sun takes, measured on the RTX — overcast +0.23, snow +0.21 — and
+## estimated for the others from those.)
+const DARKER := [0.0, 0.27, 2.65, 3.66, 3.96, 2.06, 2.22]
 const EXPOSURE_ADAPT := 0.4
 var _adapt := EXPOSURE_ADAPT # (tools: --weather_adapt=<share>, 0 the frames' own darkness measured)
 ## (milestone 216) The eye under the moon (rooftops_night.gd): this many stops more (its light 5 stops under the
