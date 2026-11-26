@@ -2,8 +2,8 @@ extends Node
 ## Milestone 216: night falls on the square (N; N again: the day comes back). The sun sets — down its azimuth to
 ## SUNSET_UNDER degrees under the horizon, its light reddening and gone at the horizon, the sky through its sunset and
 ## twilight (FellowEngine's atmosphere draws them from the sun's elevation) — then the moon rises over the roofs: the
-## Sun's light turned to the moon's (MOON_COLOR, MOON_ENERGY, from MOON_UP degrees up, MOON_TURN degrees round from where
-## the sun set, a smaller disk), the sky's light dimmed (SKY_NIGHT) so that its stars show, the houses' windows lit (their
+## Sun's light turned to the moon's (MOON_COLOR, moon_energy, from MOON_UP degrees up, MOON_TURN degrees round from where
+## the sun set, a smaller disk), the sky's light dimmed (sky_night) so that its stars show, the houses' windows lit (their
 ## rooms' lamps: glass.tres, FellowInteriorMaterial3D); the weather keys (rooftops_weather.gd) take get_night() for the
 ## square's lamps and the eye's adapting. The tools: --night=1 (night at once), --night_at=<s> (night falling then).
 
@@ -13,10 +13,13 @@ const SUNSET_UNDER := 10.0 # degrees
 const SUNSET_SHARE := 0.55 # of the way: the sun setting; the rest the moon rising
 const MOON_UP := 28.0 # degrees
 const MOON_TURN := 80.0 # degrees round from the sunset's azimuth (up over the square's west side, seen from its corner)
-const MOON_ENERGY := 0.16
 const MOON_COLOR := Color(0.62, 0.72, 1.0)
 const MOON_SIZE := 1.2 # degrees across (the disk drawn and the shadows' softness)
-const SKY_NIGHT := 0.2 # the sky's intensity under the moon (its stars show where it is dark)
+## The moon's light on the square (the sun's 4), the share of it the sky and the clouds are lit by (their sun's), the
+## sky's intensity under it (its stars show where it is dark). Tools: --night_set=moon:<e>,sky_share:<s>,sky:<i>.
+var moon_energy := 0.12
+var moon_sky_share := 0.3
+var sky_night := 0.08
 const SUNSET_COLOR := Color(1.0, 0.52, 0.3) # the sun's light at the horizon
 const WINDOW_LAMPS := 0.55 # the share of the rooms with a lamp on at night
 const WINDOW_DAYLIGHT := 0.05 # the moonlight through the windows
@@ -73,6 +76,16 @@ func _ready() -> void:
 			_to = 1.0
 		elif a.begins_with("--night_at="):
 			_at = float(a.get_slice("=", 1))
+		elif a.begins_with("--night_set="):
+			for kv in a.get_slice("=", 1).split(","):
+				var v := float(kv.get_slice(":", 1))
+				match kv.get_slice(":", 0):
+					"moon":
+						moon_energy = v
+					"sky_share":
+						moon_sky_share = v
+					"sky":
+						sky_night = v
 	if _t > 0.0:
 		_apply()
 
@@ -129,7 +142,7 @@ func _apply() -> void:
 		var v := smoothstep(0.0, 1.0, (_t - SUNSET_SHARE) / (1.0 - SUNSET_SHARE))
 		elevation = MOON_UP
 		flat = _sun_flat.rotated(deg_to_rad(MOON_TURN))
-		energy = MOON_ENERGY * v
+		energy = moon_energy * v
 		color = MOON_COLOR
 		size = MOON_SIZE
 	if "sky_sun_elevation" in _root:
@@ -144,12 +157,12 @@ func _apply() -> void:
 	if _root.has_method("set_sun_own_color"):
 		# (the sky's light through the sunset the day's, the atmosphere darkening it as the sun goes under; under the
 		# moon the moon's)
-		_root.call("set_sun_own_color", color, 0.0 if _t > SUNSET_SHARE else 1.0, energy if _t > SUNSET_SHARE else _sun_energy)
+		_root.call("set_sun_own_color", color, 0.0 if _t > SUNSET_SHARE else 1.0, energy * moon_sky_share if _t > SUNSET_SHARE else _sun_energy)
 	else:
 		_sun.light_color = color
 	var night := get_night()
 	if _sky_mat:
-		_sky_mat.set_shader_parameter("intensity", lerpf(_sky_intensity, _sky_intensity * SKY_NIGHT, smoothstep(SUNSET_SHARE, 1.0, _t)))
+		_sky_mat.set_shader_parameter("intensity", lerpf(_sky_intensity, _sky_intensity * sky_night, smoothstep(SUNSET_SHARE, 1.0, _t)))
 	if _glass:
 		_glass.set("lamp_share", lerpf(_glass_lamps, WINDOW_LAMPS, night))
 		_glass.set("daylight", lerpf(_glass_daylight, WINDOW_DAYLIGHT, night))

@@ -28,6 +28,10 @@ const FAIR := {"cloud_coverage": 0.45, "cloud_density": 2.6, "wind_speed": 3.5, 
 		"ambient_light": 1.0, "fog_density": 0.0, "temperature": 18.0, "precipitation": 0, "intensity": 0.0,
 		"lightning_rate": 0.0}
 const NAMES := ["fair", "cloudy", "overcast", "rain", "storm", "snow", "blizzard"]
+## (milestone 214) The sun's share under each weather's clouds, where the square takes less than FellowWeather3D's preset
+## (keys 1-7; -1 the preset's): under a closed deck no sun's shadow is seen — the presets' 20 % (overcast) to 5 % (a
+## storm) had left the bell tower's shadow sharp across the houses once the eye adapted to the dark.
+const SUN := [-1.0, -1.0, 0.05, 0.03, 0.015, 0.05, 0.02]
 const CYCLE := [1, 2, 4, 5, 4, 3, 1, 6, 7, 6, 1] # (keys) fair, cloudy, rain, a storm, rain, overcast, fair, snow...
 const LAMPS_DARK := 2.4
 ## (milestone 214) How many stops darker the square is under each weather than in the fair one (keys 1-7: the RTX's
@@ -35,9 +39,10 @@ const LAMPS_DARK := 2.4
 ## storm's), and the share of that the eye makes up for (a storm still darker than a fair evening).
 const DARKER := [0.0, 0.27, 1.44, 2.74, 3.22, 1.3, 2.2]
 const EXPOSURE_ADAPT := 0.55
-## (milestone 216) The eye under the moon (rooftops_night.gd): this many stops more (its light 4.6 stops under the
-## sun's, the sky's 7: the night still darker than the evening, the lamps and the windows bright in it).
-const NIGHT_STOPS := 3.0
+var _adapt := EXPOSURE_ADAPT # (tools: --weather_adapt=<share>, 0 the frames' own darkness measured)
+## (milestone 216) The eye under the moon (rooftops_night.gd): this many stops more (its light 5 stops under the
+## sun's, the sky's more: the night darker than the evening, the lamps and the windows bright in it).
+const NIGHT_STOPS := 2.5
 
 var _weather: Node
 var _key := 1
@@ -78,6 +83,8 @@ func _ready() -> void:
 			start = clampi(int(a.get_slice("=", 1)), 1, 7)
 		elif a == "--weather_cycle=1":
 			_cycle = true
+		elif a.begins_with("--weather_adapt="):
+			_adapt = float(a.get_slice("=", 1))
 	_rain = _weather.call("get_rain_node") if _weather.has_method("get_rain_node") else null
 	turn_to(start, 0.0)
 	var town := get_node_or_null(^"../Town")
@@ -107,7 +114,7 @@ func _ready() -> void:
 func turn_to(p_key: int, p_seconds: float) -> void:
 	_key = p_key
 	_stops_from = _stops
-	_stops_to = float(DARKER[p_key - 1]) * EXPOSURE_ADAPT
+	_stops_to = float(DARKER[p_key - 1]) * _adapt
 	_stops_t = 0.0
 	_stops_dur = p_seconds
 	if p_seconds <= 0.0:
@@ -119,6 +126,12 @@ func turn_to(p_key: int, p_seconds: float) -> void:
 		_weather.call("set_weather", 7, p_seconds) # WEATHER_CUSTOM: to these values
 	else:
 		_weather.call("set_weather", p_key - 1, p_seconds) # WEATHER_CLOUDY .. WEATHER_BLIZZARD
+		if float(SUN[p_key - 1]) >= 0.0:
+			# (the preset's with less sun: a custom weather, turned to over the same time)
+			var tt: float = _weather.get("transition_time")
+			_weather.set("transition_time", p_seconds)
+			_weather.set("sunlight", float(SUN[p_key - 1]))
+			_weather.set("transition_time", tt)
 	if _rain:
 		var snowing := p_key >= 6
 		_rain.set("max_drops", 60000 if snowing else 24000)
