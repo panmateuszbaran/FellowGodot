@@ -1233,18 +1233,19 @@ func _make_breaths() -> void:
 	mat.roughness = 1.0
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var quad := QuadMesh.new()
-	quad.size = Vector2(0.16, 0.16)
+	quad.size = Vector2(0.22, 0.22)
 	quad.material = mat
 	var ramp := Gradient.new()
 	ramp.set_color(0, Color(0.93, 0.95, 0.98, 0.0))
 	ramp.set_color(1, Color(0.93, 0.95, 0.98, 0.0))
-	ramp.add_point(0.12, Color(0.93, 0.95, 0.98, 0.3))
-	ramp.add_point(0.45, Color(0.93, 0.95, 0.98, 0.14))
+	ramp.add_point(0.1, Color(0.93, 0.95, 0.98, 0.5))
+	ramp.add_point(0.4, Color(0.93, 0.95, 0.98, 0.25))
 	var ramp_tex := GradientTexture1D.new()
 	ramp_tex.gradient = ramp
 	var grow := Curve.new()
-	grow.add_point(Vector2(0.0, 0.35))
-	grow.add_point(Vector2(1.0, 1.0))
+	grow.max_value = 2.0
+	grow.add_point(Vector2(0.0, 0.3))
+	grow.add_point(Vector2(1.0, 1.8))
 	var grow_tex := CurveTexture.new()
 	grow_tex.curve = grow
 	var pm := ParticleProcessMaterial.new()
@@ -1252,8 +1253,8 @@ func _make_breaths() -> void:
 	pm.emission_sphere_radius = 0.015
 	pm.direction = Vector3(0.0, -0.2, 1.0)
 	pm.spread = 14.0
-	pm.initial_velocity_min = 0.35
-	pm.initial_velocity_max = 0.55
+	pm.initial_velocity_min = 0.4
+	pm.initial_velocity_max = 0.6
 	pm.gravity = Vector3(0.0, 0.05, 0.0)
 	pm.damping_min = 0.5
 	pm.damping_max = 0.8
