@@ -169,6 +169,7 @@
 [ext_resource type="Script" path="res://scripts/rooftops_hay.gd" id="210_hay"]
 [ext_resource type="Script" path="res://scripts/rooftops_weather.gd" id="211_weather"]
 [ext_resource type="Script" path="res://scripts/rooftops_fire.gd" id="211_fire"]
+[ext_resource type="Script" path="res://scripts/rooftops_osteria.gd" id="213_osteria"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kicm1"]
 shader = ExtResource("2_yebai")
@@ -3612,6 +3613,9 @@ shape = SubResource("ConvexPolygonShape3D_ogfff")
 [node name="Mesh" type="MeshInstance3D" parent="Town/CasaRosa" unique_id=1738114988]
 layers = 17
 mesh = ExtResource("11_kbh3x")
+
+[node name="Osteria" type="Node3D" parent="Town/CasaRosa" unique_id=1213213001]
+script = ExtResource("213_osteria")
 
 [node name="CasaRiferimento" type="StaticBody3D" parent="Town" unique_id=609204591]
 transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, -22.25, 0, 0)

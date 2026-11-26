@@ -5,7 +5,7 @@ extends CanvasLayer
 ## with the distance, hidden behind the camera or beyond MAX_DIST; it fades in, stays its time and fades out.
 
 const MAX_DIST := 28.0 # m
-const WRAP := 300.0 # px: longer lines wrap
+const WRAP := 340.0 # px: longer lines wrap
 const FADE := 0.18 # s
 
 var _bubbles := {} # the anchor's instance id -> {anchor, panel, label, life, t, height, hint}
@@ -74,10 +74,10 @@ func _make(p_anchor: Node3D, p_text: String, p_seconds: float, p_height: float, 
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var label := Label.new()
 	label.text = p_text + ("   ▸ E" if p_more else "")
-	label.add_theme_font_size_override("font_size", 14 if p_hint else 17)
+	label.add_theme_font_size_override("font_size", 16 if p_hint else 20)
 	label.add_theme_color_override("font_color", Color(1, 1, 1, 0.95) if p_hint else Color(0.13, 0.1, 0.08))
 	var font := label.get_theme_font("font")
-	var w := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x if font else 0.0
+	var w := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x if font else 0.0
 	if w > WRAP:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.custom_minimum_size = Vector2(WRAP, 0.0)
@@ -120,7 +120,7 @@ func _process(delta: float) -> void:
 			panel.visible = false
 			continue
 		panel.visible = true
-		var s := clampf(7.0 / maxf(dist, 0.1), 0.62, 1.0)
+		var s := clampf(8.0 / maxf(dist, 0.1), 0.72, 1.0) * clampf(get_viewport().get_visible_rect().size.y / 900.0, 0.8, 1.6)
 		panel.scale = Vector2(s, s)
 		panel.size = panel.get_combined_minimum_size()
 		var tail := panel.get_node_or_null("Tail") as Polygon2D

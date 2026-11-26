@@ -652,6 +652,7 @@ var _talks := 0 # (tools)
 var _points := 0
 var _now := 0.0
 var _player_skel: Skeleton3D
+var _shelter: Array = [] # milestone 213: the osteria's places out of the rain ({out, in, spot, taken})
 var _player_head := -1
 
 
@@ -674,6 +675,16 @@ func _social_ready() -> void:
 			_face(node, c - node.position)
 			var p := _register(node, "stand", "talk" if i % 2 == 0 else "idle", 1.0)
 			p.fire = true
+	# Milestone 213: the osteria's people (its host, its guests) and its shelter from the rain.
+	for o in get_tree().get_nodes_in_group(&"osteria"):
+		for e in o.call("get_people"):
+			var xf: Transform3D = e.xform
+			var node := _person(String(e.clip), 1.0)
+			node.global_position = xf.origin
+			_face(node, -xf.basis.z)
+			var p := _register(node, String(e.kind), String(e.clip), 1.0)
+			p.inside = true
+		_shelter.append_array(o.call("get_shelter"))
 	for p in _people:
 		_look_setup(p)
 
@@ -748,7 +759,7 @@ func _social(delta: float) -> void:
 	# Who looks: the nearest LOOK_MAX of those near, or (the player up there) within LOOK_UP_FAR.
 	var want: Array = []
 	for p in _people:
-		if _busy(p) or p.get("look") == null or p.act == "away":
+		if _busy(p) or p.get("look") == null or p.act == "away" and not (p.node as Node3D).visible:
 			continue
 		var d := Vector2(pp.x - (p.node as Node3D).global_position.x, pp.z - (p.node as Node3D).global_position.z).length()
 		if p.act == "talk" or d < LOOK_NEAR or (up and d < LOOK_UP_FAR):
@@ -1002,7 +1013,13 @@ func _acts(delta: float) -> void:
 			"leave", "back":
 				var path: Array = p.path
 				if path.is_empty():
-					if p.act == "leave":
+					if p.act == "leave" and p.get("shelter") != null:
+						# (inside, standing out of the rain, facing out)
+						p.act = "away"
+						_face(node, -(p.shelter.spot as Transform3D).basis.z)
+						ap.speed_scale = 1.0
+						ap.play("talk" if _rng.randf() < 0.5 else "huddle", 0.4)
+					elif p.act == "leave":
 						p.act = "away"
 						node.visible = false
 						(p.shape as CollisionShape3D).disabled = true
@@ -1029,7 +1046,7 @@ func _weather_acts() -> void:
 		if _busy(p):
 			continue
 		var ap: AnimationPlayer = p.ap
-		if p.kind == "stand" and not _is_keeper(p):
+		if p.kind == "stand" and not _is_keeper(p) and not p.get("inside", false):
 			if raining and p.act == "" and _rng.randf() < 0.35:
 				_leave(p)
 			elif _rain < RAIN_BACK and p.act == "away" and _rng.randf() < 0.25:
@@ -1064,9 +1081,22 @@ func _leave(p: Dictionary) -> void:
 	for e in EXITS:
 		if from.distance_to(e[0]) < from.distance_to(best[0]):
 			best = e
-	p.path = _around(from, best[0]) + [best[1]]
-	p.exit = best
-	p.act = "leave"
+	# (milestone 213: into the osteria, if a place is free there and its door nearer than the street)
+	var shelter = null
+	for sh in _shelter:
+		if not sh.taken and from.distance_to(to_local(sh.out)) < from.distance_to(best[0]) + 4.0:
+			if shelter == null or from.distance_to(to_local(sh.out)) < from.distance_to(to_local(shelter.out)):
+				shelter = sh
+	if shelter != null:
+		shelter.taken = true
+		p.shelter = shelter
+		var spot: Transform3D = shelter.spot
+		p.path = _around(from, to_local(shelter.out)) + [to_local(shelter.in), to_local(spot.origin)]
+		p.act = "leave"
+	else:
+		p.path = _around(from, best[0]) + [best[1]]
+		p.exit = best
+		p.act = "leave"
 	var ap: AnimationPlayer = p.ap
 	ap.speed_scale = 1.35 / 1.6
 	ap.play("walk", 0.35)
@@ -1076,6 +1106,17 @@ func _leave(p: Dictionary) -> void:
 
 func _come_back(p: Dictionary) -> void:
 	var node: Node3D = p.node
+	if p.get("shelter") != null:
+		# (out of the osteria the way they came, back to their place)
+		var sh: Dictionary = p.shelter
+		sh.taken = false
+		p.shelter = null
+		p.path = [to_local(sh.in), to_local(sh.out)] + _around(to_local(sh.out), p.home)
+		p.act = "back"
+		var aw: AnimationPlayer = p.ap
+		aw.speed_scale = 1.35 / 1.6
+		aw.play("walk", 0.35)
+		return
 	var e: Array = p.exit
 	node.position = Vector3(e[1].x, node.position.y, e[1].z)
 	node.visible = true

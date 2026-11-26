@@ -23,6 +23,9 @@ extends SceneTree
 ##       [--weather_seq=<key>@<s>,...] [--weather_transition=<s>] --out=<dir> ...   (milestone 211: the weather, the
 ##       brazier, the chimneys' smoke from a still camera; the weather turned to each key at its second, over
 ##       WeatherKeys' transition or the one given; the brazier's and the weather's state printed each second)
+##   godot ... -s res://tools/climb_look.gd -- --program=osteria --view=door|inside|walkin --out=<dir> ...   (milestone
+##       213: CasaRosa's osteria — from the square through its arch, inside, or the player walking in; its state
+##       printed)
 ## --drop=<node>,...: the scene's top-level nodes left out (an A/B).
 ##   godot ... -s res://tools/climb_look.gd -- --program=talk [--talk_to=<group>] --out=<dir> [--seconds=10] ...
 ##       (milestone 212: the player walks up to one of a group and talks — E at 1.4 s, then every 2.6 s — the camera over
@@ -128,7 +131,7 @@ func _init() -> void:
 	if _lite:
 		for n in ["Skyline", "CityHouses", "Landscape", "Trees_cypress", "Trees_olive", "Trees_pine", "Trees_broadleaf",
 				"Villas", "Trees_villa_cypress", "Birds", "Crowd", "PipelineWarmer"]:
-			if n == "Crowd" and (_program in ["bump", "people", "talk", "lookup"] or _program == "weather" and _crowd_in):
+			if n == "Crowd" and (_program in ["bump", "people", "talk", "lookup", "osteria"] or _program == "weather" and _crowd_in):
 				continue # (milestone 208: the people kept to be run into)
 			var c := sc.get_node_or_null(n)
 			if c:
@@ -136,7 +139,7 @@ func _init() -> void:
 				c.free()
 		var town := sc.get_node("Town")
 		for c in town.get_children():
-			if not (c.name in KEEP) and not (_program == "hay" and c.name == "HayCart") and not (_program == "weather" and c.name in WEATHER_KEEP):
+			if not (c.name in KEEP) and not (_program == "hay" and c.name == "HayCart") and not (_program in ["weather", "osteria"] and c.name in WEATHER_KEEP):
 				town.remove_child(c)
 				c.free()
 	for n in _drop:
@@ -186,6 +189,17 @@ func _init() -> void:
 		_talk_setup(sc)
 	elif _program == "lookup":
 		pass # (the demo plays: pass --demo --demo_from=house)
+	elif _program == "osteria":
+		_player.set("autopilot", true)
+		_osteria = sc.get_node_or_null("Town/CasaRosa/Osteria")
+		_weather_keys = sc.get_node_or_null("WeatherKeys")
+		_brazier = sc.get_node_or_null("Brazier")
+		if _view == "walkin":
+			_player.global_position = Vector3(-6.45, 0.0, 9.2)
+			_player.set("facing", PI)
+			_player.rotation.y = PI
+		else:
+			_player.global_position = Vector3(-30.0, 0.0, -30.0)
 	elif _program == "weather":
 		_player.set("autopilot", true)
 		_player.global_position = Vector3(-30.0, 0.0, -30.0)
@@ -220,6 +234,18 @@ func _init() -> void:
 			_drive_weather(i)
 		elif _program == "talk":
 			_drive_talk(i)
+		elif _program == "osteria":
+			if _view == "walkin":
+				var goal := Vector3(-6.6, 0.0, 17.6)
+				var to := goal - _player.global_position
+				to.y = 0.0
+				_player.set("wish", to.normalized() * 0.5 if to.length() > 0.2 else Vector3())
+			else:
+				_player.set("wish", Vector3())
+			if not _weather_seq.is_empty():
+				_drive_weather(i)
+			if i % 60 == 0 and _osteria:
+				print("climb_look: osteria t=%.0f player %s %s" % [i / 60.0, _player.global_position.snapped(Vector3(0.01, 0.01, 0.01)), _osteria.call("get_stats")])
 		elif _program == "lookup":
 			if i % 60 == 0:
 				var crowd := _player.get_parent().get_node_or_null("Crowd")
@@ -445,6 +471,7 @@ var _view := "square"
 var _talk_group := 0
 var _crowd_in := false # --crowd=1: the weather program with the people (the rain sends them off the square)
 var _talk_target: Node3D
+var _osteria: Node3D # milestone 213
 var _talk_at := Vector3()
 var _drop: PackedStringArray = []
 var _draw_all := false # --draw_all=1: every frame drawn, every --every-th saved (what the GPU runs while drawing — the
@@ -664,6 +691,23 @@ func _place_camera(p_first: bool) -> void:
 		_look = look_at if p_first else _look.lerp(look_at, 0.12)
 		_cam.global_position = _cam_pos
 		_cam.look_at(_look, Vector3.UP)
+		return
+	if _program == "osteria":
+		if _view == "walkin":
+			# (behind the player and above, following)
+			var pp := _player.global_position
+			var want_at := pp + Vector3(0.6, 1.9, -2.6)
+			_cam_pos = want_at if p_first else _cam_pos.lerp(want_at, 0.1)
+			_look = (pp + Vector3(0, 1.2, 2.0)) if p_first else _look.lerp(pp + Vector3(0, 1.2, 2.0), 0.15)
+			_cam.global_position = _cam_pos
+			_cam.look_at(_look, Vector3.UP)
+		elif p_first:
+			if _view == "inside":
+				_cam.global_position = Vector3(-11.9, 1.7, 14.95)
+				_cam.look_at(Vector3(-7.6, 1.05, 21.2), Vector3.UP)
+			else:
+				_cam.global_position = Vector3(-5.1, 1.65, 10.6)
+				_cam.look_at(Vector3(-7.2, 1.3, 17.8), Vector3.UP)
 		return
 	if _program == "lookup":
 		if p_first:

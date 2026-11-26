@@ -567,6 +567,11 @@ func _build_scene() -> void:
 	_skyline_houses(root)
 	_landscape(root)
 	_hay_cart(town)
+	# Milestone 213 (decision 0355): CasaRosa's ground floor an osteria open to the square (rooftops_osteria.gd).
+	if town.has_node("CasaRosa"):
+		var osteria := Node3D.new()
+		osteria.set_script(load("res://scripts/rooftops_osteria.gd"))
+		_add(town.get_node("CasaRosa"), osteria, "Osteria")
 	_props(town)
 	_fountain_water(town)
 	var wind: Node = ClassDB.instantiate("FellowWind3D")
