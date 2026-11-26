@@ -9,6 +9,43 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 213 — An osteria open to the square (2026-11-26)
+
+- The owner: "and maybe some open buildings with a real interior?" (decision 0355). CasaRosa's ground floor on the
+  rooftops square is an osteria, made at run time from the building as it is (`rooftops_osteria.gd`): its two shop
+  arches opened (their glass taken out of a copy of its mesh, its solid ground floor's collider replaced by the room's
+  walls) onto a furnished room 9.5 by 8.4 m — a cotto floor, plastered walls, a beamed plank ceiling, a stone fireplace
+  with three logs burning in a gas volume (its light with shadows), a counter, shelves of bottles and jugs, barrels,
+  four tables with jugs, cups, bread and candles, a chandelier, hams and garlic — 26,000 triangles, 6 lights. Its 14
+  people (a host, guests at the tables, at the counter, at the fire) talk and look as the square's; in the rain the
+  square's people come in out of it. `climb_look.gd --program=osteria`.
+
+## Milestone 212 — The square's people talk, look and point, leave in the rain, warm their hands (2026-11-26)
+
+- The owner: "and some interactions with the NPCs?" (decision 0354). The rooftops' people (`rooftops_crowd.gd`) look
+  at the player (a `LookAtModifier3D` each: the ten nearest within 7 m; everyone within 24 m while the player climbs or
+  is on a roof, one pointing up and shouting every 6 s); E talks to the one in front (they stop, turn, wave, talk: their
+  lines — the weather, the player's climbing, being knocked down — in speech bubbles, `rooftops_bubbles.gd`); in the
+  rain the standing groups leave by the streets and come back after, the walkers hurry, the keepers huddle; round the
+  brazier three warm their hands in the cold; run into, they shout. New clips "wave", "point_up", "warm_hands",
+  "huddle". `climb_look.gd --program=talk`, `--program=lookup`.
+
+## Milestone 211 — The square's weather on the keys, a brazier burning, the chimneys smoking (2026-11-26)
+
+- The owner: "can we also show fire, smoke and the weather in this showcase?" (decision 0353). The rooftops square's
+  weather on the keys 1-7 (`rooftops_weather.gd`: FellowWeather3D with a FellowRain3D and a FellowLightning3D — fair,
+  cloudy, overcast, rain, storm, snow, blizzard; 0 by itself), the scene's depth fog drawn in to the weather's
+  visibility and greyed, the sky's own sun dimmed with it, the lamps brighter in the dark; a brazier on the square
+  (`rooftops_fire.gd`: logs burning in a gas volume, its light with shadows, damped by the rain) and the smoke of three
+  chimneys, each volume given a share of the scene's wind. `climb_look.gd --program=weather`, `--perf=1`,
+  `--setting=`, `--drop=`.
+- Engine: `FellowWeather3D` draws an environment's depth fog in to the visibility its fog leaves (3 / its density; it
+  thickened an exponential fog only), greying it and veiling the sky; the ray-traced lighting inputs (the smoke's sun,
+  DDGI, the screen gather, the RT reflections) take the weather's sunlight as the surfaces do (a chimney's smoke under
+  an overcast sky had the whole sun); `FellowBurnable3D` looks for its gas volume from its own middle (its voxel box
+  reaches down to the ground for the ash: the brazier's logs looked under the gas's floor and stayed cold). The
+  chimneys' smoke a wood fire's, pale (Fire Lab's grey soot was a black plume in the bell tower's shade).
+
 ## Milestone 210 — The cart's hay heaped and strawed (2026-11-25)
 
 - The owner: "the hay pile on the cart looks very unrealistic and off-putting" (decision 0352). The rooftops' hay cart

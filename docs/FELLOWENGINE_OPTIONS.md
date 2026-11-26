@@ -134,7 +134,9 @@ like wood in a gas volume's fire: the mesh is voxelized, the GPU heats the voxel
 to char (the volatiles feed the gas's flames: the fire comes from the object), oxidises the exposed char to glowing
 embers and ash, and lets the ash fall into a heap on the ground below; the mesh recedes with the material, darkens,
 glows in its cracks and is burned through where it is thin, the ash drawn as a heap of its own (`FellowAshHeap`).
-Runs only in a running game; it replaces the mesh instance's mesh and materials while in the tree. Decision record 0120; bench scene Burn Lab (`--scene=burn`).
+Runs only in a running game; it replaces the mesh instance's mesh and materials while in the tree. Its gas volume:
+`gas_volume_path`, or the one holding the object's middle (milestone 211: the mesh's, not the voxel box's, which
+reaches down to the ground for the ash heap). Decision record 0120; bench scene Burn Lab (`--scene=burn`).
 
 | property (node) | what it does |
 |---|---|
@@ -517,8 +519,11 @@ start: `prepare_nodes`); the
 volumetric clouds' coverage and density in place of the project settings (the clouds must be on), and so their
 shadows (decision 0133); the sun on the scene's surfaces only where the clouds cast no shadows (its light buffer
 energy times `sunlight` — the sky and the clouds keep the full sun); the
-environment's fog (added to its own, in `fog_color` as bright as the sky) and its background energy (the sky, its
-ambient light and reflections); and the ground — wet in the rain, drying after it, covered by falling snow below 1 °C,
+environment's fog (added to its own, in `fog_color` as bright as the sky; milestone 211: a depth fog of its own drawn
+in instead — its end no further than the visibility, 3 / `fog_density`, its begin a twentieth of that at most, its
+colour turning to `fog_color`, the sky veiled) and its background energy (the sky, its ambient light and
+reflections); milestone 211: the sun's share on FellowEngine's smoke, ray-traced bounces and screen gather as on the
+surfaces; and the ground — wet in the rain, drying after it, covered by falling snow below 1 °C,
 melting above 0 °C, its water freezing and frosted below 0 °C when nothing falls (decision 0136) (`ground_speed`
 speeds it up; `settle_ground` starts it as the weather leaves it). It does nothing
 in the editor. Without the node nothing changes (bit for bit); with it, the cost is that of the parts it turns on.
@@ -788,7 +793,18 @@ down and up again), the player's `LAYER_PEOPLE`, `RAY_MASK`, `BUMP_STAGGER_KEEP`
 (`rooftops_crowd.gd`'s `_skirt()`: `SKIRT_TOP` 1.0 m, `SKIRT_HEM` 0.27 m, `SKIRT_FREE` 0.22 m from the skinned place,
 `SKIRT_SIMULATE` 32 m), `climb_look.gd --program=people`. Milestone 210 (decision 0352): the hay cart's hay made at
 run time (`rooftops_hay.gd` on the cart: `straws` 26,000, `ground_straws` 500, `seed`; `TOP` 2.02 m, `SPILL` 0.24 m;
-`burst(at)`), `climb_look.gd --program=hay`.
+`burst(at)`), `climb_look.gd --program=hay`. Milestone 211 (decision 0353): the weather on the keys 1-7 and 0 (`rooftops_weather.gd`: `transition` 10 s,
+`cycle_hold` 25 s, `sky_dim` 0.85, `FAIR`, `FOG_NEAREST` 260 m, `LAMPS_DARK` 2.4; `--weather=<1-7>`,
+`--weather_cycle=1`, `turn_to()`), a brazier and the chimneys' smoke (`rooftops_fire.gd`: `kind` "brazier" |
+"chimney", `resolution`, `sleep` 70 m, `wind_scale` 0.2 | 0.6, `wind_max` 2.5 m/s; tools: `--gas_set_<kind>=`,
+`--emit_set_<kind>=`), `climb_look.gd --program=weather` (`--view`, `--weather_seq`, `--weather_transition`),
+`--perf=1`, `--setting=`, `--drop=`, `--draw_all=1`. Milestone 212 (decision 0354): the people's social layer
+(`rooftops_crowd.gd`: `LOOK_NEAR` 7 m, `LOOK_UP_FAR` 24 m, `LOOK_MAX` 10, `TALK_REACH` 2.4 m, `POINT_EVERY` 6 s,
+`RAIN_LEAVE` 0.3, `RAIN_BACK` 0.12, `COLD` 5 °C, `HURRY` 1.45, `fire_path`, `fire_people` 3, `weather_path`;
+`talk_to_nearest()`, `get_social_stats()`), speech bubbles (`rooftops_bubbles.gd`: `say()`, `hint()`, `hush()`),
+`climb_look.gd --program=talk`, `--program=lookup`, `--crowd=1`. Milestone 213 (decision 0355): CasaRosa's osteria
+(`rooftops_osteria.gd` on the building: `get_people()`, `get_shelter()`, `get_stats()`), `climb_look.gd
+--program=osteria` (`--view=door|inside|walkin`).
 
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
