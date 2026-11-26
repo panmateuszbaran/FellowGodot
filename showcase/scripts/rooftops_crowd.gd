@@ -643,6 +643,13 @@ var _bubbles: CanvasLayer
 var _weather: Node
 var _rain := 0.0 # the weather's rain now (not snow)
 var _cold := false
+## Milestone 218: night on the square (rooftops_night.gd's get_night() over NIGHT_AWAY): the standing groups go home or
+## into the osteria as in the rain, and back by day; every LANTERN_EVERY-th walker carries a lantern.
+const NIGHT_AWAY := 0.6
+const LANTERN_EVERY := 3
+var _night := false
+var _night_node: Node
+var _lanterns: Array = [] # [BoneAttachment3D]
 var _sample_t := 0.0
 var _point_t := 0.0
 var _up_t := -1e9 # when the player was last seen up there (s)
@@ -793,6 +800,57 @@ func _sample_weather() -> void:
 	var st: Dictionary = _weather.call("get_current_state")
 	_rain = float(st.get("intensity", 0.0)) if int(st.get("precipitation", 0)) == 1 else 0.0
 	_cold = float(st.get("temperature", 18.0)) < COLD
+	if _night_node == null:
+		_night_node = get_node_or_null(^"../Night")
+	var night := _night_node != null and float(_night_node.call("get_night")) > NIGHT_AWAY
+	if night != _night:
+		_night = night
+		_light_lanterns(night)
+
+
+## Milestone 218: the walkers' lanterns lit at night (made the first time: a small iron lantern in the right hand, its
+## candle's warm light — no shadows), put out by day.
+func _light_lanterns(p_on: bool) -> void:
+	if p_on and _lanterns.is_empty():
+		var body := CylinderMesh.new()
+		body.top_radius = 0.05
+		body.bottom_radius = 0.06
+		body.height = 0.16
+		var glow := StandardMaterial3D.new()
+		glow.albedo_color = Color(0.25, 0.2, 0.15)
+		glow.emission_enabled = true
+		glow.emission = Color(1.0, 0.62, 0.3)
+		glow.emission_energy_multiplier = 4.0
+		body.material = glow
+		for i in _walkers.size():
+			if i % LANTERN_EVERY != 0:
+				continue
+			var p: Dictionary = _walkers[i].person
+			var skel := p.skel as Skeleton3D
+			if skel == null or skel.find_bone("RightHand") < 0:
+				continue
+			var at := BoneAttachment3D.new()
+			at.name = "Lantern"
+			at.bone_name = "RightHand"
+			skel.add_child(at)
+			var mi := MeshInstance3D.new()
+			mi.mesh = body
+			mi.position = Vector3(0.0, -0.16, 0.0)
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			at.add_child(mi)
+			var light := OmniLight3D.new()
+			light.light_color = Color(1.0, 0.66, 0.36)
+			light.light_energy = 1.2
+			light.omni_range = 5.0
+			light.omni_attenuation = 1.4
+			light.shadow_enabled = false
+			light.position = Vector3(0.0, -0.16, 0.0)
+			at.add_child(light)
+			_lanterns.append(at)
+		_held.append(body)
+		_held.append(glow)
+	for at in _lanterns:
+		(at as Node3D).visible = p_on
 
 
 # ------------------------------------------------------------------ pointing
@@ -958,7 +1016,10 @@ func _lines(p: Dictionary) -> Array:
 	var st: Dictionary = _weather.call("get_current_state") if _weather else {}
 	var precip := int(st.get("precipitation", 0))
 	var strength := float(st.get("intensity", 0.0))
-	if precip == 1 and float(st.get("lightning_rate", 0.0)) > 1.0:
+	if _night and precip == 0:
+		out.append(["Late to be out, forestiero. The osteria is still open.", "Look at the moon over the tower!",
+				"Mind the dark corners — and the watch."][r.randi() % 3])
+	elif precip == 1 and float(st.get("lightning_rate", 0.0)) > 1.0:
 		out.append(["Hear that thunder? Saint Barbara, protect us.", "A storm like this, the bells should be ringing."][r.randi() % 2])
 	elif precip == 1 and strength > 0.1:
 		out.append(["What rain! Better find a roof.", "The stones will be slippery tonight, watch your step."][r.randi() % 2])
@@ -1042,14 +1103,15 @@ func _acts(delta: float) -> void:
 ## come back; in the cold the brazier's ring warm their hands.
 func _weather_acts() -> void:
 	var raining := _rain > RAIN_LEAVE
+	var away := raining or _night # (milestone 218: and at night)
 	for p in _people:
 		if _busy(p):
 			continue
 		var ap: AnimationPlayer = p.ap
 		if p.kind == "stand" and not _is_keeper(p) and not p.get("inside", false):
-			if raining and p.act == "" and _rng.randf() < 0.35:
+			if away and p.act == "" and _rng.randf() < 0.35:
 				_leave(p)
-			elif _rain < RAIN_BACK and p.act == "away" and _rng.randf() < 0.25:
+			elif _rain < RAIN_BACK and not _night and p.act == "away" and _rng.randf() < 0.25:
 				_come_back(p)
 		var idle: bool = p.act == "" and p.react == ""
 		if not idle:
@@ -1160,4 +1222,4 @@ func get_social_stats() -> Dictionary:
 		if float(p.get("look_w", 0.0)) > 0.5:
 			looking += 1
 	return {"talks": _talks, "points": _points, "looking": looking, "acts": acts, "rain": snappedf(_rain, 0.01), "cold": _cold,
-			"talking": not _talk.is_empty()}
+			"talking": not _talk.is_empty(), "night": _night, "lanterns": _lanterns.size() if _night else 0}
