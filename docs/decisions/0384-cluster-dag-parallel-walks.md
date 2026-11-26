@@ -1,6 +1,6 @@
 # 0384 — The hierarchy's walks of a pass in parallel
 
-Status: **KEEP as an option, off** (unmeasured where it should pay) · Branch `fellow/geometry` · Setting
+Status: **KEEP, on** (RTX laptop, 2026-11-27: the prepare step halved; it was off until measured there) · Branch `fellow/geometry` · Setting
 `rendering/fellow/geometry/cluster_dag_parallel` · Code: `render_forward_clustered.{h,cpp}` (`_fellow_dag_prepare`,
 `_fellow_dag_walk_job`), `fellow_cluster_dag_settings.h` (setting, counters `prepare_usec`, `parallel_walks`)
 
@@ -29,8 +29,14 @@ run one after the other as before. Two counters: `geometry_cluster_dag_prepare_u
   most walks, Mesa's rasteriser threads share the cores, and the terrain's walk alone is most of a pass's time (a walk
   is not split).
 
+## RTX laptop (2026-11-27; RTX 5070 Ti Laptop, 1920×1080, 120 frames a view, two runs each)
+
+The same scene, the render thread's time in the prepare step, series → parallel: ground 1.49 / 1.45 → 0.71 / 0.59 ms
+(−52 to −59 %), close 0.55 / 0.46 → 0.24 / 0.25 ms, high 0.24 / 0.20 → 0.16 / 0.15 ms; the viewport's render CPU time
+1.66 / 1.59 → 0.91 / 0.73 ms on the ground view. The GPU's time the same (1.31 / 1.24 against 1.24 / 1.20 ms). The CPU
+summed over the threads grows a little (the walks 1.45 → 1.80 ms: the helpers' caches cold).
+
 ## Decision
 
-KEEP as an option, **off**. On the RTX laptop's many-core CPU (when the owner allows the GPU tests), with scenes of many
-surfaces with a hierarchy, it should pay; it is measured there before it is turned on. Next if a single walk dominates:
-the walk's levels split (each level's tree is walked independently of the others).
+KEEP, **on** by default since the RTX measurement (it was off until then). Next if a single walk dominates: the walk's
+levels split (each level's tree is walked independently of the others).

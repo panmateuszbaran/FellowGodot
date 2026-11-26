@@ -50,6 +50,13 @@ Regression suite: `pos_budget_all` (budget 3, the `pos_cache` scene's three ligh
 `pos_budget` (budget 1) its own golden, run twice the same; with the budget off the shadows' groups (`lights`,
 `shadows`, `pos_cache`, `pos_cache_*`) unchanged.
 
+## RTX laptop (2026-11-27)
+
+The showcase's square at night (`climb_look.gd --program=weather --view=square --night=1`, 1920×1080, 840 frames, two
+runs each): budget 0 → 4, GPU 8.60 / 8.39 → 8.68 / 8.10 ms — the same: no positional light there redraws its shadow
+every frame (the cache's counters stay at 0 in that view), so the budget has nothing to save. It stays an option for
+scenes with many shadowed lights that move or have movers near.
+
 ## Decision
 
 KEEP as an option, off by default (over budget the shadows of moving things lag). The cost it saves is the redraws'

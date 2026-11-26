@@ -62,6 +62,21 @@ transform, mesh and material state (`fellow_shadow_cacheable`, not `GI_MODE_DYNA
 * The osteria itself on lavapipe outgrows the cloud machine's 7 GB (the editor build killed with and without the
   cache): its counts and the GPU's time wait for the RTX (`climb_look.gd --shadow_info=1`).
 
+## RTX laptop (2026-11-27; RTX 5070 Ti Laptop, 1920×1080, 840 frames after 240, two runs each in alternating order)
+
+The showcase's osteria at night from inside (`climb_look.gd --program=osteria --view=inside --night=1 --perf=1
+--shadow_info=1`; the lamps' and the fireplace's shadows), the cache on → off:
+
+| | cache on | cache off |
+|---|---|---|
+| shadow passes' draws a frame | 3 258 | 5 710 (cache: −43 %) |
+| their primitives a frame | 8.45 M | 15.33 M (−45 %) |
+| GPU, mean (median) | **8.10 / 8.27 ms** (8.04 / 8.16) | 8.84 / 8.85 ms (8.78 / 8.79) |
+| render CPU, mean | **3.78 / 3.95 ms** | 4.17 / 4.45 ms |
+
+The cache: −0.66 ms of GPU (−7.5 %) and −0.45 ms of the render thread a frame; 6 120 faces drawn from it and 12 rebuilt
+over 840 frames.
+
 ## Decision
 
 KEEP, on by default: the shadow maps are stock's (the regression suite's `pos_cache_*` groups), and a redraw costs

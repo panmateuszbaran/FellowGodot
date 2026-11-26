@@ -91,6 +91,17 @@ same images bit for bit, as from the parallel build). About 4 800-5 000 draws a 
 180-350); the walks 2.3-2.7 ms a frame for 26-36 walks (70-90 µs each, an editor build on this container's CPU).
 Timings of the frame mean something only on a GPU.
 
+## RTX laptop (2026-11-27; RTX 5070 Ti Laptop, 1920×1080, 120 frames a view, two runs each, with 0381 and 0384)
+
+| view | full detail: GPU, render CPU | `cluster_dag`: GPU, render CPU |
+|---|---|---|
+| ground | 3.06 / 3.00 ms, 0.17 ms | **1.24 / 1.20 ms** (−60 %), 0.91 / 0.73 ms |
+| close | 1.29 / 1.30 ms, 0.12 ms | **0.57 / 0.63 ms** (−54 %), 0.35 / 0.36 ms |
+| high | 2.03 / 1.96 ms, 0.18 / 0.11 ms | **0.64 / 0.61 ms** (−69 %), 0.30 / 0.26 ms |
+
+The GPU's time a half to a third of full detail's; the render thread pays 0.15-0.75 ms for the walks and the
+commands. The build on the laptop's CPU: 2.8 s (8.1 s in the cloud), 0.2 s from the cache.
+
 ## Decision
 
 KEEP as an option, off (it changes the image as LOD does). On the RTX, when the owner allows the GPU: the frame with

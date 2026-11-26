@@ -9,6 +9,15 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## RTX measurements of milestones 231-242 (2026-11-27)
+
+- The owner allowed the GPU again. On the RTX laptop at 1920×1080 (milestone 242's build): the lamps' shadow cache
+  (0373) in the osteria at night −43 % shadow draws, −0.66 ms GPU (−7.5 %), −0.45 ms render thread; the shadow budget
+  (0380) changes nothing in the showcase (no shadow there redraws every frame); the square's people (0374) cost
+  +0.4 ms GPU and +1.7 ms render thread; the cluster hierarchy (0379) draws its test scene in 40-46 % of full detail's
+  GPU time, and its walks in parallel (0384) halve the prepare step — `geometry/cluster_dag_parallel` now on by
+  default.
+
 ## Milestone 243 — The people's skin by region, their eyes wet (2026-11-27)
 
 - Decision 0385 (showcase). The people's faces no longer read as wax: their skin's roughness by region (lips, eyelids,

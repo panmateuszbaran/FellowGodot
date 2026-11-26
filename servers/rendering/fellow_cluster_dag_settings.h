@@ -58,9 +58,9 @@ inline bool cluster_dag_indirect() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/cluster_dag_indirect");
 }
 
-// The walks of a pass's cuts spread over the render thread and the CPU worker tasks (decision 0384; off by default: no
-// gain measured on a 2-core container); off: walked one after the other on the render thread. The same cuts. Read
-// every frame.
+// The walks of a pass's cuts spread over the render thread and the CPU worker tasks (decision 0384: on the RTX laptop's
+// CPU the prepare step −52 to −59 %; nothing on a 2-core container); off: walked one after the other on the render
+// thread. The same cuts. Read every frame.
 inline bool cluster_dag_parallel() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/cluster_dag_parallel");
 }

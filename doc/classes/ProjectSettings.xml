@@ -3367,8 +3367,8 @@
 		<member name="rendering/fellow/geometry/cluster_dag_indirect" type="bool" setter="" getter="" default="true">
 			With geometry/cluster_dag: each surface instance's cut drawn as one indirect draw of its ranges (the commands written before each pass) instead of one draw call per range. The same image. Read every frame. Decision 0381.
 		</member>
-		<member name="rendering/fellow/geometry/cluster_dag_parallel" type="bool" setter="" getter="" default="false">
-			With geometry/cluster_dag and geometry/cluster_dag_indirect: the cuts of a pass's surfaces walked in parallel, the render thread and the CPU worker tasks (rendering/fellow/cpu/worker_tasks) taking them as they finish their last; off (the default: on a 2-core container it saved nothing, the worker tasks rarely start in time and one large surface's walk dominates; to be measured on a many-core CPU): one after the other on the render thread. The same cuts and the same image. Read every frame. Decision 0384.
+		<member name="rendering/fellow/geometry/cluster_dag_parallel" type="bool" setter="" getter="" default="true">
+			With geometry/cluster_dag and geometry/cluster_dag_indirect: the cuts of a pass's surfaces walked in parallel, the render thread and the CPU worker tasks (rendering/fellow/cpu/worker_tasks) taking them as they finish their last; off: one after the other on the render thread. The same cuts and the same image. On the RTX laptop's CPU the prepare step (walks and commands) −52 to −59 % (nothing on a 2-core machine). Read every frame. Decision 0384.
 		</member>
 		<member name="rendering/fellow/geometry/cluster_front_to_back" type="int" setter="" getter="" default="0">
 			Measured and rejected (no frame gain): large surfaces' clusters drawn front to back. Decision 0058.

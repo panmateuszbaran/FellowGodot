@@ -43,6 +43,13 @@ owner: "these main gaps sound like something we must do".
 
 ![The cast walking](../showcase/people_m232.jpg)
 
+## RTX laptop (2026-11-27; milestone 242's build, the people of milestones 232-240)
+
+The square by day with its people and without them (`climb_look.gd --program=weather --view=square --crowd=1`, and
+`--drop=Crowd`; 1920×1080, 840 frames, two runs each in alternating order): GPU 9.27 / 8.46 ms against 8.91 / 8.03 ms
+(+0.36 / +0.43 ms), the render thread 3.39 / 3.82 ms against 1.73 / 2.12 ms (+1.7 ms: the people's skinned surfaces,
+their faces' blend shapes, their shadows — 2 147 shadow draws a frame against 1 502). The frame stays under 10 ms.
+
 ## Decision
 
 KEEP. Next: skin shading worth a close look (its normal and roughness detail, the eyes), period clothes from the CC0

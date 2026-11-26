@@ -31,3 +31,18 @@ content large.
    default in the showcase if it pays.
 3. Then the medium gaps that show in pictures: sun shadows (a virtual shadow map's sharpness at every distance) and
    GI.
+
+## 4. Measured on the RTX (2026-11-27)
+
+The owner allowed the GPU again; milestone 242's build on the RTX laptop at 1920×1080 (decisions 0373, 0374, 0379,
+0380, 0384 have the tables):
+
+| what | result |
+|---|---|
+| the lamps' shadow cache, the osteria at night | shadow draws −43 %, primitives −45 %, GPU 8.85 → 8.19 ms (−7.5 %), render thread −0.45 ms |
+| the shadow budget, the square at night | no change: nothing there redraws a shadow every frame — it stays an option |
+| 63 people with faces and eyes, the square by day | +0.4 ms GPU, +1.7 ms render thread; the frame under 10 ms |
+| the cluster hierarchy, its test scene | GPU 40-46 % of full detail's (3.0 → 1.2 ms on the ground view); the walks +0.15-0.75 ms on the render thread, halved by walking them in parallel (now on by default) |
+
+So the three gaps' engine work holds up on the GPU. The owner's next concern, the people's realism, is being worked on:
+the skin by region and wet eyes (milestone 243), then the hair as strands, then the faces' shapes.

@@ -285,7 +285,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag", false); // decision 0379 (changes the image, as LOD does)
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag_cache", true); // decision 0379
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag_indirect", true); // decision 0381
-	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag_parallel", false); // decision 0384 (off until measured on a many-core CPU)
+	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag_parallel", true); // decision 0384 (RTX laptop: the prepare step halved)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_min_surface_triangles", PROPERTY_HINT_RANGE, "256,1048576,1"), 32768);
 	GLOBAL_DEF("rendering/fellow/lights/enabled", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", true);
