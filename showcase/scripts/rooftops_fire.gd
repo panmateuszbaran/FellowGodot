@@ -15,7 +15,8 @@ extends Node3D
 @export_enum("brazier", "chimney") var kind := "brazier"
 @export var resolution := 56
 @export var sleep := 70.0 # m
-@export var wind_scale := -1.0 # (-1: the kind's own: 0.3 the brazier, 0.6 a chimney)
+@export var wind_scale := -1.0 # (-1: the kind's own: 0.2 the brazier, 0.6 a chimney)
+@export var wind_max := 2.5 # m/s: the most wind given to the gas (a blizzard's 14 m/s laid the brazier's flames flat)
 
 const LAYER_WORLD := 1
 
@@ -41,7 +42,7 @@ func _ready() -> void:
 		downwind = global_basis.inverse() * (wind.call("get_direction") as Vector3)
 		downwind.y = 0.0
 	if wind_scale < 0.0:
-		wind_scale = 0.3 if kind == "brazier" else 0.6
+		wind_scale = 0.2 if kind == "brazier" else 0.6
 	if kind == "brazier":
 		_brazier(downwind)
 	else:
@@ -152,6 +153,8 @@ func _brazier(p_downwind: Vector3) -> void:
 		burn.set("resolution", 24)
 		burn.set("pyrolysis_rate", 0.015) # (a third of the default's: a log lasts)
 		mi.add_child(burn)
+		# (its gas named: left to find the volume round it, the logs stayed cold in the scene — not reproduced alone)
+		burn.set("gas_volume_path", burn.get_path_to(_volume))
 		_logs.append(burn)
 	# Not walked through.
 	var body := StaticBody3D.new()
@@ -171,24 +174,24 @@ func _chimney(p_downwind: Vector3) -> void:
 	# up out of it, grey, lasting long enough to be carried off.
 	_volume = _gas(Vector3(6.0, 8.0, 6.0), -0.2, p_downwind * 1.5)
 	_volume.set("smoke_dissipation", 0.06)
-	_volume.set("smoke_density", 2.5)
+	_volume.set("smoke_density", 3.2)
 	_volume.set("cooling", 0.6)
 	_volume.set("vorticity", 0.25)
 	_volume.set("fire_light", false)
 	_volume.set("closed_faces", 0)
 	_volume.set("wind_rate", 0.3)
-	_volume.set("smoke_color", Color(0.58, 0.57, 0.56))
-	_emitter = _source(0.55)
-	_emitter.set("shape", 0) # a sphere over the flue
-	_emitter.set("radius", 0.24)
+	_volume.set("smoke_color", Color(0.5, 0.5, 0.52))
+	_emitter = _source(0.25) # (in the flue, under the cap: the smoke comes out from under it)
+	_emitter.set("shape", 0) # a sphere in the flue
+	_emitter.set("radius", 0.22)
 	_fuel = 0.0
-	_smoke = 1.4
+	_smoke = 2.4
 	_emitter.set("fuel", 0.0)
 	_emitter.set("temperature", 160.0)
 	_emitter.set("smoke", _smoke)
 	_emitter.set("noise", 0.4)
 	_emitter.set("noise_scale", 0.4)
-	_emitter.set("velocity", Vector3(0.0, 1.2, 0.0))
+	_emitter.set("velocity", Vector3(0.0, 1.0, 0.0))
 	_emitter.set("velocity_strength", 0.3)
 
 
@@ -205,7 +208,7 @@ func _process(delta: float) -> void:
 	if _volume == null:
 		return
 	if _wind and is_instance_valid(_wind):
-		_volume.set("wind", (_wind.call("get_velocity_at", _volume.global_position) as Vector3) * wind_scale)
+		_volume.set("wind", ((_wind.call("get_velocity_at", _volume.global_position) as Vector3) * wind_scale).limit_length(wind_max))
 	if kind != "brazier" or _emitter == null:
 		return
 	if _rain and is_instance_valid(_rain):
@@ -233,8 +236,11 @@ func get_stats() -> Dictionary:
 	if _volume == null:
 		return {}
 	var burning := 0
+	var hottest := 0.0
 	for b in _logs:
 		burning += int(b.call("get_burning_voxels"))
+		hottest = maxf(hottest, float(b.call("get_max_temperature")))
 	return {"power": snappedf(float(_volume.call("get_fire_power")), 0.01), "steps": _volume.call("get_steps_simulated"),
 			"sleeping": _volume.call("is_sleeping"), "wind": (_volume.get("wind") as Vector3).snapped(Vector3(0.01, 0.01, 0.01)),
-			"fuel": snappedf(float(_emitter.get("fuel")), 0.01), "smoke": snappedf(float(_emitter.get("smoke")), 0.01), "logs_burning": burning}
+			"fuel": snappedf(float(_emitter.get("fuel")), 0.01), "smoke": snappedf(float(_emitter.get("smoke")), 0.01), "logs_burning": burning,
+			"logs_hottest": snappedf(hottest, 1.0)}

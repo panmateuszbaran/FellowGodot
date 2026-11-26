@@ -493,6 +493,15 @@ func _drive_weather(i: int) -> void:
 		var crowd := _player.get_parent().get_node_or_null("Crowd")
 		if crowd and crowd.has_method("get_social_stats"):
 			print("climb_look: people t=%.0f %s" % [t, crowd.call("get_social_stats")])
+		var smoke := _player.get_parent().get_node_or_null("ChimneySmoke")
+		if smoke:
+			for c in smoke.get_children():
+				print("climb_look: chimney %s t=%.0f %s" % [c.name, t, c.call("get_stats")])
+		var rain := _player.get_parent().get_node_or_null("Rain")
+		if rain:
+			var drops: Node = rain.call("get_drops") if rain.has_method("get_drops") else null
+			print("climb_look: rain t=%.0f rain %.2f precipitation %d wetness %.2f snow %.2f drops %s" % [t, rain.get("rain"), rain.get("precipitation"),
+					rain.get("wetness"), rain.get("snow"), [drops.get("emitting"), drops.get("amount"), drops.get("visible")] if drops else "-"])
 
 
 ## The "talk" program (milestone 212): the player 3.2 m from one of a group (--talk_to=<group index>, its first

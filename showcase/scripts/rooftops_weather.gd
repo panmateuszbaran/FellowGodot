@@ -8,15 +8,18 @@ extends Node
 ## The scene's depth fog (FellowWeather3D adds its fog to an exponential fog only) follows the weather's: it closes in to
 ## the visibility the weather's fog would leave (3 / its density: 2.5 km in the rain, 1.2 km in a storm, 300 m in a
 ## blizzard), greys from the golden hour's haze as the sun goes, and veils the sky in the thickest. The sky's own sun
-## (rooftops.gd's SkySun, which lights the clouds) dims with the weather's sunlight as the Sun does on the ground; the
-## square's lamps glow brighter as it darkens (LAMPS_DARK times their light under the darkest sky).
+## (rooftops.gd's SkySun, which lights the clouds and, through the sky, the square) dims with the weather's sunlight as
+## the Sun does on the ground (sky_dim of it) and greys (the golden hour's light gone under the cloud); the square's
+## lamps glow brighter as it darkens (LAMPS_DARK times their light under the darkest sky). The rain and the snow drawn
+## to be seen (wider streaks than the main showcase's, more and larger flakes in a smaller box when it snows); a weather
+## turned to at once (--weather) leaves the ground as it would have — wet in the rain, white in the snow.
 
 @export var weather_path: NodePath = ^"../Weather"
 @export var environment_path: NodePath = ^"../WorldEnvironment"
 @export var transition := 10.0 # s
 @export var cycle_hold := 25.0 # s
 ## How much of the weather's dimming of the sun the sky's own sun (the clouds' light) takes: 0 none, 1 all.
-@export_range(0.0, 1.0) var sky_dim := 0.5
+@export_range(0.0, 1.0) var sky_dim := 0.85
 
 ## The scene's fair weather (rooftops.gd's clouds; the Wind node's 3.5 m/s).
 const FAIR := {"cloud_coverage": 0.45, "cloud_density": 2.6, "wind_speed": 3.5, "gustiness": 0.3, "sunlight": 1.0,
@@ -42,6 +45,9 @@ var _sky_sun: Light3D
 var _sky_sun_energy := 0.0
 var _sky_set := -1.0
 var _lamps: Array = [] # [OmniLight3D, its energy]
+var _sky_sun_color := Color(1, 1, 1)
+var _rain: Node
+const SKY_GREY := Color(0.78, 0.82, 0.9)
 var _label: Label
 var _help := false
 var _hint_t := 6.0
@@ -64,6 +70,7 @@ func _ready() -> void:
 			start = clampi(int(a.get_slice("=", 1)), 1, 7)
 		elif a == "--weather_cycle=1":
 			_cycle = true
+	_rain = _weather.call("get_rain_node") if _weather.has_method("get_rain_node") else null
 	turn_to(start, 0.0)
 	var town := get_node_or_null(^"../Town")
 	if town:
@@ -71,6 +78,11 @@ func _ready() -> void:
 			var light := n.get_node_or_null(^"Light") as OmniLight3D
 			if light and String(n.name).begins_with("Lamp"):
 				_lamps.append([light, light.light_energy])
+	_rain = _weather.call("get_rain_node") if _weather.has_method("get_rain_node") else null
+	if _rain:
+		_rain.set("streak_width", 0.01)
+		_rain.set("drop_color", Color(0.82, 0.85, 0.9, 0.5))
+		_rain.set("flake_size", 0.03)
 	var layer := CanvasLayer.new()
 	layer.layer = 5
 	add_child(layer)
@@ -92,6 +104,14 @@ func turn_to(p_key: int, p_seconds: float) -> void:
 		_weather.call("set_weather", 7, p_seconds) # WEATHER_CUSTOM: to these values
 	else:
 		_weather.call("set_weather", p_key - 1, p_seconds) # WEATHER_CLOUDY .. WEATHER_BLIZZARD
+	if _rain:
+		var snowing := p_key >= 6
+		_rain.set("max_drops", 60000 if snowing else 24000)
+		_rain.set("area", 30.0 if snowing else 40.0)
+		if p_seconds <= 0.0:
+			# (at once: the ground as the weather would have left it)
+			_rain.set("wetness", 1.0 if p_key == 4 or p_key == 5 else 0.0)
+			_rain.set("snow", 1.0 if snowing else 0.0)
 	_hint_t = 4.0
 	_show()
 
@@ -140,8 +160,10 @@ func _process(delta: float) -> void:
 		# (rooftops.gd sets its energy from the Sun's when the Sun changes: what it set is the fair weather's)
 		if _sky_set < 0.0 or not is_equal_approx(_sky_sun.light_energy, _sky_set):
 			_sky_sun_energy = _sky_sun.light_energy
+			_sky_sun_color = _sky_sun.light_color
 		_sky_set = _sky_sun_energy * lerpf(1.0, sun, sky_dim)
 		_sky_sun.light_energy = _sky_set
+		_sky_sun.light_color = _sky_sun_color.lerp(SKY_GREY, clampf(1.0 - sun, 0.0, 1.0))
 	if _hint_t > 0.0:
 		_hint_t -= delta
 		if _hint_t <= 0.0:
