@@ -7,7 +7,8 @@ extends Node3D
 ##  * straws: STRAWS thin curved blades (a MultiMesh, each its own length, width, colour and curl) over the heap — most
 ##    lying along it every way, some standing out of it, a fringe hanging over the boards — and a few on the ground
 ##    under it;
-##  * `burst(at)`: a body landing in it throws up straws (the player's leap of faith).
+##  * `burst(at)`: a body landing in it throws up straws (the player's leap of faith);
+##  * the straws stir in the scene's wind (milestone 215), those standing out or hanging over the boards most.
 ## Its parent is the cart (the model's bed 0.81 m up, its sides to 1.17 m at ±0.72 m across, its ends at ±1.27 m
 ## along); everything is seeded, the same each time.
 
@@ -222,6 +223,13 @@ varying float along;
 void vertex() {
 	straw = INSTANCE_CUSTOM;
 	along = UV.y;
+	// Milestone 215: the scene's wind (FellowEngine's, decision 0125: a FellowWind3D's gusts) stirs the straws — those
+	// standing out of the heap or hanging over its boards (upright, up or down) most, those lying in it hardly (held by
+	// the others). Each straw a stem of its own length (the blade is 1 m along +Y, scaled), swaying from its foot.
+	float upright = abs(normalize(MODEL_MATRIX[1].xyz).y);
+	WIND_HEIGHT = 1.0;
+	WIND_BEND = mix(0.04, 0.6, upright * upright);
+	WIND_FLUTTER = 0.4;
 }
 void fragment() {
 	// A straw's hollow round stem: lighter down its middle, darker at its edges and its foot (in the heap's shade), a
