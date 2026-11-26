@@ -6,7 +6,7 @@ extends Node
 ## degrees round from where the sun set, a smaller disk), the sky's light dimmed (sky_night) so that its stars show, the
 ## houses' windows lit (their rooms' lamps: glass.tres, FellowInteriorMaterial3D); the weather keys
 ## (rooftops_weather.gd) take get_night() for the square's lamps and the eye's adapting. The tools: --night=1 (night at
-## once), --night_at=<s> (night falling then).
+## once), --night_at=<s> (night falling then), --day_at=<s> (the day coming back then).
 
 @export var duration := 20.0 # s, either way
 
@@ -28,6 +28,7 @@ const WINDOW_DAYLIGHT := 0.05 # the moonlight through the windows
 var _t := 0.0 # 0 the day, 1 the night
 var _to := 0.0
 var _at := -1.0
+var _day_at := -1.0 # (tools: --day_at=<s>, the day coming back then)
 var _clock := 0.0
 var _sun: DirectionalLight3D
 var _root: Node
@@ -81,6 +82,8 @@ func _ready() -> void:
 			_to = 1.0
 		elif a.begins_with("--night_at="):
 			_at = float(a.get_slice("=", 1))
+		elif a.begins_with("--day_at="):
+			_day_at = float(a.get_slice("=", 1))
 		elif a.begins_with("--night_set="):
 			for kv in a.get_slice("=", 1).split(","):
 				var v := float(kv.get_slice(":", 1))
@@ -124,6 +127,9 @@ func _process(delta: float) -> void:
 	if _at >= 0.0 and _clock >= _at:
 		_at = -1.0
 		_to = 1.0
+	if _day_at >= 0.0 and _clock >= _day_at:
+		_day_at = -1.0
+		_to = 0.0
 	if _t != _to:
 		_t = move_toward(_t, _to, delta / maxf(duration, 0.01))
 	if _t != _applied:

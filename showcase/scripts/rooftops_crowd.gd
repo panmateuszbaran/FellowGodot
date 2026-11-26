@@ -63,6 +63,7 @@ func _ready() -> void:
 			w["node"] = _person("walk", (w["speed"] as float) / 1.6)
 			w["detour"] = Vector3()
 			w["person"] = _register(w["node"], "walk", "walk", (w["speed"] as float) / 1.6)
+			w.person["walker"] = w # (milestone 222: a walker going home at night finds its way back)
 			_walkers.append(w)
 	for g in groups:
 		var c: Vector3 = g[0]
@@ -296,8 +297,8 @@ func _process(delta: float) -> void:
 				(p.node as Node3D).position = (p.home as Vector3) + (p.shove as Vector3)
 	for w in _walkers:
 		var person: Dictionary = w.person
-		if person.react != "" and person.react != "walk_on" or person.act == "talk" or person.act == "point":
-			continue # (its way waits: the reaction moves it; milestone 212: talking, pointing)
+		if person.react != "" and person.react != "walk_on" or person.act in ["talk", "point", "leave", "away", "back"]:
+			continue # (its way waits: the reaction moves it; milestone 212: talking, pointing; 222: gone home)
 		w.s += (w.speed as float) * (w.pace as float) * delta
 		var pts: PackedVector3Array = w.pts
 		var here := _at(pts, w.loop, w.length, w.s)
@@ -374,6 +375,8 @@ func bump(p_collider: Object, p_velocity: Vector3, p_normal: Vector3) -> int:
 		# (milestone 212: talking, pointing, leaving — over; a walker's way and the others' place as before)
 		if p.act == "talk" and not _talk.is_empty():
 			_talk = {}
+		if p.kind == "walk" and p.act in ["leave", "back"]:
+			_walker_detour(p) # (milestone 222: its way from where the bump caught it)
 		p.act = ""
 		_bubbles.call("hush", p.node)
 	if p.kind == "seat" or (speed < NUDGE_MAX and not from_above):
@@ -1084,6 +1087,8 @@ func _acts(delta: float) -> void:
 						p.act = "away"
 						node.visible = false
 						(p.shape as CollisionShape3D).disabled = true
+					elif p.kind == "walk":
+						_walker_rejoin(p) # (milestone 222: back on its way)
 					else:
 						p.act = ""
 						p.react = "home" # (the last of the way: the home reaction's walk to its place)
@@ -1128,6 +1133,80 @@ func _weather_acts() -> void:
 			ap.play(clip, 0.5)
 	for w in _walkers:
 		w.pace = HURRY if raining else 1.0
+	_walkers_home()
+
+
+## Milestone 222: at night the walkers without a lantern go home — WALKERS_HOME of them, each down the street nearest it
+## (EXITS) — and by day come back out of it to their way: the square at night is its lantern carriers', the osteria's
+## and the few who stay.
+const WALKERS_HOME := 0.75
+func _walkers_home() -> void:
+	for i in _walkers.size():
+		var w: Dictionary = _walkers[i]
+		var p: Dictionary = w.person
+		if _busy(p) or p.react != "":
+			continue
+		var lantern := i % LANTERN_EVERY == 0
+		if _night and not lantern and p.act == "" and _rng.randf() < 0.2:
+			if fmod(float(i) * 0.618034, 1.0) >= WALKERS_HOME:
+				continue
+			var from := (p.node as Node3D).position
+			var best: Array = EXITS[0]
+			for e in EXITS:
+				if from.distance_to(e[0]) < from.distance_to(best[0]):
+					best = e
+			p.path = _around(from, best[0]) + [best[1]]
+			p.exit = best
+			p.act = "leave"
+			var ap: AnimationPlayer = p.ap
+			ap.speed_scale = 1.35 / 1.6
+			ap.play("walk", 0.35)
+			if _rng.randf() < 0.3:
+				var lines: Array = ["Buonanotte!", "A domani!", "Home, before the lamps go out."]
+				_bubbles.call("say", p.node, lines[_rng.randi() % lines.size()], 2.2, _head_height(p))
+		elif not _night and p.act == "away" and p.get("exit") != null and _rng.randf() < 0.25:
+			# (out of the street it went down, to the nearest point of its way)
+			var e: Array = p.exit
+			var node: Node3D = p.node
+			node.position = Vector3(e[1].x, node.position.y, e[1].z)
+			node.visible = true
+			(p.shape as CollisionShape3D).disabled = false
+			var pts: PackedVector3Array = w.pts
+			var best_s := 0.0
+			var best_d := 1e9
+			var span: float = (w.length as float) * (1.0 if w.loop else 2.0)
+			for k in 64:
+				var s_k := span * float(k) / 64.0
+				var d := _at(pts, w.loop, w.length, s_k).distance_to(e[0])
+				if d < best_d:
+					best_d = d
+					best_s = s_k
+			w.s = best_s
+			p.path = [e[0]] + _around(e[0], _at(pts, w.loop, w.length, best_s))
+			p.act = "back"
+			var ap: AnimationPlayer = p.ap
+			ap.speed_scale = 1.35 / 1.6
+			ap.play("walk", 0.35)
+
+
+## Milestone 222: a walker come back to its way walks on along it (from where it came out, its lane eased in).
+func _walker_rejoin(p: Dictionary) -> void:
+	_walker_detour(p)
+	_act_done(p)
+
+
+## Milestone 222: a walker off its way (going home, coming back, stopped by a bump) eases back into it from where it is.
+func _walker_detour(p: Dictionary) -> void:
+	var w: Dictionary = p.walker
+	var node: Node3D = p.node
+	var here := _at(w.pts, w.loop, w.length, w.s)
+	var ahead := _at(w.pts, w.loop, w.length, (w.s as float) + 0.7)
+	var dir := Vector3(ahead.x - here.x, 0.0, ahead.z - here.z).normalized()
+	var side := Vector3(-dir.z, 0.0, dir.x)
+	var off := node.position - (here + side * (w.lane as float))
+	off.y = 0.0
+	w.detour = off
+	w.push = 0.0
 
 
 func _is_keeper(p: Dictionary) -> bool:
