@@ -557,6 +557,10 @@ func _drive_weather(i: int) -> void:
 		var crowd := _player.get_parent().get_node_or_null("Crowd")
 		if crowd and crowd.has_method("get_social_stats"):
 			print("climb_look: people t=%.0f %s" % [t, crowd.call("get_social_stats")])
+		var night := _player.get_parent().get_node_or_null("Night")
+		if night and night.has_method("get_stats"):
+			print("climb_look: night t=%.0f %s exposure %.2f" % [t, night.call("get_stats"),
+					((_player.get_parent().get_node("WorldEnvironment") as WorldEnvironment).camera_attributes as CameraAttributes).exposure_multiplier])
 		var smoke := _player.get_parent().get_node_or_null("ChimneySmoke")
 		if smoke:
 			for c in smoke.get_children():

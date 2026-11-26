@@ -49,6 +49,8 @@ var _sun_basis := Basis()
 var _sun_energy := 0.0
 var _sun_color := Color(1.0, 1.0, 1.0) # the Sun's own (sRGB), before sun_air
 var _shafts := Vector2(-1.0, -1.0) # the light shafts' threshold and intensity before this scene changed them
+var _air_share := 1.0 # milestone 216: how much of sun_air the Sun's light takes (none from the moon)
+var _sky_energy := -1.0 # milestone 216: the SkySun's energy from this, not the Sun's, when set (the sunset's sky)
 
 
 func _enter_tree() -> void:
@@ -101,6 +103,16 @@ func _process(_delta: float) -> void:
 		_follow_sun()
 
 
+## Milestone 216 (rooftops_night.gd): the Sun's own colour (the moon's at night), how much of the air's reddening it
+## takes (sun_air's share), and the energy the SkySun follows instead of the Sun's (negative: the Sun's) — the sky keeps
+## its light through the sunset while the Sun's on the square fades at the horizon.
+func set_sun_own_color(p_color: Color, p_air: float, p_sky_energy := -1.0) -> void:
+	_sun_color = p_color
+	_air_share = p_air
+	_sky_energy = p_sky_energy
+	_sun_energy = -1.0 # (followed next frame)
+
+
 ## The SkySun in the Sun's direction (seen from above), at most sky_sun_elevation degrees up; its colour the Sun's own,
 ## its energy the Sun's times sky_brightness (the sky's and the clouds' light scale with it). The Sun's colour through
 ## the SkySun's air (sun_air).
@@ -120,10 +132,10 @@ func _follow_sun() -> void:
 	var own := _sun_color.srgb_to_linear()
 	var sky := sky_sun_color.srgb_to_linear()
 	var keep := Vector3(own.r, own.g, own.b).dot(Y) / maxf(Vector3(sky.r, sky.g, sky.b).dot(Y), 1e-4)
-	_sky_sun.light_energy = _sun.light_energy * sky_brightness * keep
+	_sky_sun.light_energy = (_sun.light_energy if _sky_energy < 0.0 else _sky_energy) * sky_brightness * keep
 	_sky_sun.light_angular_distance = _sun.light_angular_distance
 	_sun.light_color = _sun_color
-	if sun_air > 0.0 and sky_up < sun_up and sky_up > 0.0:
+	if sun_air * _air_share > 0.0 and sky_up < sun_up and sky_up > 0.0:
 		# Zenith optical depths (FellowEngine's atmosphere, decision 0108: Rayleigh's sRGB coefficients over its 8 km
 		# scale height, the haze's extinction over 1.2 km, ozone's absorption over its 30 km tent's 15) and Kasten and
 		# Young's air mass.
@@ -131,7 +143,7 @@ func _follow_sun() -> void:
 		var mie: float = ProjectSettings.get_setting("rendering/fellow/post/atmosphere/mie_scale", 1.0)
 		var tau := Vector3(7.190e-3, 13.763e-3, 32.519e-3) * 8.0 * rayleigh + Vector3.ONE * 4.44e-3 * 1.2 * mie + Vector3(0.650e-3, 1.881e-3, 0.085e-3) * 15.0
 		var extra := _air_mass(sky_up) - _air_mass(sun_up)
-		var t := Vector3.ONE.lerp(Vector3(exp(-tau.x * extra), exp(-tau.y * extra), exp(-tau.z * extra)), sun_air)
+		var t := Vector3.ONE.lerp(Vector3(exp(-tau.x * extra), exp(-tau.y * extra), exp(-tau.z * extra)), sun_air * _air_share)
 		var c := _sun_color.srgb_to_linear()
 		var lit := Vector3(c.r * t.x, c.g * t.y, c.b * t.z)
 		const LUMA := Vector3(0.2126, 0.7152, 0.0722)

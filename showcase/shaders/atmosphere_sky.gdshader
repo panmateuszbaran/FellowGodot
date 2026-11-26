@@ -140,9 +140,11 @@ void sky() {
 			col += sun * t * (limb / (solid_angle * 0.8)) * sun_disk_energy;
 		}
 	}
+	// The stars where the sky is dark as it is seen (its intensity: milestone 216's night dims the sky, not the stars).
+	vec3 star = vec3(0.0);
 	if (d.y > 0.0 && star_brightness > 0.0 && !AT_CUBEMAP_PASS) {
-		float sky_luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
-		col += stars(d) * star_brightness * smoothstep(0.02, 0.0, sky_luma) * smoothstep(0.0, 0.08, d.y);
+		float sky_luma = dot(col, vec3(0.2126, 0.7152, 0.0722)) * intensity;
+		star = stars(d) * star_brightness * smoothstep(0.02, 0.0, sky_luma) * smoothstep(0.0, 0.08, d.y);
 	}
-	COLOR = col * intensity * (AT_CUBEMAP_PASS ? radiance_scale : 1.0);
+	COLOR = col * intensity * (AT_CUBEMAP_PASS ? radiance_scale : 1.0) + star;
 }

@@ -170,6 +170,7 @@
 [ext_resource type="Script" path="res://scripts/rooftops_weather.gd" id="211_weather"]
 [ext_resource type="Script" path="res://scripts/rooftops_fire.gd" id="211_fire"]
 [ext_resource type="Script" path="res://scripts/rooftops_osteria.gd" id="213_osteria"]
+[ext_resource type="Script" path="res://scripts/rooftops_night.gd" id="216_night"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kicm1"]
 shader = ExtResource("2_yebai")
@@ -6293,6 +6294,9 @@ transition_time = 10.0
 
 [node name="WeatherKeys" type="Node" parent="." unique_id=1211211004]
 script = ExtResource("211_weather")
+
+[node name="Night" type="Node" parent="." unique_id=1216216001]
+script = ExtResource("216_night")
 
 [node name="Brazier" type="Node3D" parent="." unique_id=1211211005]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.2, 0, 4.2)

@@ -35,6 +35,9 @@ const LAMPS_DARK := 2.4
 ## storm's), and the share of that the eye makes up for (a storm still darker than a fair evening).
 const DARKER := [0.0, 0.27, 1.44, 2.74, 3.22, 1.3, 2.2]
 const EXPOSURE_ADAPT := 0.55
+## (milestone 216) The eye under the moon (rooftops_night.gd): this many stops more (its light 4.6 stops under the
+## sun's, the sky's 7: the night still darker than the evening, the lamps and the windows bright in it).
+const NIGHT_STOPS := 3.0
 
 var _weather: Node
 var _key := 1
@@ -54,6 +57,8 @@ var _stops_from := 0.0
 var _stops_to := 0.0
 var _stops_t := 0.0
 var _stops_dur := 0.0
+var _night_node: Node
+var _night := 0.0
 var _radiance_base := -1.0
 var _radiance_set := -1.0
 var _rain: Node
@@ -156,6 +161,15 @@ func _process(delta: float) -> void:
 		_stops_t = minf(_stops_t + delta, _stops_dur)
 		_stops = lerpf(_stops_from, _stops_to, smoothstep(0.0, 1.0, _stops_t / _stops_dur))
 		_apply_exposure()
+	if _night_node == null:
+		_night_node = get_node_or_null(^"../Night")
+	if _night_node:
+		var night: float = _night_node.call("get_night")
+		if night != _night:
+			_night = night
+			_apply_exposure()
+			_hint_t = maxf(_hint_t, 3.0)
+			_show()
 	var state: Dictionary = _weather.call("get_current_state")
 	var sun: float = state.get("sunlight", 1.0)
 	for l in _lamps:
@@ -197,17 +211,17 @@ func _apply_exposure() -> void:
 			return
 		_attrs = we.camera_attributes
 		_exposure_base = _attrs.exposure_multiplier
-	_attrs.exposure_multiplier = _exposure_base * pow(2.0, _stops)
+	_attrs.exposure_multiplier = _exposure_base * pow(2.0, _stops + NIGHT_STOPS * _night)
 
 
 func _show() -> void:
 	if _label == null:
 		return
-	var text := "Weather: %s%s" % [NAMES[_key - 1], "  (changing by itself)" if _cycle else ""]
+	var text := "Weather: %s%s%s" % [NAMES[_key - 1], ", night" if _night > 0.5 else "", "  (changing by itself)" if _cycle else ""]
 	if _help:
-		text += "\n1 fair  2 cloudy  3 overcast  4 rain  5 storm  6 snow  7 blizzard\n0 the weather changing by itself   F1 hide"
+		text += "\n1 fair  2 cloudy  3 overcast  4 rain  5 storm  6 snow  7 blizzard\n0 the weather changing by itself   N night / day   F1 hide"
 	elif _hint_t > 0.0:
-		text += "    (1-7 the weather, 0 by itself, F1 the keys)"
+		text += "    (1-7 the weather, 0 by itself, N night, F1 the keys)"
 	_label.text = text
 	_label.visible = _help or _hint_t > 0.0 or _cycle
 

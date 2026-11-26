@@ -1389,6 +1389,9 @@ func _weather(p_root: Node3D) -> void:
 	var keys := Node.new()
 	keys.set_script(load("res://scripts/rooftops_weather.gd"))
 	_add(p_root, keys, "WeatherKeys")
+	var night := Node.new()
+	night.set_script(load("res://scripts/rooftops_night.gd")) # (milestone 216: N)
+	_add(p_root, night, "Night")
 	var brazier := Node3D.new()
 	brazier.set_script(load("res://scripts/rooftops_fire.gd"))
 	brazier.position = BRAZIER
