@@ -821,6 +821,7 @@ Milestone 214 (decision 0356): the weather keys' sky light not dimmed with the S
 s, `SUNSET_SHARE` 0.6, `moon_energy` 0.15, `moon_sky_share` 0.1, `sky_night` 0.12, `MOON_UP` 28°, `MOON_TURN` 80°,
 `WINDOW_LAMPS` 0.55; `toggle()`, `get_night()`; tools: `--night=1`, `--night_at=<s>`,
 `--night_set=moon:,sky_share:,sky:`; rooftops.gd's `set_sun_own_color()`; `rooftops_weather.gd`'s `NIGHT_STOPS` 2.5).
+Milestone 218 (decision 0360): the people at night (`rooftops_crowd.gd`: `NIGHT_AWAY` 0.6, `LANTERN_EVERY` 3).
 
 ## Vehicles' marks, smoke and sounds (milestone 79)
 

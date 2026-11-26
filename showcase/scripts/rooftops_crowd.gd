@@ -1163,7 +1163,11 @@ func _leave(p: Dictionary) -> void:
 	ap.speed_scale = 1.35 / 1.6
 	ap.play("walk", 0.35)
 	if _rng.randf() < 0.4:
-		_bubbles.call("say", p.node, ["Andiamo, it's pouring!", "Quick, inside!", "Ugh, my good shoes..."][_rng.randi() % 3], 2.2, _head_height(p))
+		var lines: Array = ["Andiamo, it's pouring!", "Quick, inside!", "Ugh, my good shoes..."]
+		if _night and _rain <= RAIN_LEAVE:
+			# (milestone 218: going home, or for a glass, at night)
+			lines = ["Buonanotte!", "Time for a glass, then bed.", "A domani!"]
+		_bubbles.call("say", p.node, lines[_rng.randi() % lines.size()], 2.2, _head_height(p))
 
 
 func _come_back(p: Dictionary) -> void:

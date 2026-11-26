@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 218 — The square's people at night (2026-11-26)
+
+- Decision 0360. At night (milestone 216's N) the rooftops square's groups go home or into the osteria as in the rain
+  ("Buonanotte!") and come back by day; every third walker carries a lantern (its warm light swinging with the arm);
+  the people talk of the night.
+
 ## Milestone 217 — The rooftops' frame pass by pass; gas volumes asleep out of view (2026-11-26)
 
 - Decision 0359. `climb_look.gd --passes=1`: the GPU's time in each of the engine's passes (its pass markers) — the
