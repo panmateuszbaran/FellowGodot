@@ -23,7 +23,8 @@ layout(push_constant, std430) uniform Params {
 	ivec2 src_offset;
 	float scale;
 	float bias;
-	vec2 pad;
+	float clamp_max;
+	float pad;
 }
 params;
 
@@ -32,6 +33,7 @@ void main() {
 	ivec2 p = ivec2(gl_FragCoord.xy) - params.dst_origin + params.src_offset;
 	float d = texelFetch(source_depth, p, 0).r;
 	// Re-base reverse-Z orthographic depth from the cache's range to the cascade's; 0.9999 is where the shadow pass
-	// clamps ("pancakes") casters in front of the near plane, 0 is the cleared value (nothing).
-	gl_FragDepth = clamp(d * params.scale + params.bias, 0.0, 0.9999);
+	// clamps ("pancakes") casters in front of the near plane, 0 is the cleared value (nothing). A positional light's
+	// face (decision 0373) is copied as it is: scale 1, bias 0, clamp_max 1.
+	gl_FragDepth = clamp(d * params.scale + params.bias, 0.0, params.clamp_max);
 }

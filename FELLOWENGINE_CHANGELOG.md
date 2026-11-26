@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 231 — Omni and spot lights' shadows: the static casters cached (2026-11-26)
+
+- Decision 0373. `rendering/fellow/shadows/positional_cache` (on): when an omni or spot light's shadow is drawn again
+  because something in its range moved, the casters that have not changed for `directional_cache_static_frames`
+  frames come from a copy of each face (cube face, paraboloid, spot map) made when they were last drawn, and only the
+  moving ones are drawn over it. The static casters are drawn exactly as stock draws them, so the shadow maps are
+  stock's (the regression suite's new `pos_cache` scene and groups: identical pictures, also with the cache made again
+  at every draw); a light that moves is drawn the stock way. `climb_look.gd --shadow_info=1` counts the shadow passes'
+  draws. Its GPU gain is to be measured on the RTX.
+
 ## Milestone 230 — The osteria's floor no longer flickers (2026-11-26)
 
 - Decision 0372. The rooftops osteria's floor drawn 6 mm over the raised pavement's slab that runs on under the house at

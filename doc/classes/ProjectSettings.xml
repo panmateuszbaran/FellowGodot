@@ -3959,7 +3959,7 @@
 			A cascade is served from the cache only when the static casters it saves cost more than the copy (their primitives and draws against this many per cascade texel): cheap cascades are drawn as stock does.
 		</member>
 		<member name="rendering/fellow/shadows/directional_cache_static_frames" type="int" setter="" getter="" default="60">
-			Frames a caster must stay unchanged to count as static (cached).
+			Frames a caster must stay unchanged to count as static (cached), in the directional and the positional caches.
 		</member>
 		<member name="rendering/fellow/shadows/directional_cache_texel_lod" type="float" setter="" getter="" default="1.0">
 			Cached casters use the coarsest LOD whose error is below this many shadow-map texels.
@@ -3987,6 +3987,15 @@
 		</member>
 		<member name="rendering/fellow/shadows/pcss_quad_search" type="bool" setter="" getter="" default="false">
 			Measured and rejected (not visually lossless): the PCSS blocker search shared by 2 x 2 pixel quads. Decision 0042.
+		</member>
+		<member name="rendering/fellow/shadows/positional_cache" type="bool" setter="" getter="" default="true">
+			When an omni or spot light's shadow is drawn again (something in its range moved), its static casters come from a copy of each face made when they were last drawn, and only the others are drawn over it; the copy is made again when the light, a cached caster or the camera's place (mesh LOD) changes. Exact: the same image or results as stock Godot. Decision 0373.
+		</member>
+		<member name="rendering/fellow/shadows/positional_cache_camera_travel" type="float" setter="" getter="" default="4.0">
+			The positional shadow cache's faces are made again once the camera has moved this far from where it was (the static casters' mesh LODs follow the camera); 0: not for the camera.
+		</member>
+		<member name="rendering/fellow/shadows/positional_cache_debug_mode" type="int" setter="" getter="" default="0">
+			Debug: 0 normal, 1 every positional cache made again each time its light's shadow is drawn.
 		</member>
 		<member name="rendering/fellow/shadows/positional_max_mip" type="bool" setter="" getter="" default="true">
 			The same pyramid for omni and spot shadows. Exact: the same image or results as stock Godot. Decision 0005.

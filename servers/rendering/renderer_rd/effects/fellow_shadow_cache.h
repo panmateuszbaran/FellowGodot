@@ -38,14 +38,20 @@ namespace RendererRD {
 
 // FellowEngine directional shadow cache (docs/decisions/0004-directional-shadow-cache.md): owns the per-cascade cache
 // depth textures and copies a cache region into the directional shadow atlas, re-basing the stored depth from the
-// cache's depth range to the cascade's.
+// cache's depth range to the cascade's. Also the positional shadow cache's faces (decision 0373: an omni light's six
+// cube faces or two paraboloids, a spot light's one map), copied as they are.
 class FellowShadowCache {
+public:
+	static constexpr int MAX_FACES = 6;
+
+private:
 	struct PushConstant {
 		int32_t dst_origin[2];
 		int32_t src_offset[2];
 		float scale;
 		float bias;
-		float pad[2];
+		float clamp_max;
+		float pad;
 	};
 
 	FellowShadowCacheCopyShaderRD copy_shader;
@@ -53,15 +59,16 @@ class FellowShadowCache {
 	PipelineCacheRD copy_pipeline;
 
 	struct Entry {
-		RID texture[4];
-		RID framebuffer[4];
-		int size[4] = { 0, 0, 0, 0 };
-		RD::DataFormat format[4] = { RD::DATA_FORMAT_MAX, RD::DATA_FORMAT_MAX, RD::DATA_FORMAT_MAX, RD::DATA_FORMAT_MAX };
-		bool content_valid[4] = { false, false, false, false };
+		RID texture[MAX_FACES];
+		RID framebuffer[MAX_FACES];
+		int size[MAX_FACES] = {};
+		RD::DataFormat format[MAX_FACES] = { RD::DATA_FORMAT_MAX, RD::DATA_FORMAT_MAX, RD::DATA_FORMAT_MAX, RD::DATA_FORMAT_MAX, RD::DATA_FORMAT_MAX, RD::DATA_FORMAT_MAX };
+		bool content_valid[MAX_FACES] = {};
+		Vector2i content_origin[MAX_FACES]; // where in its target a positional face's content was drawn (decision 0373)
 		// Static caster cost of the last rebuild of each cascade (read back by the scene cull's cost gate).
-		uint64_t cost_build_frame[4] = { 0, 0, 0, 0 };
-		uint64_t cost_primitives[4] = { 0, 0, 0, 0 };
-		uint32_t cost_draws[4] = { 0, 0, 0, 0 };
+		uint64_t cost_build_frame[MAX_FACES] = {};
+		uint64_t cost_primitives[MAX_FACES] = {};
+		uint32_t cost_draws[MAX_FACES] = {};
 		bool lost = false; // a cascade was needed but its content is gone: the scene cull must rebuild
 	};
 	HashMap<int64_t, Entry> entries;
@@ -82,10 +89,14 @@ class FellowShadowCache {
 	void _free_entry(Entry &p_entry);
 
 public:
-	// Returns the framebuffer of the cache texture of cascade p_cascade, (re)creating it if size or format changed.
+	// Returns the framebuffer of the cache texture of cascade (or face) p_cascade, (re)creating it if size or format
+	// changed.
 	RID get_framebuffer(int64_t p_cache_id, int p_cascade, int p_size, RD::DataFormat p_format, uint32_t p_usage_bits);
 	RID get_texture(int64_t p_cache_id, int p_cascade) const;
-	void set_content_valid(int64_t p_cache_id, int p_cascade);
+	// p_origin: where the content was drawn in the face's target (a positional face drawn into the shadow atlas is only
+	// reused at the same place: the rasterization depends on the viewport's position).
+	void set_content_valid(int64_t p_cache_id, int p_cascade, const Vector2i &p_origin = Vector2i());
+	bool is_content_valid(int64_t p_cache_id, int p_cascade, const Vector2i &p_origin = Vector2i()) const;
 	void set_static_cost(int64_t p_cache_id, int p_cascade, uint64_t p_build_frame, uint64_t p_primitives, uint32_t p_draws);
 	bool get_static_cost(int64_t p_cache_id, int p_cascade, uint64_t p_build_frame, uint64_t &r_primitives, uint32_t &r_draws) const;
 	// Returns the cache texture if it holds a rebuilt content, otherwise marks the cache lost and returns RID().
@@ -99,8 +110,10 @@ public:
 	void free_cache(int64_t p_cache_id);
 	uint64_t get_vram_bytes() const;
 
-	// Writes depth = clamp(cache(p + src_offset) * scale + bias, 0, 0.9999) into p_dst_rect of p_dst_framebuffer.
-	void copy(RID p_source_texture, RID p_dst_framebuffer, const Rect2i &p_dst_rect, const Vector2i &p_src_offset, float p_scale, float p_bias);
+	// Writes depth = clamp(cache(p + src_offset) * scale + bias, 0, clamp_max) into p_dst_rect of p_dst_framebuffer
+	// (p = the destination texel relative to the rect). The directional cascades clamp at 0.9999 (their pancaking); the
+	// positional faces copy their depths unchanged (scale 1, bias 0, clamp_max 1).
+	void copy(RID p_source_texture, RID p_dst_framebuffer, const Rect2i &p_dst_rect, const Vector2i &p_src_offset, float p_scale, float p_bias, float p_clamp_max = 0.9999f);
 
 	FellowShadowCache();
 	~FellowShadowCache();

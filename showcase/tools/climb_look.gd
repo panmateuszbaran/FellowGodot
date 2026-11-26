@@ -126,6 +126,9 @@ func _init() -> void:
 			_draw_all = true
 		elif a == "--draw_all=1":
 			_draw_all = true
+		elif a == "--shadow_info=1":
+			_shadow_info = true
+			_draw_all = true
 		elif a.begins_with("--drop="):
 			_drop = a.get_slice("=", 1).split(",")
 		elif a.begins_with("--talk_to="):
@@ -316,6 +319,11 @@ func _init() -> void:
 					var name := rd.get_captured_timestamp_name(k - 1)
 					var dt := float(rd.get_captured_timestamp_gpu_time(k) - rd.get_captured_timestamp_gpu_time(k - 1)) / 1e6
 					_pass_sum[name] = float(_pass_sum.get(name, 0.0)) + dt
+		if _shadow_info and i >= _skip:
+			var svp := root.get_viewport_rid()
+			_shadow_draws += RenderingServer.viewport_get_render_info(svp, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME)
+			_shadow_prims += RenderingServer.viewport_get_render_info(svp, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME)
+			_shadow_frames += 1
 		if _perf and i >= _skip:
 			_perf_gpu.append(RenderingServer.viewport_get_measured_render_time_gpu(vp))
 			_perf_cpu.append(RenderingServer.viewport_get_measured_render_time_cpu(vp) + RenderingServer.get_frame_setup_time_cpu())
@@ -330,6 +338,14 @@ func _init() -> void:
 	f.store_string(JSON.stringify({"every": _every, "skip": _skip, "frames": _frames}))
 	f.close()
 	print("climb_look: %d frames" % total)
+	if _shadow_info and _shadow_frames > 0:
+		var st: Dictionary = RenderingServer.fellow_get_stats()
+		var pos := {}
+		for k in st:
+			if str(k).begins_with("shadow_pos_cache"):
+				pos[str(k).trim_prefix("shadow_pos_cache_")] = st[k]
+		print("climb_look: shadows %d frames: %.1f draws, %.0f primitives a frame; positional cache %s" % [_shadow_frames,
+				float(_shadow_draws) / _shadow_frames, float(_shadow_prims) / _shadow_frames, pos])
 	if _perf and _perf_gpu.size() > 0:
 		var g := Array(_perf_gpu)
 		var c := Array(_perf_cpu)
@@ -559,6 +575,11 @@ var _perf := false # --perf=1: every frame drawn, none saved, vsync off; the GPU
 ## --passes=1 (milestone 217): --perf and the GPU's time in each of the engine's passes (its RENDER_TIMESTAMP markers, with
 ## --setting=rendering/fellow/profiling/pass_timestamps:true — they fence the passes: the frame's total is not --perf's).
 var _passes := false
+var _shadow_info := false # --shadow_info=1 (milestone 231): every frame drawn; the shadow passes' draws and primitives a
+# frame (mean after --skip) and the positional shadow cache's counters printed
+var _shadow_draws := 0
+var _shadow_prims := 0
+var _shadow_frames := 0
 var _pass_sum := {}
 var _pass_frames := 0
 var _perf_gpu: PackedFloat64Array = []

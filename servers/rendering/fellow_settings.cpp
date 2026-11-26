@@ -36,6 +36,7 @@
 #include "servers/rendering/fellow_hitch_sampler.h"
 #include "servers/rendering/fellow_memory_counters.h"
 #include "servers/rendering/fellow_parallel.h"
+#include "servers/rendering/fellow_positional_shadow_cache.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
@@ -238,6 +239,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shadows/directional_cache_texel_lod", PROPERTY_HINT_RANGE, "0,8,0.05"), 1.0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/directional_cache_max_rebuilds_per_frame", PROPERTY_HINT_RANGE, "1,16,1"), 1);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shadows/directional_cache_min_cost_per_texel", PROPERTY_HINT_RANGE, "0,4,0.005"), 0.125);
+	GLOBAL_DEF("rendering/fellow/shadows/positional_cache", true); // decision 0373
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shadows/positional_cache_camera_travel", PROPERTY_HINT_RANGE, "0,50,0.1,suffix:m"), 4.0);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/positional_cache_debug_mode", PROPERTY_HINT_ENUM, "Normal,Rebuild Every Draw"), 0);
 	GLOBAL_DEF("rendering/fellow/shadows/skip_backfacing_directional", true);
 	GLOBAL_DEF("rendering/fellow/shadows/skip_unblended_cascade", true);
 	GLOBAL_DEF("rendering/fellow/shadows/skip_backfacing_positional", true);
@@ -636,6 +640,11 @@ Fellow::Stats &Fellow::stats() {
 	return s;
 }
 
+Fellow::PositionalShadowCacheStats &Fellow::positional_shadow_cache_stats() {
+	static PositionalShadowCacheStats s;
+	return s;
+}
+
 Fellow::CostScope::CostScope(SafeNumeric<uint64_t> &p_usec, SafeNumeric<uint64_t> &p_count) :
 		usec(p_usec), from(OS::get_singleton()->get_ticks_usec()) {
 	p_count.increment();
@@ -662,6 +671,16 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["shadow_cache_copies_skipped"] = s.shadow_cache_copies_skipped.get();
 	d["shadow_cache_cascades_uneconomic"] = s.shadow_cache_cascades_uneconomic.get();
 	d["shadow_cache_cascades_unstable"] = s.shadow_cache_cascades_unstable.get();
+	{
+		const PositionalShadowCacheStats &ps = positional_shadow_cache_stats(); // decision 0373
+		d["shadow_pos_cache_faces_cached"] = ps.faces_cached.get();
+		d["shadow_pos_cache_faces_rebuilt"] = ps.faces_rebuilt.get();
+		d["shadow_pos_cache_invalidations"] = ps.invalidations.get();
+		d["shadow_pos_cache_promotions"] = ps.promotions.get();
+		d["shadow_pos_cache_camera_rebuilds"] = ps.camera_rebuilds.get();
+		d["shadow_pos_cache_static_casters"] = ps.static_casters.get();
+		d["shadow_pos_cache_dynamic_casters"] = ps.dynamic_casters.get();
+	}
 	d["geometry_cluster_surfaces"] = s.geometry_cluster_surfaces.get();
 	d["geometry_cluster_surfaces_active"] = s.geometry_cluster_surfaces_active.get();
 	d["physics_ticks"] = s.physics_ticks.get();

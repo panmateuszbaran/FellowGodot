@@ -556,6 +556,7 @@ private:
 			Vector2i fellow_source_offset;
 			float fellow_scale = 1.0;
 			float fellow_bias = 0.0;
+			float fellow_clamp_max = 0.9999f; // 1: a positional face copied as it is (decision 0373)
 
 			// FellowEngine mesh clusters: world-space planes of the shadow camera's volume (no near plane when casters
 			// are pancaked).
@@ -1462,6 +1463,7 @@ private:
 	LocalVector<FellowDirCascade> fellow_dir_cascades;
 	LocalVector<Pair<Rect2i, Rect2i>> fellow_dir_built;
 	Rect2i _fellow_dir_needed_rect(const FellowDirCascade &p_cascade, const RenderSceneDataRD *p_scene_data) const;
+	void _fellow_push_shadow_copy(RID p_source, RID p_framebuffer, const Rect2i &p_rect, const Vector2i &p_source_offset); // decision 0373
 	// This frame, cascades rendered the stock way clear their own rect instead of the whole atlas being cleared (so the
 	// cached cascades keep their content and an unchanged one is neither copied again nor rebuilt in the pyramid).
 	bool fellow_dir_clear_stock_rects = false;

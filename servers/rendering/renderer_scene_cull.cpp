@@ -36,6 +36,7 @@
 #include "core/object/callable_mp.h"
 #include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
+#include "servers/rendering/fellow_positional_shadow_cache.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/fellow_texture_streaming.h"
 #include "servers/rendering/rendering_light_culler.h"
@@ -2662,7 +2663,7 @@ void RendererSceneCull::_fellow_shadow_instance_changed(Instance *p_instance) co
 	const uint64_t frame = RSG::rasterizer->get_frame_number();
 	const uint64_t prev = p_instance->fellow_change_frame;
 	p_instance->fellow_change_frame = frame;
-	if (prev == frame || p_instance->scenario == nullptr || p_instance->array_index < 0 || !Fellow::directional_shadow_cache()) {
+	if (prev == frame || p_instance->scenario == nullptr || p_instance->array_index < 0 || !(Fellow::directional_shadow_cache() || Fellow::positional_shadow_cache())) {
 		return;
 	}
 	if (prev + (uint64_t)Fellow::directional_shadow_cache_static_frames() > frame) {
@@ -2680,7 +2681,8 @@ void RendererSceneCull::_fellow_shadow_fading(Instance *p_instance, bool p_direc
 	// Decision 0260: an instance whose shadow fades (dithered) changes the shadow maps it is in every frame: out of the
 	// directional caches (p_directional: a directional light casts shadows), and its positional lights' shadows drawn
 	// again (as for a moving instance).
-	if (p_directional) {
+	if (p_directional || Fellow::positional_shadow_cache()) {
+		// (Also for the positional caches, decision 0373: a dithered shadow is not static.)
 		_fellow_shadow_instance_changed(p_instance);
 	}
 	if (((1 << p_instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && p_instance->base_data && p_instance->cast_shadows != RSE::SHADOW_CASTING_SETTING_OFF) {
@@ -3102,6 +3104,186 @@ void RendererSceneCull::_fellow_shadow_cache_gc(uint64_t p_frame, bool p_free_al
 	}
 }
 
+void RendererSceneCull::_fellow_shadow_events_gc(Scenario *p_scenario, uint64_t p_frame) {
+	// Forget invalidation events older than 240 frames. A cache that had not checked them yet (a positional light not
+	// drawn since) sees it from fellow_shadow_events_dropped_seq and re-makes its faces.
+	LocalVector<Scenario::FellowShadowInvalidation> &events = p_scenario->fellow_shadow_invalidations;
+	if (events.is_empty() || events[0].frame + 240 >= p_frame) {
+		return;
+	}
+	LocalVector<Scenario::FellowShadowInvalidation> kept;
+	for (const Scenario::FellowShadowInvalidation &ev : events) {
+		if (ev.frame + 240 >= p_frame) {
+			kept.push_back(ev);
+		} else {
+			p_scenario->fellow_shadow_events_dropped_seq = MAX(p_scenario->fellow_shadow_events_dropped_seq, ev.seq);
+		}
+	}
+	events = kept;
+}
+
+/* FellowEngine positional shadow cache (docs/decisions/0373-positional-shadow-cache.md) */
+
+RendererSceneCull::FellowPosShadowCache *RendererSceneCull::_fellow_pos_shadow_cache_prepare(Instance *p_instance, FellowPosShadowMode p_mode, const Transform3D &p_light_transform, RID p_shadow_atlas, Scenario *p_scenario, uint32_t p_visible_layers, const Vector3 &p_cam_pos) {
+	if (!fellow_pos_cache_frame_on) {
+		return nullptr;
+	}
+	InstanceLightData *light = static_cast<InstanceLightData *>(p_instance->base_data);
+	const uint64_t frame = RSG::rasterizer->get_frame_number();
+	const uint64_t static_frames = (uint64_t)Fellow::directional_shadow_cache_static_frames();
+	HashMap<RID, FellowPosShadowCache> &caches = fellow_pos_shadow_caches[p_shadow_atlas];
+	FellowPosShadowCache *c = caches.getptr(light->instance);
+	if (c == nullptr) {
+		FellowPosShadowCache nc;
+		nc.cache_id = fellow_dir_shadow_cache_next_id++; // one id space with the directional caches (one FellowShadowCache)
+		c = &caches.insert(light->instance, nc)->value;
+	}
+	c->last_used_frame = frame;
+
+	const RID base = p_instance->base;
+	const real_t range = RSG::light_storage->light_get_param(base, RSE::LIGHT_PARAM_RANGE);
+	const real_t angle = p_mode == FELLOW_POS_SPOT ? RSG::light_storage->light_get_param(base, RSE::LIGHT_PARAM_SPOT_ANGLE) : 0.0;
+	const bool reverse_cull_face = RSG::light_storage->light_get_reverse_cull_face_mode(base);
+	const uint32_t caster_mask = RSG::light_storage->light_get_shadow_caster_mask(base);
+
+	// The light itself: a light that moves (or whose range, angle, ... change) is drawn the stock way until it has been
+	// unchanged for static_frames frames, as a caster.
+	if (c->scenario != p_scenario->self || c->mode != p_mode || c->range != range || c->spot_angle != angle || c->reverse_cull_face != reverse_cull_face || c->caster_mask != caster_mask || c->visible_layers != p_visible_layers || c->light_transform != p_light_transform) {
+		if (c->valid) {
+			Fellow::positional_shadow_cache_stats().invalidations.increment();
+		}
+		c->valid = false;
+		c->light_changed_frame = frame;
+		c->scenario = p_scenario->self;
+		c->mode = p_mode;
+		c->range = range;
+		c->spot_angle = angle;
+		c->reverse_cull_face = reverse_cull_face;
+		c->caster_mask = caster_mask;
+		c->visible_layers = p_visible_layers;
+		c->light_transform = p_light_transform;
+	}
+	if (c->light_changed_frame + static_frames > frame) {
+		c->rebuilding = false;
+		return nullptr;
+	}
+
+	bool rebuild = false;
+	if (!c->valid) {
+		rebuild = true;
+	} else if (p_scenario->fellow_shadow_events_dropped_seq > c->last_event_seq) {
+		Fellow::positional_shadow_cache_stats().invalidations.increment();
+		rebuild = true; // events it had not checked were forgotten
+	} else {
+		// A caster that was in the faces changed or left (its box where it was cached) within the light's range.
+		const AABB light_box(p_light_transform.origin - Vector3(range, range, range), Vector3(range, range, range) * 2.0);
+		const LocalVector<Scenario::FellowShadowInvalidation> &events = p_scenario->fellow_shadow_invalidations;
+		for (int i = int(events.size()) - 1; i >= 0 && events[i].seq > c->last_event_seq; i--) {
+			const Scenario::FellowShadowInvalidation &ev = events[i];
+			if (ev.prev_change_frame + static_frames <= c->build_frame && ev.aabb.intersects(light_box)) {
+				Fellow::positional_shadow_cache_stats().invalidations.increment();
+				rebuild = true;
+				break;
+			}
+		}
+		if (!rebuild && c->promote && frame >= c->build_frame + static_frames) {
+			Fellow::positional_shadow_cache_stats().promotions.increment();
+			rebuild = true;
+		}
+		const float travel = Fellow::positional_shadow_cache_camera_travel();
+		if (!rebuild && travel > 0.0f && p_cam_pos.distance_to(c->build_cam_pos) > travel) {
+			Fellow::positional_shadow_cache_stats().camera_rebuilds.increment();
+			rebuild = true;
+		}
+		if (Fellow::positional_shadow_cache_debug_mode() == 1) {
+			rebuild = true;
+		}
+	}
+	c->last_event_seq = p_scenario->fellow_shadow_event_seq;
+	c->rebuilding = rebuild;
+	if (rebuild) {
+		c->valid = true;
+		c->promote = false;
+		c->build_frame = frame;
+		c->build_cam_pos = p_cam_pos;
+	}
+	return c;
+}
+
+bool RendererSceneCull::_fellow_pos_shadow_in_cache(const Instance *p_instance, const FellowPosShadowCache *p_cache, uint64_t p_frame, uint32_t &r_promotable) const {
+	// As the directional cache's split (a caster whose shadow depends on nothing but its transform, mesh and material
+	// state, unchanged for static_frames frames); positional shadows have no visibility ranges.
+	const InstanceGeometryData *geom = static_cast<const InstanceGeometryData *>(p_instance->base_data);
+	if (!geom->fellow_shadow_cacheable || p_instance->dynamic_gi) {
+		return false;
+	}
+	const uint64_t static_frames = (uint64_t)Fellow::directional_shadow_cache_static_frames();
+	if (p_instance->fellow_change_frame + static_frames <= p_cache->build_frame) {
+		return true;
+	}
+	if (p_instance->fellow_change_frame + static_frames <= p_frame) {
+		r_promotable++;
+	}
+	return false;
+}
+
+void RendererSceneCull::_fellow_pos_shadow_collect_static(const PagedArray<Instance *> &p_all, const Instance *p_light, uint32_t p_visible_layers, const FellowPosShadowCache *p_cache, RendererSceneRender::RenderShadowData &r_data) const {
+	const uint32_t caster_mask = RSG::light_storage->light_get_shadow_caster_mask(p_light->base);
+	uint32_t promotable = 0;
+	for (int j = 0; j < (int)p_all.size(); j++) {
+		Instance *instance = p_all[j];
+		// The stock caster filter (_light_instance_update_shadow).
+		if (!instance->visible || instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY || !((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask & caster_mask)) {
+			continue;
+		}
+		if (_fellow_pos_shadow_in_cache(instance, p_cache, 0, promotable)) {
+			r_data.fellow.cache_instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
+		}
+	}
+}
+
+void RendererSceneCull::_fellow_pos_shadow_cache_fill(FellowPosShadowCache *p_cache, bool p_rebuild, uint32_t p_promotable, RendererSceneRender::RenderShadowData &r_data) {
+	r_data.fellow.cache_id = p_cache->cache_id;
+	r_data.fellow.rebuild = p_rebuild;
+	r_data.fellow.build_frame = p_cache->build_frame;
+	if (p_promotable > 0) {
+		p_cache->promote = true;
+	}
+	Fellow::PositionalShadowCacheStats &st = Fellow::positional_shadow_cache_stats();
+	st.faces_cached.increment();
+	if (p_rebuild) {
+		st.faces_rebuilt.increment();
+	}
+	st.static_casters.add(r_data.fellow.cache_instances.size());
+	st.dynamic_casters.add(r_data.instances.size());
+}
+
+void RendererSceneCull::_fellow_pos_shadow_cache_gc(uint64_t p_frame, bool p_free_all) {
+	// A light not drawn for 600 frames gives its faces' memory back (its next draw re-makes them: stock's cost).
+	if (fellow_pos_shadow_caches.is_empty()) {
+		return;
+	}
+	LocalVector<RID> empty_atlases;
+	for (KeyValue<RID, HashMap<RID, FellowPosShadowCache>> &at : fellow_pos_shadow_caches) {
+		LocalVector<RID> stale;
+		for (KeyValue<RID, FellowPosShadowCache> &E : at.value) {
+			if (p_free_all || E.value.last_used_frame + 600 < p_frame) {
+				stale.push_back(E.key);
+			}
+		}
+		for (const RID &rid : stale) {
+			scene_render->fellow_directional_shadow_cache_free(at.value[rid].cache_id);
+			at.value.erase(rid);
+		}
+		if (at.value.is_empty()) {
+			empty_atlases.push_back(at.key);
+		}
+	}
+	for (const RID &rid : empty_atlases) {
+		fellow_pos_shadow_caches.erase(rid);
+	}
+}
+
 bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers) {
 	InstanceLightData *light = static_cast<InstanceLightData *>(p_instance->base_data);
 
@@ -3120,6 +3302,8 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 				if (max_shadows_used + 2 > MAX_UPDATE_SHADOWS) {
 					return true;
 				}
+				FellowPosShadowCache *fellow_cache = _fellow_pos_shadow_cache_prepare(p_instance, FELLOW_POS_DUAL_PARABOLOID, light_transform, p_shadow_atlas, p_scenario, p_visible_layers, p_cam_transform.origin);
+				const uint64_t fellow_frame = RSG::rasterizer->get_frame_number();
 				for (int i = 0; i < 2; i++) {
 					//using this one ensures that raster deferred will have it
 					RENDER_TIMESTAMP("Cull OmniLight3D Shadow Paraboloid, Half " + itos(i));
@@ -3156,6 +3340,12 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 
 					RendererSceneRender::RenderShadowData &shadow_data = render_shadow_data[max_shadows_used++];
 
+					if (fellow_cache) {
+						// FellowEngine positional shadow cache (decision 0373): the cached casters, before the tight culling.
+						_fellow_pos_shadow_collect_static(instance_shadow_cull_result, p_instance, p_visible_layers, fellow_cache, shadow_data);
+					}
+					uint32_t fellow_promotable = 0;
+
 					if (!light->is_shadow_update_full()) {
 						light_culler->cull_regular_light(instance_shadow_cull_result);
 					}
@@ -3174,6 +3364,9 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 							}
 						}
 
+						if (fellow_cache && _fellow_pos_shadow_in_cache(instance, fellow_cache, fellow_frame, fellow_promotable)) {
+							continue; // drawn into the faces' cache
+						}
 						shadow_data.instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
 					}
 
@@ -3182,12 +3375,17 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 					RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform, radius, 0, i, 0);
 					shadow_data.light = light->instance;
 					shadow_data.pass = i;
+					if (fellow_cache) {
+						_fellow_pos_shadow_cache_fill(fellow_cache, fellow_cache->rebuilding, fellow_promotable, shadow_data);
+					}
 				}
 			} else { //shadow cube
 
 				if (max_shadows_used + 6 > MAX_UPDATE_SHADOWS) {
 					return true;
 				}
+				FellowPosShadowCache *fellow_cache = _fellow_pos_shadow_cache_prepare(p_instance, FELLOW_POS_CUBE, light_transform, p_shadow_atlas, p_scenario, p_visible_layers, p_cam_transform.origin);
+				const uint64_t fellow_frame = RSG::rasterizer->get_frame_number();
 
 				real_t radius = RSG::light_storage->light_get_param(p_instance->base, RSE::LIGHT_PARAM_RANGE);
 				real_t z_near = MIN(0.025f, radius);
@@ -3239,6 +3437,12 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 
 					RendererSceneRender::RenderShadowData &shadow_data = render_shadow_data[max_shadows_used++];
 
+					if (fellow_cache) {
+						// FellowEngine positional shadow cache (decision 0373): the cached casters, before the tight culling.
+						_fellow_pos_shadow_collect_static(instance_shadow_cull_result, p_instance, p_visible_layers, fellow_cache, shadow_data);
+					}
+					uint32_t fellow_promotable = 0;
+
 					if (!light->is_shadow_update_full()) {
 						light_culler->cull_regular_light(instance_shadow_cull_result);
 					}
@@ -3256,6 +3460,9 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 							}
 						}
 
+						if (fellow_cache && _fellow_pos_shadow_in_cache(instance, fellow_cache, fellow_frame, fellow_promotable)) {
+							continue; // drawn into the faces' cache
+						}
 						shadow_data.instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
 					}
 
@@ -3264,6 +3471,9 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 
 					shadow_data.light = light->instance;
 					shadow_data.pass = i;
+					if (fellow_cache) {
+						_fellow_pos_shadow_cache_fill(fellow_cache, fellow_cache->rebuilding, fellow_promotable, shadow_data);
+					}
 				}
 
 				//restore the regular DP matrix
@@ -3277,6 +3487,8 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 			if (max_shadows_used + 1 > MAX_UPDATE_SHADOWS) {
 				return true;
 			}
+			FellowPosShadowCache *fellow_cache = _fellow_pos_shadow_cache_prepare(p_instance, FELLOW_POS_SPOT, light_transform, p_shadow_atlas, p_scenario, p_visible_layers, p_cam_transform.origin);
+			const uint64_t fellow_frame = RSG::rasterizer->get_frame_number();
 
 			real_t radius = RSG::light_storage->light_get_param(p_instance->base, RSE::LIGHT_PARAM_RANGE);
 			real_t angle = RSG::light_storage->light_get_param(p_instance->base, RSE::LIGHT_PARAM_SPOT_ANGLE);
@@ -3307,6 +3519,12 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 
 			RendererSceneRender::RenderShadowData &shadow_data = render_shadow_data[max_shadows_used++];
 
+			if (fellow_cache) {
+				// FellowEngine positional shadow cache (decision 0373): the cached casters, before the tight culling.
+				_fellow_pos_shadow_collect_static(instance_shadow_cull_result, p_instance, p_visible_layers, fellow_cache, shadow_data);
+			}
+			uint32_t fellow_promotable = 0;
+
 			if (!light->is_shadow_update_full()) {
 				light_culler->cull_regular_light(instance_shadow_cull_result);
 			}
@@ -3324,6 +3542,9 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 						RSG::mesh_storage->mesh_instance_check_for_update(instance->mesh_instance);
 					}
 				}
+				if (fellow_cache && _fellow_pos_shadow_in_cache(instance, fellow_cache, fellow_frame, fellow_promotable)) {
+					continue; // drawn into the faces' cache
+				}
 				shadow_data.instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
 			}
 
@@ -3332,6 +3553,9 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 			RSG::light_storage->light_instance_set_shadow_transform(light->instance, cm, light_transform, radius, 0, 0, 0);
 			shadow_data.light = light->instance;
 			shadow_data.pass = 0;
+			if (fellow_cache) {
+				_fellow_pos_shadow_cache_fill(fellow_cache, fellow_cache->rebuilding, fellow_promotable, shadow_data);
+			}
 
 		} break;
 		case RSE::LIGHT_AREA: {
@@ -4378,16 +4602,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 		if (fellow_cache_on) {
 			// Forget invalidation events no live cache can still need, and free caches of vanished lights/viewports.
-			LocalVector<Scenario::FellowShadowInvalidation> &events = scenario->fellow_shadow_invalidations;
-			if (!events.is_empty() && events[0].frame + 240 < fellow_frame) {
-				LocalVector<Scenario::FellowShadowInvalidation> kept;
-				for (const Scenario::FellowShadowInvalidation &ev : events) {
-					if (ev.frame + 240 >= fellow_frame) {
-						kept.push_back(ev);
-					}
-				}
-				events = kept;
-			}
+			_fellow_shadow_events_gc(scenario, fellow_frame);
 			_fellow_shadow_cache_gc(fellow_frame, false);
 		}
 	}
@@ -4557,6 +4772,20 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		}
 
 		// Positional Shadows
+		// FellowEngine positional shadow cache (decision 0373): main renders of a viewport (not reflection probes).
+		{
+			const uint64_t fellow_frame = RSG::rasterizer->get_frame_number();
+			// (A renderer with the directional cache has the faces' FellowShadowCache and reads FellowShadowCacheOp for omni and
+			// spot lights too: cache_id, rebuild, cache_instances.)
+			fellow_pos_cache_frame_on = Fellow::positional_shadow_cache() && scene_render->fellow_directional_shadow_cache_supported() && p_reflection_probe.is_null() && p_viewport.is_valid() && p_shadow_atlas.is_valid();
+			if (!Fellow::positional_shadow_cache()) {
+				_fellow_pos_shadow_cache_gc(fellow_frame, true);
+			} else if (fellow_pos_cache_gc_frame != fellow_frame) {
+				fellow_pos_cache_gc_frame = fellow_frame;
+				_fellow_shadow_events_gc(scenario, fellow_frame);
+				_fellow_pos_shadow_cache_gc(fellow_frame, false);
+			}
+		}
 		for (uint32_t i = 0; i < (uint32_t)scene_cull_result.lights.size(); i++) {
 			Instance *ins = scene_cull_result.lights[i];
 

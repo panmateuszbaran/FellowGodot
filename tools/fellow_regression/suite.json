@@ -41,7 +41,8 @@
     "hair",
     "interiors",
     "weathering",
-    "weather_gi"
+    "weather_gi",
+    "pos_cache"
    ]
   },
   "stock": {
@@ -53,7 +54,8 @@
     "lights",
     "shadows",
     "materials",
-    "instances"
+    "instances",
+    "pos_cache"
    ],
    "same_as": "base"
   },
@@ -105,6 +107,37 @@
     "crowd"
    ],
    "same_as": "base"
+  },
+  "pos_cache_off": {
+   "comment": "The positional shadow cache (decision 0373) off, casters static after 4 frames (the reference of pos_cache_on and pos_cache_rebuild: a capture is 40 frames, the default 60).",
+   "settings": {
+    "rendering/fellow/shadows/positional_cache": false,
+    "rendering/fellow/shadows/directional_cache_static_frames": 4
+   },
+   "scenes": [
+    "pos_cache"
+   ]
+  },
+  "pos_cache_on": {
+   "comment": "The positional shadow cache with casters static after 4 frames: static casters from the faces' copies, a hidden and a moved one taken out, the moved one taken in again; the picture of the cache off.",
+   "settings": {
+    "rendering/fellow/shadows/directional_cache_static_frames": 4
+   },
+   "scenes": [
+    "pos_cache"
+   ],
+   "same_as": "pos_cache_off"
+  },
+  "pos_cache_rebuild": {
+   "comment": "The positional shadow cache re-made at every draw (its debug mode: the copy path without reuse); the picture of the cache off.",
+   "settings": {
+    "rendering/fellow/shadows/directional_cache_static_frames": 4,
+    "rendering/fellow/shadows/positional_cache_debug_mode": 1
+   },
+   "scenes": [
+    "pos_cache"
+   ],
+   "same_as": "pos_cache_off"
   }
  },
  "scene_tolerance_comment": "A scene's own tolerance, e.g. \"rain\": {\"max_diff\": 0, \"share_over\": 0.001}: the larger of it and the run's, field by field. None needed on lavapipe: the rain scene has no splashes (stock's GPU sub-emitter particles, emitted through an atomic counter in an order that changes between runs: 20 of 147 456 pixels differed between two runs, none without them)."

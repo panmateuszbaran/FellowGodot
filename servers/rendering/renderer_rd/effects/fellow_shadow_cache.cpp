@@ -59,7 +59,7 @@ FellowShadowCache::~FellowShadowCache() {
 }
 
 void FellowShadowCache::_free_entry(Entry &p_entry) {
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < MAX_FACES; i++) {
 		if (p_entry.texture[i].is_valid()) {
 			RD::get_singleton()->free_rid(p_entry.texture[i]); // also frees the dependent framebuffer
 			p_entry.texture[i] = RID();
@@ -70,7 +70,7 @@ void FellowShadowCache::_free_entry(Entry &p_entry) {
 }
 
 RID FellowShadowCache::get_framebuffer(int64_t p_cache_id, int p_cascade, int p_size, RD::DataFormat p_format, uint32_t p_usage_bits) {
-	ERR_FAIL_INDEX_V(p_cascade, 4, RID());
+	ERR_FAIL_INDEX_V(p_cascade, MAX_FACES, RID());
 	Entry &e = entries[p_cache_id];
 	if (e.texture[p_cascade].is_valid() && (e.size[p_cascade] != p_size || e.format[p_cascade] != p_format)) {
 		RD::get_singleton()->free_rid(e.texture[p_cascade]);
@@ -85,7 +85,7 @@ RID FellowShadowCache::get_framebuffer(int64_t p_cache_id, int p_cascade, int p_
 		tf.height = p_size;
 		tf.usage_bits = p_usage_bits;
 		e.texture[p_cascade] = RD::get_singleton()->texture_create(tf, RD::TextureView());
-		RD::get_singleton()->set_resource_name(e.texture[p_cascade], "Fellow directional shadow cache " + itos(p_cascade));
+		RD::get_singleton()->set_resource_name(e.texture[p_cascade], "Fellow shadow cache " + itos(p_cache_id) + " face " + itos(p_cascade));
 		Vector<RID> fb_tex;
 		fb_tex.push_back(e.texture[p_cascade]);
 		e.framebuffer[p_cascade] = RD::get_singleton()->framebuffer_create(fb_tex);
@@ -96,16 +96,23 @@ RID FellowShadowCache::get_framebuffer(int64_t p_cache_id, int p_cascade, int p_
 	return e.framebuffer[p_cascade];
 }
 
-void FellowShadowCache::set_content_valid(int64_t p_cache_id, int p_cascade) {
-	ERR_FAIL_INDEX(p_cascade, 4);
+void FellowShadowCache::set_content_valid(int64_t p_cache_id, int p_cascade, const Vector2i &p_origin) {
+	ERR_FAIL_INDEX(p_cascade, MAX_FACES);
 	Entry *e = entries.getptr(p_cache_id);
 	if (e) {
 		e->content_valid[p_cascade] = true;
+		e->content_origin[p_cascade] = p_origin;
 	}
 }
 
+bool FellowShadowCache::is_content_valid(int64_t p_cache_id, int p_cascade, const Vector2i &p_origin) const {
+	ERR_FAIL_INDEX_V(p_cascade, MAX_FACES, false);
+	const Entry *e = entries.getptr(p_cache_id);
+	return e && e->texture[p_cascade].is_valid() && e->content_valid[p_cascade] && e->content_origin[p_cascade] == p_origin;
+}
+
 void FellowShadowCache::set_static_cost(int64_t p_cache_id, int p_cascade, uint64_t p_build_frame, uint64_t p_primitives, uint32_t p_draws) {
-	ERR_FAIL_INDEX(p_cascade, 4);
+	ERR_FAIL_INDEX(p_cascade, MAX_FACES);
 	Entry *e = entries.getptr(p_cache_id);
 	if (e) {
 		e->cost_build_frame[p_cascade] = p_build_frame;
@@ -115,7 +122,7 @@ void FellowShadowCache::set_static_cost(int64_t p_cache_id, int p_cascade, uint6
 }
 
 bool FellowShadowCache::get_static_cost(int64_t p_cache_id, int p_cascade, uint64_t p_build_frame, uint64_t &r_primitives, uint32_t &r_draws) const {
-	ERR_FAIL_INDEX_V(p_cascade, 4, false);
+	ERR_FAIL_INDEX_V(p_cascade, MAX_FACES, false);
 	const Entry *e = entries.getptr(p_cache_id);
 	if (e == nullptr || e->cost_build_frame[p_cascade] != p_build_frame) {
 		return false;
@@ -126,7 +133,7 @@ bool FellowShadowCache::get_static_cost(int64_t p_cache_id, int p_cascade, uint6
 }
 
 RID FellowShadowCache::get_valid_texture(int64_t p_cache_id, int p_cascade) {
-	ERR_FAIL_INDEX_V(p_cascade, 4, RID());
+	ERR_FAIL_INDEX_V(p_cascade, MAX_FACES, RID());
 	Entry *e = entries.getptr(p_cache_id);
 	if (e && e->texture[p_cascade].is_valid() && e->content_valid[p_cascade]) {
 		return e->texture[p_cascade];
@@ -180,7 +187,7 @@ bool FellowShadowCache::take_lost(int64_t p_cache_id) {
 }
 
 RID FellowShadowCache::get_texture(int64_t p_cache_id, int p_cascade) const {
-	ERR_FAIL_INDEX_V(p_cascade, 4, RID());
+	ERR_FAIL_INDEX_V(p_cascade, MAX_FACES, RID());
 	const Entry *e = entries.getptr(p_cache_id);
 	return e ? e->texture[p_cascade] : RID();
 }
@@ -196,7 +203,7 @@ void FellowShadowCache::free_cache(int64_t p_cache_id) {
 uint64_t FellowShadowCache::get_vram_bytes() const {
 	uint64_t total = 0;
 	for (const KeyValue<int64_t, Entry> &E : entries) {
-		for (int i = 0; i < 4; i++) {
+		for (int i = 0; i < MAX_FACES; i++) {
 			if (E.value.texture[i].is_valid()) {
 				total += (uint64_t)E.value.size[i] * E.value.size[i] * (E.value.format[i] == RD::DATA_FORMAT_D16_UNORM ? 2 : 4);
 			}
@@ -205,7 +212,7 @@ uint64_t FellowShadowCache::get_vram_bytes() const {
 	return total;
 }
 
-void FellowShadowCache::copy(RID p_source_texture, RID p_dst_framebuffer, const Rect2i &p_dst_rect, const Vector2i &p_src_offset, float p_scale, float p_bias) {
+void FellowShadowCache::copy(RID p_source_texture, RID p_dst_framebuffer, const Rect2i &p_dst_rect, const Vector2i &p_src_offset, float p_scale, float p_bias, float p_clamp_max) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -218,8 +225,8 @@ void FellowShadowCache::copy(RID p_source_texture, RID p_dst_framebuffer, const 
 	pc.src_offset[1] = p_src_offset.y;
 	pc.scale = p_scale;
 	pc.bias = p_bias;
-	pc.pad[0] = 0.0;
-	pc.pad[1] = 0.0;
+	pc.clamp_max = p_clamp_max;
+	pc.pad = 0.0;
 
 	RID sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	RD::Uniform u_source(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, p_source_texture }));

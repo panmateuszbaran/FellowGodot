@@ -370,6 +370,7 @@ public:
 		};
 		LocalVector<FellowShadowInvalidation> fellow_shadow_invalidations;
 		uint64_t fellow_shadow_event_seq = 0;
+		uint64_t fellow_shadow_events_dropped_seq = 0; // events up to this sequence number were forgotten (decision 0373)
 
 		Scenario() {
 			indexers[INDEXER_GEOMETRY].set_index(INDEXER_GEOMETRY);
@@ -1276,6 +1277,48 @@ public:
 	void _fellow_shadow_cache_decide(int p_shadow_index, uint64_t p_frame, uint32_t p_visible_layers, Scenario *p_scenario);
 	void _fellow_shadow_cache_fill_render_data(int p_shadow_index, int p_cascade, RendererSceneRender::RenderShadowData &r_data, uint64_t p_frame);
 	void _fellow_shadow_cache_gc(uint64_t p_frame, bool p_free_all);
+
+	// FellowEngine positional shadow cache (docs/decisions/0373-positional-shadow-cache.md): an omni or spot light's
+	// static casters kept per shadow map face (the renderer's FellowShadowCache); when the light's shadow is drawn
+	// again, each face is copied from it and only the other casters are drawn over the copy.
+	enum FellowPosShadowMode : int8_t {
+		FELLOW_POS_SPOT,
+		FELLOW_POS_DUAL_PARABOLOID,
+		FELLOW_POS_CUBE,
+	};
+	struct FellowPosShadowCache {
+		int64_t cache_id = -1;
+		RID scenario;
+		bool valid = false;
+		bool rebuilding = false; // the faces are re-made in the current draw of the light
+		bool promote = false; // casters that became static were drawn over the copy: take them in at a redraw
+		uint64_t build_frame = 0; // casters unchanged since build_frame - static_frames are in the faces
+		uint64_t last_event_seq = 0; // invalidation events up to this sequence number were checked
+		uint64_t last_used_frame = 0;
+		uint64_t light_changed_frame = 0; // the light's own parameters below last changed (drawn the stock way since)
+		Vector3 build_cam_pos;
+		// What the faces were made for (the light's parameters, unchanged since light_changed_frame).
+		Transform3D light_transform;
+		real_t range = 0.0;
+		real_t spot_angle = 0.0;
+		int8_t mode = -1; // FellowPosShadowMode
+		bool reverse_cull_face = false;
+		uint32_t caster_mask = 0;
+		uint32_t visible_layers = 0;
+	};
+	// shadow atlas -> light instance -> cache
+	HashMap<RID, HashMap<RID, FellowPosShadowCache>> fellow_pos_shadow_caches;
+	bool fellow_pos_cache_frame_on = false; // the cache may be used in this render_scene() (main viewport render)
+	uint64_t fellow_pos_cache_gc_frame = 0;
+
+	FellowPosShadowCache *_fellow_pos_shadow_cache_prepare(Instance *p_instance, FellowPosShadowMode p_mode, const Transform3D &p_light_transform, RID p_shadow_atlas, Scenario *p_scenario, uint32_t p_visible_layers, const Vector3 &p_cam_pos);
+	// Splits a face's casters: static ones of the cache into r_data.fellow.cache_instances (from p_all, before the
+	// camera-dependent caster culling: the cache outlives the camera); returns whether p_instance is in the cache.
+	void _fellow_pos_shadow_collect_static(const PagedArray<Instance *> &p_all, const Instance *p_light, uint32_t p_visible_layers, const FellowPosShadowCache *p_cache, RendererSceneRender::RenderShadowData &r_data) const;
+	_FORCE_INLINE_ bool _fellow_pos_shadow_in_cache(const Instance *p_instance, const FellowPosShadowCache *p_cache, uint64_t p_frame, uint32_t &r_promotable) const;
+	void _fellow_pos_shadow_cache_fill(FellowPosShadowCache *p_cache, bool p_rebuild, uint32_t p_promotable, RendererSceneRender::RenderShadowData &r_data);
+	void _fellow_pos_shadow_cache_gc(uint64_t p_frame, bool p_free_all);
+	void _fellow_shadow_events_gc(Scenario *p_scenario, uint64_t p_frame);
 
 	_FORCE_INLINE_ bool _light_instance_update_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers = 0xFFFFFF);
 

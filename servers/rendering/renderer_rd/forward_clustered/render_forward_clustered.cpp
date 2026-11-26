@@ -6232,7 +6232,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			RENDER_TIMESTAMP("Render OmniLight Shadows");
 			// Cube shadows are rendered in their own way.
 			for (const int &index : p_render_data->cube_shadows) {
-				_render_shadow_pass(p_render_data->render_shadows[index].light, p_render_data->shadow_atlas, p_render_data->render_shadows[index].pass, p_render_data->render_shadows[index].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, true, true, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
+				_render_shadow_pass(p_render_data->render_shadows[index].light, p_render_data->shadow_atlas, p_render_data->render_shadows[index].pass, p_render_data->render_shadows[index].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, true, true, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, &p_render_data->render_shadows[index].fellow);
 			}
 		}
 
@@ -6291,7 +6291,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		}
 		//render positional shadows
 		for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
-			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
+			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, &p_render_data->render_shadows[p_render_data->shadows[i]].fellow);
 		}
 
 		_render_shadow_process();
@@ -8142,7 +8142,23 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		// (FellowEngine, decision 0260: not dithered — the cube's depths are filtered into the atlas's paraboloids, which
 		// would average a dither's texels with what lies behind them: a fading caster's shadow stays whole here.)
 		fellow_shadow_cube = true;
-		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, Rect2(), false, true, true, true, p_render_info, p_viewport_size, p_main_cam_transform);
+		if (p_fellow_op != nullptr && p_fellow_op->cache_id >= 0) {
+			// FellowEngine positional shadow cache (docs/decisions/0373-positional-shadow-cache.md). The face is drawn
+			// over the whole framebuffer from its origin: drawn into the cache the same way, the static casters land on
+			// the same texels with the same depths.
+			const int face_size = RD::get_singleton()->framebuffer_get_size(render_fb).x;
+			RID cache_fb = fellow_shadow_cache->get_framebuffer(p_fellow_op->cache_id, p_pass, face_size, RendererRD::LightStorage::get_cubemap_depth_format(), RendererRD::LightStorage::get_cubemap_depth_usage_bits());
+			if (p_fellow_op->rebuild || !fellow_shadow_cache->is_content_valid(p_fellow_op->cache_id, p_pass)) {
+				_render_shadow_append(cache_fb, p_fellow_op->cache_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, Rect2(), false, true, true, true, p_render_info, p_viewport_size, p_main_cam_transform);
+				fellow_shadow_cache->set_content_valid(p_fellow_op->cache_id, p_pass);
+			}
+			_fellow_push_shadow_copy(fellow_shadow_cache->get_texture(p_fellow_op->cache_id, p_pass), render_fb, Rect2i(0, 0, face_size, face_size), Vector2i());
+			if (p_instances.size() > 0) {
+				_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, Rect2(), false, false, false, true, p_render_info, p_viewport_size, p_main_cam_transform);
+			}
+		} else {
+			_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, Rect2(), false, true, true, true, p_render_info, p_viewport_size, p_main_cam_transform);
+		}
 		fellow_shadow_cube = false;
 		if (finalize_cubemap) {
 			_render_shadow_process();
@@ -8234,6 +8250,23 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 			fellow_pending_caster_planes = nullptr;
 			_fellow_mark_dir_atlas_dirty(atlas_rect);
 		}
+	} else if (p_fellow_op != nullptr && p_fellow_op->cache_id >= 0 && (light_storage->light_get_type(base) == RSE::LIGHT_SPOT || light_storage->light_get_type(base) == RSE::LIGHT_OMNI)) {
+		// FellowEngine positional shadow cache (docs/decisions/0373-positional-shadow-cache.md): a spot light's map or
+		// an omni light's paraboloid. Its static casters are drawn into the atlas rect exactly as stock draws them (the
+		// rasterization depends on where the rect is), and the rect is copied out into the cache; otherwise the cache
+		// is copied in. The other casters are drawn over it.
+		const bool use_16_bits = light_storage->shadow_atlas_get_use_16_bits(p_shadow_atlas);
+		RID cache_fb = fellow_shadow_cache->get_framebuffer(p_fellow_op->cache_id, p_pass, atlas_rect.size.x, RendererRD::LightStorage::get_shadow_atlas_depth_format(use_16_bits), RendererRD::LightStorage::get_shadow_atlas_depth_usage_bits());
+		if (p_fellow_op->rebuild || !fellow_shadow_cache->is_content_valid(p_fellow_op->cache_id, p_pass, atlas_rect.position)) {
+			_render_shadow_append(render_fb, p_fellow_op->cache_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, using_dual_paraboloid, using_dual_paraboloid_flip, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, p_clear_region, p_open_pass, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
+			_fellow_push_shadow_copy(light_storage->shadow_atlas_get_texture(p_shadow_atlas), cache_fb, Rect2i(Point2i(), atlas_rect.size), atlas_rect.position);
+			fellow_shadow_cache->set_content_valid(p_fellow_op->cache_id, p_pass, atlas_rect.position);
+		} else {
+			_fellow_push_shadow_copy(fellow_shadow_cache->get_texture(p_fellow_op->cache_id, p_pass), render_fb, atlas_rect, Vector2i());
+		}
+		if (p_instances.size() > 0) {
+			_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, using_dual_paraboloid, using_dual_paraboloid_flip, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, false, false, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
+		}
 	} else {
 		bool clear_region = p_clear_region;
 		if (light_storage->light_get_type(base) == RSE::LIGHT_DIRECTIONAL) {
@@ -8253,6 +8286,30 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, using_dual_paraboloid, using_dual_paraboloid_flip, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, clear_region, p_open_pass, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
 		fellow_pending_caster_planes = nullptr;
 	}
+}
+
+void RenderForwardClustered::_fellow_push_shadow_copy(RID p_source, RID p_framebuffer, const Rect2i &p_rect, const Vector2i &p_source_offset) {
+	// A shadow pass that copies depths as they are (decision 0373), run in order with the others in
+	// _render_shadow_end(): p_rect of p_framebuffer = p_source from p_source_offset.
+	ERR_FAIL_COND(p_source.is_null());
+	SceneState::ShadowPass copy_pass;
+	copy_pass.fellow_copy = true;
+	copy_pass.element_from = 0;
+	copy_pass.element_count = 0;
+	copy_pass.pass_mode = PASS_MODE_SHADOW;
+	copy_pass.lod_distance_multiplier = 0.0;
+	copy_pass.screen_mesh_lod_threshold = 0.0;
+	copy_pass.framebuffer = p_framebuffer;
+	copy_pass.rect = p_rect;
+	copy_pass.clear_depth = false;
+	copy_pass.flip_cull = false;
+	copy_pass.uniform_buffer_index = 0;
+	copy_pass.fellow_source = p_source;
+	copy_pass.fellow_source_offset = p_source_offset;
+	copy_pass.fellow_scale = 1.0;
+	copy_pass.fellow_bias = 0.0;
+	copy_pass.fellow_clamp_max = 1.0;
+	scene_state.shadow_passes.push_back(copy_pass);
 }
 
 Rect2i RenderForwardClustered::_fellow_dir_needed_rect(const FellowDirCascade &p_cascade, const RenderSceneDataRD *p_scene_data) const {
@@ -8887,7 +8944,7 @@ void RenderForwardClustered::_render_shadow_end() {
 
 	for (SceneState::ShadowPass &shadow_pass : scene_state.shadow_passes) {
 		if (shadow_pass.fellow_copy) {
-			fellow_shadow_cache->copy(shadow_pass.fellow_source, shadow_pass.framebuffer, shadow_pass.rect, shadow_pass.fellow_source_offset, shadow_pass.fellow_scale, shadow_pass.fellow_bias);
+			fellow_shadow_cache->copy(shadow_pass.fellow_source, shadow_pass.framebuffer, shadow_pass.rect, shadow_pass.fellow_source_offset, shadow_pass.fellow_scale, shadow_pass.fellow_bias, shadow_pass.fellow_clamp_max);
 			continue;
 		}
 		RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + shadow_pass.element_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + shadow_pass.element_from, shadow_pass.element_count, shadow_pass.flip_cull, shadow_pass.pass_mode, 0, true, false, shadow_pass.rp_uniform_set, false, Vector2(), shadow_pass.lod_distance_multiplier, shadow_pass.screen_mesh_lod_threshold, 1, shadow_pass.element_from);
