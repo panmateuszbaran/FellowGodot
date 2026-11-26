@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 223 — Each weather's sky (2026-11-26)
+
+- Decision 0365. The rooftops' weather keys light the clouds per weather: the snow's sky a bright white grey (it had
+  been a storm's dark grey), a blizzard's lighter, overcast and rain grey, a storm dark as before; eased as the weather
+  turns.
+
 ## Milestone 222 — The walkers go home at night (2026-11-26)
 
 - Decision 0364. At night most of the rooftops square's walkers without a lantern go home down the nearest street and

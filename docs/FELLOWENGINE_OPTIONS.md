@@ -828,6 +828,8 @@ Milestone 221 (decision 0363): the moon's face (`atmosphere_sky.gdshader`: `moon
 `moon_earthshine` 0.004; `rooftops_night.gd`: `moon_disk` 0.004; tools: `--night_set=disk:<share>`, `--day_at=<s>`,
 `climb_look.gd --view=moon`). Milestone 222 (decision 0364): the walkers home at night (`rooftops_crowd.gd`:
 `WALKERS_HOME` 0.75).
+Milestone 223 (decision 0365): the clouds' light per weather (`rooftops_weather.gd`: `SKY_DIM` 0.4 overcast, 0.7 rain,
+0.85 a storm, 0 snow, 0.2 a blizzard; tools: `--weather_sky_dim=<share>`).
 
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
