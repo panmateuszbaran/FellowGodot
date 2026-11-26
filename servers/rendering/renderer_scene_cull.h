@@ -742,6 +742,7 @@ public:
 		RSE::LightBakeMode bake_mode;
 		uint32_t max_sdfgi_cascade = 2;
 		uint32_t cull_mask = 0xFFFFFFFF;
+		uint32_t fellow_shadow_wait = 0; // shadows/positional_update_budget (decision 0380): renders its redraw was put off
 
 	private:
 		// Instead of a single dirty flag, we maintain a count

@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 238 — A budget for the lights' shadows (2026-11-26)
+
+- Decision 0380, `shadows/positional_update_budget` (0, off) and `positional_update_max_wait` (8): at most N omni and
+  spot lights' shadows drawn again in a render — lights given a new place in the atlas and lights that waited 8
+  renders first, then the largest on screen times the renders waited —, the others keeping an earlier frame's shadow.
+  16 lights and 8 moving balls (lavapipe): budget 4 draws a quarter of the shadows at 45.6 dB against no budget; at or
+  under the budget the image is bit for bit. Two regression groups (`pos_budget_all`, `pos_budget`).
+
 ## Milestone 237 — A hierarchy of clusters (Nanite's level of detail) (2026-11-26)
 
 - Decision 0379, `geometry/cluster_dag` (off). Large static surfaces get a hierarchy of 128-triangle clusters simplified

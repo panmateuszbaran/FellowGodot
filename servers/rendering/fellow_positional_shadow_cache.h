@@ -55,6 +55,18 @@ inline int positional_shadow_cache_debug_mode() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/positional_cache_debug_mode");
 }
 
+// The omni and spot lights' shadows drawn again in one render at most this many (0: no limit, stock): when more of
+// them need it (something moved in their range), the largest on screen and the longest waiting go first; the others
+// keep their shadow of an earlier frame (moving casters' shadows lag) — but a light given a new place in the atlas is
+// always drawn, and one that has waited positional_update_max_wait renders is drawn whatever the budget. Read every
+// frame. Changes the image while over the budget.
+inline int positional_update_budget() {
+	return shadows_enabled() ? MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/positional_update_budget")) : 0;
+}
+inline int positional_update_max_wait() {
+	return MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/positional_update_max_wait"));
+}
+
 struct PositionalShadowCacheStats {
 	SafeNumeric<uint64_t> faces_cached; // positional faces drawn from their cache
 	SafeNumeric<uint64_t> faces_rebuilt; // of those, faces whose cache was made again
@@ -63,6 +75,10 @@ struct PositionalShadowCacheStats {
 	SafeNumeric<uint64_t> camera_rebuilds; // caches made again because the camera moved (mesh LOD)
 	SafeNumeric<uint64_t> static_casters; // casters left to the cache (summed over the faces drawn)
 	SafeNumeric<uint64_t> dynamic_casters; // casters drawn over the cache (summed over the faces drawn)
+	SafeNumeric<uint64_t> budget_drawn; // positional shadows drawn again under the update budget
+	SafeNumeric<uint64_t> budget_deferred; // positional shadows the budget left for a later render
+	SafeNumeric<uint64_t> budget_forced; // of those drawn, ones that had waited max_wait renders
+	SafeNumeric<uint64_t> budget_new_place; // of those drawn, ones given a new place in the atlas
 };
 PositionalShadowCacheStats &positional_shadow_cache_stats();
 

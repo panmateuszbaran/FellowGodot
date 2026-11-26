@@ -243,6 +243,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/shadows/positional_cache", true); // decision 0373
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shadows/positional_cache_camera_travel", PROPERTY_HINT_RANGE, "0,50,0.1,suffix:m"), 4.0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/positional_cache_debug_mode", PROPERTY_HINT_ENUM, "Normal,Rebuild Every Draw"), 0);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/positional_update_budget", PROPERTY_HINT_RANGE, "0,256,1"), 0); // decision 0380
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/positional_update_max_wait", PROPERTY_HINT_RANGE, "1,120,1"), 8);
 	GLOBAL_DEF("rendering/fellow/shadows/skip_backfacing_directional", true);
 	GLOBAL_DEF("rendering/fellow/shadows/skip_unblended_cascade", true);
 	GLOBAL_DEF("rendering/fellow/shadows/skip_backfacing_positional", true);
@@ -694,6 +696,10 @@ Dictionary Fellow::get_stats_dictionary() {
 		d["shadow_pos_cache_camera_rebuilds"] = ps.camera_rebuilds.get();
 		d["shadow_pos_cache_static_casters"] = ps.static_casters.get();
 		d["shadow_pos_cache_dynamic_casters"] = ps.dynamic_casters.get();
+		d["shadow_pos_budget_drawn"] = ps.budget_drawn.get(); // decision 0380
+		d["shadow_pos_budget_deferred"] = ps.budget_deferred.get();
+		d["shadow_pos_budget_forced"] = ps.budget_forced.get();
+		d["shadow_pos_budget_new_place"] = ps.budget_new_place.get();
 	}
 	{
 		const ClusterDagStats &cs = cluster_dag_stats(); // decision 0379

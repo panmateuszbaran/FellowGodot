@@ -44,6 +44,7 @@ game's project is before it runs on a template. On the cloud's two CPUs a run ta
 | `post` | atmosphere, clouds, bloom, light shafts, vignette, local exposure | `sky` |
 | `rt` | ray-traced AO, sun shadows, reflections, GI (lavapipe has `VK_KHR_ray_query`) | `raytracing` |
 | `pos_cache_off`, `pos_cache_on`, `pos_cache_rebuild` | casters static after 4 frames (a capture is 40); the positional shadow cache off, on, made again at every draw | `pos_cache` — `_on` and `_rebuild` must match `_off` exactly (decision 0373) |
+| `pos_budget_all`, `pos_budget` | the positional shadows' update budget at 3 (the scene's lights: all drawn) and at 1 (one a render, the others lagging) | `pos_cache` — `_all` must match `base` exactly; `pos_budget` has its own golden (decision 0380) |
 
 Pictures are 512 × 288, not a quarter of 1080p: at widths like 480, 960 and 1920 stock leaves the last column of
 SSAO's and SSIL's output unwritten (decision 0067; FellowEngine writes it), so stock's frame is not defined there and

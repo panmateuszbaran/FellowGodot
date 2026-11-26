@@ -4786,6 +4786,17 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				_fellow_pos_shadow_cache_gc(fellow_frame, false);
 			}
 		}
+		// FellowEngine shadows/positional_update_budget (decision 0380): the lights whose shadow wants drawing again.
+		const int fellow_budget = Fellow::positional_update_budget();
+		struct FellowBudgetLight {
+			uint32_t order = 0;
+			Instance *ins = nullptr;
+			bool must = false;
+			bool new_place = false;
+			float score = 0.0f;
+		};
+		thread_local LocalVector<FellowBudgetLight> fellow_budget_lights;
+		fellow_budget_lights.clear();
 		for (uint32_t i = 0; i < (uint32_t)scene_cull_result.lights.size(); i++) {
 			Instance *ins = scene_cull_result.lights[i];
 
@@ -4925,6 +4936,18 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 			bool redraw = RSG::light_storage->shadow_atlas_update_light(p_shadow_atlas, light->instance, coverage, light->last_version);
 
+			// FellowEngine shadows/positional_update_budget (decision 0380): the redraws decided after every light is seen.
+			if (fellow_budget > 0 && redraw) {
+				FellowBudgetLight bl;
+				bl.order = i;
+				bl.ins = ins;
+				bl.new_place = RSG::light_storage->fellow_shadow_atlas_last_reallocated();
+				bl.must = bl.new_place || light->fellow_shadow_wait + 1 >= uint32_t(Fellow::positional_update_max_wait());
+				bl.score = coverage * float(1 + light->fellow_shadow_wait);
+				fellow_budget_lights.push_back(bl);
+				continue;
+			}
+
 			if (redraw && max_shadows_used < MAX_UPDATE_SHADOWS) {
 				//must redraw!
 				RENDER_TIMESTAMP("> Render Light3D " + itos(i));
@@ -4937,6 +4960,63 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 					light->make_shadow_dirty();
 				}
 			}
+		}
+
+		// FellowEngine shadows/positional_update_budget (decision 0380): the lights that must be drawn (a new place in the
+		// atlas, or waited max_wait renders), then the largest on screen times the renders waited, up to the budget, drawn in
+		// the order stock would have drawn them; the others keep their shadow and are dirty again (asked for next render).
+		if (!fellow_budget_lights.is_empty()) {
+			LocalVector<uint32_t> rank;
+			rank.resize(fellow_budget_lights.size());
+			for (uint32_t k = 0; k < rank.size(); k++) {
+				rank[k] = k;
+			}
+			const FellowBudgetLight *bls = fellow_budget_lights.ptr();
+			struct ByPriority {
+				const FellowBudgetLight *b = nullptr;
+				bool operator()(uint32_t p_a, uint32_t p_b) const {
+					if (b[p_a].must != b[p_b].must) {
+						return b[p_a].must;
+					}
+					if (b[p_a].score != b[p_b].score) {
+						return b[p_a].score > b[p_b].score;
+					}
+					return b[p_a].order < b[p_b].order;
+				}
+			};
+			SortArray<uint32_t, ByPriority> sorter;
+			sorter.compare.b = bls;
+			sorter.sort(rank.ptr(), rank.size());
+			LocalVector<uint8_t> chosen;
+			chosen.resize_initialized(fellow_budget_lights.size());
+			const uint32_t budget = uint32_t(Fellow::positional_update_budget());
+			for (uint32_t k = 0; k < rank.size(); k++) {
+				if (k < budget || bls[rank[k]].must) {
+					chosen[rank[k]] = 1;
+				}
+			}
+			Fellow::PositionalShadowCacheStats &ps = Fellow::positional_shadow_cache_stats();
+			for (uint32_t k = 0; k < fellow_budget_lights.size(); k++) {
+				Instance *ins = bls[k].ins;
+				InstanceLightData *light = static_cast<InstanceLightData *>(ins->base_data);
+				if (chosen[k] && max_shadows_used < MAX_UPDATE_SHADOWS) {
+					light->fellow_shadow_wait = 0;
+					ps.budget_drawn.increment();
+					if (bls[k].new_place) {
+						ps.budget_new_place.increment();
+					} else if (bls[k].must) {
+						ps.budget_forced.increment();
+					}
+					if (_light_instance_update_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers)) {
+						light->make_shadow_dirty();
+					}
+				} else {
+					light->fellow_shadow_wait++;
+					ps.budget_deferred.increment();
+					light->make_shadow_dirty();
+				}
+			}
+			fellow_budget_lights.clear();
 		}
 	}
 

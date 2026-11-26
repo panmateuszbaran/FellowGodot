@@ -138,6 +138,25 @@
     "pos_cache"
    ],
    "same_as": "pos_cache_off"
+  },
+  "pos_budget_all": {
+   "comment": "The positional shadows' update budget (decision 0380) at 3, as many as the scene's lights: every shadow drawn again when it wants it, the picture without a budget.",
+   "settings": {
+    "rendering/fellow/shadows/positional_update_budget": 3
+   },
+   "scenes": [
+    "pos_cache"
+   ],
+   "same_as": "base"
+  },
+  "pos_budget": {
+   "comment": "The positional shadows' update budget at 1 (decision 0380): one of the three lights' shadows drawn again a render, the largest on screen times the renders waited first, the others' shadows of the ball lagging.",
+   "settings": {
+    "rendering/fellow/shadows/positional_update_budget": 1
+   },
+   "scenes": [
+    "pos_cache"
+   ]
   }
  },
  "scene_tolerance_comment": "A scene's own tolerance, e.g. \"rain\": {\"max_diff\": 0, \"share_over\": 0.001}: the larger of it and the run's, field by field. None needed on lavapipe: the rain scene has no splashes (stock's GPU sub-emitter particles, emitted through an atomic counter in an order that changes between runs: 20 of 147 456 pixels differed between two runs, none without them)."

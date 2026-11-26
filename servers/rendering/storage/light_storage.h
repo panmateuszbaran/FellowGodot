@@ -204,6 +204,9 @@ public:
 	virtual void shadow_atlas_set_size(RID p_atlas, int p_size, bool p_use_16_bits = true) = 0;
 	virtual void shadow_atlas_set_quadrant_subdivision(RID p_atlas, int p_quadrant, int p_subdivision) = 0;
 	virtual bool shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version) = 0;
+	// FellowEngine (shadows/positional_update_budget): whether the last shadow_atlas_update_light() gave the light a new
+	// place in the atlas (its shadow must be drawn there: what is there is another light's). Unknown: true.
+	virtual bool fellow_shadow_atlas_last_reallocated() const { return true; }
 
 	virtual void shadow_atlas_update(RID p_atlas) = 0;
 

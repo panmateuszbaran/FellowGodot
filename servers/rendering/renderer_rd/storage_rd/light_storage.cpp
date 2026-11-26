@@ -2696,6 +2696,7 @@ bool LightStorage::_shadow_atlas_find_omni_shadows(ShadowAtlas *shadow_atlas, in
 }
 
 bool LightStorage::shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version) {
+	fellow_last_reallocated = false; // (FellowEngine: true where the light is given a new place, below)
 	ShadowAtlas *shadow_atlas = shadow_atlas_owner.get_or_null(p_atlas);
 	ERR_FAIL_NULL_V(shadow_atlas, false);
 
@@ -2814,6 +2815,7 @@ bool LightStorage::shadow_atlas_update_light(RID p_atlas, RID p_light_instance, 
 
 		//update it in map
 		shadow_atlas->shadow_owners[p_light_instance] = new_key;
+		fellow_last_reallocated = true;
 		//make it dirty, as it should redraw anyway
 		return true;
 	}
