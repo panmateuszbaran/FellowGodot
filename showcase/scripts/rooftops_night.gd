@@ -40,9 +40,10 @@ var _sun_size := 2.5
 var _sky_mat: ShaderMaterial
 var _sky_intensity := 1.0
 var _disk := -1.0 # the sky's sun_disk_energy by day
-## The moon's disk this much of the sun's (its glow at night's exposure; milestone 221: its face — a half moon, its seas —
-## drawn by the sky's shader, moon_sun the sun's direction under the horizon). Tools: --night_set=disk:<share>.
-var moon_disk := 0.1
+## The moon's disk this much of the sun's: milestone 221, its face — a half moon lit from the sun under the horizon, its
+## seas — drawn by the sky's shader (moon, moon_sun), as bright as the night's exposure shows it (0.1, milestone 216's
+## glow, blew it out white). Tools: --night_set=disk:<share>.
+var moon_disk := 0.004
 var _glass: Resource
 var _glass_lamps := 0.0
 var _glass_daylight := 1.0

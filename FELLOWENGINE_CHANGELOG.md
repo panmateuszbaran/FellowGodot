@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 222 — The walkers go home at night (2026-11-26)
+
+- Decision 0364. At night most of the rooftops square's walkers without a lantern go home down the nearest street and
+  come back to their ways by day: 28 of its 63 people away at night (14 before); the lantern carriers stay.
+
+## Milestone 221 — The moon's face (2026-11-26)
+
+- Decision 0363. The rooftops' night sky draws the moon's face: a half moon lit from where the sun set (Lommel-Seeliger's
+  law, earthshine), its seas and bright craters, as bright as the night's exposure shows it (no longer a white glow);
+  the stars stay points through a long lens (`climb_look.gd --view=moon`).
+
 ## Milestone 220 — The gas volumes' steps recorded together (2026-11-26)
 
 - Decision 0362. `rendering/fellow/fluid/gas_batch_steps` (on, exact): the gas volumes' steps of a physics frame are

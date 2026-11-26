@@ -824,6 +824,10 @@ s, `SUNSET_SHARE` 0.6, `moon_energy` 0.15, `moon_sky_share` 0.1, `sky_night` 0.1
 Milestone 218 (decision 0360): the people at night (`rooftops_crowd.gd`: `NIGHT_AWAY` 0.6, `LANTERN_EVERY` 3).
 Milestone 219 (decision 0361): the brazier's fire light's shadow dual paraboloid (`rooftops_fire.gd`; tools:
 `climb_look.gd --omni_dp=all|fire|lamps|cube`).
+Milestone 221 (decision 0363): the moon's face (`atmosphere_sky.gdshader`: `moon` 0-1, `moon_sun` the sun's direction,
+`moon_earthshine` 0.004; `rooftops_night.gd`: `moon_disk` 0.004; tools: `--night_set=disk:<share>`, `--day_at=<s>`,
+`climb_look.gd --view=moon`). Milestone 222 (decision 0364): the walkers home at night (`rooftops_crowd.gd`:
+`WALKERS_HOME` 0.75).
 
 ## Vehicles' marks, smoke and sounds (milestone 79)
 
