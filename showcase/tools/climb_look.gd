@@ -799,6 +799,15 @@ func _place_camera(p_first: bool) -> void:
 			_cam.look_at(Vector3(12.6, 5.2, -11.5), Vector3.UP)
 		return
 	if _program == "weather":
+		if _view == "moon":
+			# (milestone 221: the sky's disk — the moon at night — through a long lens from the square's corner, following
+			# the sky's light as it moves)
+			var ss := _cam.get_parent().get_node_or_null(^"SkySun") as Light3D
+			_cam.fov = 6.0
+			_cam.global_position = Vector3(7.5, 2.4, 11.5)
+			if ss:
+				_cam.look_at(_cam.global_position + ss.global_basis.z * 100.0, Vector3.UP)
+			return
 		if p_first:
 			var at := Vector3(-7.2, 0.0, 4.2)
 			if _view == "brazier":

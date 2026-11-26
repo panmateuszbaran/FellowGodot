@@ -39,7 +39,9 @@ var _sun_size := 2.5
 var _sky_mat: ShaderMaterial
 var _sky_intensity := 1.0
 var _disk := -1.0 # the sky's sun_disk_energy by day
-const MOON_DISK := 0.1 # the moon's disk this much of the sun's (its glow at night's exposure)
+## The moon's disk this much of the sun's (its glow at night's exposure; milestone 221: its face — a half moon, its seas —
+## drawn by the sky's shader, moon_sun the sun's direction under the horizon). Tools: --night_set=disk:<share>.
+var moon_disk := 0.1
 var _glass: Resource
 var _glass_lamps := 0.0
 var _glass_daylight := 1.0
@@ -89,6 +91,8 @@ func _ready() -> void:
 						moon_sky_share = v
 					"sky":
 						sky_night = v
+					"disk":
+						moon_disk = v
 	# (applied from the first frame: rooftops.gd sets the sky's disk after this node is ready)
 
 
@@ -169,7 +173,11 @@ func _apply() -> void:
 		if _disk < 0.0:
 			var v: Variant = _sky_mat.get_shader_parameter("sun_disk_energy")
 			_disk = float(v) if v != null else 1.0
-		_sky_mat.set_shader_parameter("sun_disk_energy", _disk * (MOON_DISK if _t > SUNSET_SHARE else 1.0))
+		_sky_mat.set_shader_parameter("sun_disk_energy", _disk * (moon_disk if _t > SUNSET_SHARE else 1.0))
+		# (milestone 221) the disk the moon's face, lit by the sun where it set, SUNSET_UNDER under the horizon
+		_sky_mat.set_shader_parameter("moon", 1.0 if _t > SUNSET_SHARE else 0.0)
+		var under := deg_to_rad(-SUNSET_UNDER)
+		_sky_mat.set_shader_parameter("moon_sun", Vector3(_sun_flat.x * cos(under), sin(under), _sun_flat.y * cos(under)))
 	if _glass:
 		_glass.set("lamp_share", lerpf(_glass_lamps, WINDOW_LAMPS, night))
 		_glass.set("daylight", lerpf(_glass_daylight, WINDOW_DAYLIGHT, night))

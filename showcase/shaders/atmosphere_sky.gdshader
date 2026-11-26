@@ -35,6 +35,12 @@ uniform float sun_disk_energy = 1.0;
 // atmosphere's about its luminance: a golden hour's sky is pale (the sun's light reddened through five air masses, the
 // multiple scattering white), the deep blue of a painted sky (the owner: as the Witcher 3's) an artist's. 1: none.
 uniform float sky_saturation = 1.0;
+// Milestone 221: the disk is the moon's (rooftops_night.gd: 0 the sun's, 1 the moon's) — lit from moon_sun (the sun's
+// direction, under the horizon at night: its phase and its terminator) by Lommel-Seeliger's law (the full moon as bright
+// at its limb as at its centre), its seas and bright craters a pattern on its face, earthshine on its dark side.
+uniform float moon = 0.0;
+uniform vec3 moon_sun = vec3(0.0, -1.0, 0.0);
+uniform float moon_earthshine = 0.004;
 
 float star_hash(vec3 p) {
 	p = fract(p * 0.3183099 + 0.1);
@@ -42,16 +48,94 @@ float star_hash(vec3 p) {
 	return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
 }
 
-vec3 stars(vec3 d) {
+vec3 stars(vec3 d, float p_pixel) {
 	vec3 cell = floor(d * 320.0);
 	float h = star_hash(cell);
 	if (h < 0.996) {
 		return vec3(0.0);
 	}
 	vec3 centre = (cell + 0.5) / 320.0;
-	float f = smoothstep(0.0024, 0.0, length(d - normalize(centre)));
+	// (milestone 221: a point however narrow the view — its glow as many pixels across as at 50 degrees, within its cell)
+	float f = smoothstep(0.0024 * min(1.0, p_pixel / 0.0004), 0.0, length(d - normalize(centre)));
 	float tint = star_hash(cell + 7.0);
 	return mix(vec3(1.0, 0.85, 0.7), vec3(0.75, 0.85, 1.0), tint) * f * (h - 0.996) * 250.0;
+}
+
+float moon_hash(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float moon_noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(moon_hash(i), moon_hash(i + vec2(1.0, 0.0)), f.x), mix(moon_hash(i + vec2(0.0, 1.0)), moon_hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+float moon_fbm(vec2 p) {
+	return 0.5 * moon_noise(p) + 0.25 * moon_noise(p * 2.03 + 3.1) + 0.125 * moon_noise(p * 4.07 + 7.7) + 0.125 * moon_noise(p * 8.11 + 1.9);
+}
+
+// A sea's share of the face round c, radii r (a Gaussian: the seas' shapes the sum of a few, their shores cut ragged).
+float moon_sea(vec2 p, vec2 c, vec2 r) {
+	vec2 v = (p - c) / r;
+	return exp(-dot(v, v));
+}
+
+// A bright crater (its ejecta: a soft spot).
+float moon_crater(vec2 p, vec2 c, float r) {
+	vec2 v = (p - c) / r;
+	return exp(-dot(v, v));
+}
+
+// The face's albedo relative to its highlands' (p: the disk of radius 1, x to the right and y up as the face is seen from
+// the northern hemisphere): the large seas where they are (Imbrium, Serenitatis, Tranquillitatis, Crisium, Fecunditatis,
+// Nectaris, Procellarum, Nubium, Humorum, Frigoris) with ragged shores, the highlands mottled, Tycho and its rays,
+// Copernicus, Kepler and Aristarchus bright.
+float moon_albedo(vec2 p) {
+	vec2 w = p + 0.05 * (vec2(moon_fbm(p * 5.0 + 2.0), moon_fbm(p * 5.0 + 9.0)) - 0.5);
+	float f = moon_sea(w, vec2(-0.30, 0.42), vec2(0.27, 0.22)); // Imbrium
+	f += moon_sea(w, vec2(-0.12, 0.52), vec2(0.12, 0.10));
+	f += moon_sea(w, vec2(0.14, 0.42), vec2(0.15, 0.14)); // Serenitatis
+	f += moon_sea(w, vec2(0.31, 0.15), vec2(0.19, 0.15)); // Tranquillitatis
+	f += moon_sea(w, vec2(0.20, 0.02), vec2(0.10, 0.08));
+	f += moon_sea(w, vec2(0.74, 0.30), vec2(0.11, 0.09)); // Crisium
+	f += moon_sea(w, vec2(0.60, -0.13), vec2(0.11, 0.16)); // Fecunditatis
+	f += moon_sea(w, vec2(0.40, -0.32), vec2(0.08, 0.08)); // Nectaris
+	f += moon_sea(w, vec2(-0.64, 0.10), vec2(0.20, 0.30)); // Procellarum
+	f += moon_sea(w, vec2(-0.55, -0.22), vec2(0.18, 0.20));
+	f += moon_sea(w, vec2(-0.40, 0.10), vec2(0.14, 0.18));
+	f += moon_sea(w, vec2(-0.20, -0.38), vec2(0.16, 0.11)); // Nubium
+	f += moon_sea(w, vec2(-0.47, -0.46), vec2(0.08, 0.08)); // Humorum
+	f += moon_sea(w, vec2(-0.12, 0.77), vec2(0.36, 0.06)); // Frigoris
+	f += moon_sea(w, vec2(-0.04, 0.16), vec2(0.10, 0.08)); // Vaporum, Insularum
+	float sea = smoothstep(0.30, 0.62, f + 0.35 * (moon_fbm(p * 9.0 + 4.0) - 0.5));
+	float a = mix(1.0, 0.56, sea);
+	a *= 0.8 + 0.4 * moon_fbm(p * 15.0 + 5.0);
+	// Tycho, its rays over the southern highlands
+	vec2 t = p - vec2(-0.12, -0.74);
+	float ray = pow(moon_noise(vec2(atan(t.y, t.x) * 7.0, 0.5)), 5.0) * exp(-length(t) * 2.2);
+	a += 0.6 * moon_crater(p, vec2(-0.12, -0.74), 0.03) + 0.3 * ray;
+	a += 0.35 * moon_crater(p, vec2(-0.30, 0.12), 0.03) + 0.25 * moon_crater(p, vec2(-0.50, 0.10), 0.022);
+	a += 0.45 * moon_crater(p, vec2(-0.66, 0.36), 0.018);
+	return a;
+}
+
+// The moon's disk round m (LIGHT0's direction) of half-angle h, seen along d: its luminance relative to the sun disk's
+// mean (a full moon's centre 1), lit from moon_sun; and how much of the pixel it covers.
+float moon_light(vec3 d, vec3 m, float h, out float r_cover) {
+	vec3 right = cross(m, vec3(0.0, 1.0, 0.0));
+	right = length(right) > 1e-4 ? normalize(right) : vec3(1.0, 0.0, 0.0);
+	vec3 up = cross(right, m);
+	vec3 q = d - m * dot(d, m); // (the sine of the angle off its centre: precise this close to it)
+	vec2 p = vec2(dot(q, right), dot(q, up)) / sin(h);
+	float x = length(p);
+	r_cover = clamp((1.0 - x) / max(fwidth(x), 1e-4) + 0.5, 0.0, 1.0);
+	float z = sqrt(max(0.0, 1.0 - min(x * x, 1.0)));
+	vec3 n = right * p.x + up * p.y - m * z;
+	float mu0 = dot(n, normalize(moon_sun));
+	float lit = mu0 > 0.0 ? 2.0 * mu0 / (mu0 + z + 1e-3) : 0.0;
+	return moon_albedo(p / max(x, 1.0)) * (lit + moon_earthshine);
 }
 
 const float BOTTOM_RADIUS = 6360.0;
@@ -132,7 +216,20 @@ void sky() {
 		// The sun's disk: its illuminance over its solid angle, through the atmosphere, limb-darkened.
 		float half_angle = max(LIGHT0_SIZE * 0.5 * sun_disk_scale, 0.0005);
 		float cos_sun = dot(d, LIGHT0_DIRECTION);
-		if (cos_sun > cos(half_angle) && zenith < horizon_zenith) {
+		if (moon > 0.0) {
+			// (milestone 221) the moon's face, its edge antialiased; blended from the sun's disk as the moon comes up
+			float cover = 0.0;
+			float face = moon_light(d, LIGHT0_DIRECTION, half_angle, cover);
+			if (cover > 0.0 && zenith < horizon_zenith) {
+				vec3 t = texture(fellow_atmosphere_transmittance, transmittance_uv(r, d.y)).rgb;
+				float solid_angle = 2.0 * PI * (1.0 - cos(half_angle));
+				float x = clamp(acos(clamp(cos_sun, -1.0, 1.0)) / half_angle, 0.0, 1.0);
+				float limb = 1.0 - 0.6 * (1.0 - sqrt(max(0.0, 1.0 - x * x)));
+				// (its light less blue than the moonlight's colour on the square: a grey face)
+				vec3 light = mix(sun, vec3(dot(sun, vec3(0.2126, 0.7152, 0.0722))), 0.6 * moon);
+				col += light * t * (mix(limb, face, moon) * cover / (solid_angle * 0.8)) * sun_disk_energy;
+			}
+		} else if (cos_sun > cos(half_angle) && zenith < horizon_zenith) {
 			vec3 t = texture(fellow_atmosphere_transmittance, transmittance_uv(r, d.y)).rgb;
 			float solid_angle = 2.0 * PI * (1.0 - cos(half_angle));
 			float x = clamp(acos(clamp(cos_sun, -1.0, 1.0)) / half_angle, 0.0, 1.0);
@@ -142,9 +239,10 @@ void sky() {
 	}
 	// The stars where the sky is dark as it is seen (its intensity: milestone 216's night dims the sky, not the stars).
 	vec3 star = vec3(0.0);
+	float pixel = length(fwidth(d)); // (the view's angle across a pixel: outside the branch, its derivatives defined)
 	if (d.y > 0.0 && star_brightness > 0.0 && !AT_CUBEMAP_PASS) {
 		float sky_luma = dot(col, vec3(0.2126, 0.7152, 0.0722)) * intensity;
-		star = stars(d) * star_brightness * smoothstep(0.02, 0.0, sky_luma) * smoothstep(0.0, 0.08, d.y);
+		star = stars(d, pixel) * star_brightness * smoothstep(0.02, 0.0, sky_luma) * smoothstep(0.0, 0.08, d.y);
 	}
 	COLOR = col * intensity * (AT_CUBEMAP_PASS ? radiance_scale : 1.0) + star;
 }
