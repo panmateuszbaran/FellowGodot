@@ -115,6 +115,7 @@ func _init() -> void:
 			_env_set = a.get_slice("=", 1).split(",")
 		elif a == "--perf=1":
 			_perf = true
+			_draw_all = true
 		elif a == "--passes=1":
 			_perf = true
 			_passes = true
