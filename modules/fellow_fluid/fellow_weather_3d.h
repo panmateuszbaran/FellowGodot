@@ -131,6 +131,8 @@ private:
 		Color fog_light_color;
 		float fog_sky_affect = 1.0f;
 		float sky_energy = 1.0f; // background_energy_multiplier: the sky, its ambient light and reflections
+		float fog_depth_begin = 10.0f; // milestone 211: a depth fog drawn in to the weather's visibility
+		float fog_depth_end = 100.0f;
 	};
 	Ref<Environment> env;
 	EnvValues env_base;

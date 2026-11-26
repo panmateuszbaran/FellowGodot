@@ -5,9 +5,8 @@ extends Node
 ##   1 the scene's own fair weather (its towering cumulus, FAIR), 2 cloudy, 3 overcast, 4 rain, 5 a storm (lightning),
 ##   6 snow, 7 a blizzard; 0 the weather changing by itself (CYCLE, each held CYCLE_HOLD seconds); F1 the keys shown.
 ## The tools: --weather=<1-7> (at once), --weather_cycle=1; turn_to().
-## The scene's depth fog (FellowWeather3D adds its fog to an exponential fog only) follows the weather's: it closes in to
-## the visibility the weather's fog would leave (3 / its density: 2.5 km in the rain, 1.2 km in a storm, 300 m in a
-## blizzard), greys from the golden hour's haze as the sun goes, and veils the sky in the thickest. The sky's own sun
+## The scene's depth fog closes in with the weather's (FellowWeather3D draws a depth fog in to the visibility its fog
+## leaves, milestone 211: 2.5 km in the rain, 1.2 km in a storm, 300 m in a blizzard). The sky's own sun
 ## (rooftops.gd's SkySun, which lights the clouds and, through the sky, the square) dims with the weather's sunlight as
 ## the Sun does on the ground (sky_dim of it) and greys (the golden hour's light gone under the cloud); the square's
 ## lamps glow brighter as it darkens (LAMPS_DARK times their light under the darkest sky). The rain and the snow drawn
@@ -15,7 +14,6 @@ extends Node
 ## turned to at once (--weather) leaves the ground as it would have — wet in the rain, white in the snow.
 
 @export var weather_path: NodePath = ^"../Weather"
-@export var environment_path: NodePath = ^"../WorldEnvironment"
 @export var transition := 10.0 # s
 @export var cycle_hold := 25.0 # s
 ## How much of the weather's dimming of the sun the sky's own sun (the clouds' light) takes: 0 none, 1 all.
@@ -27,20 +25,13 @@ const FAIR := {"cloud_coverage": 0.45, "cloud_density": 2.6, "wind_speed": 3.5, 
 		"lightning_rate": 0.0}
 const NAMES := ["fair", "cloudy", "overcast", "rain", "storm", "snow", "blizzard"]
 const CYCLE := [1, 2, 4, 5, 4, 3, 1, 6, 7, 6, 1] # (keys) fair, cloudy, rain, a storm, rain, overcast, fair, snow...
-const FOG_NEAREST := 260.0 # m: the depth fog's end at the thickest
-const FOG_GREY := Color(0.55, 0.58, 0.62)
 const LAMPS_DARK := 2.4
 
 var _weather: Node
-var _env: Environment
 var _key := 1
 var _cycle := false
 var _cycle_i := 0
 var _cycle_t := 0.0
-var _fog_end := 0.0
-var _fog_begin := 0.0
-var _fog_color := Color()
-var _fog_sky := 0.0
 var _sky_sun: Light3D
 var _sky_sun_energy := 0.0
 var _sky_set := -1.0
@@ -55,13 +46,6 @@ var _hint_t := 6.0
 
 func _ready() -> void:
 	_weather = get_node_or_null(weather_path)
-	var we := get_node_or_null(environment_path) as WorldEnvironment
-	if we:
-		_env = we.environment
-		_fog_end = _env.fog_depth_end
-		_fog_begin = _env.fog_depth_begin
-		_fog_color = _env.fog_light_color
-		_fog_sky = _env.fog_sky_affect
 	if _weather == null:
 		return
 	var start := 1
@@ -143,15 +127,6 @@ func _process(delta: float) -> void:
 			turn_to(CYCLE[_cycle_i], transition)
 	var state: Dictionary = _weather.call("get_current_state")
 	var sun: float = state.get("sunlight", 1.0)
-	if _env and _fog_end > 0.0 and _env.fog_mode == Environment.FOG_MODE_DEPTH:
-		var fog: float = state.get("fog_density", 0.0)
-		var end := clampf(3.0 / maxf(fog, 1e-6), FOG_NEAREST, _fog_end)
-		_env.fog_depth_end = end
-		_env.fog_depth_begin = minf(_fog_begin, end * 0.05)
-		var grey := FOG_GREY * (0.55 + 0.45 * float(state.get("ambient_light", 1.0)))
-		grey.a = 1.0
-		_env.fog_light_color = _fog_color.lerp(grey, clampf(1.0 - sun, 0.0, 1.0))
-		_env.fog_sky_affect = lerpf(_fog_sky, 0.8, clampf(fog / 0.01, 0.0, 1.0))
 	for l in _lamps:
 		(l[0] as OmniLight3D).light_energy = float(l[1]) * lerpf(1.0, LAMPS_DARK, clampf(1.0 - sun, 0.0, 1.0))
 	if _sky_sun == null:

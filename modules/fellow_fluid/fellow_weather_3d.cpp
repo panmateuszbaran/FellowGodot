@@ -546,6 +546,12 @@ void FellowWeather3D::_restore_environment() {
 		if (env->get_bg_energy_multiplier() == env_applied.sky_energy) {
 			env->set_bg_energy_multiplier(env_base.sky_energy);
 		}
+		if (env->get_fog_depth_begin() == env_applied.fog_depth_begin) {
+			env->set_fog_depth_begin(env_base.fog_depth_begin);
+		}
+		if (env->get_fog_depth_end() == env_applied.fog_depth_end) {
+			env->set_fog_depth_end(env_base.fog_depth_end);
+		}
 	}
 	env.unref();
 	env_captured = false;
@@ -568,6 +574,8 @@ void FellowWeather3D::_apply_environment() {
 		env_base.fog_light_color = env->get_fog_light_color();
 		env_base.fog_sky_affect = env->get_fog_sky_affect();
 		env_base.sky_energy = env->get_bg_energy_multiplier();
+		env_base.fog_depth_begin = env->get_fog_depth_begin();
+		env_base.fog_depth_end = env->get_fog_depth_end();
 		env_applied = env_base;
 		env_captured = true;
 	} else {
@@ -587,6 +595,12 @@ void FellowWeather3D::_apply_environment() {
 		if (env->get_bg_energy_multiplier() != env_applied.sky_energy) {
 			env_base.sky_energy = env->get_bg_energy_multiplier();
 		}
+		if (env->get_fog_depth_begin() != env_applied.fog_depth_begin) {
+			env_base.fog_depth_begin = env->get_fog_depth_begin();
+		}
+		if (env->get_fog_depth_end() != env_applied.fog_depth_end) {
+			env_base.fog_depth_end = env->get_fog_depth_end();
+		}
 	}
 	EnvValues v = env_base;
 	if (fog && env->get_fog_mode() == Environment::FOG_MODE_EXPONENTIAL) {
@@ -602,6 +616,22 @@ void FellowWeather3D::_apply_environment() {
 			v.fog_light_color.a = 1.0f;
 			const float sky = 1.0f - Math::exp(-add * 1500.0f);
 			v.fog_sky_affect = env_base.fog_enabled ? Math::lerp(env_base.fog_sky_affect, 1.0f, sky) : sky;
+		}
+	}
+	if (fog && env->get_fog_mode() == Environment::FOG_MODE_DEPTH && env_base.fog_enabled) {
+		// Milestone 211: a depth fog (its own begin and end, as a golden hour's haze from far off) drawn in to the
+		// visibility the weather's fog leaves (3 / its density: 2.5 km in the rain, 1.2 km in a storm, 300 m in a
+		// blizzard), its begin with it, its colour the weather's as the weather's fog thickens, the sky veiled with it.
+		const float add = current.fog;
+		if (add > 0.0f) {
+			const float visibility = 3.0f / add;
+			v.fog_depth_end = MIN(env_base.fog_depth_end, visibility);
+			v.fog_depth_begin = MIN(env_base.fog_depth_begin, v.fog_depth_end * 0.05f);
+			const float sky = 1.0f - Math::exp(-add * 1500.0f);
+			const Color weather_fog = fog_color * (env_base.sky_energy * current.ambient);
+			v.fog_light_color = env_base.fog_light_color.lerp(weather_fog, sky);
+			v.fog_light_color.a = 1.0f;
+			v.fog_sky_affect = Math::lerp(env_base.fog_sky_affect, 1.0f, sky * 0.8f);
 		}
 	}
 	if (ambient) {
@@ -622,12 +652,20 @@ void FellowWeather3D::_apply_environment() {
 	if (v.sky_energy != env->get_bg_energy_multiplier()) {
 		env->set_bg_energy_multiplier(v.sky_energy);
 	}
+	if (v.fog_depth_begin != env->get_fog_depth_begin()) {
+		env->set_fog_depth_begin(v.fog_depth_begin);
+	}
+	if (v.fog_depth_end != env->get_fog_depth_end()) {
+		env->set_fog_depth_end(v.fog_depth_end);
+	}
 	// Read back: the setters may round (the colour), so that the next frame does not take them for the project's.
 	env_applied.fog_enabled = env->is_fog_enabled();
 	env_applied.fog_density = env->get_fog_density();
 	env_applied.fog_light_color = env->get_fog_light_color();
 	env_applied.fog_sky_affect = env->get_fog_sky_affect();
 	env_applied.sky_energy = env->get_bg_energy_multiplier();
+	env_applied.fog_depth_begin = env->get_fog_depth_begin();
+	env_applied.fog_depth_end = env->get_fog_depth_end();
 }
 
 void FellowWeather3D::_rt_set_sky(PackedByteArray p_state) {

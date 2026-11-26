@@ -5380,6 +5380,15 @@ void RenderForwardClustered::_fellow_rt_lighting(const RenderDataRD *p_render_da
 		// The hits are lit as the scene shader's Lambert diffuse (light × N·L / π) and stored as the "ambient light" the
 		// albedo multiplies: the 1 / π here.
 		energy /= Math::PI;
+		// The sun behind a FellowWeather3D's clouds (decision 0132), as the scene's surfaces have it — the smoke, the
+		// ray-traced bounces and the screen gather too (milestone 211: a chimney's smoke under an overcast sky was lit by
+		// the whole sun while the square under it had a tenth).
+		if (RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists()) {
+			const RendererRD::FellowWeather::SkyState &sky_state = weather->get_sky_state();
+			if (sky_state.sun_light.is_valid() && sky_state.sun_light == light && !weather->is_cloud_shadowing()) {
+				energy *= sky_state.sun_factor;
+			}
+		}
 		const Color c = light_storage->light_get_color(light).srgb_to_linear();
 		r_lighting.sun_color = Color(c.r * energy, c.g * energy, c.b * energy);
 		r_lighting.sun_shadow = light_storage->light_has_shadow(light);
