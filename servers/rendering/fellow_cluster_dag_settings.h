@@ -58,6 +58,13 @@ inline bool cluster_dag_indirect() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/cluster_dag_indirect");
 }
 
+// The walks of a pass's cuts spread over the render thread and the CPU worker tasks (decision 0384; off by default: no
+// gain measured on a 2-core container); off: walked one after the other on the render thread. The same cuts. Read
+// every frame.
+inline bool cluster_dag_parallel() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/cluster_dag_parallel");
+}
+
 struct ClusterDagStats {
 	SafeNumeric<uint64_t> surfaces; // surfaces with a hierarchy in use
 	SafeNumeric<uint64_t> build_usec; // CPU time of the hierarchies' builds (worker threads)
@@ -70,6 +77,8 @@ struct ClusterDagStats {
 	SafeNumeric<uint64_t> indirect_draws; // indirect draw calls (geometry/cluster_dag_indirect: one a surface instance)
 	SafeNumeric<uint64_t> run_instances; // instances of Godot's instanced runs drawn one by one with their own cuts
 	SafeNumeric<uint64_t> walk_usec; // CPU time of the walks
+	SafeNumeric<uint64_t> prepare_usec; // the render thread's time writing the passes' indirect commands, walks included
+	SafeNumeric<uint64_t> parallel_walks; // walks done in a pass's parallel group (decision 0384)
 	SafeNumeric<uint64_t> cache_hits; // hierarchies loaded from user://fellow_dag_cache
 	SafeNumeric<uint64_t> cache_writes; // hierarchies written to it
 };

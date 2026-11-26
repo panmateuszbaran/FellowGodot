@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 242 — The hierarchy's walks in parallel, as an option (2026-11-26)
+
+- Decision 0384, `geometry/cluster_dag_parallel` (off). A pass's cuts through the cluster hierarchy can be walked by
+  the render thread and the CPU worker tasks together, the indirect commands written in the same order (the same
+  images). On the 2-core container it gains nothing; it waits for a many-core measurement. Counters
+  `geometry_cluster_dag_prepare_usec`, `_parallel_walks`.
+
 ## Milestone 241 — Sheen for cloth (2026-11-26)
 
 - Decision 0383. Materials get a sheen lobe (glTF's `KHR_materials_sheen`, Filament's cloth: the "Charlie"

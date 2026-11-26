@@ -634,8 +634,21 @@ private:
 	static void _fellow_record_chunk(void *p_self, uint32_t p_index);
 	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2());
 	// geometry/cluster_dag (decisions 0379, 0381).
-	const LocalVector<uint32_t> *_fellow_dag_cut(const RenderListParameters *p_params, const GeometryInstanceSurfaceDataCache *p_surf, const FellowClusterDag *p_dag, const Plane *p_local_planes, int p_plane_count);
+	const LocalVector<uint32_t> *_fellow_dag_cut(const RenderListParameters *p_params, const GeometryInstanceSurfaceDataCache *p_surf, const FellowClusterDag *p_dag, const Plane *p_local_planes, int p_plane_count, LocalVector<uint32_t> *p_out = nullptr);
 	void _fellow_dag_prepare(RenderListParameters *p_params);
+	// A pass's surface instance with a hierarchy whose cut _fellow_dag_prepare() walks (decision 0384: in parallel).
+	struct FellowDagJob {
+		uint32_t element = 0;
+		const GeometryInstanceSurfaceDataCache *surf = nullptr;
+		const FellowClusterDag *dag = nullptr;
+		Plane planes[8];
+		int plane_count = 0;
+		const LocalVector<uint32_t> *ranges = nullptr; // the cut (the surface's camera cache, or out)
+		LocalVector<uint32_t> out;
+	};
+	LocalVector<FellowDagJob> fellow_dag_jobs;
+	const RenderListParameters *fellow_dag_job_params = nullptr;
+	static void _fellow_dag_walk_job(void *p_self, uint32_t p_index);
 	static constexpr uint32_t FELLOW_DAG_CMD_BYTES = 5 * sizeof(uint32_t);
 	static constexpr uint32_t FELLOW_DAG_CMD_SLOTS = 4;
 	struct FellowDagCmdSlot {

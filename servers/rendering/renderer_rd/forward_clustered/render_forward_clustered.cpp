@@ -1239,7 +1239,9 @@ void RenderForwardClustered::_render_list_serial(RenderingDevice::DrawListID p_d
 // geometry/cluster_dag (decision 0379): a surface instance's cut in a pass — (first index, index count) ranges in the
 // hierarchy's index array; the camera passes of one render share the first one's walk. The pointer is valid until the
 // next call on this thread.
-const LocalVector<uint32_t> *RenderForwardClustered::_fellow_dag_cut(const RenderListParameters *p_params, const GeometryInstanceSurfaceDataCache *p_surf, const FellowClusterDag *p_dag, const Plane *p_local_planes, int p_plane_count) {
+// p_out: where the cut goes when the camera passes' cache does not take it (decision 0384: a parallel walk's own
+// vector); null: a vector of this thread's.
+const LocalVector<uint32_t> *RenderForwardClustered::_fellow_dag_cut(const RenderListParameters *p_params, const GeometryInstanceSurfaceDataCache *p_surf, const FellowClusterDag *p_dag, const Plane *p_local_planes, int p_plane_count, LocalVector<uint32_t> *p_out) {
 	GeometryInstanceSurfaceDataCache::FellowLodCache *fellow_lc = p_surf->fellow_lod_cache;
 	Fellow::ClusterDagStats &dag_stats = Fellow::cluster_dag_stats();
 	if (p_params->fellow_lod_epoch != 0 && fellow_lc != nullptr && fellow_lc->dag && fellow_lc->epoch == p_params->fellow_lod_epoch) {
@@ -1256,7 +1258,7 @@ const LocalVector<uint32_t> *RenderForwardClustered::_fellow_dag_cut(const Rende
 	dp.distance_bias = p_params->fellow_lod_distance_bias;
 	dp.threshold = p_params->screen_mesh_lod_threshold;
 	thread_local LocalVector<uint32_t> fellow_dag_ranges;
-	LocalVector<uint32_t> *out = &fellow_dag_ranges;
+	LocalVector<uint32_t> *out = p_out != nullptr ? p_out : &fellow_dag_ranges;
 	if (p_params->fellow_lod_epoch != 0) {
 		if (fellow_lc == nullptr) {
 			fellow_lc = memnew(GeometryInstanceSurfaceDataCache::FellowLodCache);
@@ -1282,6 +1284,13 @@ const LocalVector<uint32_t> *RenderForwardClustered::_fellow_dag_cut(const Rende
 	return out;
 }
 
+// geometry/cluster_dag_parallel (decision 0384): one of a pass's walks, on the render thread or a worker task.
+void RenderForwardClustered::_fellow_dag_walk_job(void *p_self, uint32_t p_index) {
+	RenderForwardClustered *self = static_cast<RenderForwardClustered *>(p_self);
+	FellowDagJob &job = self->fellow_dag_jobs[p_index];
+	job.ranges = self->_fellow_dag_cut(self->fellow_dag_job_params, job.surf, job.dag, job.planes, job.plane_count, &job.out);
+}
+
 // geometry/cluster_dag_indirect (decision 0381): before a pass's draw list, the cuts of its surfaces with a hierarchy
 // walked and their ranges written as indirect draw commands (one buffer per frame in flight, each pass its own part):
 // each such element is then one indirect draw of its ranges instead of one draw per range. An element the draw loop
@@ -1291,10 +1300,12 @@ void RenderForwardClustered::_fellow_dag_prepare(RenderListParameters *p_params)
 	if (!p_params->fellow_cluster_dag || p_params->fellow_cluster_plane_count <= 0 || p_params->screen_mesh_lod_threshold <= 0.0 || !Fellow::cluster_dag_indirect() || p_params->element_info == nullptr) {
 		return;
 	}
+	const uint64_t prepare_from = OS::get_singleton()->get_ticks_usec();
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	const bool depth_like = p_params->pass_mode == PASS_MODE_SHADOW || p_params->pass_mode == PASS_MODE_SHADOW_DP || p_params->pass_mode == PASS_MODE_DEPTH;
-	fellow_dag_staging.clear();
-	bool any = false;
+	// The elements with a hierarchy and their planes in their space; then their cuts walked (in parallel, decision
+	// 0384: each walk its own surface's cache or its own vector); then their commands written in the elements' order.
+	uint32_t job_count = 0;
 	for (int i = 0; i < p_params->element_count; i++) {
 		const GeometryInstanceSurfaceDataCache *surf = p_params->elements[i];
 		const RenderElementInfo &element_info = p_params->element_info[i];
@@ -1316,21 +1327,46 @@ void RenderForwardClustered::_fellow_dag_prepare(RenderListParameters *p_params)
 		if (dag == nullptr || dag_indices.is_null()) {
 			continue;
 		}
+		if (job_count == fellow_dag_jobs.size()) {
+			fellow_dag_jobs.resize(job_count + 1);
+		}
+		FellowDagJob &job = fellow_dag_jobs[job_count++];
+		job.element = uint32_t(i);
+		job.surf = surf;
+		job.dag = dag;
+		job.ranges = nullptr;
 		const Transform3D &xf = surf->owner->transform;
-		Plane local_planes[8];
-		const int plane_count = MIN(p_params->fellow_cluster_plane_count, 8);
-		for (int p = 0; p < plane_count; p++) {
+		job.plane_count = MIN(p_params->fellow_cluster_plane_count, 8);
+		for (int p = 0; p < job.plane_count; p++) {
 			const Plane &wp = p_params->fellow_cluster_planes[p];
-			local_planes[p] = Plane(xf.basis.xform_inv(wp.normal), wp.d - wp.normal.dot(xf.origin));
+			job.planes[p] = Plane(xf.basis.xform_inv(wp.normal), wp.d - wp.normal.dot(xf.origin));
 		}
-		const LocalVector<uint32_t> &ranges = *_fellow_dag_cut(p_params, surf, dag, local_planes, plane_count);
-		if (!any) {
-			fellow_dag_cmd_of_element.resize(p_params->element_count);
-			for (uint64_t &c : fellow_dag_cmd_of_element) {
-				c = UINT64_MAX;
-			}
-			any = true;
+	}
+	if (job_count == 0) {
+		Fellow::cluster_dag_stats().prepare_usec.add(OS::get_singleton()->get_ticks_usec() - prepare_from);
+		return;
+	}
+	if (job_count > 1 && Fellow::cluster_dag_parallel() && fellow_parallel != nullptr && Fellow::cpu_worker_tasks() > 0) {
+		// The render thread walks too, the worker tasks help (decision 0016's loops). A surface appears once in a pass's
+		// list, so no two walks share a surface's cache.
+		fellow_dag_job_params = p_params;
+		_fellow_parallel_for(job_count, &RenderForwardClustered::_fellow_dag_walk_job);
+		fellow_dag_job_params = nullptr;
+		Fellow::cluster_dag_stats().parallel_walks.add(job_count);
+	} else {
+		for (uint32_t j = 0; j < job_count; j++) {
+			FellowDagJob &job = fellow_dag_jobs[j];
+			job.ranges = _fellow_dag_cut(p_params, job.surf, job.dag, job.planes, job.plane_count, &job.out);
 		}
+	}
+	fellow_dag_staging.clear();
+	fellow_dag_cmd_of_element.resize(p_params->element_count);
+	for (uint64_t &c : fellow_dag_cmd_of_element) {
+		c = UINT64_MAX;
+	}
+	for (uint32_t j = 0; j < job_count; j++) {
+		const FellowDagJob &job = fellow_dag_jobs[j];
+		const LocalVector<uint32_t> &ranges = *job.ranges;
 		const uint32_t first = fellow_dag_staging.size() / 5;
 		for (uint32_t r = 0; r < ranges.size(); r += 2) {
 			fellow_dag_staging.push_back(ranges[r + 1]); // index count
@@ -1339,11 +1375,8 @@ void RenderForwardClustered::_fellow_dag_prepare(RenderListParameters *p_params)
 			fellow_dag_staging.push_back(0); // vertex offset
 			fellow_dag_staging.push_back(0); // first instance
 		}
-		fellow_dag_cmd_of_element[i] = (uint64_t(first) << 32) | uint64_t(ranges.size() / 2);
+		fellow_dag_cmd_of_element[job.element] = (uint64_t(first) << 32) | uint64_t(ranges.size() / 2);
 		Fellow::cluster_dag_stats().draws.add(ranges.size() / 2);
-	}
-	if (!any) {
-		return;
 	}
 	// This frame's buffer (one per frame in flight: a buffer the GPU may still read is not written).
 	const uint64_t frame = RSG::rasterizer->get_frame_number();
@@ -1373,6 +1406,7 @@ void RenderForwardClustered::_fellow_dag_prepare(RenderListParameters *p_params)
 	cs.used += need;
 	p_params->fellow_dag_cmds = fellow_dag_cmd_of_element.ptr();
 	p_params->fellow_dag_cmd_buffer = cs.buffer;
+	Fellow::cluster_dag_stats().prepare_usec.add(OS::get_singleton()->get_ticks_usec() - prepare_from);
 }
 
 void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region) {
