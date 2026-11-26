@@ -99,14 +99,19 @@ first pose held a second first, while the light settles).
 | Ctrl | walk; up a steep roof, on hands and feet (milestone 156) |
 | Space (A) | jump; hanging, a leap along, up, down or round a corner to another hold (`hang_jump()`) |
 | C (B) | let go of a wall or a ledge; running, a roll |
-| E (Y) | at the bell tower's beam's end: perch (the camera swirls round, "synchronizing"); then Space: the leap of faith into the hay |
+| E (Y) | talk to the person in front ("E Talk" over them; E for their next line — milestone 212); at the bell tower's beam's end: perch (the camera swirls round, "synchronizing"); then Space: the leap of faith into the hay |
+| 1-7 | the weather (milestone 211): the golden hour's fair weather, cloudy, overcast, rain, a storm, snow, a blizzard — over 10 s; 0: changing by itself; F1: these keys |
+| N | night falls — the sun sets, the moon rises, the windows and lanterns light up (milestone 216); N again: the day |
 | Esc, a click, F11 | free the mouse, take it again, full screen |
 
 What it shows of FellowEngine: `FellowTraversal3D` (mantles and vaults with the mannequin's own clips and their root
 motion scaled onto the ledge, hanging, shimmying, free climbing past string courses, cornices and plinths — decision
 0281 —, the climb's lunge, into the belfry's arch), `FellowTraversalPose3D` (the hands on the stone, the feet on the
-wall over the clips), `FellowCloth3D` (banners, awnings, laundry) in `FellowWind3D`, the atmosphere, clouds, light
-shafts, bloom and contact shadows, `FellowPipelineWarmer3D`.
+wall over the clips), `FellowCloth3D` (banners, awnings, laundry, the people's robes) in `FellowWind3D`, the atmosphere,
+clouds, light shafts, bloom and contact shadows, `FellowPipelineWarmer3D`; since milestone 211 `FellowWeather3D` with
+`FellowRain3D` and `FellowLightning3D` (the weather keys; milestone 214: its overcast light), `FellowGasVolume3D` and
+`FellowBurnable3D` (the brazier, the chimneys' smoke, the osteria's fireplace), `FellowInteriorMaterial3D` (the rooms
+behind the windows, lit at night), the people's talk, looks and shelter, and CasaRosa's osteria to walk into.
 
 Everything in it is made by code, in two steps:
 
