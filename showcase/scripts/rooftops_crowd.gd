@@ -703,6 +703,11 @@ func _social_ready() -> void:
 		_shelter.append_array(o.call("get_shelter"))
 	for p in _people:
 		_look_setup(p)
+	# Milestone 227: footprints in the snow — everyone's feet and the player's.
+	for p in _people:
+		_foot_trackers(p.skel)
+	if _player_skel:
+		_foot_trackers(_player_skel)
 
 
 ## The head turned to a target of its own (LookAtModifier3D after the clip, as the player's: tools/build_rooftops.gd).
@@ -1194,6 +1199,24 @@ func _walkers_home() -> void:
 			var ap: AnimationPlayer = p.ap
 			ap.speed_scale = 1.35 / 1.6
 			ap.play("walk", 0.35)
+
+
+## Milestone 227: a FellowSnowTracker3D under each foot (FellowEngine's snow tracks, decision 0130: a print where a
+## foot stands, a groove where it drags) — the square's snow trodden where its people walk and stand.
+func _foot_trackers(p_skel: Skeleton3D) -> void:
+	if p_skel == null or not ClassDB.class_exists(&"FellowSnowTracker3D"):
+		return
+	for bone in ["LeftFoot", "RightFoot"]:
+		if p_skel.find_bone(bone) < 0:
+			continue
+		var at := BoneAttachment3D.new()
+		at.name = "Track" + bone
+		at.bone_name = bone
+		p_skel.add_child(at)
+		var tr: Node3D = ClassDB.instantiate(&"FellowSnowTracker3D")
+		tr.set("radius", 0.06)
+		tr.set("contact_height", 0.14)
+		at.add_child(tr)
 
 
 ## Milestone 225: the breaths made the first time it is cold (one emitter on each person's head and the player's),
