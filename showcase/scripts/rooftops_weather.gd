@@ -20,8 +20,17 @@ extends Node
 @export var weather_path: NodePath = ^"../Weather"
 @export var transition := 10.0 # s
 @export var cycle_hold := 25.0 # s
-## How much of the weather's dimming of the sun the sky's own sun (the clouds' light) takes: 0 none, 1 all.
+## How much of the weather's dimming of the sun the sky's own sun (the clouds' light) takes: 0 none, 1 all (the
+## weathers without their own in SKY_DIM).
 @export_range(0.0, 1.0) var sky_dim := 0.85
+## (milestone 223) The clouds' light under each weather (keys 1-7; -1 sky_dim): the deck lit from above by the sun as
+## the sky over it is — a storm's dark (0.85), a rain's grey, an overcast sky's a lighter grey, the snow's a bright white
+## grey (0: its clouds lit by the whole sun over them; 0.85 had made the snowy square's sky a storm's).
+const SKY_DIM := [-1.0, -1.0, 0.4, 0.7, 0.85, 0.0, 0.2]
+var _sky_dim_now := 0.85
+var _sky_dim_from := 0.85
+var _sky_dim_to := 0.85
+var _sky_dim_forced := false # (tools: --weather_sky_dim)
 
 ## The scene's fair weather (rooftops.gd's clouds; the Wind node's 3.5 m/s).
 const FAIR := {"cloud_coverage": 0.45, "cloud_density": 2.6, "wind_speed": 3.5, "gustiness": 0.3, "sunlight": 1.0,
@@ -88,6 +97,7 @@ func _ready() -> void:
 			_adapt = float(a.get_slice("=", 1))
 		elif a.begins_with("--weather_sky_dim="):
 			sky_dim = float(a.get_slice("=", 1))
+			_sky_dim_forced = true
 	_rain = _weather.call("get_rain_node") if _weather.has_method("get_rain_node") else null
 	turn_to(start, 0.0)
 	var town := get_node_or_null(^"../Town")
@@ -120,8 +130,11 @@ func turn_to(p_key: int, p_seconds: float) -> void:
 	_stops_to = float(DARKER[p_key - 1]) * _adapt
 	_stops_t = 0.0
 	_stops_dur = p_seconds
+	_sky_dim_from = _sky_dim_now
+	_sky_dim_to = sky_dim if _sky_dim_forced or float(SKY_DIM[p_key - 1]) < 0.0 else float(SKY_DIM[p_key - 1])
 	if p_seconds <= 0.0:
 		_stops = _stops_to
+		_sky_dim_now = _sky_dim_to
 		_apply_exposure()
 	if p_key == 1:
 		for k in FAIR:
@@ -176,6 +189,7 @@ func _process(delta: float) -> void:
 		# (the eye adapting as the weather turns, eased as FellowWeather3D eases it)
 		_stops_t = minf(_stops_t + delta, _stops_dur)
 		_stops = lerpf(_stops_from, _stops_to, smoothstep(0.0, 1.0, _stops_t / _stops_dur))
+		_sky_dim_now = lerpf(_sky_dim_from, _sky_dim_to, smoothstep(0.0, 1.0, _stops_t / _stops_dur))
 		_apply_exposure()
 	if _night_node == null:
 		_night_node = get_node_or_null(^"../Night")
@@ -197,7 +211,7 @@ func _process(delta: float) -> void:
 		if _sky_set < 0.0 or not is_equal_approx(_sky_sun.light_energy, _sky_set):
 			_sky_sun_energy = _sky_sun.light_energy
 			_sky_sun_color = _sky_sun.light_color
-		var dim := lerpf(1.0, sun, sky_dim)
+		var dim := lerpf(1.0, sun, _sky_dim_now)
 		_sky_set = _sky_sun_energy * dim
 		_sky_sun.light_energy = _sky_set
 		_sky_sun.light_color = _sky_sun_color.lerp(SKY_GREY, clampf(1.0 - sun, 0.0, 1.0))
