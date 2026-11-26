@@ -107,7 +107,12 @@ FellowGasVolume3D *FellowBurnable3D::_find_gas_volume() const {
 	if (!target || !is_inside_tree()) {
 		return nullptr;
 	}
-	const Vector3 centre = target->get_global_transform().xform(origin + Vector3(res) * voxel * 0.5f);
+	// The object's own middle (its mesh's): not the voxel box's, which reaches down to the ground under it for the ash
+	// heap (milestone 211: logs in a brazier's bowl, the box's middle 0.36 m under them, below the volume's floor — they
+	// found no gas and stayed cold).
+	const Ref<Mesh> mesh = original_mesh.is_valid() ? original_mesh : target->get_mesh();
+	const Vector3 local = mesh.is_valid() ? mesh->get_aabb().get_center() : origin + Vector3(res) * voxel * 0.5f;
+	const Vector3 centre = target->get_global_transform().xform(local);
 	const Vector<Node *> nodes = get_tree()->get_nodes_in_group(SNAME("fellow_gas_volumes"));
 	for (Node *n : nodes) {
 		FellowGasVolume3D *v = Object::cast_to<FellowGasVolume3D>(n);

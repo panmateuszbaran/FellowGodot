@@ -109,6 +109,11 @@ func _init() -> void:
 			var key := kv.get_slice(":", 0)
 			var val := kv.get_slice(":", 1)
 			ProjectSettings.set_setting(key, (val == "true") if val in ["true", "false"] else float(val))
+		elif a.begins_with("--env_set="):
+			_env_set = a.get_slice("=", 1).split(",")
+		elif a == "--perf=1":
+			_perf = true
+			_draw_all = true
 		elif a == "--draw_all=1":
 			_draw_all = true
 		elif a.begins_with("--drop="):
@@ -149,11 +154,15 @@ func _init() -> void:
 				town.remove_child(c)
 				c.free()
 	for n in _drop:
-		# (--drop=<node>,...: the scene's top-level nodes left out — an A/B)
+		# (--drop=<node path>,...: nodes of the scene left out — an A/B)
 		var c := sc.get_node_or_null(n)
 		if c:
-			sc.remove_child(c)
+			c.get_parent().remove_child(c)
 			c.free()
+	for kv in _env_set:
+		for n in sc.find_children("*", "WorldEnvironment", true, false):
+			var val := kv.get_slice(":", 1)
+			(n as WorldEnvironment).environment.set(kv.get_slice(":", 0), (val == "true") if val in ["true", "false"] else float(val))
 	if _lite:
 		# (the light simplified for lavapipe: no SDFGI, SSIL or volumetric fog — the motion is what is looked at)
 		for n in sc.find_children("*", "WorldEnvironment", true, false):
@@ -219,6 +228,10 @@ func _init() -> void:
 		_player.rotation.y = PI * 0.5
 	var total := _skip + int(_seconds * 60.0)
 	var vp := root.get_viewport_rid()
+	if _perf:
+		_images = false
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+		RenderingServer.viewport_set_measure_render_time(vp, true)
 	for i in total:
 		# (only the frames saved are drawn)
 		var draw := _images and i >= _skip and (i - _skip) % _every == 0
@@ -264,6 +277,9 @@ func _init() -> void:
 			_cam.current = true
 		await process_frame
 		_record(i)
+		if _perf and i >= _skip:
+			_perf_gpu.append(RenderingServer.viewport_get_measured_render_time_gpu(vp))
+			_perf_cpu.append(RenderingServer.viewport_get_measured_render_time_cpu(vp) + RenderingServer.get_frame_setup_time_cpu())
 		if draw:
 			await RenderingServer.frame_post_draw
 			var shot := root.get_texture().get_image()
@@ -275,6 +291,14 @@ func _init() -> void:
 	f.store_string(JSON.stringify({"every": _every, "skip": _skip, "frames": _frames}))
 	f.close()
 	print("climb_look: %d frames" % total)
+	if _perf and _perf_gpu.size() > 0:
+		var g := Array(_perf_gpu)
+		var c := Array(_perf_cpu)
+		g.sort()
+		c.sort()
+		var mean := func(a: Array) -> float: return a.reduce(func(x, y): return x + y, 0.0) / maxf(a.size(), 1)
+		print("climb_look: perf %d frames: GPU mean %.2f ms, median %.2f, p95 %.2f; render CPU mean %.2f ms, median %.2f" % [g.size(),
+				mean.call(g), g[g.size() / 2], g[int(g.size() * 0.95)], mean.call(c), c[c.size() / 2]])
 	var crowd := _player.get_parent().get_node_or_null("Crowd")
 	if crowd and crowd.has_method("get_reaction_stats"):
 		print("climb_look: the people ", crowd.call("get_reaction_stats"))
@@ -480,6 +504,10 @@ var _talk_target: Node3D
 var _osteria: Node3D # milestone 213
 var _talk_at := Vector3()
 var _drop: PackedStringArray = []
+var _env_set: PackedStringArray = [] # --env_set=name:value,...: the WorldEnvironment's Environment's properties
+var _perf := false # --perf=1: every frame drawn, none saved, vsync off; the GPU's and the CPU's time a frame printed
+var _perf_gpu: PackedFloat64Array = []
+var _perf_cpu: PackedFloat64Array = []
 var _draw_all := false # --draw_all=1: every frame drawn, every --every-th saved (what the GPU runs while drawing — the
 		# burning logs, milestone 211 — goes on in the frames between)
 var _weather_seq: Array = [] # [key, second]

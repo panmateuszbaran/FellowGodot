@@ -164,7 +164,8 @@ func _brazier(p_downwind: Vector3) -> void:
 		burn.set("resolution", 24)
 		burn.set("pyrolysis_rate", 0.015) # (a third of the default's: a log lasts)
 		mi.add_child(burn)
-		# (its gas named: left to find the volume round it, the logs stayed cold in the scene — not reproduced alone)
+		# (its gas named: milestone 211's engines found none round the logs — their voxel box's middle, reaching down to the
+		# bowl for the ash heap, was under the volume's floor; fixed in FellowBurnable3D since)
 		burn.set("gas_volume_path", burn.get_path_to(_volume))
 		_logs.append(burn)
 	# Not walked through.
