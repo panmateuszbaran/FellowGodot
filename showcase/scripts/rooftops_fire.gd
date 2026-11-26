@@ -183,21 +183,23 @@ func _brazier(p_downwind: Vector3) -> void:
 
 func _chimney(p_downwind: Vector3) -> void:
 	# A plume (Fire Lab's chimney, benchmarks/project/scenes/fire_lab.gd): from the flue, warm enough to rise, pushed
-	# up out of it, grey, lasting long enough to be carried off.
+	# up out of it, lasting long enough to be carried off. A wood fire's smoke, pale blue-grey: it scatters most of the
+	# light it takes (Fire Lab's grey soot, 0.5, was a black plume in the bell tower's shade against the sky).
 	_volume = _gas(Vector3(6.0, 8.0, 6.0), -0.2, p_downwind * 1.5)
 	_volume.set("smoke_dissipation", 0.06)
-	_volume.set("smoke_density", 3.2)
+	_volume.set("smoke_density", 1.6)
+	_volume.set("self_shadow", 0.6)
 	_volume.set("cooling", 0.6)
 	_volume.set("vorticity", 0.25)
 	_volume.set("fire_light", false)
 	_volume.set("closed_faces", 0)
 	_volume.set("wind_rate", 0.3)
-	_volume.set("smoke_color", Color(0.5, 0.5, 0.52))
+	_volume.set("smoke_color", Color(0.82, 0.82, 0.84))
 	_emitter = _source(0.25) # (in the flue, under the cap: the smoke comes out from under it)
 	_emitter.set("shape", 0) # a sphere in the flue
 	_emitter.set("radius", 0.22)
 	_fuel = 0.0
-	_smoke = 2.4
+	_smoke = 3.0
 	_emitter.set("fuel", 0.0)
 	_emitter.set("temperature", 160.0)
 	_emitter.set("smoke", _smoke)
