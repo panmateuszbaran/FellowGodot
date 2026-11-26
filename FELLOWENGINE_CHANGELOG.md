@@ -9,6 +9,11 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 236 — Hair (2026-11-26)
+
+- Decision 0378. The people's hair drawn opaque first and blended at its edges (soft strands), duller (black hair no
+  longer shines like plastic); the hair under a hat cut away by the generator (it came through Aldo's fedora).
+
 ## Milestone 235 — Eyes and moods (2026-11-26)
 
 - Decision 0377. The people's eyes turn: eye bones from the generator (and their own iris colours), turned by

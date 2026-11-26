@@ -23,6 +23,7 @@ var _face := {} # --face=jawOpen:1,mouthSmileLeft:0.8 (milestone 234): blend sha
 var _look := false # --look=1 (milestone 235): a target circling before the face, the eyes following it
 var _mood := "" # --mood=happy[:0.8] (milestone 235): an expression held on the face
 var _target: Node3D
+var _hide := "" # --hide=<name>: the person's meshes whose name has it hidden (what pokes through what)
 const CAST := ["giulia", "marco", "rosa", "aldo", "amara", "kenji"]
 
 
@@ -48,6 +49,10 @@ func _init() -> void:
 			_talk = true
 		elif a == "--look=1":
 			_look = true
+		elif a.begins_with("--hide="):
+			_hide = a.get_slice("=", 1)
+		elif a.begins_with("--hair="):
+			FellowPerson.hair_mode = int(a.get_slice("=", 1))
 		elif a.begins_with("--mood="):
 			_mood = a.get_slice("=", 1)
 		elif a.begins_with("--face="):
@@ -76,6 +81,10 @@ func _npc(p_name: String, p_at: Vector3) -> Node3D:
 					(mi as MeshInstance3D).set_blend_shape_value(bi, _face[k])
 	if pskel and _talk and pskel.get_node_or_null(^"Face"):
 		pskel.get_node(^"Face").set("talking", true)
+	if pskel and _hide != "":
+		for mi in pskel.find_children("*", "MeshInstance3D", true, false):
+			if String(mi.name).contains(_hide):
+				(mi as MeshInstance3D).visible = false
 	if pskel and _mood != "" and pskel.get_node_or_null(^"Face"):
 		pskel.get_node(^"Face").call("set_expression", _mood.get_slice(":", 0), float(_mood.get_slice(":", 1)) if _mood.contains(":") else 1.0, 0.0)
 	if pskel and _look and pskel.get_node_or_null(^"Face"):

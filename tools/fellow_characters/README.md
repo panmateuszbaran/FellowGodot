@@ -20,6 +20,8 @@ glTF for the engine (milestone 232, decision 0374).
 * **Eyes** (milestone 235): `LeftEye` and `RightEye` bones under the head at the eyeballs' centres, each eyeball
   weighted to its own (55 bones); the irises from the spec's `eye_colour` (the pack's `blue`, `bluegreen`, `brown`,
   `brownlight`, `deepblue`, `green`, `grey`, `ice`, `lightblue`, or `darkbrown`: its brown less red).
+* **Hats** (milestone 236): with a hat among the clothes (fedora, hat, cap, helmet, hood) the hair's faces above the
+  hat's underside are removed (MPFB fits the hair to the head: it came through the hat).
 
 ```
 python3 tools/fellow_characters/make_characters.py --mpfb <mpfb2>/src/mpfb --assets <unpacked system assets> \
@@ -29,7 +31,7 @@ python3 tools/fellow_characters/make_characters.py --mpfb <mpfb2>/src/mpfb --ass
 In the engine, `showcase/scripts/fellow_person.gd` (`FellowPerson.dress()`) wears a person over a mannequin: the
 mannequin's skeleton keeps everything that drives it and a `RetargetModifier3D` hands its pose to the person's skeleton,
 whose limbs' rests are first turned to the mannequin's T-pose (MPFB's rest is an A-pose); the skin gets subsurface
-scattering, the hair and lashes alpha scissor, and a `FellowFaceAnimator` on the face (blinking; `talking`; its gaze
+scattering, the hair blended at its edges after an opaque pre-pass and the brows and lashes alpha scissor, and a `FellowFaceAnimator` on the face (blinking; `talking`; its gaze
 turning the eye bones, `fellow_person_eyes.gd`; a "pain" expression beside its own). The player's person also gets a
 two-bone IK onto the mannequin's hands and feet (milestone 233).
 `showcase/tools/person_look.gd` renders one or the whole cast playing a clip (`--face=shape:weight,...`, `--talk=1`, `--look=1`, `--mood=name[:weight]`). Import settings (`showcase/people/*.glb.import`): embedded textures as Basis Universal, no light baking.

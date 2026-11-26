@@ -10,6 +10,10 @@ extends RefCounted
 
 const SKIN_SSS := 0.35
 const ALPHA_CUT := 0.45
+const HAIR_ROUGHNESS := 0.8
+const HAIR_SPECULAR := 0.25
+## The hair's drawing: 1 (milestone 236) blended at its edges after an opaque pre-pass, 0 cut by its alpha (232-235).
+static var hair_mode := 1
 
 
 ## p_match_height: the person scaled so that its hips stand at the mannequin's (the player: its hands and feet where
@@ -200,11 +204,19 @@ static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint:
 			m.roughness = 0.55
 			m.metallic_specular = 0.4
 		elif m.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
-			# Hair cards, eyebrows, eyelashes: cut, both sides drawn.
-			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-			m.alpha_scissor_threshold = ALPHA_CUT
+			# Hair cards, eyebrows, eyelashes: both sides drawn. The eyebrows and eyelashes cut by their alpha; the hair
+			# (milestone 236) drawn where it is opaque before the other passes and blended at its edges after them
+			# (soft strands instead of hard cut ones), duller (black hair shone like plastic).
+			var brow := n.contains("eyebrow") or n.contains("eyelash")
+			if hair_mode == 1 and not brow:
+				m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
+				m.roughness = HAIR_ROUGHNESS
+				m.metallic_specular = HAIR_SPECULAR
+			else:
+				m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+				m.alpha_scissor_threshold = ALPHA_CUT
+				m.roughness = 0.6
 			m.cull_mode = BaseMaterial3D.CULL_DISABLED
-			m.roughness = 0.6
 			m.albedo_color *= p_hair_tint
 		elif n.contains("eye") or n.contains("low-poly") or n.contains("high-poly"):
 			m.roughness = 0.12

@@ -226,6 +226,52 @@ def face_units(bpy, service, body, face_dir, followers):
     return names
 
 
+HATS = ("fedora", "hat", "cap", "helmet", "hood")
+HAT_REACH = 0.02 # m
+HAT_MARGIN = 0.005 # m
+
+
+def trim_under_hat(bpy, root, hair_name, clothes):
+    """Milestone 236: hair under a hat — MPFB fits the hair to the head, not to the hat, and its cards came through the
+    hat's crown (black patches on Aldo's fedora). The hair's faces with a vertex above the hat's lowest point over it
+    (within HAT_REACH seen from above, less HAT_MARGIN) are removed: what hangs below the brim stays."""
+    import bmesh
+
+    hats = [c for c in clothes if any(h in c.lower() for h in HATS)]
+    if not hair_name or not hats:
+        return 0
+    meshes = [c for c in root.children_recursive if c.type == "MESH"]
+    hair = next((c for c in meshes if hair_name in c.name), None)
+    hat = next((c for c in meshes if any(h in c.name for h in hats)), None)
+    if hair is None or hat is None:
+        return 0
+    from mathutils import Vector, kdtree
+
+    pts = [hat.matrix_world @ v.co for v in hat.data.vertices]
+    tree = kdtree.KDTree(len(pts))
+    for i, p in enumerate(pts):
+        tree.insert(Vector((p.x, p.y, 0.0)), i)
+    tree.balance()
+    bm = bmesh.new()
+    bm.from_mesh(hair.data)
+    mw = hair.matrix_world
+    inside = set()
+    for v in bm.verts:
+        w = mw @ v.co
+        # (the hat's lowest point over this one, within 2 cm seen from above: the brim's underside or the crown's rim)
+        near = tree.find_range(Vector((w.x, w.y, 0.0)), HAT_REACH)
+        if near and w.z > min(pts[i].z for _, i, _ in near) - HAT_MARGIN:
+            inside.add(v.index)
+    gone = [f for f in bm.faces if any(v.index in inside for v in f.verts)]
+    bmesh.ops.delete(bm, geom=gone, context="FACES")
+    loose = [v for v in bm.verts if not v.link_faces]
+    bmesh.ops.delete(bm, geom=loose, context="VERTS")
+    bm.to_mesh(hair.data)
+    bm.free()
+    hair.data.update()
+    return len(gone)
+
+
 def eye_colour(bpy, eyes, find_eye, colour):
     """Milestone 235: the irises' colour (the spec's `eye_colour`: one of the pack's eye textures, eyes/materials/
     <colour>_eye.png; or "darkbrown": the pack's brown — a red-brown — turned towards a neutral dark brown)."""
@@ -342,6 +388,7 @@ def make(bpy, service, spec, out, save_blend, face_dir):
     # (the hair's, eyebrows' and eyelashes' alpha cuts the surface; the others are opaque)
     game_materials(bpy, root, [n for n in (spec.get("hair"), spec.get("eyebrows"), spec.get("eyelashes")) if n])
     apply_shape_keys(bpy, root, set(face))
+    trim_under_hat(bpy, root, spec.get("hair"), spec.get("clothes", []))
     humanoid_bones(root)
     eye_bones(bpy, root, spec.get("eyes_mesh", "low-poly"))
     bpy.ops.object.select_all(action="DESELECT")
