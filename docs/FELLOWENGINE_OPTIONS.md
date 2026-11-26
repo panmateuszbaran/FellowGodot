@@ -449,6 +449,9 @@ asked:
   the "cat's paws" running over a lake (`gust_ripples`, 1, scales them);
 * `FellowGasVolume3D.sleep_distance` (milestone 68, 0: never): while the camera is farther from the box, the gas is not
   stepped (its state kept, still drawn) and the burning objects in it wait; `is_sleeping()`.
+* `FellowGasVolume3D.sleep_offscreen` (milestone 217, decision 0359; 0: never): once the box (grown by a tenth and a
+  metre) has been outside the camera's view this many seconds, the gas is not stepped (kept, drawn, its sound on) until
+  it comes back into view — for smoke without a fire's light;
 * `FellowGasVolume3D.wind_from_scene`: the gas's `wind` each step is the scene's wind at the box's centre, gusts
   included (flames and smoke lean and flicker with the gusts);
 * a `ParticleProcessMaterial`'s **Wind** group, `wind_enabled` and `wind_influence` (1/s): the particles' horizontal

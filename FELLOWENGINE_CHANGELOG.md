@@ -9,6 +9,15 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 217 — The rooftops' frame pass by pass; gas volumes asleep out of view (2026-11-26)
+
+- Decision 0359. `climb_look.gd --passes=1`: the GPU's time in each of the engine's passes (its pass markers) — the
+  rooftops at 1080p on the RTX laptop: opaque 2-3.5 ms, the depth pre-pass 1.2-1.8, the sun's shadows 0.7-1.5, the
+  clouds 0.8-1.4, the gas simulation 3 ms fenced but 0.8 ms in the real frame (overlapped), 1 ms of the render thread.
+  `FellowGasVolume3D.sleep_offscreen` (off by default): a volume out of the camera's view for that long is not stepped
+  (kept, drawn, its sound on); the rooftops' chimneys use it (the render thread 0.1-0.3 ms less, no GPU time measurable
+  on the RTX).
+
 ## Milestone 216 — Night falls on the square (2026-11-26)
 
 - Decision 0358. N on the rooftops square (`rooftops_night.gd`): over 20 s the sun sets down its azimuth, slowly through
