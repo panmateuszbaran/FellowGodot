@@ -117,7 +117,8 @@ milestone 232 the people are people — MakeHuman bodies with their skins, hair 
 skeleton drives them through a `RetargetModifier3D`); `--people=0` brings the mannequins back. From milestone 233 the
 player too (Luca, his hands and feet put on the mannequin's by a two-bone IK; `--player_person=0`). Their faces blink
 and talk (milestone 234), their eyes turn to the player before their heads, and they show moods — glad, surprised,
-in pain, cross (milestone 235: `scripts/fellow_person_eyes.gd`, `rooftops_crowd.gd`'s `_mood`).
+in pain, cross (milestone 235: `scripts/fellow_person_eyes.gd`, `rooftops_crowd.gd`'s `_mood`); those standing together
+glance at each other, and the player looks at whom it talks to (milestone 240).
 
 Everything in it is made by code, in two steps:
 

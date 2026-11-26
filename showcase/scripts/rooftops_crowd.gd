@@ -83,6 +83,7 @@ func _ready() -> void:
 	for g in groups:
 		var c: Vector3 = g[0]
 		var n: int = g[1]
+		var members: Array = []
 		for i in n:
 			var a := TAU * i / n + _rng.randf_range(-0.3, 0.3)
 			var p := c + Vector3(cos(a), 0.0, sin(a)) * _rng.randf_range(0.55, 0.7)
@@ -90,7 +91,8 @@ func _ready() -> void:
 			var node := _person(clip, 1.0)
 			node.position = p
 			_face(node, c - p)
-			_register(node, "stand", clip, 1.0)
+			members.append(_register(node, "stand", clip, 1.0))
+		_mates(members)
 	for s in seats:
 		if _rng.randf() < 0.3:
 			continue
@@ -723,6 +725,7 @@ func _social_ready() -> void:
 		if _player_skel:
 			_player_head = _player_skel.find_bone("Head")
 	var fire := get_node_or_null(fire_path) as Node3D
+	var fire_ring: Array = []
 	if fire and fire_people > 0:
 		var c := fire.global_position
 		for i in fire_people:
@@ -732,6 +735,8 @@ func _social_ready() -> void:
 			_face(node, c - node.position)
 			var p := _register(node, "stand", "talk" if i % 2 == 0 else "idle", 1.0)
 			p.fire = true
+			fire_ring.append(p)
+	_mates(fire_ring)
 	# Milestone 213: the osteria's people (its host, its guests) and its shelter from the rain.
 	for o in get_tree().get_nodes_in_group(&"osteria"):
 		for e in o.call("get_people"):
@@ -836,17 +841,23 @@ func _social(delta: float) -> void:
 		if look == null:
 			continue
 		var goal := 1.0 if looking.has(p.node) and not _busy(p) else 0.0
+		# (milestone 240: a glance at one of its group turns the head part of the way; the eyes do the rest)
+		var glance = p.get("glance_at")
+		if goal == 0.0 and glance != null and not _busy(p) and p.act == "":
+			goal = GLANCE_HEAD
 		p.look_w = move_toward(float(p.look_w), goal, delta / 0.5)
 		look.influence = p.look_w
 		look.active = p.look_w > 0.001
 		if look.active:
-			(p.look_target as Node3D).global_position = eyes
+			(p.look_target as Node3D).global_position = eyes if goal != GLANCE_HEAD else _head_of(glance)
 		# (milestone 235: the eyes on the player as soon as the head is to turn — the eyes lead it — and off it with it)
 		var gazing := goal > 0.5 or float(p.look_w) > 0.5
 		var fa: Node = p.face_anim
 		if fa and gazing != bool(p.gazing):
 			p.gazing = gazing
 			fa.set("look_target_path", fa.get_path_to(p.look_target) if gazing else NodePath())
+			if not gazing and p.has("glance_until"):
+				p.glance_until = 0.0 # (back to glancing at the others)
 	# Someone pointing up at the player.
 	_point_t -= delta
 	if up and _point_t <= 0.0:
@@ -1064,6 +1075,75 @@ func _faces(delta: float) -> void:
 			face.process_mode = Node.PROCESS_MODE_INHERIT if near else Node.PROCESS_MODE_DISABLED
 		var ap: AnimationPlayer = p.ap
 		face.set("talking", _clock < float(p.talk_until) or (ap != null and ap.current_animation == "talk"))
+		if face.process_mode != Node.PROCESS_MODE_DISABLED:
+			_glance(p, face)
+	_player_gaze()
+
+
+## Milestone 240: the people standing together (a group, the brazier's ring) glance at each other while they do not
+## look at the player — mostly at the one talking, now and then ahead — each look 1.2-3.5 s; the eyes only (the
+## heads keep their clips). And the player's eyes on the one they talk to.
+const GLANCE_HEAD := 0.45 # the head's share of a glance
+
+func _mates(p_members: Array) -> void:
+	for p in p_members:
+		p["mates"] = p_members.filter(func(q): return q != p)
+		p["glance_until"] = 0.0
+		p["glance_at"] = null
+
+
+func _head_of(p: Dictionary) -> Vector3:
+	var sk: Skeleton3D = p.body
+	if sk == null:
+		return (p.node as Node3D).global_position + Vector3.UP * 1.6
+	if not p.has("head_bone"):
+		p["head_bone"] = sk.find_bone("Head")
+	var b: int = p.head_bone
+	if b < 0:
+		return (p.node as Node3D).global_position + Vector3.UP * 1.6
+	return sk.global_transform * sk.get_bone_global_pose(b).origin + Vector3.UP * 0.07
+
+
+func _eyes_at(p_node: Node3D) -> Node3D:
+	var n := p_node.get_node_or_null(^"EyesAt") as Node3D
+	if n == null:
+		n = Node3D.new()
+		n.name = "EyesAt"
+		n.top_level = true
+		p_node.add_child(n)
+	return n
+
+
+func _glance(p: Dictionary, p_face: Node) -> void:
+	if not p.has("mates") or bool(p.gazing) or _busy(p) or p.act != "":
+		return
+	if _clock >= float(p.glance_until):
+		p.glance_until = _clock + _rng.randf_range(1.2, 3.5)
+		var talkers: Array = (p.mates as Array).filter(func(q): return q.ap != null and (q.ap as AnimationPlayer).current_animation == "talk" and not _busy(q))
+		var pool: Array = talkers if not talkers.is_empty() and _rng.randf() < 0.75 else (p.mates as Array).filter(func(q): return not _busy(q))
+		p.glance_at = null if pool.is_empty() or _rng.randf() < 0.25 else pool[_rng.randi() % pool.size()]
+		var eyes := _eyes_at(p.node)
+		p_face.set("look_target_path", p_face.get_path_to(eyes) if p.glance_at != null else NodePath())
+	if p.glance_at != null:
+		_eyes_at(p.node).global_position = _head_of(p.glance_at)
+
+
+func _player_gaze() -> void:
+	if _player_skel == null:
+		return
+	if not has_meta(&"player_face"):
+		set_meta(&"player_face", _player_skel.find_child("Face", true, false))
+	var face: Node = get_meta(&"player_face")
+	if face == null:
+		return
+	var talking := not _talk.is_empty()
+	if talking:
+		var eyes := _eyes_at(_player)
+		eyes.global_position = _head_of(_talk.p)
+		if face.get("look_target_path") != face.get_path_to(eyes):
+			face.set("look_target_path", face.get_path_to(eyes))
+	elif not (face.get("look_target_path") as NodePath).is_empty():
+		face.set("look_target_path", NodePath())
 
 
 ## Milestone 235: a mood on the face (FellowFaceAnimator's expressions — happy, sad, angry, surprised, afraid,
