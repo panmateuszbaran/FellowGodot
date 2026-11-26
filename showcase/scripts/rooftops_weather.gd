@@ -4,7 +4,8 @@ extends Node
 ## ground wet, snowy or frozen):
 ##   1 the scene's own fair weather (its towering cumulus, FAIR), 2 cloudy, 3 overcast, 4 rain, 5 a storm (lightning),
 ##   6 snow, 7 a blizzard; 0 the weather changing by itself (CYCLE, each held CYCLE_HOLD seconds); F1 the keys shown.
-## The tools: --weather=<1-7> (at once), --weather_cycle=1, --weather_sky_dim=<share>; turn_to().
+## The tools: --weather=<1-7> (at once), --weather_cycle=1, --weather_sky_dim=<share>, --weather_sun=<key>:<share>,...;
+## turn_to().
 ## The scene's depth fog closes in with the weather's (FellowWeather3D draws a depth fog in to the visibility its fog
 ## leaves, milestone 211: 2.5 km in the rain, 1.2 km in a storm, 300 m in a blizzard). The sky's own sun
 ## (rooftops.gd's SkySun, which lights the clouds and, through the sky, the square) dims with the weather's sunlight as
@@ -31,6 +32,7 @@ var _sky_dim_now := 0.85
 var _sky_dim_from := 0.85
 var _sky_dim_to := 0.85
 var _sky_dim_forced := false # (tools: --weather_sky_dim)
+var _sun_set := {} # (tools: --weather_sun=<key>:<share>,... the sun's share under a weather instead of SUN's)
 
 ## The scene's fair weather (rooftops.gd's clouds; the Wind node's 3.5 m/s).
 const FAIR := {"cloud_coverage": 0.45, "cloud_density": 2.6, "wind_speed": 3.5, "gustiness": 0.3, "sunlight": 1.0,
@@ -95,6 +97,9 @@ func _ready() -> void:
 			_cycle = true
 		elif a.begins_with("--weather_adapt="):
 			_adapt = float(a.get_slice("=", 1))
+		elif a.begins_with("--weather_sun="):
+			for kv in a.get_slice("=", 1).split(","):
+				_sun_set[int(kv.get_slice(":", 0))] = float(kv.get_slice(":", 1))
 		elif a.begins_with("--weather_sky_dim="):
 			sky_dim = float(a.get_slice("=", 1))
 			_sky_dim_forced = true
@@ -142,11 +147,12 @@ func turn_to(p_key: int, p_seconds: float) -> void:
 		_weather.call("set_weather", 7, p_seconds) # WEATHER_CUSTOM: to these values
 	else:
 		_weather.call("set_weather", p_key - 1, p_seconds) # WEATHER_CLOUDY .. WEATHER_BLIZZARD
-		if float(SUN[p_key - 1]) >= 0.0:
+		var sun_share: float = _sun_set.get(p_key, float(SUN[p_key - 1]))
+		if sun_share >= 0.0:
 			# (the preset's with less sun: a custom weather, turned to over the same time)
 			var tt: float = _weather.get("transition_time")
 			_weather.set("transition_time", p_seconds)
-			_weather.set("sunlight", float(SUN[p_key - 1]))
+			_weather.set("sunlight", sun_share)
 			_weather.set("transition_time", tt)
 	if _rain:
 		var snowing := p_key >= 6
