@@ -822,6 +822,8 @@ s, `SUNSET_SHARE` 0.6, `moon_energy` 0.15, `moon_sky_share` 0.1, `sky_night` 0.1
 `WINDOW_LAMPS` 0.55; `toggle()`, `get_night()`; tools: `--night=1`, `--night_at=<s>`,
 `--night_set=moon:,sky_share:,sky:`; rooftops.gd's `set_sun_own_color()`; `rooftops_weather.gd`'s `NIGHT_STOPS` 2.5).
 Milestone 218 (decision 0360): the people at night (`rooftops_crowd.gd`: `NIGHT_AWAY` 0.6, `LANTERN_EVERY` 3).
+Milestone 219 (decision 0361): the brazier's fire light's shadow dual paraboloid (`rooftops_fire.gd`; tools:
+`climb_look.gd --omni_dp=all|fire|lamps|cube`).
 
 ## Vehicles' marks, smoke and sounds (milestone 79)
 

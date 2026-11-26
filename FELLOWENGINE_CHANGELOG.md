@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 219 — The brazier's shadow a dual paraboloid's (2026-11-26)
+
+- Decision 0361. The rooftops brazier's fire light casts a dual paraboloid shadow (two renders a frame instead of a
+  cube's six): the square 0.4-0.6 ms of GPU and 0.2-0.5 ms of the render thread less on the RTX laptop at 1080p, the
+  brazier at night the same picture; the osteria's fireplace keeps its cube (under its hood the dual paraboloid is
+  wrong). `climb_look.gd --omni_dp=all|fire|lamps|cube`.
+
 ## Milestone 218 — The square's people at night (2026-11-26)
 
 - Decision 0360. At night (milestone 216's N) the rooftops square's groups go home or into the osteria as in the rain
