@@ -25,6 +25,9 @@ import os
 import sys
 import tempfile
 
+# MPFB 2's package folder (set from --mpfb: its data/targets has the face modifiers' targets).
+MPFB_DIR = ""
+
 # Milestone 243: the pack's high-poly eyes (1 064 vertices, a round eyeball and cornea; 232-242: low-poly, 96).
 EYES_MESH = "high-poly"
 
@@ -46,6 +49,8 @@ def parse_args():
 
 
 def setup_mpfb(args):
+    global MPFB_DIR
+    MPFB_DIR = os.path.abspath(args.mpfb)
     # Blender's user folder (its extensions, MPFB's settings and data) before bpy is imported.
     profile = os.path.abspath(args.profile) if args.profile else tempfile.mkdtemp(prefix="fellow_mpfb_")
     os.environ["BLENDER_USER_RESOURCES"] = profile
@@ -342,6 +347,50 @@ def eye_bones(bpy, root, eyes_name):
         groups["LeftEye" if w.x > 0.0 else "RightEye"].add([v.index], 1.0, "REPLACE")
 
 
+def face_shape(service, body, mpfb_dir, modifiers, asym_seed=None, asym=0.0):
+    """Milestone 245: the face's own shape — MakeHuman's face modifiers (the spec's `face_shape`: a modifier's label
+    from MPFB's data/targets/target.json, e.g. "nose-hump-decr-incr", to a value -1..1; a single target such as
+    "head-oval" 0..1) loaded as the body's shape keys (applied with the macros at the export), both sides of a sided
+    one; and a little asymmetry (no face is symmetric): every "asym-*" modifier of the face at a random value in
+    ±`asym`. Before the assets are fitted, so that the eyebrows, eyes and clothes follow."""
+    import random
+
+    TargetService = service("services.targetservice", "TargetService")
+    tdir = os.path.join(mpfb_dir, "data", "targets")
+    with open(os.path.join(tdir, "target.json"), encoding="utf-8") as f:
+        meta = json.load(f)
+    by_label = {}
+    for cat, info in meta.items():
+        for c in info.get("categories", []):
+            by_label[c["label"]] = (cat, c)
+    mods = dict(modifiers or {})
+    if asym > 0.0:
+        rng = random.Random(asym_seed)
+        for label in sorted(by_label):
+            if label.startswith("asym-") and not any(k in label for k in ("breast", "trunk")):
+                mods.setdefault(label, rng.uniform(-asym, asym))
+    loaded = 0
+    for label, value in sorted(mods.items()):
+        if label not in by_label or abs(value) < 1e-4:
+            if label not in by_label:
+                print("make_characters: no face modifier %r" % label)
+            continue
+        cat, c = by_label[label]
+        names = []
+        if "opposites" in c:
+            sign = "positive-" if value > 0 else "negative-"
+            sides = ("left", "right") if c.get("has_left_and_right") else ("unsided",)
+            names = [c["opposites"].get(sign + side, "") for side in sides]
+        else:
+            names = c.get("targets", [])[:1] if value > 0 else []
+        for name in [n for n in names if n]:
+            path = os.path.join(tdir, cat, name + ".target.gz")
+            if os.path.exists(path):
+                TargetService.load_target(body, path, weight=min(abs(float(value)), 1.0), name="face-" + name)
+                loaded += 1
+    return loaded
+
+
 def hair_strands(bpy, root, body, hair_name, path_json, dump=""):
     """Milestone 244: the person's hair traced into strand guides (hair_guides.py) for FellowHair3D, written to
     <name>_hair.json beside the .glb; `dump`: the traced data also saved (.npz) to try the tracer on alone."""
@@ -420,6 +469,9 @@ def make(bpy, service, spec, out, save_blend, face_dir, hair_dump=""):
         if macro in spec:
             HumanObjectProperties.set_value(macro, float(spec[macro]), entity_reference=body)
     TargetService.reapply_macro_details(body)
+    if spec.get("face_shape") or spec.get("face_asym", 0.0):
+        n = face_shape(service, body, MPFB_DIR, spec.get("face_shape"), spec["name"], float(spec.get("face_asym", 0.0)))
+        print("make_characters: %s's face: %d targets" % (spec["name"], n))
 
     HumanService.set_character_skin(find(AssetService, spec["skin"], "skins", ".mhmat"), body, skin_type="GAMEENGINE")
     HumanService.add_builtin_rig(body, "game_engine")

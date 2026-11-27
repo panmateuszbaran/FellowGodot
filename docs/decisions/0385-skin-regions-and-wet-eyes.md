@@ -38,6 +38,12 @@ vertices), opaque, without a wet surface or the shadow of the lids, so they look
   the eyes 2 040 triangles a person instead of 172.
 * Regression suite (the people are the showcase's): no engine change.
 
+## RTX laptop (2026-11-27; with 0386's hair)
+
+The square by day with its people and without them (as for 0374): GPU 9.18 / 9.13 ms against 8.77 / 8.82 ms
+(+0.41 / +0.31 ms; before these materials +0.36 / +0.43 ms), the render thread +1.56 / +1.74 ms (before +1.7 ms): the
+skin's regions, the wet eyes and the hair's highlights cost nothing measurable for the 63 people.
+
 ## Decision
 
 KEEP. Not yet the faces' gap closed: the hair (painted cards, "a helmet") is the largest left — milestone 244's strands

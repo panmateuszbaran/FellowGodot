@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 245 — The people's own faces (2026-11-27)
+
+- Decision 0387 (showcase). Each person's face shaped by MakeHuman's face modifiers (`people.json`'s `face_shape`:
+  nose, lips, cheekbones, jaw, ears, the head's shape) and a little seeded asymmetry (`face_asym`), applied before the
+  eyebrows, eyes, hair and clothes are fitted: the crowd no longer shares one averaged face. The hair's highlights
+  (0386) left off curly hair and toned down. On the RTX the people with 243-244's materials cost what they did
+  (+0.3-0.4 ms GPU).
+
 ## Milestone 244 — The hair's highlights across its strands; strands traced from it (2026-11-27)
 
 - Decision 0386. The people's hair shines in a band across its painted strands: each hairstyle's flow map (the

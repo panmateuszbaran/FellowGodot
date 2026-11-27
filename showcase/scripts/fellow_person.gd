@@ -337,13 +337,15 @@ static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint:
 ## hairstyle's flow map (hair_<name>_flow.png, make_skin_maps.py: the texture's own strand direction), a little
 ## glossier than 236's flat hair (a highlight that runs across the strands reads as hair; a round one as plastic).
 static var hair_flow := true
-const HAIR_FLOW_ROUGHNESS := 0.5
-const HAIR_FLOW_SPECULAR := 0.4
+const HAIR_FLOW_ROUGHNESS := 0.55
+const HAIR_FLOW_SPECULAR := 0.3
 const HAIR_ANISOTROPY := 0.85
+## Curly hair has no band of light (its strands point every way): kept as 236 made it (an afro's top went grey).
+const HAIR_CURLY := ["afro"]
 
 static func _hair_highlights(p_mat: StandardMaterial3D, p_style: String) -> void:
 	var path := "res://people/hair_%s_flow.png" % p_style
-	if not ResourceLoader.exists(path):
+	if not ResourceLoader.exists(path) or HAIR_CURLY.any(func(c: String) -> bool: return p_style.contains(c)):
 		return
 	p_mat.anisotropy_enabled = true
 	p_mat.anisotropy = HAIR_ANISOTROPY

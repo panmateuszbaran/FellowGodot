@@ -32,6 +32,10 @@ glTF for the engine (milestone 232, decision 0374).
   for FellowHair3D — roots where the hair covers the scalp, then along the painted strands' direction over the hair's
   surface — written to `<name>_hair.json` beside the `.glb` (`--hair_dump <dir>`: the traced data too, to try the
   tracer alone).
+* **Faces** (milestone 245): the spec's `face_shape` (MakeHuman's face modifiers by their label in MPFB's
+  `data/targets/target.json`, e.g. `"nose-hump-decr-incr": 0.35`, or a single target such as `"head-oval": 0.4`) and
+  `face_asym` (every asymmetry modifier of the face at a random value within it, seeded by the name), loaded before the
+  assets are fitted.
 * **Hats** (milestone 236): with a hat among the clothes (fedora, hat, cap, helmet, hood) the hair's faces above the
   hat's underside are removed (MPFB fits the hair to the head: it came through the hat).
 
