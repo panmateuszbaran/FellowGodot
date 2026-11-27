@@ -62,3 +62,12 @@ KEEP as an option, off (it changes the image: sharper, and where stock blurred a
 Open: on the RTX, its cost and whether it should be on in the showcase (the rooftops' views end at the city's edge or
 the sky — the street's case, where it gains little; indoors, the osteria, and looking down from the roofs it gains
 most); splits placed by the depths' distribution, not only their range (SDSM's full form).
+
+## Rejected
+
+* **The splits blended towards a logarithmic spacing within the fitted range** (SDSM's practical split scheme, a
+  setting from 0 — the light's own offsets — to 1): against the 16384 atlas the street 31.5 → 30.7-31.2 dB (fewer
+  pixels off, 0.75 → 0.63 %, but the far cascades coarser), the courtyard 29.2 → 29.2-29.5 dB, looking down 33.0 →
+  33.3-33.6 dB, the vista the same: no clear gain over Godot's offsets (0.1, 0.2, 0.5 of the range, already close to
+  logarithmic), so not kept.
+
