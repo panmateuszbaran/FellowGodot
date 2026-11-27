@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 247 — The people's small parts (2026-11-27)
+
+- Decision 0389 (showcase). A person is nine meshes, five of them small (eyes, eyebrows, eyelashes, teeth, tongue):
+  the eyes, brows, teeth and tongue cast no shadow, the mouth's parts are not drawn beyond 8 m, the brows and lashes
+  beyond 30 m. Seven people side by side: 175 → 127 draw calls a frame; the image unchanged within the look tool's
+  noise.
+
 ## Milestone 246 — The sun's cascades fitted to what the view shows (2026-11-27)
 
 - Decision 0388, `shadows/directional_depth_fit` (off). The directional light's four cascades span the depths the view

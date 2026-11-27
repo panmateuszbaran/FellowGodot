@@ -10,7 +10,7 @@ extends SceneTree
 ##   expression held (the built-in ones and "pain"). --sheen=0: the clothes without their sheen (milestone 241).
 ##   --skin=0: the skin without its regions' maps (milestone 243). --light=key: a low sun, a light behind, a dim ambient.
 ##   --strands=1: the hair's strands over its cards (milestone 244, off by default); --flow=0: the hair's highlights
-##   without its flow map.
+##   without its flow map. --parts=0: the small parts (eyes, brows, lashes, teeth, tongue) as before milestone 247.
 
 var _out := "user://person_look"
 var _person := "giulia"
@@ -65,6 +65,8 @@ func _init() -> void:
 			FellowPerson.strand_hair = false
 		elif a == "--strands=1":
 			FellowPerson.strand_hair = true
+		elif a == "--parts=0":
+			FellowPerson.parts_lod = false
 		elif a == "--flow=0":
 			FellowPerson.hair_flow = false
 		elif a.begins_with("--light="):
@@ -199,5 +201,9 @@ func _run() -> void:
 		if i % _every == _every - 1:
 			await RenderingServer.frame_post_draw
 			root.get_texture().get_image().save_png("%s/f%04d.png" % [_out, i / _every])
-	print("person_look: %d frames" % frames)
+	# (milestone 247: what the people cost the renderer — the last frame's draw calls and primitives, all passes, and the
+	# shadow passes' own from FellowEngine's statistics)
+	var draws := RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)
+	var prims := RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME)
+	print("person_look: %d frames; the last: %d draw calls, %d primitives" % [frames, draws, prims])
 	quit()

@@ -78,9 +78,36 @@ static func dress(p_npc: Node3D, p_person: PackedScene, p_rng: RandomNumberGener
 	for mi in pskel.find_children("*", "MeshInstance3D", true, false):
 		_materials(mi as MeshInstance3D, cloth_tint, hair_tint)
 	_face(pskel, skel, p_rng)
+	if parts_lod:
+		_small_parts(pskel)
 	if strand_hair:
 		_strands(pskel, p_person.resource_path.get_basename() + "_hair.json", hair_tint, p_match_height)
 	return pskel
+
+
+## Milestone 247: the person's small parts — eyes, eyebrows, eyelashes, teeth, tongue: five of its nine meshes, each a
+## draw call in every pass. The eyes, brows, teeth and tongue cast no shadow (inside the head, or flat on the skin; the
+## lashes still do: they shade the eyes), the mouth's are not drawn beyond MOUTH_RANGE (behind the lips), the brows'
+## and lashes' beyond FACE_RANGE (under a pixel).
+static var parts_lod := true
+const MOUTH_RANGE := 8.0 # m
+const FACE_RANGE := 30.0 # m
+
+static func _small_parts(p_person: Skeleton3D) -> void:
+	for mi in p_person.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		var n := String(m.name).to_lower()
+		var mouth := n.contains("teeth") or n.contains("tongue")
+		var face := n.contains("eyebrow") or n.contains("eyelash")
+		var eyes := n.contains("high-poly") or n.contains("low-poly")
+		if not (mouth or face or eyes):
+			continue
+		if not n.contains("eyelash"):
+			m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF # (the lashes shade the eyes: kept)
+		if mouth:
+			m.visibility_range_end = MOUTH_RANGE
+		elif face:
+			m.visibility_range_end = FACE_RANGE
 
 
 ## Milestone 244: the hair as strands (FellowHair3D, decision 0386) over its cards, from the guides traced from the
