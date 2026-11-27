@@ -46,3 +46,18 @@ The owner allowed the GPU again; milestone 242's build on the RTX laptop at 1920
 
 So the three gaps' engine work holds up on the GPU. The owner's next concern, the people's realism, is being worked on:
 the skin by region and wet eyes (milestone 243), then the hair as strands, then the faces' shapes.
+
+## 5. After milestone 247 (2026-11-27)
+
+The medium gaps, without the GPU (the owner: "continue without GPU"):
+
+| gap | milestones | what changed | waits for the RTX |
+|---|---|---|---|
+| materials | 241 | a sheen lobe (velvet, wool, satin: glTF's `KHR_materials_sheen`); the showcase's suits and hats wear it | its cost (a few ALU on the materials that use it) |
+| characters as seen | 243-245, 247 | skin by region (glossy lips and T-zone, an oily second lobe, light through the ears), wet high-poly eyes shaded by the lids, the hair's highlights across its painted strands, each face its own (MakeHuman's face modifiers, a little asymmetry), the small parts' draw calls cut by a quarter; strands traced from the hair (an engine feature) but off in the showcase (a haze at its distances) | the square's 63 people's render thread after 247 (0374: +1.7 ms) |
+| sun shadows | 246 | the cascades can be fitted to the depths the view shows (sample distribution shadow maps, an option): against a 16384 atlas a courtyard 25.5 → 29.2 dB, looking down 29.8 → 33.0 dB | its cost; on in the showcase or not (its views do not fit the cloud's memory on lavapipe any more) |
+
+Scores (judgment): characters as seen medium (better faces; still MakeHuman's painted textures and mid-poly bodies —
+MetaHumans, usable in Godot since June 2025, would be the next class, on the owner's decision); sun shadows medium
+(closer where views end short; not virtual shadow maps' texel per pixel); materials medium (one lobe more; no layered
+materials like Substrate); GI medium (unchanged since 167-168). Tools, platforms and content stay large.
