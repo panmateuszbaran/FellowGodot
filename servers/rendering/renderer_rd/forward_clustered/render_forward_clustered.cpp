@@ -37,6 +37,7 @@
 #include "core/os/os.h"
 #include "servers/rendering/fellow_bake_shaders.h"
 #include "servers/rendering/fellow_cluster_dag_settings.h"
+#include "servers/rendering/fellow_depth_fit.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/fellow_settings_look.h"
 #include "servers/rendering/renderer_rd/effects/fellow_gas.h"
@@ -5423,6 +5424,44 @@ RID RenderForwardClustered::_fellow_process_contact_shadow(RenderDataRD *p_rende
 	return params.dest;
 }
 
+// FellowEngine depth-fitted sun shadows (decision 0388): the depth pre-pass's nearest and farthest opaque surface,
+// read back for the scene cull's next set-ups of the directional cascades (keyed by the render buffers).
+void RenderForwardClustered::_fellow_depth_fit_reduce(const RenderDataRD *p_render_data) {
+	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
+	if (rb.is_null() || rb->get_view_count() != 1) {
+		return;
+	}
+	if (!fellow_depth_range) {
+		fellow_depth_range = memnew(RendererRD::FellowDepthRange);
+	}
+	RENDER_TIMESTAMP("FellowEngine Depth Range");
+	RendererRD::FellowDepthRange::Params params;
+	params.depth = rb->get_depth_texture(0);
+	params.size = rb->get_internal_size();
+	params.projection = _fellow_jittered_projection(p_render_data);
+	const uint64_t frame = RSG::rasterizer->get_frame_number();
+	const Transform3D &cam = p_render_data->scene_data->cam_transform;
+	const Vector3 forward = -cam.basis.get_column(Vector3::AXIS_Z).normalized();
+	fellow_depth_range->process(params, callable_mp_static(&RenderForwardClustered::_fellow_depth_fit_readback).bind(uint64_t(rb->get_instance_id()), frame, cam.origin, forward));
+}
+
+void RenderForwardClustered::_fellow_depth_fit_readback(const Vector<uint8_t> &p_data, uint64_t p_buffers, uint64_t p_frame, const Vector3 &p_cam_origin, const Vector3 &p_cam_forward) {
+	if (p_data.size() < 16) {
+		return;
+	}
+	const uint32_t *w = reinterpret_cast<const uint32_t *>(p_data.ptr());
+	Fellow::DepthFitRange r;
+	r.frame = p_frame;
+	r.any = w[2] > 0 && w[0] != 0x7f7fffffu;
+	if (r.any) {
+		memcpy(&r.nearest, &w[0], sizeof(float));
+		memcpy(&r.farthest, &w[1], sizeof(float));
+	}
+	r.cam_origin = p_cam_origin;
+	r.cam_forward = p_cam_forward;
+	Fellow::depth_fit_set(ObjectID(p_buffers), r);
+}
+
 // FellowEngine (decision 0126): the depth texture's copy for materials sampling it with a mipmap filter, its levels the
 // nearest depth of their cells (SSR's Hi-Z reduction; up to 8 levels: cells of up to 128 pixels). Its own texture: the
 // single-level copy stays as it is for every other reader.
@@ -7413,6 +7452,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	if (depth_pre_pass && (Fellow::debug_occlusion_stats() || fellow_occlusion.filtered) && !is_reflection_probe) {
 		_fellow_occlusion_stats(p_render_data);
+	}
+	if (depth_pre_pass && !use_msaa && !is_reflection_probe && Fellow::directional_depth_fit()) {
+		_fellow_depth_fit_reduce(p_render_data);
 	}
 
 	{
@@ -11940,6 +11982,10 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (fellow_rtao) {
 		memdelete(fellow_rtao);
 		fellow_rtao = nullptr;
+	}
+	if (fellow_depth_range) {
+		memdelete(fellow_depth_range);
+		fellow_depth_range = nullptr;
 	}
 	if (fellow_contact_shadow) {
 		memdelete(fellow_contact_shadow);

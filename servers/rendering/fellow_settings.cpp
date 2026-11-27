@@ -34,6 +34,7 @@
 #include "core/os/os.h"
 #include "core/variant/dictionary.h"
 #include "servers/rendering/fellow_cluster_dag_settings.h"
+#include "servers/rendering/fellow_depth_fit.h"
 #include "servers/rendering/fellow_hitch_sampler.h"
 #include "servers/rendering/fellow_memory_counters.h"
 #include "servers/rendering/fellow_parallel.h"
@@ -286,6 +287,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag_cache", true); // decision 0379
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag_indirect", true); // decision 0381
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag_parallel", true); // decision 0384 (RTX laptop: the prepare step halved)
+	GLOBAL_DEF("rendering/fellow/shadows/directional_depth_fit", false); // decision 0388
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_min_surface_triangles", PROPERTY_HINT_RANGE, "256,1048576,1"), 32768);
 	GLOBAL_DEF("rendering/fellow/lights/enabled", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", true);
@@ -716,6 +718,9 @@ Dictionary Fellow::get_stats_dictionary() {
 		d["geometry_cluster_dag_indirect_draws"] = cs.indirect_draws.get();
 		d["geometry_cluster_dag_run_instances"] = cs.run_instances.get();
 		d["geometry_cluster_dag_walk_usec"] = cs.walk_usec.get();
+		d["shadows_depth_fit_renders"] = Fellow::depth_fit_stats().fitted_renders.get(); // decision 0388
+		d["shadows_depth_fit_near_mm"] = Fellow::depth_fit_stats().last_near_mm.get();
+		d["shadows_depth_fit_far_mm"] = Fellow::depth_fit_stats().last_far_mm.get();
 		d["geometry_cluster_dag_prepare_usec"] = cs.prepare_usec.get(); // decision 0384
 		d["geometry_cluster_dag_parallel_walks"] = cs.parallel_walks.get();
 		d["geometry_cluster_dag_cache_hits"] = cs.cache_hits.get();

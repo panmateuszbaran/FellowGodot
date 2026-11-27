@@ -1191,6 +1191,13 @@ public:
 	void _unpair_instance(Instance *p_instance);
 
 	void _light_instance_setup_directional_shadow(int p_shadow_index, Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect);
+	// FellowEngine depth-fitted sun shadows (decision 0388): the view's depth range for this render's cascades (from the
+	// renderer's readback of an earlier frame; any false: none, the cascades as stock sets them).
+	struct FellowDepthFitNow {
+		bool use = false;
+		float nearest = 0.0f;
+		float farthest = 0.0f;
+	} fellow_depth_fit_now;
 
 	/* FellowEngine directional shadow cache (docs/decisions/0004-directional-shadow-cache.md) */
 

@@ -72,6 +72,13 @@ String RenderingLightCuller::Data::plane_bitfield_to_string(unsigned int BF) {
 }
 #endif
 
+void RenderingLightCuller::fellow_set_directional_distances(const real_t *p_distances, int p_count) {
+	fellow_distance_count = CLAMP(p_count, 0, 4);
+	for (int i = 0; i <= fellow_distance_count && fellow_distance_count > 0; i++) {
+		fellow_distances[i] = p_distances[i];
+	}
+}
+
 void RenderingLightCuller::prepare_directional_light(const RendererSceneCull::Instance *p_instance, int32_t p_directional_light_id) {
 	//data.directional_light = p_instance;
 	// Something is probably going wrong, we shouldn't have this many directional lights...
@@ -161,6 +168,13 @@ bool RenderingLightCuller::_prepare_light(const RendererSceneCull::Instance &p_i
 			};
 			// If not 4 cascades, replace last used cascade plane distance with max shadow range (shadow far plane distance).
 			plane_distances[used_planes - 1] = shadow_far;
+			if (fellow_distance_count == lsource.cascade_count) {
+				// FellowEngine (decision 0388): the cascades' own distances, as the scene cull set them up.
+				for (int i = 0; i < used_planes; i++) {
+					plane_distances[i] = fellow_distances[i];
+				}
+			}
+			fellow_distance_count = 0;
 #ifdef LIGHT_CULLER_DEBUG_LOGGING
 			if (is_logging()) {
 				print_line("cascade split planes (first " + itos(used_planes) + " used): " +

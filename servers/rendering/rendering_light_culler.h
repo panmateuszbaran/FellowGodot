@@ -161,6 +161,11 @@ public:
 	// Directional lights are prepared in advance, and can be culled multithreaded chopping and changing between
 	// different directional_light_id.
 	void prepare_directional_light(const RendererSceneCull::Instance *p_instance, int32_t p_directional_light_id);
+	// FellowEngine depth-fitted sun shadows (decision 0388): the next prepare_directional_light() takes the cascades'
+	// distances from the camera (p_count + 1 of them: the first's near, then each one's far) as the scene cull set them
+	// up, instead of the light's own split offsets times its max distance (the casters each cascade keeps must be those
+	// of the slice it really covers).
+	void fellow_set_directional_distances(const real_t *p_distances, int p_count);
 
 	// Return false if the instance is to be culled.
 	bool cull_directional_light(const RendererSceneCull::InstanceBounds &p_bound, int32_t p_directional_light_id, int32_t p_cascade);
@@ -173,6 +178,8 @@ public:
 	void set_light_culling_active(bool p_active) { data.light_culling_active = p_active; }
 
 private:
+	real_t fellow_distances[5] = {}; // decision 0388
+	int fellow_distance_count = 0; // 0: none set
 	struct LightCullPlanes {
 		void add_cull_plane(const Plane &p);
 		Plane cull_planes[MAX_CULL_PLANES];

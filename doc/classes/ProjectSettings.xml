@@ -3976,6 +3976,9 @@
 		<member name="rendering/fellow/shadows/directional_cache_texel_lod" type="float" setter="" getter="" default="1.0">
 			Cached casters use the coarsest LOD whose error is below this many shadow-map texels.
 		</member>
+		<member name="rendering/fellow/shadows/directional_depth_fit" type="bool" setter="" getter="" default="false">
+			The directional light's shadow cascades fitted to the depths the view shows (sample distribution shadow maps): the depth pre-pass is reduced on the GPU to its nearest and farthest opaque surface, read back a few frames later, and the cascades then span that range (the farthest surface kept before the shadow's fade, with a margin, in steps of a quarter octave) instead of the camera's near plane to the shadow's max distance — sharper shadows wherever the view ends short of it (streets, rooms, looking down). Only ever narrower than stock's; the camera's near plane and the max distance otherwise. Not with MSAA or in reflection probes. Changes the image. Read every frame. Decision 0388.
+		</member>
 		<member name="rendering/fellow/shadows/directional_max_mip" type="bool" setter="" getter="" default="true">
 			Soft directional shadows: a min/max pyramid of the shadow map lets fully lit and fully shadowed pixels skip the filter. Exact: the same image or results as stock Godot. Decision 0005.
 		</member>

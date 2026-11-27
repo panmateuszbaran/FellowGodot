@@ -36,6 +36,7 @@
 #include "core/object/callable_mp.h"
 #include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
+#include "servers/rendering/fellow_depth_fit.h"
 #include "servers/rendering/fellow_positional_shadow_cache.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/fellow_texture_streaming.h"
@@ -2397,9 +2398,6 @@ void RendererSceneCull::_update_instance_lightmap_captures(Instance *p_instance)
 }
 
 void RendererSceneCull::_light_instance_setup_directional_shadow(int p_shadow_index, Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect) {
-	// For later tight culling, the light culler needs to know the details of the directional light.
-	light_culler->prepare_directional_light(p_instance, p_shadow_index);
-
 	InstanceLightData *light = static_cast<InstanceLightData *>(p_instance->base_data);
 
 	Transform3D light_transform = p_instance->transform;
@@ -2412,6 +2410,24 @@ void RendererSceneCull::_light_instance_setup_directional_shadow(int p_shadow_in
 	}
 	max_distance = MAX(max_distance, p_cam_projection.get_z_near() + 0.001);
 	real_t min_distance = MIN(p_cam_projection.get_z_near(), max_distance);
+	if (fellow_depth_fit_now.use && !p_cam_orthogonal) {
+		// FellowEngine depth-fitted sun shadows (decision 0388): the cascades span what the view showed a few frames ago
+		// — its farthest surface past which the shadow fades only beyond (the fade starts at fade_start of the range),
+		// with a margin, and its nearest — in steps of a quarter octave (a range that changes every frame would move the
+		// texels: shimmer), only ever narrower than stock's.
+		const real_t fade_start = CLAMP(RSG::light_storage->light_get_param(p_instance->base, RSE::LIGHT_PARAM_SHADOW_FADE_START), real_t(0.1), real_t(0.999));
+		const real_t step = Math::pow(real_t(2.0), real_t(0.25));
+		const real_t far_want = MAX(real_t(fellow_depth_fit_now.farthest) * real_t(1.1), real_t(fellow_depth_fit_now.farthest) / fade_start * real_t(1.02));
+		const real_t far_q = Math::pow(step, Math::ceil(Math::log(MAX(far_want, real_t(0.01))) / Math::log(step)));
+		if (far_q < max_distance) {
+			max_distance = MAX(far_q, min_distance + real_t(0.5));
+		}
+		const real_t near_want = real_t(fellow_depth_fit_now.nearest) / real_t(1.5);
+		if (near_want > min_distance) {
+			const real_t near_q = Math::pow(step, Math::floor(Math::log(near_want) / Math::log(step)));
+			min_distance = CLAMP(near_q, min_distance, max_distance * real_t(0.25));
+		}
+	}
 
 	real_t pancake_size = RSG::light_storage->light_get_param(p_instance->base, RSE::LIGHT_PARAM_SHADOW_PANCAKE_SIZE);
 
@@ -2438,6 +2454,13 @@ void RendererSceneCull::_light_instance_setup_directional_shadow(int p_shadow_in
 	};
 
 	distances[splits] = max_distance;
+
+	// For later tight culling, the light culler needs to know the details of the directional light (FellowEngine,
+	// decision 0388: and the cascades' distances, when they were fitted to the view's depths).
+	if (fellow_depth_fit_now.use && !p_cam_orthogonal) {
+		light_culler->fellow_set_directional_distances(distances, splits);
+	}
+	light_culler->prepare_directional_light(p_instance, p_shadow_index);
 
 	real_t texture_size = RSG::light_storage->get_directional_light_shadow_size(light->instance);
 
@@ -4592,9 +4615,30 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			}
 		}
 
+		// FellowEngine depth-fitted sun shadows (decision 0388): this view's depth range from a recent frame.
+		fellow_depth_fit_now = FellowDepthFitNow();
+		if (Fellow::directional_depth_fit() && p_reflection_probe.is_null() && p_render_buffers.is_valid()) {
+			Fellow::DepthFitRange r;
+			// The range is a few frames old: the camera moved since by `moved` metres, which widens it as much; if it
+			// turned by more than 15 degrees or jumped (a cut, a quick turn), what it sees now may lie anywhere: none.
+			const Transform3D &cam = p_camera_data->main_transform;
+			const Vector3 forward = -cam.basis.get_column(Vector3::AXIS_Z).normalized();
+			bool ok = Fellow::depth_fit_get(p_render_buffers->get_instance_id(), r) && r.any && fellow_frame - r.frame <= 8 && r.far_held > 0.0f;
+			const real_t moved = ok ? cam.origin.distance_to(r.cam_origin) : real_t(0.0);
+			ok = ok && forward.dot(r.cam_forward) >= Math::cos(Math::deg_to_rad(real_t(15.0))) && moved <= MAX(real_t(1.0), real_t(r.far_held) * real_t(0.1));
+			if (ok) {
+				fellow_depth_fit_now.use = true;
+				fellow_depth_fit_now.nearest = MAX(0.0f, r.near_held - float(moved));
+				fellow_depth_fit_now.farthest = r.far_held + float(moved);
+				Fellow::depth_fit_stats().fitted_renders.increment();
+				Fellow::depth_fit_stats().last_near_mm.set(uint64_t(r.nearest * 1000.0f));
+				Fellow::depth_fit_stats().last_far_mm.set(uint64_t(r.farthest * 1000.0f));
+			}
+		}
 		for (int i = 0; i < lights_with_shadow.size(); i++) {
 			_light_instance_setup_directional_shadow(i, lights_with_shadow[i], p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect);
 		}
+		fellow_depth_fit_now = FellowDepthFitNow();
 
 		for (int i = 0; i < lights_with_shadow.size() && i < RendererSceneRender::MAX_DIRECTIONAL_LIGHTS; i++) {
 			_fellow_shadow_cache_decide(i, fellow_frame, p_visible_layers, scenario);

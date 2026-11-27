@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 246 — The sun's cascades fitted to what the view shows (2026-11-27)
+
+- Decision 0388, `shadows/directional_depth_fit` (off). The directional light's four cascades span the depths the view
+  actually shows (the depth pre-pass reduced on the GPU and read back; held over recent frames; widened by the
+  camera's movement; stock after a cut) instead of the near plane to the shadow's max distance: in a courtyard or
+  looking down the shadows are much sharper (25.5 → 29.2 dB and 29.8 → 33.0 dB against a 16384 atlas). Godot's light
+  culler is given the same slices (with the stock ones it dropped the far cascades' casters).
+
 ## Milestone 245 — The people's own faces (2026-11-27)
 
 - Decision 0387 (showcase). Each person's face shaped by MakeHuman's face modifiers (`people.json`'s `face_shape`:

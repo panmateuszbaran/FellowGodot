@@ -35,17 +35,18 @@
 #include "servers/rendering/fellow_sort.h"
 #include "servers/rendering/multi_uma_buffer.h"
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
-#include "servers/rendering/renderer_rd/effects/fellow_shadow_cache.h"
+#include "servers/rendering/renderer_rd/effects/fellow_atmosphere.h"
+#include "servers/rendering/renderer_rd/effects/fellow_clouds.h"
+#include "servers/rendering/renderer_rd/effects/fellow_contact_shadow.h"
 #include "servers/rendering/renderer_rd/effects/fellow_ddgi.h"
-#include "servers/rendering/renderer_rd/effects/fellow_sdf_gather.h"
+#include "servers/rendering/renderer_rd/effects/fellow_depth_range.h"
+#include "servers/rendering/renderer_rd/effects/fellow_rainbow.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rt_albedo.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rt_reflections.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rt_shadow.h"
-#include "servers/rendering/renderer_rd/effects/fellow_atmosphere.h"
-#include "servers/rendering/renderer_rd/effects/fellow_clouds.h"
-#include "servers/rendering/renderer_rd/effects/fellow_rainbow.h"
-#include "servers/rendering/renderer_rd/effects/fellow_contact_shadow.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rtao.h"
+#include "servers/rendering/renderer_rd/effects/fellow_sdf_gather.h"
+#include "servers/rendering/renderer_rd/effects/fellow_shadow_cache.h"
 #include "servers/rendering/renderer_rd/effects/fellow_shadow_max_mip.h"
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
 #include "servers/rendering/renderer_rd/effects/fsr3.h"
@@ -1528,6 +1529,9 @@ private:
 	RendererRD::FellowRTAO *fellow_rtao = nullptr;
 	RendererRD::FellowRTShadow *fellow_rt_shadow = nullptr;
 	RendererRD::FellowContactShadow *fellow_contact_shadow = nullptr; // decision 0107
+	RendererRD::FellowDepthRange *fellow_depth_range = nullptr; // decision 0388
+	void _fellow_depth_fit_reduce(const RenderDataRD *p_render_data);
+	static void _fellow_depth_fit_readback(const Vector<uint8_t> &p_data, uint64_t p_buffers, uint64_t p_frame, const Vector3 &p_cam_origin, const Vector3 &p_cam_forward);
 	// FellowEngine sky atmosphere (decision 0108): the tables, their wrappers for the global shader parameters, this
 	// frame's parameters (valid: the tables were updated for this render).
 	RendererRD::FellowAtmosphere *fellow_atmosphere = nullptr;
