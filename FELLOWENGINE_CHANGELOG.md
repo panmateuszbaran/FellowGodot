@@ -13,7 +13,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 
 - Decision 0393's addendum (with `shading/gltf_material_extensions`). `KHR_materials_diffuse_transmission` read as
   BaseMaterial3D's backlight: a teacup's porcelain and a plant's leaves lit through from behind. Also decision 0386's
-  second addendum: a Kajiya-Kay shader for the people's hair tried and rejected.
+  second addendum: a Kajiya-Kay shader for the people's hair tried and rejected; and decision 0390's addendum: imported
+  coats as rough as glTF's (Godot's coat roughness past its inspector's 1, which the shaders allow).
 
 ## Milestone 251 — glTF's glass (2026-11-28)
 

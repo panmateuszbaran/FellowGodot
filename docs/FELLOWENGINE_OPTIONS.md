@@ -1757,8 +1757,8 @@ and the maximum. A `ShaderMaterial` writes `IRIDESCENCE`, `IRIDESCENCE_IOR` and 
 
 `shading/gltf_material_extensions` (off; decision 0390): glTF files are read (the editor's import, `GLTFDocument` at run
 time) and written with `KHR_materials_sheen` (the sheen, its textures into `sheen_texture`), `KHR_materials_clearcoat`
-(the coat; its strength and roughness textures packed into `clearcoat_texture`; coats rougher than glTF's 0.32 held
-there, its normal texture not read), `KHR_materials_anisotropy` (the strength matched to Godot's at the material's
+(the coat; its strength and roughness textures packed into `clearcoat_texture`; coats rougher than glTF's 0.32 go past
+`clearcoat_roughness` 1, which the shaders allow; its normal texture not read), `KHR_materials_anisotropy` (the strength matched to Godot's at the material's
 roughness, the rotation and direction texture baked into `anisotropy_flowmap`), and `KHR_materials_ior` with
 `KHR_materials_specular` (the reflectance at normal incidence as `metallic_specular`, up to F0 0.16; the specular
 colour averaged, its textures not read); from milestone 250 also `KHR_materials_iridescence` (the film above, its textures

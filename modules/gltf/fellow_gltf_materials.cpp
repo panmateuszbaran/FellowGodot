@@ -33,8 +33,9 @@
 //
 // * KHR_materials_sheen: the sheen lobe (decision 0383); its colour and roughness textures into sheen_texture (RGB, A).
 // * KHR_materials_clearcoat: the coat; its strength and roughness textures packed into clearcoat_texture (R, G). Godot's
-//   coat roughness is linear in GGX alpha from 0.001 to 0.1 (perceptual roughness 0.03 to 0.32): rougher coats are held
-//   at 0.32. The coat's own normal texture is not read (Godot's coat uses the geometric normal).
+//   coat roughness is linear in GGX alpha (0.001 + 0.099 r): glTF's perceptual roughness 0.03-0.32 is 0-1, rougher coats
+//   go past 1 (to 10.1, the shaders do not clamp it; milestone 253). The coat's own normal texture is not read (Godot's
+//   coat uses the geometric normal).
 // * KHR_materials_anisotropy: the strength (matched to Godot's parameterization at the material's roughness) and the
 //   direction (the rotation and the texture's directions baked into one flowmap, its strength in alpha).
 // * KHR_materials_ior and KHR_materials_specular: the dielectric's reflectance at normal incidence as Godot's specular
@@ -128,13 +129,16 @@ Ref<ImageTexture> fellow_combine(const Ref<Image> &p_a, const Ref<Image> &p_b, c
 	return tex;
 }
 
-// Godot's coat roughness (GGX alpha mix(0.001, 0.1, r)) from glTF's perceptual roughness (alpha r^2), and back.
+// Godot's coat roughness (GGX alpha mix(0.001, 0.1, r)) from glTF's perceptual roughness (alpha r^2), and back. The
+// shaders do not clamp it: past 1 (the inspector's range) the mix goes on to alpha 1 at about 10.1, glTF's roughest coat.
+const float FELLOW_COAT_ROUGHNESS_MAX = 0.999f / 0.099f;
+
 float fellow_coat_roughness_from_gltf(float p_roughness) {
-	return CLAMP((p_roughness * p_roughness - 0.001f) / 0.099f, 0.0f, 1.0f);
+	return CLAMP((p_roughness * p_roughness - 0.001f) / 0.099f, 0.0f, FELLOW_COAT_ROUGHNESS_MAX);
 }
 
 float fellow_coat_roughness_to_gltf(float p_roughness) {
-	return Math::sqrt(0.001f + 0.099f * CLAMP(p_roughness, 0.0f, 1.0f));
+	return Math::sqrt(0.001f + 0.099f * CLAMP(p_roughness, 0.0f, FELLOW_COAT_ROUGHNESS_MAX));
 }
 
 // Godot's anisotropy a stretches GGX's alpha to alpha / sqrt(1 - 0.9 a) along the tangent and alpha sqrt(1 - 0.9 a)
@@ -315,10 +319,12 @@ void GLTFDocument::_fellow_parse_material_extensions(Ref<GLTFState> p_state, int
 			const Ref<Image> strength_image = _fellow_texture_image(p_state, coat, "clearcoatTexture", p_primary_texture_coord, &strength_index);
 			const Ref<Image> roughness_image = _fellow_texture_image(p_state, coat, "clearcoatRoughnessTexture", p_primary_texture_coord, &roughness_index);
 			if (roughness_image.is_valid()) {
-				// (the roughness is not linear between the two: baked with its factor, Godot's factor 1)
-				p_material->set_clearcoat_roughness(1.0f);
-				p_material->set_texture(BaseMaterial3D::TEXTURE_CLEARCOAT, fellow_combine(strength_image, roughness_image, name + "_clearcoat", [roughness](const Color &p_s, const Color &p_r) {
-					return Color(p_s.r, fellow_coat_roughness_from_gltf(roughness * p_r.g), 0.0f, 1.0f);
+				// (the roughness is not linear between the two: Godot's factor the coat's roughest, the texture's G each
+				// texel's share of it)
+				const float most = MAX(fellow_coat_roughness_from_gltf(roughness), 1e-4f);
+				p_material->set_clearcoat_roughness(most);
+				p_material->set_texture(BaseMaterial3D::TEXTURE_CLEARCOAT, fellow_combine(strength_image, roughness_image, name + "_clearcoat", [roughness, most](const Color &p_s, const Color &p_r) {
+					return Color(p_s.r, fellow_coat_roughness_from_gltf(roughness * p_r.g) / most, 0.0f, 1.0f);
 				}));
 			} else {
 				p_material->set_clearcoat_roughness(fellow_coat_roughness_from_gltf(roughness));
@@ -327,9 +333,6 @@ void GLTFDocument::_fellow_parse_material_extensions(Ref<GLTFState> p_state, int
 						return Color(p_s.r, 1.0f, 0.0f, 1.0f);
 					}));
 				}
-			}
-			if (roughness > 0.32f) {
-				print_verbose(vformat("glTF: material %s's clear coat roughness %.2f is held at Godot's 0.32.", name, roughness));
 			}
 			if (coat.has("clearcoatNormalTexture")) {
 				print_verbose(vformat("glTF: material %s's clear coat normal texture is not read (Godot's coat follows the geometric normal).", name));

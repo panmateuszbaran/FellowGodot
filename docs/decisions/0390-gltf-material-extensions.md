@@ -24,7 +24,7 @@ run time) and writes them back on export:
   same Charlie lobe). Its two textures go into a new `BaseMaterial3D.sheen_texture`: RGB multiply the colour (sRGB), A
   the roughness — glTF's own packing, so one texture used for both is taken as it is; two are packed into one.
 * **Clear coat**: `clearcoat_enabled`, `clearcoat`, `clearcoat_roughness`. Godot's coat roughness is linear in GGX alpha
-  from 0.001 to 0.1 (glTF's perceptual roughness 0.03 to 0.32): converted, rougher coats held at 0.32. Its strength
+  from 0.001 to 0.1 (glTF's perceptual roughness 0.03 to 0.32): converted (rougher coats: see the addendum). Its strength
   (R) and roughness (G) textures are packed into `clearcoat_texture` (R as it is, G converted with the factor: the two
   roughnesses are not proportional). The coat's own normal texture is not read: Godot's coat follows the geometric
   normal (glTF's too when the coat has no normal texture).
@@ -93,3 +93,12 @@ normal texture and rougher coats (both need the coat's shading changed), the spe
 * **Matching the anisotropy by raising the roughness** (Godot's alpha set to the geometric mean of glTF's two, so both
   directions match): it changes the material's roughness for everything else (its reflections' blur, a roughness
   texture's meaning) to fix the stretch of near-mirrors; the ratio alone keeps the roughness as authored.
+
+## Addendum (2026-11-28): rougher coats
+
+Godot's coat roughness is the GGX alpha `0.001 + 0.099 r`; the inspector's range (0-1) stops at alpha 0.1 (glTF's 0.32),
+but no shader clamps it, so the importer now goes on past 1 — to 10.1, alpha 1, glTF's roughest coat — instead of
+holding coats at 0.32; with a roughness texture, the material's value is the coat's roughest and the texture's G each
+texel's share of it. ClearCoatTest's "roughness variations" row: the rough stripes' reflections spread as the
+reference's, where they were held glossy. Export reads the same scale back.
+
