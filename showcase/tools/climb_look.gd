@@ -27,6 +27,7 @@ extends SceneTree
 ##       213: CasaRosa's osteria — from the square through its arch, inside, or the player walking in; its state
 ##       printed)
 ## --drop=<node>,...: the scene's top-level nodes left out (an A/B). --setting=<project setting>:<value> for this run.
+## --skin_relief=0: the people's skin without its baked occlusion and micro-relief (milestone 249, an A/B).
 ##   godot ... -s res://tools/climb_look.gd -- --program=talk [--talk_to=<group>] --out=<dir> [--seconds=10] ...
 ##       (milestone 212: the player walks up to one of a group and talks — E at 1.4 s, then every 2.6 s — the camera over
 ##       the player's shoulder; the crowd's social counts printed)
@@ -111,6 +112,8 @@ func _init() -> void:
 			var key := kv.get_slice(":", 0)
 			var val := kv.get_slice(":", 1)
 			ProjectSettings.set_setting(key, (val == "true") if val in ["true", "false"] else float(val))
+		elif a == "--skin_relief=0":
+			FellowPerson.skin_relief = false # (milestone 249: the people's skin without its baked occlusion and relief)
 		elif a.begins_with("--omni_dp="):
 			_omni_dp = a.get_slice("=", 1)
 		elif a == "--omni_dp_level=1":
