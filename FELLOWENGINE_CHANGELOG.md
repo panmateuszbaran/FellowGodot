@@ -14,8 +14,9 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - Decision 0395 (Windows). A game started behind another window (its launcher closed before the window was up, so
   Windows did not give it the focus) had its captured mouse clipped to it anyway: the cursor trapped over a window
   without the focus. A captured or confined mouse now takes the cursor only while one of the game's windows is in
-  front, and takes it when the window comes to the front; losing the focus lets go of the clip. The showcase's
-  launcher waits for the game's window before closing, so the game may take the focus.
+  front (Windows asked which window is in front, once a frame while waiting: a window refused the foreground is still
+  activated within its thread), and takes it when the window comes to the front; losing the focus lets go of the clip.
+  The showcase's launcher waits for the game's window to be shown and hands it the focus before closing.
 
 ## Milestone 253 — the people in period clothes (2026-11-28)
 
