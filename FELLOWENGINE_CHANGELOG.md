@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 252 — glTF's diffuse transmission (2026-11-28)
+
+- Decision 0393's addendum (with `shading/gltf_material_extensions`). `KHR_materials_diffuse_transmission` read as
+  BaseMaterial3D's backlight: a teacup's porcelain and a plant's leaves lit through from behind. Also decision 0386's
+  second addendum: a Kajiya-Kay shader for the people's hair tried and rejected.
+
 ## Milestone 251 — glTF's glass (2026-11-28)
 
 - Decision 0393 (with `shading/gltf_material_extensions`, off). `KHR_materials_transmission` and

@@ -45,6 +45,7 @@
 // * KHR_materials_transmission and KHR_materials_volume (milestone 251, decision 0393): glass as BaseMaterial3D's
 //   refraction tinted by its albedo (refraction_tint); a volume bent by its IOR and absorbing along its thickness (with
 //   a thickness texture, the absorption baked into the albedo texture).
+// * KHR_materials_diffuse_transmission (milestone 252): BaseMaterial3D's backlight (leaves, paper, lampshades).
 
 #include "gltf_document.h"
 
@@ -452,6 +453,44 @@ void GLTFDocument::_fellow_parse_material_extensions(Ref<GLTFState> p_state, int
 					out.a = p_a.a;
 					return out;
 				}));
+			}
+		}
+	}
+
+	if (p_extensions.has("KHR_materials_diffuse_transmission")) {
+		// (milestone 252, decision 0393) Light through a thin diffusing surface — leaves, paper, a lampshade, thin porcelain:
+		// BaseMaterial3D's backlight (the light from behind, scattered), the transmission's factor times its colour; their
+		// textures baked into the backlight texture. BaseMaterial3D multiplies the backlight by the albedo (glTF does not):
+		// undone for a plain albedo colour, kept where the albedo has a texture.
+		const Dictionary dt = p_extensions["KHR_materials_diffuse_transmission"];
+		const float factor = CLAMP(fellow_float(dt, "diffuseTransmissionFactor", 0.0f), 0.0f, 1.0f);
+		if (factor > 0.0f) {
+			const Color colour = fellow_linear_color(dt, "diffuseTransmissionColorFactor", Color(1, 1, 1));
+			const Ref<Image> factor_image = _fellow_texture_image(p_state, dt, "diffuseTransmissionTexture", p_primary_texture_coord, nullptr);
+			const Ref<Image> colour_image = _fellow_texture_image(p_state, dt, "diffuseTransmissionColorTexture", p_primary_texture_coord, nullptr);
+			p_material->set_feature(BaseMaterial3D::FEATURE_BACKLIGHT, true);
+			if (factor_image.is_valid() || colour_image.is_valid()) {
+				// (BaseMaterial3D adds its backlight colour and texture: the colour black, the texture the product)
+				p_material->set_backlight(Color(0, 0, 0));
+				const Color scale = colour * factor;
+				p_material->set_texture(BaseMaterial3D::TEXTURE_BACKLIGHT, fellow_combine(colour_image, factor_image, name + "_backlight", [scale](const Color &p_c, const Color &p_f) {
+					// (the colour texture is sRGB; BaseMaterial3D reads its backlight texture as linear values)
+					Color lin = Color(p_c.r, p_c.g, p_c.b).srgb_to_linear() * Color(scale.r, scale.g, scale.b) * p_f.a;
+					lin.a = 1.0f;
+					return lin;
+				}));
+			} else {
+				// (glTF's transmitted light is its colour alone; BaseMaterial3D multiplies the backlight by the albedo:
+				// divided by a plain albedo colour here, where it has no texture)
+				Color c = colour * factor;
+				if (p_material->get_texture(BaseMaterial3D::TEXTURE_ALBEDO).is_null()) {
+					const Color albedo = p_material->get_albedo().srgb_to_linear();
+					c.r = MIN(c.r / MAX(albedo.r, 0.02f), 16.0f);
+					c.g = MIN(c.g / MAX(albedo.g, 0.02f), 16.0f);
+					c.b = MIN(c.b / MAX(albedo.b, 0.02f), 16.0f);
+				}
+				c.a = 1.0f;
+				p_material->set_backlight(c.linear_to_srgb());
 			}
 		}
 	}

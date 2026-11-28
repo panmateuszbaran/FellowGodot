@@ -1765,7 +1765,8 @@ colour averaged, its textures not read); from milestone 250 also `KHR_materials_
 packed into `iridescence_texture`); from milestone 251 `KHR_materials_transmission` and `KHR_materials_volume` (glass:
 BaseMaterial3D's refraction tinted by the albedo, `refraction_tint`, letting through the transmission factor; a volume
 bent by its IOR and absorbing along its thickness, scaled to the world's units, a thickness texture baked into the albedo
-texture; decision 0393). Files that require one of them load. Packed textures are embedded
+texture; decision 0393); from milestone 252 `KHR_materials_diffuse_transmission` (leaves, paper, lampshades: the backlight).
+Files that require one of them load. Packed textures are embedded
 uncompressed, as the stock specular-glossiness conversion's are. Off, as stock: the extensions are ignored.
 
 ## Options that change the image (off by default)

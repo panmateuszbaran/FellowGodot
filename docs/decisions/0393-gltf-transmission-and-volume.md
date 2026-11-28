@@ -59,3 +59,16 @@ setting off and on.
 
 KEEP, with decision 0390's setting (off). Open: shadows through glass (a tinted, lighter shadow), glass seen through
 glass (ordering, or a refraction pass per layer).
+
+## Addendum (milestone 252): diffuse transmission
+
+`KHR_materials_diffuse_transmission` — light through a thin, diffusing surface: leaves, paper, lampshades, thin
+porcelain — read as BaseMaterial3D's backlight (the light from behind, scattered): the factor times the colour, their
+textures baked into the backlight texture (linear values, as BaseMaterial3D reads it). BaseMaterial3D multiplies the
+backlight by the albedo, glTF does not: undone for a plain albedo colour (divided by it), kept where the albedo has a
+texture. Checks (lavapipe, the sun behind the samples): DiffuseTransmissionTeacup's porcelain glows with its pattern
+from behind as in the reference (off: dark); DiffuseTransmissionTest's factor row goes from teal to white as the
+reference's, its texture rows follow; its red-colour row stays dark (a red transmission through a teal albedo with no
+red: Godot's backlight cannot add a colour the albedo lacks); DiffuseTransmissionPlant's leaves a little brighter from
+behind.
+

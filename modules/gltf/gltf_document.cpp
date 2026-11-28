@@ -6987,6 +6987,7 @@ HashSet<String> GLTFDocument::get_supported_gltf_extensions_hashset() {
 		// FellowEngine (decision 0390)
 		supported_extensions.insert("KHR_materials_anisotropy");
 		supported_extensions.insert("KHR_materials_clearcoat");
+		supported_extensions.insert("KHR_materials_diffuse_transmission");
 		supported_extensions.insert("KHR_materials_ior");
 		supported_extensions.insert("KHR_materials_iridescence");
 		supported_extensions.insert("KHR_materials_sheen");
