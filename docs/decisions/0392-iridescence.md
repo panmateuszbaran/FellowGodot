@@ -44,7 +44,14 @@ anodized metal, beetles' shells, mother-of-pearl, car paints that turn from viol
   read: decision 0390).
 * The image regression suite: exact (no material in it has a film).
 * Cost: one evaluation per pixel of a filmed material (two orders of the spectral sum: a few dozen ALU and two
-  `exp`/`cos` triples); nothing for other materials. On the RTX with the next measurements.
+  `exp`/`cos` triples); nothing for other materials. On the RTX +0.29 ms over a 1440p screen (below).
+
+## RTX laptop (2026-11-28; RTX 5070 Ti Laptop, milestone 251's build)
+
+`matcost` (a test of its own: a screen of spheres and a wall behind them at 2560×1440, every pixel the material under
+test, a sun with shadows and 16 omni lights; the variants interleaved, 4 rounds of 300 frames): the base 1.79 ms,
+**iridescence +0.29 ms** (2.08: the film's spectral sum once per pixel), like stock's anisotropy (+0.29 ms) and
+cheaper than its clear coat (+0.45 ms); the sheen +0.13 ms; every layer at once +1.07 ms.
 
 ## Decision
 

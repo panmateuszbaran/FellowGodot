@@ -78,6 +78,14 @@ specular-glossiness conversion's are; a texture taken as it is keeps the import'
 AnisotropyStrengthTest (CC0, Ed Mackey) and SheenTestGrid (CC0, Eric Chadwick) from Khronos' glTF-Sample-Assets,
 rendered with the setting off and on.
 
+## RTX laptop (2026-11-28; RTX 5070 Ti Laptop, milestone 251's build)
+
+`matcost` (a test of its own: a screen of spheres and a wall behind them at 2560×1440, every pixel the material under
+test, a sun with shadows and 16 omni lights; the variants interleaved, 4 rounds of 300 frames): the base 1.79 ms,
+the layers an imported material can now turn on, each over the whole screen: sheen +0.13 ms, sheen with its texture
++0.27 ms, clear coat +0.45 ms, anisotropy +0.29 ms, iridescence (0392) +0.29 ms, all +1.07 ms. The importer's own cost
+is at loading only.
+
 ## Decision
 
 KEEP as an option, off (it changes how files using these extensions look, and stock Godot ignores them); on is the

@@ -38,13 +38,19 @@ the screen's ambient occlusion is too coarse at a person's scale and the shadow 
   smooth sheet; at a few metres the relief's mipmaps are flat (as they should: a pixel covers millimetres).
 * `--relief=0` gives the skin as before (the same `.glb` meshes; without the occlusion and the detail).
 * Cost: one texture more for the occlusion, three for the detail (its albedo, white; its normal; its mask) on the skin's
-  pixels; on the RTX with the queued measurements.
+  pixels; on the RTX nothing measurable on the square (below).
+
+## RTX laptop (2026-11-28; milestone 251's build, the square by day with its 61 people, 1920×1080, two runs each)
+
+With the skin's occlusion and relief 9.02 ms GPU (8.94, 9.09), without (`climb_look --skin_relief=0`) 9.09 ms (9.05,
+9.12); the render thread 2.99 / 2.96 ms. Nothing measurable: the people cover a small part of the frame and the
+detail's mipmaps are small at their distances.
 
 ## Decision
 
 KEEP, on in the showcase (`FellowPerson.skin_relief`). Open: the relief's effect on the roughness where its mipmaps flatten
-it (Toksvig: a far face should be a little rougher, not as glossy as a smooth one), wrinkles from the people's ages
-(MakeHuman's old skins have them painted, not in the surface), and the GPU cost on the RTX.
+it (Toksvig: a far face should be a little rougher, not as glossy as a smooth one) and wrinkles from the people's ages
+(MakeHuman's old skins have them painted, not in the surface).
 
 ## Rejected
 

@@ -79,3 +79,16 @@ depth fit's measurements queued); tools, platforms and content large.
 
 Next: the RTX measurements when the queue runs (the layers' cost at 1440p, the people's small parts and skin on the
 square, the depth fit's cost and look); then GI or sharper sun shadows (a virtual shadow map's texel per pixel).
+
+## 7. Measured on the RTX (2026-11-28, milestone 251's build)
+
+| what | result |
+|---|---|
+| the materials' layers over a 1440p screen (16 lights and a sun) | sheen +0.13 ms (with its texture +0.27), iridescence +0.29, anisotropy +0.29, clear coat +0.45, all together +1.07 ms on a 1.79 ms base |
+| the square's 61 people after 247 (small parts) | render thread +1.42 ms (was +1.65), their shadow draws −43 %; GPU with them 9.02 ms (9.16 before) |
+| the skin's occlusion and relief (249) | nothing measurable (9.02 against 9.09 ms without) |
+| the sun's depth fit (246) | +0.21-0.25 ms GPU, 10-21 % more shadow draws, frames 38-51 dB from unfit at the showcase's views: stays off there |
+
+Every number the night's milestones waited for is in. The showcase's frame by day with its people: 9.0 ms GPU, 3.0 ms
+render thread at 1080p on the laptop's RTX 5070 Ti.
+

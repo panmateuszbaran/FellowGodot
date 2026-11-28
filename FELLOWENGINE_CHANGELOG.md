@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## RTX measurements of milestones 241-251 (2026-11-28)
+
+- The materials' layers over a 1440p screen: sheen +0.13 ms (with its texture +0.27), iridescence +0.29, anisotropy
+  +0.29, clear coat +0.45 (decisions 0383, 0390, 0392). The square's 61 people after 247: render thread +1.42 ms (was
+  +1.65), their shadow draws −43 % (0389); the skin's occlusion and relief nothing measurable (0391). The sun's depth
+  fit +0.21-0.25 ms GPU for frames within 38-51 dB: off in the showcase (0388).
+
 ## Milestone 252 — glTF's diffuse transmission (2026-11-28)
 
 - Decision 0393's addendum (with `shading/gltf_material_extensions`). `KHR_materials_diffuse_transmission` read as

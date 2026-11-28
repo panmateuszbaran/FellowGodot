@@ -47,6 +47,14 @@ Not done: sheen in the Mobile and Compatibility renderers; a sheen texture (`she
 uniform: glTF's sheen maps are not imported); the reflection at the sheen's own roughness (the ambient irradiance
 stands in for it).
 
+## RTX laptop (2026-11-28; RTX 5070 Ti Laptop, milestone 251's build)
+
+`matcost` (a test of its own: a screen of spheres and a wall behind them at 2560×1440, every pixel the material under
+test, a sun with shadows and 16 omni lights; the variants interleaved, 4 rounds of 300 frames): the base 1.79 ms,
+**sheen +0.13 ms** (1.91), with decision 0390's texture +0.27 ms (2.05); for comparison stock's clear coat +0.45 ms,
+anisotropy +0.29 ms, all the layers together +1.07 ms. The suits and hats in the showcase cover a few per cent of the
+screen: nothing measurable on the square (decision 0389's section).
+
 ## Decision
 
 KEEP: a lobe every AAA material model has (Unreal's Substrate "fuzz", Filament's sheen, glTF's), off unless a material

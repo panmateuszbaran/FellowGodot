@@ -56,12 +56,27 @@ checked against a wall 19.5 m away: 19.50 m. Regression suite: all scenes exact 
 The cost: one compute pass over the depth buffer (16 texels a thread, one atomic per workgroup) and a 16-byte
 readback a frame; on the CPU nothing measurable. Not measured on a GPU (the owner: no GPU for now).
 
+## RTX laptop (2026-11-28; milestone 251's build, 1920×1080, two runs of each, off and on)
+
+| view | GPU off → on | render thread off → on | shadow draws a frame off → on |
+|---|---|---|---|
+| the square by day, its people (840 frames) | 9.02 → 9.23 ms (+0.21) | 2.99 → 3.05 ms | 1859 → 2049 (+10 %) |
+| the osteria from its door (720 frames) | 7.70 → 7.95 ms (+0.25) | 3.05 → 3.16 ms | 2637 → 3193 (+21 %) |
+| the demo's climb from the house (1440 frames, moving) | 7.39 → 7.61 ms (+0.22) | 2.66 → 2.83 ms | 1264 → 1475 (+17 %) |
+
+The fit costs on the RTX: the depth reduction itself is small, but the fitted cascades are narrower and overlap more
+casters (more draws). And the images hardly change at the showcase's views: the square's frame 41.6 dB from the unfit
+one (0.06 % of pixels apart by more than 20/255: an alley's shadow a little further over a person), the osteria's
+44.9 dB, the demo's 38.1-51.4 dB (its differences the clouds' animation). The showcase's views end at the city's edge
+or at walls only part of the time, and its atlas and cascades were already tuned to them.
+
 ## Decision
 
 KEEP as an option, off (it changes the image: sharper, and where stock blurred aliasing the texels' steps can show).
-Open: on the RTX, its cost and whether it should be on in the showcase (the rooftops' views end at the city's edge or
-the sky — the street's case, where it gains little; indoors, the osteria, and looking down from the roofs it gains
-most); splits placed by the depths' distribution, not only their range (SDSM's full form).
+Off in the showcase too, after the RTX (2026-11-28): +0.21-0.25 ms GPU and 10-21 % more shadow draws for frames within
+38-51 dB of the unfit ones. A project whose views end short — courtyards, interiors, looking down — gains what lavapipe
+showed (a courtyard 25.5 → 29.2 dB against a 16384 atlas). Open: splits placed by the depths' distribution, not only
+their range (SDSM's full form), and casters culled per fitted cascade so the narrower cascades do not draw more.
 
 ## Rejected
 

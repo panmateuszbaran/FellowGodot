@@ -25,6 +25,19 @@ pixel at the showcase's field of view).
   is not measurable apart from it; the differences sit at the eyes' corners and the hair's edges.
 * No engine change.
 
+## RTX laptop (2026-11-28; milestone 251's build against 244's, the square by day, 1920×1080, two runs each)
+
+| | 244: without → with the people | 251: without → with the people |
+|---|---|---|
+| render thread | 1.69 → 3.34 ms (**+1.65**) | 1.57 → 2.99 ms (**+1.42**) |
+| shadow draws a frame | 1503 → 2148 (+645) | 1492 → 1859 (**+367**) |
+| GPU | 8.79 → 9.16 ms (+0.37) | 8.47 → 9.02 ms (+0.55) |
+
+The 61 people's shadow draws −43 % (the small parts no longer cast), their render-thread cost −0.23 ms (−14 %). The
+GPU's share moved the other way by 0.18 ms, inside the two builds' run-to-run spread on this view (the frame without
+people itself 0.32 ms apart): with the people the frame is 9.16 → 9.02 ms. Milestone 249's skin (decision 0391) is not
+in it: without its occlusion and relief the same frame is 9.09 ms.
+
 ## Decision
 
-KEEP. On the RTX (when allowed): the square's people's render-thread cost against 0374's +1.7 ms.
+KEEP (the RTX's numbers above).
