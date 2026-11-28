@@ -61,3 +61,21 @@ Scores (judgment): characters as seen medium (better faces; still MakeHuman's pa
 MetaHumans, usable in Godot since June 2025, would be the next class, on the owner's decision); sun shadows medium
 (closer where views end short; not virtual shadow maps' texel per pixel); materials medium (one lobe more; no layered
 materials like Substrate); GI medium (unchanged since 167-168). Tools, platforms and content stay large.
+
+## 6. After milestone 251 (2026-11-28)
+
+The owner: "continue the journey to AAA quality" (with the GPU allowed again; its job queue was not running, so the
+RTX measurements of 241-251 are queued in `.tools\queue\m251_rtx_job.bat`).
+
+| gap | milestones | what changed |
+|---|---|---|
+| materials | 248, 250, 251 | glTF's PBR extensions read and written (an import setting, off): sheen with its texture, clear coat, anisotropy, IOR and specular (248); a new thin-film iridescence layer (250: `IRIDESCENCE*`, BaseMaterial3D's Iridescence group); glass — transmission as a refraction tinted by its colour and weighed by 1 − Fresnel, volumes bent by their IOR and absorbing along their thickness (251). Khronos' samples (velvet sofa, ToyCar, brushed metal, abalone, the amber dragon, the candle-holder) as their references, within Godot's ranges |
+| characters as seen | 249 | each person's crevices' occlusion baked (Cycles, in its UV layout) and the skin's micro-relief (pores and furrows on a second UV map of one density): the skin less like plastic, its highlights broken close up; hair cards from the traced guides tried and rejected (not better than the painted shell) |
+
+Scores (judgment): materials medium → **medium-small** (glTF's PBR set covered except dispersion and diffuse
+transmission; no layer stacking like Substrate's slabs, glass screen-space only, no tinted shadows); characters as seen
+medium (skin closer up; hair and the painted textures remain MakeHuman's); GI and sun shadows medium (unchanged; the
+depth fit's measurements queued); tools, platforms and content large.
+
+Next: the RTX measurements when the queue runs (the layers' cost at 1440p, the people's small parts and skin on the
+square, the depth fit's cost and look); then GI or sharper sun shadows (a virtual shadow map's texel per pixel).
