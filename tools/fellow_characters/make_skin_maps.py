@@ -11,6 +11,10 @@ mesh's default UV layout, which every MakeHuman skin shares, so one set of maps 
   factor of its roughness) — skin's oily film: the T-zone and the lips most, the face some, the body barely.
 * skin_transmittance.png (R): where light shows through from behind (the ears, a little the nose's wings).
 * eye_occlusion.png (with --eyes): the eyeballs darkened towards the lids (the high-poly eyes' UVs).
+* skin_relief_mask.png (R; milestone 249): where the skin's micro-relief shows (the detail mask): the T-zone most, the
+  lips and eyelids little, the nails not.
+* skin_pores_normal.png (milestone 249): the micro-relief itself, a tiling normal map (pores and the skin's fine
+  furrows; 20 mm of skin per repeat on make_characters.py's second UV map).
 * hair_<name>_flow.png (with --hair, --hair_names; milestone 244): each hairstyle's flow map — the direction across
   its painted strands, for the hair's anisotropic highlights (which run across the strands).
 
@@ -37,6 +41,64 @@ def smooth_noise(p_size, p_cells, p_seed):
     rng = np.random.default_rng(p_seed)
     small = Image.fromarray((rng.random((p_cells, p_cells)) * 255).astype(np.uint8))
     return np.asarray(small.resize((p_size, p_size), Image.BICUBIC)).astype(np.float32) / 255.0
+
+
+def periodic_noise(p_size, p_scale, p_seed):
+    """Smooth noise that tiles: white noise low-passed in the frequency domain (features about p_scale texels), -1..1."""
+    rng = np.random.default_rng(p_seed)
+    f = np.fft.fft2(rng.standard_normal((p_size, p_size)))
+    k = np.fft.fftfreq(p_size)
+    kk = np.sqrt(k[None, :] ** 2 + k[:, None] ** 2)
+    out = np.real(np.fft.ifft2(f * np.exp(-((kk * p_scale) ** 2))))
+    return out / (np.abs(out).max() + 1e-9)
+
+
+def pores_normal(p_size=512, p_tile_mm=20.0, p_seed=11):
+    """Milestone 249: the skin's micro-relief as a tiling tangent-space normal map (p_tile_mm of skin per repeat):
+    pores (pits 0.1-0.25 mm across, about 1.5 per mm²... thinned to what reads), and the fine lines that cross the skin
+    in two families (its "microrelief": furrows 0.5-0.8 mm apart), their depth wandering. Every pattern is periodic in
+    the tile (integer wave numbers, wrapped distances), so it repeats without seams."""
+    rng = np.random.default_rng(p_seed)
+    n = p_size
+    mm = p_tile_mm / n  # mm per texel
+    yy, xx = np.mgrid[0:n, 0:n].astype(np.float32)
+    h = np.zeros((n, n), np.float32)
+    # The furrows: two families of lines across the tile (wave numbers chosen for 0.55-0.75 mm spacing), warped.
+    depth = 0.55 + 0.45 * periodic_noise(n, 12.0, p_seed + 2)
+    for i, (kx, ky, w) in enumerate(((23, 18, 0.8), (-15, 26, 0.65), (31, -4, 0.25))):
+        # (each family its own wander: no rhombs repeating)
+        warp = periodic_noise(n, 22.0, p_seed + 10 + i) * 4.0 + periodic_noise(n, 5.0, p_seed + 20 + i) * 1.2
+        phase = 2.0 * np.pi * (kx * xx + ky * yy) / n + warp
+        groove = np.abs(np.cos(phase * 0.5))  # 1 on the lines' centres
+        width = 0.88 + 0.06 * periodic_noise(n, 9.0, p_seed + 30 + i)
+        h -= w * depth * np.clip((groove - width) / (1.0 - width), 0.0, 1.0) ** 2
+    # The pores: pits on a jittered grid, each its own size and depth.
+    spacing_mm = 0.9
+    cells = max(4, int(round(p_tile_mm / spacing_mm)))
+    step = n / cells
+    for cy in range(cells):
+        for cx in range(cells):
+            if rng.random() < 0.3:
+                continue
+            px = (cx + rng.random()) * step
+            py = (cy + rng.random()) * step
+            r = rng.uniform(0.05, 0.12) / mm  # radius in texels
+            d = rng.uniform(0.5, 1.0)
+            x0, x1 = int(px - 3 * r) - 1, int(px + 3 * r) + 2
+            y0, y1 = int(py - 3 * r) - 1, int(py + 3 * r) + 2
+            ys = np.arange(y0, y1)
+            xs = np.arange(x0, x1)
+            g = np.exp(-(((ys[:, None] - py) ** 2 + (xs[None, :] - px) ** 2) / (2 * r * r)))
+            h[np.ix_(ys % n, xs % n)] -= 2.2 * d * g
+    h += 0.15 * periodic_noise(n, 1.5, p_seed + 3)
+    # (slopes from wrapped differences: the normal map tiles too)
+    gx = (np.roll(h, -1, axis=1) - np.roll(h, 1, axis=1)) * 0.5
+    gy = (np.roll(h, -1, axis=0) - np.roll(h, 1, axis=0)) * 0.5
+    strength = 0.55
+    nx, ny, nz = -gx * strength, gy * strength, np.ones_like(h)  # (+v is up in the texture: the image's y flipped)
+    ln = np.sqrt(nx * nx + ny * ny + nz * nz)
+    rgb = np.stack([nx / ln, ny / ln, nz / ln], axis=-1) * 0.5 + 0.5
+    return Image.fromarray((rgb * 255 + 0.5).astype(np.uint8), "RGB")
 
 
 def eye_occlusion(p_obj, p_size):
@@ -189,6 +251,15 @@ def main():
     # (BaseMaterial3D multiplies clearcoat_roughness by G: lower is glossier)
     oil_rough = np.clip(1.0 - 0.4 * tzone - 0.45 * lips - 0.5 * nails, 0.0, 1.0)
 
+    # Milestone 249: where the micro-relief shows (BaseMaterial3D's detail mask): the nose and the T-zone's pores most,
+    # the face, the body less, the lips and the eyelids little (their own finer lines), the nails not at all.
+    relief = 0.55 * (1 - face) + 0.85 * face
+    relief = relief * (1 - tzone) + 1.0 * tzone
+    relief = relief * (1 - lids) + 0.35 * lids
+    relief = relief * (1 - lips) + 0.25 * lips
+    relief = relief * (1 - nails)
+    relief = np.clip(relief, 0.0, 1.0)
+
     nose_wings = ((xx >= eyes_u + 0.45 * span) & (xx < mouth_u - 0.3 * span)) * np.exp(-(((yy - mid_v) / 0.02) ** 2)) * face
     trans = np.clip(np.maximum(ears, 0.35 * nose_wings), 0.0, 1.0)
 
@@ -197,6 +268,8 @@ def main():
     rg = np.stack([oil, oil_rough, np.zeros_like(oil)], axis=-1)
     Image.fromarray((rg * 255 + 0.5).astype(np.uint8)).save(os.path.join(a.out, "skin_oil.png"), optimize=True)
     Image.fromarray((trans * 255 + 0.5).astype(np.uint8)).save(os.path.join(a.out, "skin_transmittance.png"), optimize=True)
+    Image.fromarray((relief * 255 + 0.5).astype(np.uint8)).save(os.path.join(a.out, "skin_relief_mask.png"), optimize=True)
+    pores_normal().save(os.path.join(a.out, "skin_pores_normal.png"), optimize=True)
     if a.eyes:
         occ = eye_occlusion(a.eyes, 512)
         Image.fromarray((occ * 255 + 0.5).astype(np.uint8)).save(os.path.join(a.out, "eye_occlusion.png"), optimize=True)

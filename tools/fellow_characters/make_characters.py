@@ -31,6 +31,15 @@ MPFB_DIR = ""
 # Milestone 243: the pack's high-poly eyes (1 064 vertices, a round eyeball and cornea; 232-242: low-poly, 96).
 EYES_MESH = "high-poly"
 
+# Milestone 249: the skin's ambient occlusion baked per person (Cycles, in the body's UV layout: <name>_ao.png) and a
+# second UV map for the skin's micro-relief (the first's islands scaled to one density: DETAIL_TILE metres of skin per
+# repeat of make_skin_maps.py's skin_pores_normal.png).
+SKIN_AO_SIZE = 1024
+SKIN_AO_SAMPLES = 64
+SKIN_AO_DISTANCE = 0.06  # m: crevices' scale (eye sockets, nostrils, the mouth's corners, ears, fingers)
+DETAIL_TILE = 0.02  # m
+SKIN_AO = True
+
 
 def parse_args():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -43,6 +52,7 @@ def parse_args():
     ap.add_argument("--blend", action="store_true", help="also save each character's .blend (to look at)")
     ap.add_argument("--hair_dump", default="", help="milestone 244: also save the hair's traced data (.npz) here, to try "
                     "hair_guides.py alone; 'skip': no strand guides")
+    ap.add_argument("--ao", default="1", help="milestone 249: 0 to skip baking the skin's ambient occlusion")
     ap.add_argument("--faces", default="", help="MakeHuman's face units (the Faceunits 01 pack's targets/faceunits, CC0: "
                     "ARKit's 52 shapes); default <assets>/targets/faceunits if there; 'none': no face shapes")
     return ap.parse_args()
@@ -455,6 +465,124 @@ def find(asset_service, name, subdir, ext):
     return path
 
 
+def skin_ao(bpy, root, body, path, cards, size=SKIN_AO_SIZE, samples=SKIN_AO_SAMPLES, distance=SKIN_AO_DISTANCE):
+    """Milestone 249: the body's ambient occlusion baked into its UV layout with Cycles — the crevices a screen-space
+    effect misses at a person's scale: the eye sockets round the eyeballs, the nostrils, the mouth's corners and inside,
+    behind and inside the ears, between the fingers and toes, the clothes' edges on the skin. The eyes, teeth, tongue
+    and clothes occlude; the hair's, eyebrows' and eyelashes' cards (their alpha cut) do not. Written as a grey PNG."""
+    import numpy as np
+    from PIL import Image
+
+    scene = bpy.context.scene
+    scene.render.engine = "CYCLES"
+    scene.cycles.device = "CPU"
+    scene.cycles.samples = samples
+    if scene.world is None:
+        scene.world = bpy.data.worlds.new("ao_world")
+    scene.world.light_settings.distance = distance
+    hidden = []
+    mine = set(root.children_recursive) | {root}
+    for ob in bpy.context.scene.objects:
+        # (the character the export copy was made from stands in the same place)
+        if ob.type == "MESH" and ob not in mine and not ob.hide_render:
+            ob.hide_render = True
+            hidden.append(ob)
+    for ob in root.children_recursive:
+        if ob.type == "MESH" and ob != body and not ob.hide_render:
+            names = (ob.name + " " + " ".join(s.material.name for s in ob.material_slots if s.material)).lower()
+            if any(k.lower() in names for k in cards):
+                ob.hide_render = True
+                hidden.append(ob)
+    mat = body.active_material
+    img = bpy.data.images.new("skin_ao_bake", size, size, alpha=False, float_buffer=True)
+    # (texels no face covers keep 2.0: afterwards each takes its nearest baked texel's value, so that the texture's
+    # mipmaps do not darken the islands' edges)
+    img.pixels.foreach_set(np.full(size * size * 4, 2.0, dtype=np.float32))
+    node = mat.node_tree.nodes.new("ShaderNodeTexImage")
+    node.image = img
+    for n in mat.node_tree.nodes:
+        n.select = False
+    node.select = True
+    mat.node_tree.nodes.active = node
+    bpy.ops.object.select_all(action="DESELECT")
+    body.select_set(True)
+    bpy.context.view_layer.objects.active = body
+    body.data.uv_layers.active_index = 0
+    bpy.ops.object.bake(type="AO", margin=2, use_clear=False)
+    buf = np.empty(size * size * 4, dtype=np.float32)
+    img.pixels.foreach_get(buf)
+    px = buf.reshape(size, size, 4)[::-1, :, 0].copy()
+    empty = px > 1.5
+    if empty.any() and not empty.all():
+        from scipy.ndimage import distance_transform_edt
+
+        idx = distance_transform_edt(empty, return_distances=False, return_indices=True)
+        px = px[idx[0], idx[1]]
+    Image.fromarray((np.clip(px, 0.0, 1.0) * 255 + 0.5).astype(np.uint8), "L").save(path, optimize=True)
+    mat.node_tree.nodes.remove(node)
+    bpy.data.images.remove(img)
+    for ob in hidden:
+        ob.hide_render = False
+    return float(px[~empty].mean()) if (~empty).any() else 0.0
+
+
+def detail_uv(bpy, body, tile=DETAIL_TILE):
+    """Milestone 249: a second UV map for the skin's micro-relief: the first's islands each scaled (about the origin,
+    so its tangent frame stays the first's) to one density, `tile` metres of skin per unit — the pores the same size on
+    the nose as on the back, whatever room each island has in the texture."""
+    import bmesh
+
+    me = body.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    uv = bm.loops.layers.uv[0]
+    parent = list(range(len(bm.faces)))
+
+    def root_of(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    bm.faces.ensure_lookup_table()
+    for e in bm.edges:
+        if len(e.link_faces) != 2:
+            continue
+        f0, f1 = e.link_faces
+        same = True
+        for v in e.verts:
+            u0 = next(l[uv].uv for l in f0.loops if l.vert == v)
+            u1 = next(l[uv].uv for l in f1.loops if l.vert == v)
+            if (u0 - u1).length > 1e-5:
+                same = False
+                break
+        if same:
+            a, b = root_of(f0.index), root_of(f1.index)
+            if a != b:
+                parent[a] = b
+    area3, areauv = {}, {}
+    for f in bm.faces:
+        r = root_of(f.index)
+        area3[r] = area3.get(r, 0.0) + f.calc_area()
+        co = [l[uv].uv for l in f.loops]
+        a = 0.0
+        for k in range(1, len(co) - 1):
+            a += abs((co[k] - co[0]).cross(co[k + 1] - co[0])) * 0.5
+        areauv[r] = areauv.get(r, 0.0) + a
+    scale = {r: (area3[r] / areauv[r]) ** 0.5 / tile if areauv[r] > 1e-12 else 0.0 for r in area3}
+    uv2 = bm.loops.layers.uv.new("detail")
+    for f in bm.faces:
+        s = scale[root_of(f.index)]
+        for l in f.loops:
+            l[uv2].uv = l[uv].uv * s
+    bm.to_mesh(me)
+    bm.free()
+    me.uv_layers.active_index = 0
+    for i, layer in enumerate(me.uv_layers):
+        layer.active_render = i == 0
+    return len(scale)
+
+
 def make(bpy, service, spec, out, save_blend, face_dir, hair_dump=""):
     HumanService = service("services.humanservice", "HumanService")
     TargetService = service("services.targetservice", "TargetService")
@@ -508,6 +636,11 @@ def make(bpy, service, spec, out, save_blend, face_dir, hair_dump=""):
     humanoid_bones(root)
     eye_bones(bpy, root, spec.get("eyes_mesh", EYES_MESH))
     os.makedirs(out, exist_ok=True)
+    if SKIN_AO:
+        cards = [n for n in (spec.get("hair"), spec.get("eyebrows"), spec.get("eyelashes")) if n]
+        mean = skin_ao(bpy, root, export_body, os.path.join(out, spec["name"] + "_ao.png"), cards)
+        print("make_characters: %s's skin occlusion baked (mean %.3f)" % (spec["name"], mean))
+    print("make_characters: %s's detail UVs: %d islands" % (spec["name"], detail_uv(bpy, export_body)))
     if spec.get("hair") and hair_dump != "skip":
         n = hair_strands(bpy, root, export_body, spec["hair"], os.path.join(out, spec["name"] + "_hair.json"), hair_dump)
         print("make_characters: %s's hair: %d strand guides" % (spec["name"], n))
@@ -533,6 +666,8 @@ def main():
     with open(args.spec, encoding="utf-8") as f:
         people = json.load(f)["people"]
     only = [n for n in args.only.split(",") if n]
+    global SKIN_AO
+    SKIN_AO = args.ao != "0"
     bpy, service = setup_mpfb(args)
     face_dir = ""
     if args.faces != "none":

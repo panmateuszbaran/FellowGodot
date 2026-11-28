@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 249 — The people's skin: its crevices and micro-relief (2026-11-28)
+
+- Decision 0391 (showcase). Each person's ambient occlusion baked into its body's UV layout with Cycles (the eye
+  sockets, nostrils, the mouth's corners, ears, between the fingers: what the screen's occlusion misses at a person's
+  scale) and the skin's micro-relief — pores and fine furrows as a tiling normal map on a second UV map of one density,
+  masked by region. The skin less like plastic: its highlights broken close up, its crevices shaded.
+
 ## Milestone 248 — glTF's material extensions (2026-11-28)
 
 - Decision 0390 (`shading/gltf_material_extensions`, off). glTF files are read and written with `KHR_materials_sheen`,

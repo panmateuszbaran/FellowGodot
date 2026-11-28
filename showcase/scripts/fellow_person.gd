@@ -76,7 +76,7 @@ static func dress(p_npc: Node3D, p_person: PackedScene, p_rng: RandomNumberGener
 		cloth_tint = Color.from_hsv(p_rng.randf(), p_rng.randf_range(0.0, 0.45), p_rng.randf_range(0.7, 1.0))
 		hair_tint = Color.from_hsv(0.08, p_rng.randf_range(0.0, 0.3), p_rng.randf_range(0.55, 1.0))
 	for mi in pskel.find_children("*", "MeshInstance3D", true, false):
-		_materials(mi as MeshInstance3D, cloth_tint, hair_tint)
+		_materials(mi as MeshInstance3D, cloth_tint, hair_tint, p_person.resource_path.get_basename())
 	_face(pskel, skel, p_rng)
 	if parts_lod:
 		_small_parts(pskel)
@@ -311,7 +311,7 @@ static func _descends(p_skel: Skeleton3D, p_bone: int, p_ancestor: int) -> bool:
 	return false
 
 
-static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint: Color) -> void:
+static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint: Color, p_base := "") -> void:
 	if p_mesh.mesh == null:
 		return
 	for i in p_mesh.mesh.get_surface_count():
@@ -328,6 +328,8 @@ static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint:
 			m.metallic_specular = 0.4
 			if skin_maps:
 				_skin_regions(m)
+			if skin_relief:
+				_skin_relief(m, p_base, (p_mesh.mesh.surface_get_format(i) & Mesh.ARRAY_FORMAT_TEX_UV2) != 0)
 		elif m.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
 			# Hair cards, eyebrows, eyelashes: both sides drawn. The eyebrows and eyelashes cut by their alpha; the hair
 			# (milestone 236) drawn where it is opaque before the other passes and blended at its edges after them
@@ -396,6 +398,39 @@ static func _wet_eyes(p_mat: StandardMaterial3D) -> void:
 		p_mat.ao_texture = occ
 		p_mat.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 		p_mat.ao_light_affect = 0.85
+
+
+## Milestone 249: the skin's crevices and micro-relief (decision 0391). Each person's ambient occlusion baked in its
+## body's UV layout (<name>_ao.png, make_characters.py): the eye sockets round the eyes, the nostrils, the mouth's
+## corners, the ears, between the fingers — what the screen's occlusion misses at a person's scale; it darkens the
+## ambient light and its reflections, and SKIN_AO_LIGHT of the direct light. And the skin's pores and fine furrows
+## (skin_pores_normal.png, make_skin_maps.py) tiled over the body's second UV map at one density (20 mm of skin a
+## repeat), where skin_relief_mask.png lets them show (the T-zone most, the lips and lids little, the nails not):
+## close up they break the skin's highlights as real skin does; a few metres away their mipmaps are flat.
+static var skin_relief := true
+const SKIN_AO_LIGHT := 0.35
+static var _relief_textures: Array[Texture2D] = []
+
+
+static func _skin_relief(p_mat: StandardMaterial3D, p_base: String, p_has_uv2: bool) -> void:
+	var ao_path := p_base + "_ao.png"
+	if p_base != "" and ResourceLoader.exists(ao_path):
+		p_mat.ao_enabled = true
+		p_mat.ao_texture = load(ao_path) as Texture2D
+		p_mat.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+		p_mat.ao_light_affect = SKIN_AO_LIGHT
+	if not p_has_uv2:
+		return # (a body exported before 249: no second UV map to tile the relief over)
+	if _relief_textures.is_empty():
+		for f in ["skin_pores_normal", "skin_relief_mask"]:
+			_relief_textures.append(load("res://people/%s.png" % f) as Texture2D)
+	if _relief_textures[0] == null or _relief_textures[1] == null:
+		return
+	p_mat.detail_enabled = true
+	p_mat.detail_uv_layer = BaseMaterial3D.DETAIL_UV_2
+	p_mat.detail_blend_mode = BaseMaterial3D.BLEND_MODE_MUL # (no detail albedo: white, the skin's colour kept)
+	p_mat.detail_normal = _relief_textures[0]
+	p_mat.detail_mask = _relief_textures[1]
 
 
 static func _skin_regions(p_mat: StandardMaterial3D) -> void:

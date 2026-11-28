@@ -11,6 +11,8 @@ extends SceneTree
 ##   --skin=0: the skin without its regions' maps (milestone 243). --light=key: a low sun, a light behind, a dim ambient.
 ##   --strands=1: the hair's strands over its cards (milestone 244, off by default); --flow=0: the hair's highlights
 ##   without its flow map. --parts=0: the small parts (eyes, brows, lashes, teeth, tongue) as before milestone 247.
+##   --relief=0: the skin without its baked occlusion and micro-relief (milestone 249); --dist=<m>: the face view's
+##   distance (0.62).
 
 var _out := "user://person_look"
 var _person := "giulia"
@@ -27,6 +29,7 @@ var _look := false # --look=1 (milestone 235): a target circling before the face
 var _mood := "" # --mood=happy[:0.8] (milestone 235): an expression held on the face
 var _target: Node3D
 var _hide := "" # --hide=<name>: the person's meshes whose name has it hidden (what pokes through what)
+var _face_dist := 0.62 # --dist=<m> (milestone 249): the face view's distance
 var _light := "" # --light=key (milestone 243): a low sun from the side, a light behind (rim, the ears), a dim ambient
 const CAST := ["giulia", "marco", "rosa", "aldo", "amara", "kenji"]
 
@@ -67,6 +70,10 @@ func _init() -> void:
 			FellowPerson.strand_hair = true
 		elif a == "--parts=0":
 			FellowPerson.parts_lod = false
+		elif a == "--relief=0":
+			FellowPerson.skin_relief = false
+		elif a.begins_with("--dist="):
+			_face_dist = float(a.get_slice("=", 1))
 		elif a == "--flow=0":
 			FellowPerson.hair_flow = false
 		elif a.begins_with("--light="):
@@ -188,7 +195,7 @@ func _run() -> void:
 				var ps := sk.find_child("Skeleton3D", true, false) as Skeleton3D if sk else null
 				if ps and ps.find_bone("Head") >= 0:
 					head = ps.global_transform * ps.get_bone_global_pose(ps.find_bone("Head")).origin + Vector3(0, 0.07, 0)
-				cam.position = head + Vector3(0.12, 0.02, 0.62)
+				cam.position = head + Vector3(0.12, 0.02, 0.62) * (_face_dist / 0.62)
 				cam.look_at(head)
 				if _target:
 					# (the target circling 0.8 m before the face: 25 degrees to each side, 15 up and down)
