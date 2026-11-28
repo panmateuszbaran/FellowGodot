@@ -252,8 +252,28 @@ Vector2i DisplayServerWindows::_get_screen_expand_offset(int p_screen) const {
 	}
 }
 
+// FellowEngine (decision 0395): a grabbed mouse (captured or confined) takes the cursor only while one of this
+// process's windows is in front. Set while the game is behind another window (started from a launcher that closed,
+// so Windows did not let it take the focus), stock clipped the cursor to a window that got no input; the grab now
+// waits for the window's activation (_process_activate_event sets the mode again, fellow_activating telling it so).
+static bool fellow_activating = false;
+
+static bool fellow_foreground_is_ours() {
+	if (fellow_activating) {
+		return true;
+	}
+	HWND fg = GetForegroundWindow();
+	DWORD pid = 0;
+	if (fg != nullptr) {
+		GetWindowThreadProcessId(fg, &pid);
+	}
+	return fg != nullptr && pid == GetCurrentProcessId();
+}
+
 void DisplayServerWindows::_set_mouse_mode_impl(DisplayServerEnums::MouseMode p_mode) {
-	if (p_mode == DisplayServerEnums::MOUSE_MODE_HIDDEN || p_mode == DisplayServerEnums::MOUSE_MODE_CAPTURED || p_mode == DisplayServerEnums::MOUSE_MODE_CONFINED_HIDDEN) {
+	const bool grab_wanted = p_mode == DisplayServerEnums::MOUSE_MODE_CAPTURED || p_mode == DisplayServerEnums::MOUSE_MODE_CONFINED || p_mode == DisplayServerEnums::MOUSE_MODE_CONFINED_HIDDEN;
+	const bool grab = grab_wanted && fellow_foreground_is_ours(); // FellowEngine (decision 0395).
+	if ((p_mode == DisplayServerEnums::MOUSE_MODE_HIDDEN || p_mode == DisplayServerEnums::MOUSE_MODE_CAPTURED || p_mode == DisplayServerEnums::MOUSE_MODE_CONFINED_HIDDEN) && (grab || !grab_wanted)) {
 		// Hide cursor before moving.
 		if (hCursor == nullptr) {
 			hCursor = SetCursor(nullptr);
@@ -262,7 +282,7 @@ void DisplayServerWindows::_set_mouse_mode_impl(DisplayServerEnums::MouseMode p_
 		}
 	}
 
-	if (windows.has(DisplayServerEnums::MAIN_WINDOW_ID) && (p_mode == DisplayServerEnums::MOUSE_MODE_CAPTURED || p_mode == DisplayServerEnums::MOUSE_MODE_CONFINED || p_mode == DisplayServerEnums::MOUSE_MODE_CONFINED_HIDDEN)) {
+	if (windows.has(DisplayServerEnums::MAIN_WINDOW_ID) && grab) {
 		// Mouse is grabbed (captured or confined).
 		DisplayServerEnums::WindowID window_id = _get_focused_window_or_popup();
 		if (!windows.has(window_id)) {
@@ -6937,7 +6957,9 @@ void DisplayServerWindows::_process_activate_event(DisplayServerEnums::WindowID 
 	WindowData &wd = windows[p_window_id];
 	if (wd.activate_state == WA_ACTIVE || wd.activate_state == WA_CLICKACTIVE) {
 		last_focused_window = p_window_id;
+		fellow_activating = true; // FellowEngine (decision 0395): the window is coming to the front.
 		_set_mouse_mode_impl(mouse_mode);
+		fellow_activating = false;
 		if (!IsIconic(wd.hWnd)) {
 			SetFocus(wd.hWnd);
 		}
@@ -6956,6 +6978,7 @@ void DisplayServerWindows::_process_activate_event(DisplayServerEnums::WindowID 
 		if (!_has_moving_window()) {
 			ReleaseCapture();
 		}
+		ClipCursor(nullptr); // FellowEngine (decision 0395): a confined cursor let go with the focus.
 		wd.window_focused = false;
 		AccessibilityServer::get_singleton()->set_window_focused(p_window_id, false);
 

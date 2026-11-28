@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 254 — the game's window and the mouse (2026-11-28)
+
+- Decision 0395 (Windows). A game started behind another window (its launcher closed before the window was up, so
+  Windows did not give it the focus) had its captured mouse clipped to it anyway: the cursor trapped over a window
+  without the focus. A captured or confined mouse now takes the cursor only while one of the game's windows is in
+  front, and takes it when the window comes to the front; losing the focus lets go of the clip. The showcase's
+  launcher waits for the game's window before closing, so the game may take the focus.
+
 ## Milestone 253 — the people in period clothes (2026-11-28)
 
 - Decision 0394 (the showcase). The owner: modern people in a town of an Assassin's Creed kind look very bad. The
