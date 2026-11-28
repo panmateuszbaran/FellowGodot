@@ -17,7 +17,9 @@ candle-holder's glass and the glass dragon came in as white or coloured plastic.
 * **Transmission as BaseMaterial3D's refraction**: the screen behind the surface seen through it, blurred by its
   roughness (Godot's screen-space refraction), letting through 1 − the albedo's alpha: the transmission factor goes to
   that alpha (the transmission texture, with its factor, into the albedo texture's alpha).
-* **`refraction_tint`** (new, off): the light through the surface multiplied by its albedo — coloured glass. Off, the
+* **`refraction_tint`** (new, off): the light through the surface multiplied by its albedo — coloured glass — and by
+  what its surface does not reflect (1 − Schlick's Fresnel at the view's angle, F0 from its specular: glTF's 1 − F), so
+  that glass shows its reflection, not what is behind it, at grazing angles (its silhouettes, a bowl's sides). Off, the
   refraction is stock's (the same shader text).
 * **Volume**: thin-walled (no thickness) straight through; a volume bent by its IOR (Godot's offset, 0.05 at IOR 1.5,
   scaled with IOR − 1) and absorbing along its thickness (Beer-Lambert: the attenuation colour to the power of the
@@ -38,6 +40,8 @@ candle-holder's glass and the glass dragon came in as white or coloured plastic.
   distance) follows the reference's progressions.
 * TransmissionRoughnessTest: the blur grows with roughness along the rows as in the reference; TransmissionTest's
   spheres transparent and coloured (its "with opacity" columns lose their cut-outs: see below).
+* The light through weighed by 1 − F (a follow-up commit): the bowls' sides and the candle-holder's silhouette show the
+  sky's reflection where they showed the background straight through.
 * The image regression suite: exact.
 
 `docs/showcase/gltf_glass_m251.jpg`: ToyCar, GlassVaseFlowers and TransmissionTest (Khronos' samples, CC0) with the
@@ -49,8 +53,7 @@ setting off and on.
 * Refractive materials cast no shadow here (real glass casts a light, tinted one).
 * A transmissive material's alpha cut-out (`alphaMode` MASK with transmission) is lost: the albedo's alpha now carries
   the transmission.
-* No dispersion, no thickness for the bend (only the IOR), no Fresnel weighting of the light through (glTF lets through
-  1 − F; here the reflection adds on top).
+* No dispersion, no thickness for the bend (only the IOR).
 
 ## Decision
 

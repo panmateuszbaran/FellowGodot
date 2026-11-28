@@ -1850,8 +1850,10 @@ void fragment() {)";
 	// At low depth differences, decrease refraction intensity to avoid sudden discontinuities.
 	EMISSION += textureLod(screen_texture, mix(SCREEN_UV, ref_ofs, smoothstep(0.0, 1.0, VERTEX.z - refraction_view_pos.z)), ROUGHNESS * 8.0).rgb * ref_amount * EXPOSURE)";
 		if (refraction_tint) {
-			// FellowEngine (decision 0393): coloured glass — the light through it tinted by its albedo.
-			code += " * ALBEDO";
+			// FellowEngine (decision 0393): coloured glass — the light through it tinted by its albedo, and weighed by
+			// what its surface does not reflect (Schlick's Fresnel at the view's angle, its F0 from the specular): at
+			// grazing angles glass shows its reflection, not what is behind it.
+			code += " * ALBEDO * (1.0 - (0.16 * SPECULAR * SPECULAR + (1.0 - 0.16 * SPECULAR * SPECULAR) * pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 5.0)))";
 		}
 		code += R"(;
 	ALBEDO *= 1.0 - ref_amount;

@@ -365,7 +365,7 @@
 			Specifies the channel of the [member refraction_texture] in which the refraction information is stored. This is useful when you store the information for multiple effects in a single texture. For example if you stored refraction in the red channel, roughness in the blue, and ambient occlusion in the green you could reduce the number of textures you use.
 		</member>
 		<member name="refraction_tint" type="bool" setter="set_refraction_tint" getter="is_refraction_tint" default="false">
-			If [code]true[/code], the light seen through a refracting surface (see [member refraction_enabled]) is multiplied by its albedo: coloured glass, tinted liquids (FellowEngine). glTF's [code]KHR_materials_transmission[/code] is read into a tinted refraction (see [code]rendering/fellow/shading/gltf_material_extensions[/code]). If [code]false[/code], the refraction is Godot's.
+			If [code]true[/code], the light seen through a refracting surface (see [member refraction_enabled]) is multiplied by its albedo — coloured glass, tinted liquids — and by what its surface does not reflect (1 − its Fresnel at the view's angle: at grazing angles glass shows its reflection, not what is behind it) (FellowEngine). glTF's [code]KHR_materials_transmission[/code] is read into a tinted refraction (see [code]rendering/fellow/shading/gltf_material_extensions[/code]). If [code]false[/code], the refraction is Godot's.
 		</member>
 		<member name="rim" type="float" setter="set_rim" getter="get_rim" default="1.0">
 			Sets the strength of the rim lighting effect.
