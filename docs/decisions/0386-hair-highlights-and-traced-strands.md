@@ -43,3 +43,14 @@ a cylinder: smooth along it, every normal round it).
 KEEP the highlights. KEEP `guide_shapes` (a hairstyle given to FellowHair3D: tools, other content) and the tracer; the
 showcase's strands stay off until they look like hair at its distances — more strands drawn wider where they are far,
 their coverage resolved better than by dithering, and the guides stopped at the hairline.
+
+## Addendum (milestone 250, 2026-11-28): cards from the guides — rejected
+
+Tried: each traced guide made into two narrow cards (12 mm at the root, tapering), textured with 80 painted strands of
+coverage in alpha, coloured from the shell's mean colour, normals out from the head, shining across the strands, over the
+shell darkened to 0.75 (`person_look.gd --view=face --light=key`, Marco and Rosa). The guides' first points rise along
+the head's radius (from the scalp to the hair's surface) and stood out as spikes until cut; after that, Marco's hair was
+a little darker with a few strands at its silhouette catching the sky, and Rosa's light bob duller and streaked grey
+(the darkened shell between the cards). Not better than MakeHuman's painted shell at 0.6 m, so not kept: hair that reads
+as strands needs authored cards (many more, their strands drawn per hairstyle) or strands resolved better than by
+dithering, not cards laid along a few hundred guides.

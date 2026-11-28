@@ -599,6 +599,11 @@ void BaseMaterial3D::init_shaders() {
 	shader_names->sheen_color = "sheen_color";
 	shader_names->sheen_roughness = "sheen_roughness";
 	shader_names->texture_sheen = "texture_sheen";
+	shader_names->iridescence_strength = "iridescence_strength";
+	shader_names->iridescence_ior = "iridescence_ior";
+	shader_names->iridescence_thickness_min = "iridescence_thickness_min";
+	shader_names->iridescence_thickness_max = "iridescence_thickness_max";
+	shader_names->texture_iridescence = "texture_iridescence";
 
 	shader_names->ao_light_affect = "ao_light_affect";
 
@@ -967,6 +972,16 @@ uniform sampler2D texture_albedo : source_color, %s;
 		code += "uniform float sheen_roughness : hint_range(0.0, 1.0, 0.01);\n";
 		if (sheen_texture.is_valid()) {
 			code += vformat("uniform sampler2D texture_sheen : source_color, hint_default_white, %s;\n", texfilter_str);
+		}
+	}
+
+	if (iridescence_enabled) {
+		code += "uniform float iridescence_strength : hint_range(0.0, 1.0, 0.01);\n";
+		code += "uniform float iridescence_ior : hint_range(1.0, 3.0, 0.01);\n";
+		code += "uniform float iridescence_thickness_min : hint_range(0.0, 2000.0, 1.0);\n";
+		code += "uniform float iridescence_thickness_max : hint_range(0.0, 2000.0, 1.0);\n";
+		if (iridescence_texture.is_valid()) {
+			code += vformat("uniform sampler2D texture_iridescence : hint_default_white, %s;\n", texfilter_str);
 		}
 	}
 
@@ -1944,6 +1959,25 @@ void fragment() {)";
 		}
 	}
 
+	if (iridescence_enabled) {
+		code += R"(
+	// Iridescence: Enabled (FellowEngine: a thin film; Forward+ only)
+	IRIDESCENCE = iridescence_strength;
+	IRIDESCENCE_IOR = iridescence_ior;
+	IRIDESCENCE_THICKNESS = iridescence_thickness_max;
+)";
+		if (iridescence_texture.is_valid()) {
+			// (decision 0392: glTF's iridescenceTexture in R, its iridescenceThicknessTexture in G)
+			if (flags[FLAG_UV1_USE_TRIPLANAR]) {
+				code += "	vec2 iridescence_tex = triplanar_texture(texture_iridescence, uv1_power_normal, uv1_triplanar_pos).rg;\n";
+			} else {
+				code += "	vec2 iridescence_tex = texture(texture_iridescence, base_uv).rg;\n";
+			}
+			code += "	IRIDESCENCE *= iridescence_tex.r;\n";
+			code += "	IRIDESCENCE_THICKNESS = mix(iridescence_thickness_min, iridescence_thickness_max, iridescence_tex.g);\n";
+		}
+	}
+
 	if (features[FEATURE_ANISOTROPY]) {
 		code += R"(
 	// Anisotropy: Enabled
@@ -2623,6 +2657,10 @@ void BaseMaterial3D::_validate_property(PropertyInfo &p_property) const {
 			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 		}
 
+		if (p_property.name.begins_with("iridescence_") && !iridescence_enabled) {
+			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		}
+
 		if (p_property.name == "point_size" && !flags[FLAG_USE_POINT_SIZE]) {
 			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 		}
@@ -3063,6 +3101,63 @@ void BaseMaterial3D::set_sheen_texture(const Ref<Texture2D> &p_texture) {
 
 Ref<Texture2D> BaseMaterial3D::get_sheen_texture() const {
 	return sheen_texture;
+}
+
+void BaseMaterial3D::set_iridescence_enabled(bool p_enable) {
+	iridescence_enabled = p_enable;
+	_queue_shader_change();
+	notify_property_list_changed();
+}
+
+bool BaseMaterial3D::is_iridescence_enabled() const {
+	return iridescence_enabled;
+}
+
+void BaseMaterial3D::set_iridescence_strength(float p_strength) {
+	iridescence_strength = CLAMP(p_strength, 0.0f, 1.0f);
+	_material_set_param(shader_names->iridescence_strength, iridescence_strength);
+}
+
+float BaseMaterial3D::get_iridescence_strength() const {
+	return iridescence_strength;
+}
+
+void BaseMaterial3D::set_iridescence_ior(float p_ior) {
+	iridescence_ior = MAX(p_ior, 1.0f);
+	_material_set_param(shader_names->iridescence_ior, iridescence_ior);
+}
+
+float BaseMaterial3D::get_iridescence_ior() const {
+	return iridescence_ior;
+}
+
+void BaseMaterial3D::set_iridescence_thickness_min(float p_nm) {
+	iridescence_thickness_min = MAX(p_nm, 0.0f);
+	_material_set_param(shader_names->iridescence_thickness_min, iridescence_thickness_min);
+}
+
+float BaseMaterial3D::get_iridescence_thickness_min() const {
+	return iridescence_thickness_min;
+}
+
+void BaseMaterial3D::set_iridescence_thickness_max(float p_nm) {
+	iridescence_thickness_max = MAX(p_nm, 0.0f);
+	_material_set_param(shader_names->iridescence_thickness_max, iridescence_thickness_max);
+}
+
+float BaseMaterial3D::get_iridescence_thickness_max() const {
+	return iridescence_thickness_max;
+}
+
+void BaseMaterial3D::set_iridescence_texture(const Ref<Texture2D> &p_texture) {
+	iridescence_texture = p_texture;
+	Variant rid = p_texture.is_valid() ? Variant(p_texture->get_rid()) : Variant();
+	_material_set_param(shader_names->texture_iridescence, rid);
+	_queue_shader_change();
+}
+
+Ref<Texture2D> BaseMaterial3D::get_iridescence_texture() const {
+	return iridescence_texture;
 }
 
 static Vector4 _get_texture_mask(BaseMaterial3D::TextureChannel p_channel) {
@@ -3664,6 +3759,19 @@ void BaseMaterial3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_sheen_texture", "texture"), &BaseMaterial3D::set_sheen_texture);
 	ClassDB::bind_method(D_METHOD("get_sheen_texture"), &BaseMaterial3D::get_sheen_texture);
 
+	ClassDB::bind_method(D_METHOD("set_iridescence_enabled", "enable"), &BaseMaterial3D::set_iridescence_enabled);
+	ClassDB::bind_method(D_METHOD("is_iridescence_enabled"), &BaseMaterial3D::is_iridescence_enabled);
+	ClassDB::bind_method(D_METHOD("set_iridescence_strength", "strength"), &BaseMaterial3D::set_iridescence_strength);
+	ClassDB::bind_method(D_METHOD("get_iridescence_strength"), &BaseMaterial3D::get_iridescence_strength);
+	ClassDB::bind_method(D_METHOD("set_iridescence_ior", "ior"), &BaseMaterial3D::set_iridescence_ior);
+	ClassDB::bind_method(D_METHOD("get_iridescence_ior"), &BaseMaterial3D::get_iridescence_ior);
+	ClassDB::bind_method(D_METHOD("set_iridescence_thickness_min", "nanometers"), &BaseMaterial3D::set_iridescence_thickness_min);
+	ClassDB::bind_method(D_METHOD("get_iridescence_thickness_min"), &BaseMaterial3D::get_iridescence_thickness_min);
+	ClassDB::bind_method(D_METHOD("set_iridescence_thickness_max", "nanometers"), &BaseMaterial3D::set_iridescence_thickness_max);
+	ClassDB::bind_method(D_METHOD("get_iridescence_thickness_max"), &BaseMaterial3D::get_iridescence_thickness_max);
+	ClassDB::bind_method(D_METHOD("set_iridescence_texture", "texture"), &BaseMaterial3D::set_iridescence_texture);
+	ClassDB::bind_method(D_METHOD("get_iridescence_texture"), &BaseMaterial3D::get_iridescence_texture);
+
 	ClassDB::bind_method(D_METHOD("set_metallic_texture_channel", "channel"), &BaseMaterial3D::set_metallic_texture_channel);
 	ClassDB::bind_method(D_METHOD("get_metallic_texture_channel"), &BaseMaterial3D::get_metallic_texture_channel);
 
@@ -3898,6 +4006,14 @@ void BaseMaterial3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "sheen_color", PROPERTY_HINT_COLOR_NO_ALPHA), "set_sheen_color", "get_sheen_color");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sheen_roughness", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_sheen_roughness", "get_sheen_roughness");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "sheen_texture", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_sheen_texture", "get_sheen_texture");
+
+	ADD_GROUP("Iridescence", "iridescence_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "iridescence", PROPERTY_HINT_GROUP_ENABLE), "set_iridescence_enabled", "is_iridescence_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "iridescence_strength", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_iridescence_strength", "get_iridescence_strength");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "iridescence_ior", PROPERTY_HINT_RANGE, "1,3,0.01"), "set_iridescence_ior", "get_iridescence_ior");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "iridescence_thickness_min", PROPERTY_HINT_RANGE, "0,2000,1,suffix:nm"), "set_iridescence_thickness_min", "get_iridescence_thickness_min");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "iridescence_thickness_max", PROPERTY_HINT_RANGE, "0,2000,1,suffix:nm"), "set_iridescence_thickness_max", "get_iridescence_thickness_max");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "iridescence_texture", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_iridescence_texture", "get_iridescence_texture");
 
 	ADD_GROUP("Transform", "");
 	ADD_PROPERTYI(PropertyInfo(Variant::BOOL, "fixed_size"), "set_flag", "get_flag", FLAG_FIXED_SIZE);
@@ -4145,6 +4261,10 @@ BaseMaterial3D::BaseMaterial3D(bool p_orm) :
 	set_wind_sheen(0.0);
 	set_sheen_color(Color(0.5, 0.5, 0.5));
 	set_sheen_roughness(0.5);
+	set_iridescence_strength(1.0);
+	set_iridescence_ior(1.3);
+	set_iridescence_thickness_min(100.0);
+	set_iridescence_thickness_max(400.0);
 
 	set_msdf_pixel_range(4.0);
 	set_msdf_outline_size(0.0);

@@ -705,6 +705,9 @@ void SceneShaderForwardMobile::init(const String p_defines) {
 		actions.renames["CLEARCOAT_ROUGHNESS"] = "clearcoat_roughness_highp";
 		actions.renames["SHEEN"] = "fellow_sheen"; // (FellowEngine decision 0383: Forward+ only, ignored here)
 		actions.renames["SHEEN_ROUGHNESS"] = "fellow_sheen_roughness";
+		actions.renames["IRIDESCENCE"] = "fellow_iridescence"; // (FellowEngine decision 0392: Forward+ only, ignored here)
+		actions.renames["IRIDESCENCE_IOR"] = "fellow_iridescence_ior";
+		actions.renames["IRIDESCENCE_THICKNESS"] = "fellow_iridescence_thickness";
 		actions.renames["ANISOTROPY"] = "anisotropy_highp";
 		actions.renames["ANISOTROPY_FLOW"] = "anisotropy_flow_highp";
 		actions.renames["SSS_STRENGTH"] = "sss_strength_highp";

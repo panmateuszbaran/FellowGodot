@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 250 — Iridescence (2026-11-28)
+
+- Decision 0392. A thin film over a surface (soap, oil, tempered metal, shells, pearl): `IRIDESCENCE`,
+  `IRIDESCENCE_IOR`, `IRIDESCENCE_THICKNESS` in Forward+'s `fragment()`, BaseMaterial3D's Iridescence group, glTF's
+  `KHR_materials_iridescence` read and written with decision 0390's setting. Its colours change with the angle and the
+  film's thickness (Belcour and Barla's model, as glTF's reference viewer evaluates it). Materials without it compile as
+  before; the regression suite is exact.
+- Decision 0386's addendum: hair cards made from the traced guides tried and rejected (not better than the painted
+  shell at 0.6 m).
+
 ## Milestone 249 — The people's skin: its crevices and micro-relief (2026-11-28)
 
 - Decision 0391 (showcase). Each person's ambient occlusion baked into its body's UV layout with Cycles (the eye

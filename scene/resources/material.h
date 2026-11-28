@@ -387,6 +387,8 @@ private:
 		uint64_t fellow_wind : 1;
 		uint64_t fellow_sheen : 1;
 		uint64_t fellow_sheen_texture : 1;
+		uint64_t fellow_iridescence : 1;
+		uint64_t fellow_iridescence_texture : 1;
 		uint64_t proximity_fade : 1;
 		uint64_t orm : 1;
 
@@ -441,6 +443,8 @@ private:
 		mk.fellow_wind = wind_enabled;
 		mk.fellow_sheen = sheen_enabled;
 		mk.fellow_sheen_texture = sheen_enabled && sheen_texture.is_valid();
+		mk.fellow_iridescence = iridescence_enabled;
+		mk.fellow_iridescence_texture = iridescence_enabled && iridescence_texture.is_valid();
 		mk.proximity_fade = proximity_fade_enabled;
 		mk.distance_fade = distance_fade;
 		mk.emission_op = emission_op;
@@ -508,6 +512,11 @@ private:
 		StringName sheen_color;
 		StringName sheen_roughness;
 		StringName texture_sheen;
+		StringName iridescence_strength;
+		StringName iridescence_ior;
+		StringName iridescence_thickness_min;
+		StringName iridescence_thickness_max;
+		StringName texture_iridescence;
 		StringName proximity_fade_distance;
 		StringName msdf_pixel_range;
 		StringName msdf_outline_size;
@@ -587,6 +596,13 @@ private:
 	Color sheen_color = Color(0.5, 0.5, 0.5);
 	float sheen_roughness = 0.5f;
 	Ref<Texture2D> sheen_texture; // RGB: the sheen's colour (sRGB), A: its roughness (decision 0390)
+	// FellowEngine iridescence (decision 0392).
+	bool iridescence_enabled = false;
+	float iridescence_strength = 1.0f;
+	float iridescence_ior = 1.3f;
+	float iridescence_thickness_min = 100.0f; // nm
+	float iridescence_thickness_max = 400.0f; // nm
+	Ref<Texture2D> iridescence_texture; // R: the strength, G: the thickness from min to max
 	int particles_anim_h_frames = 0;
 	int particles_anim_v_frames = 0;
 	bool particles_anim_loop = false;
@@ -851,6 +867,19 @@ public:
 	float get_sheen_roughness() const;
 	void set_sheen_texture(const Ref<Texture2D> &p_texture);
 	Ref<Texture2D> get_sheen_texture() const;
+
+	void set_iridescence_enabled(bool p_enable);
+	bool is_iridescence_enabled() const;
+	void set_iridescence_strength(float p_strength);
+	float get_iridescence_strength() const;
+	void set_iridescence_ior(float p_ior);
+	float get_iridescence_ior() const;
+	void set_iridescence_thickness_min(float p_nm);
+	float get_iridescence_thickness_min() const;
+	void set_iridescence_thickness_max(float p_nm);
+	float get_iridescence_thickness_max() const;
+	void set_iridescence_texture(const Ref<Texture2D> &p_texture);
+	Ref<Texture2D> get_iridescence_texture() const;
 
 	void set_alpha_scissor_threshold(float p_threshold);
 	float get_alpha_scissor_threshold() const;

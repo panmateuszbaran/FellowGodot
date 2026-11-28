@@ -175,6 +175,65 @@ float V_Neubelt(float NoV, float NoL) {
 }
 #endif
 
+#ifdef LIGHT_IRIDESCENCE_USED
+// FellowEngine iridescence (decision 0392): a thin film's reflectance (Belcour and Barla 2017, "A Practical Extension
+// to Microfacet Theory for the Modeling of Varying Iridescence": the Airy sum's first terms, each order's spectral
+// integral by the CIE matching functions' Gaussian fit, to linear Rec. 709), as glTF's KHR_materials_iridescence.
+vec3 fellow_irid_sensitivity(float p_opd, vec3 p_shift) {
+	float phase = 2.0 * M_PI * p_opd * 1.0e-9;
+	const vec3 val = vec3(5.4856e-13, 4.4201e-13, 5.2481e-13);
+	const vec3 pos = vec3(1.6810e+06, 1.7953e+06, 2.2084e+06);
+	const vec3 var = vec3(4.3278e+09, 9.3046e+09, 6.6121e+09);
+	vec3 xyz = val * sqrt(2.0 * M_PI * var) * cos(pos * phase + p_shift) * exp(-phase * phase * var);
+	xyz.x += 9.7470e-14 * sqrt(2.0 * M_PI * 4.5282e+09) * cos(2.2399e+06 * phase + p_shift.x) * exp(-4.5282e+09 * phase * phase);
+	xyz /= 1.0685e-7;
+	const mat3 xyz_to_rec709 = mat3(3.2404542, -0.9692660, 0.0556434, -1.5371385, 1.8760108, -0.2040259, -0.4985314, 0.0415560, 1.0572252);
+	return xyz_to_rec709 * xyz;
+}
+
+float fellow_ior_to_f0(float p_transmitted, float p_incident) {
+	float r = (p_transmitted - p_incident) / (p_transmitted + p_incident);
+	return r * r;
+}
+
+vec3 fellow_thin_film_fresnel(float p_outside_ior, float p_film_ior, float p_cos1, float p_thickness, vec3 p_base_f0) {
+	// (the film's IOR towards the outside's as it thins: no film, no colours)
+	float film_ior = mix(p_outside_ior, p_film_ior, smoothstep(0.0, 0.03, p_thickness));
+	float sin2_sq = (p_outside_ior / film_ior) * (p_outside_ior / film_ior) * (1.0 - p_cos1 * p_cos1);
+	float cos2_sq = 1.0 - sin2_sq;
+	if (cos2_sq < 0.0) {
+		return vec3(1.0); // (total internal reflection)
+	}
+	float cos2 = sqrt(cos2_sq);
+	// The outside to the film.
+	float r0 = fellow_ior_to_f0(film_ior, p_outside_ior);
+	float r12 = r0 + (1.0 - r0) * pow(1.0 - p_cos1, 5.0);
+	float t121 = 1.0 - r12;
+	float phi12 = film_ior < p_outside_ior ? M_PI : 0.0;
+	float phi21 = M_PI - phi12;
+	// The film to the base (its IOR from its F0).
+	vec3 sqrt_f0 = sqrt(clamp(p_base_f0, vec3(0.0), vec3(0.9999)));
+	vec3 base_ior = (vec3(1.0) + sqrt_f0) / (vec3(1.0) - sqrt_f0);
+	vec3 r1 = (base_ior - vec3(film_ior)) / (base_ior + vec3(film_ior));
+	r1 *= r1;
+	vec3 r23 = r1 + (vec3(1.0) - r1) * pow(1.0 - cos2, 5.0);
+	vec3 phi23 = vec3(base_ior.x < film_ior ? M_PI : 0.0, base_ior.y < film_ior ? M_PI : 0.0, base_ior.z < film_ior ? M_PI : 0.0);
+	// The optical path difference and the phases.
+	float opd = 2.0 * film_ior * p_thickness * cos2;
+	vec3 phi = vec3(phi21) + phi23;
+	vec3 r123 = clamp(r12 * r23, vec3(1e-5), vec3(0.9999));
+	vec3 rs = t121 * t121 * r23 / (vec3(1.0) - r123);
+	vec3 reflectance = r12 + rs;
+	vec3 cm = rs - t121;
+	vec3 sqrt_r123 = sqrt(r123);
+	for (int m = 1; m <= 2; m++) {
+		cm *= sqrt_r123;
+		reflectance += cm * 2.0 * fellow_irid_sensitivity(float(m) * opd, float(m) * phi);
+	}
+	return max(reflectance, vec3(0.0));
+}
+#endif
+
 hvec3 f0_Clear_Coat_To_Surface(hvec3 f0) {
 	// Approximation of iorTof0(f0ToIor(f0), 1.5)
 	// This assumes that the clear coat layer has an IOR of 1.5
@@ -383,6 +442,9 @@ void light_compute(hvec3 N, hvec3 L, hvec3 V, half A, hvec3 light_color, bool is
 			// https://google.github.io/filament/Filament.html#lighting/occlusion/specularocclusion
 			half f90 = clamp(dot(f0, hvec3(50.0 * 0.33)), metallic, half(1.0));
 			hvec3 F = f0 + (f90 - f0) * cLdotH5;
+#ifdef LIGHT_IRIDESCENCE_USED
+			F = mix(F, hvec3(fellow_irid_fresnel), half(fellow_iridescence)); // FellowEngine iridescence (decision 0392)
+#endif
 			hvec3 specular_brdf_NL = energy_compensation * cNdotL * D * F * G;
 			specular_light += specular_brdf_NL * light_color * attenuation * cc_attenuation * specular_amount;
 #endif

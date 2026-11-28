@@ -1230,6 +1230,15 @@ float fellow_sheen_scaling = 1.0; // what the base layer keeps: 1 - max(sheen) *
 vec3 fellow_sheen_irradiance = vec3(0.0); // the ambient light reaching the sheen (occluded, not yet tinted by the albedo)
 #endif
 
+#ifdef LIGHT_IRIDESCENCE_USED
+// FellowEngine iridescence (decision 0392): a thin film over the surface, written by the material (IRIDESCENCE, its
+// strength; IRIDESCENCE_IOR; IRIDESCENCE_THICKNESS in nanometres), its Fresnel read by light_compute().
+float fellow_iridescence = 0.0;
+float fellow_iridescence_ior = 1.3;
+float fellow_iridescence_thickness = 400.0;
+vec3 fellow_irid_fresnel = vec3(0.0);
+#endif
+
 #if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
 
 // Default to SPECULAR_SCHLICK_GGX.
@@ -3246,6 +3255,15 @@ void fragment_shader(in SceneData scene_data) {
 	f0 = mix(f0, f0_Clear_Coat_To_Surface(f0), clearcoat);
 #endif
 
+#ifdef LIGHT_IRIDESCENCE_USED
+	// FellowEngine iridescence (decision 0392): the film's Fresnel at the view's angle (as glTF's reference viewer: one
+	// value for the ambient light and every light), mixed into the base's by the film's strength.
+	fellow_iridescence = clamp(fellow_iridescence, 0.0, 1.0);
+	if (fellow_iridescence > 0.0) {
+		fellow_irid_fresnel = fellow_thin_film_fresnel(1.0, max(fellow_iridescence_ior, 1.0), clamp(dot(normal, view), 0.0001, 1.0), max(fellow_iridescence_thickness, 0.0), f0);
+	}
+#endif
+
 #ifdef LIGHT_SHEEN_USED
 	// FellowEngine sheen (decision 0383): the fibres' lobe over the base (Estevez and Kulla's distribution, its
 	// directional albedo the DFG table's third channel); the base keeps what the sheen does not reflect.
@@ -3269,7 +3287,11 @@ void fragment_shader(in SceneData scene_data) {
 
 		// cheap luminance approximation
 		float f90 = clamp(50.0 * f0.g, metallic, 1.0);
+#ifdef LIGHT_IRIDESCENCE_USED
+		indirect_specular_light *= energy_compensation * mix((f90 - f0) * envBRDF.x + f0 * envBRDF.y, fellow_irid_fresnel * envBRDF.y, fellow_iridescence);
+#else
 		indirect_specular_light *= energy_compensation * ((f90 - f0) * envBRDF.x + f0 * envBRDF.y);
+#endif
 
 #ifdef LIGHT_CLEARCOAT_USED
 		float geo_NdotV = max(dot(geo_normal, view), 0.0001); // We want to use geometric normal, not normal_map

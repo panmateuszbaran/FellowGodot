@@ -1742,6 +1742,17 @@ as before.
 `sheen_texture` (milestone 248, decision 0390) varies it over the surface: RGB multiply `sheen_color` (sRGB), A
 multiplies `sheen_roughness` — glTF's `sheenColorTexture` and `sheenRoughnessTexture` packed into one.
 
+## Iridescence (milestone 250)
+
+A `BaseMaterial3D`'s **Iridescence** group (decision 0392; Forward+): `iridescence` on lays a thin film over the surface
+— soap bubbles, oil on water, tempered or anodized metal, beetles' shells, mother-of-pearl — whose reflections take
+colours that change with the angle and the film's thickness (glTF's `KHR_materials_iridescence`, Belcour and Barla's
+thin-film model). `iridescence_strength` (1) mixes the film's Fresnel into the specular reflection's, `iridescence_ior`
+(1.3) is the film's index (equal to the surface's under it: no colours on it), `iridescence_thickness_max` (400 nm) its
+thickness, or with `iridescence_texture` (R the strength, G the thickness) between `iridescence_thickness_min` (100 nm)
+and the maximum. A `ShaderMaterial` writes `IRIDESCENCE`, `IRIDESCENCE_IOR` and `IRIDESCENCE_THICKNESS` (nm) in its
+`fragment()`. Mobile and Compatibility take the built-ins and ignore them.
+
 ## glTF's material extensions (milestone 248)
 
 `shading/gltf_material_extensions` (off; decision 0390): glTF files are read (the editor's import, `GLTFDocument` at run
@@ -1750,7 +1761,8 @@ time) and written with `KHR_materials_sheen` (the sheen, its textures into `shee
 there, its normal texture not read), `KHR_materials_anisotropy` (the strength matched to Godot's at the material's
 roughness, the rotation and direction texture baked into `anisotropy_flowmap`), and `KHR_materials_ior` with
 `KHR_materials_specular` (the reflectance at normal incidence as `metallic_specular`, up to F0 0.16; the specular
-colour averaged, its textures not read). Files that require one of them load. Packed textures are embedded
+colour averaged, its textures not read); from milestone 250 also `KHR_materials_iridescence` (the film above, its textures
+packed into `iridescence_texture`). Files that require one of them load. Packed textures are embedded
 uncompressed, as the stock specular-glossiness conversion's are. Off, as stock: the extensions are ignored.
 
 ## Options that change the image (off by default)

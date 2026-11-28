@@ -886,6 +886,9 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		actions.renames["CLEARCOAT_ROUGHNESS"] = "clearcoat_roughness";
 		actions.renames["SHEEN"] = "fellow_sheen"; // decision 0383
 		actions.renames["SHEEN_ROUGHNESS"] = "fellow_sheen_roughness";
+		actions.renames["IRIDESCENCE"] = "fellow_iridescence"; // decision 0392
+		actions.renames["IRIDESCENCE_IOR"] = "fellow_iridescence_ior";
+		actions.renames["IRIDESCENCE_THICKNESS"] = "fellow_iridescence_thickness";
 		actions.renames["ANISOTROPY"] = "anisotropy";
 		actions.renames["ANISOTROPY_FLOW"] = "anisotropy_flow";
 		actions.renames["SSS_STRENGTH"] = "sss_strength";
@@ -945,6 +948,9 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		actions.usage_defines["CLEARCOAT_ROUGHNESS"] = "@CLEARCOAT";
 		actions.usage_defines["SHEEN"] = "#define LIGHT_SHEEN_USED\n"; // decision 0383
 		actions.usage_defines["SHEEN_ROUGHNESS"] = "@SHEEN";
+		actions.usage_defines["IRIDESCENCE"] = "#define LIGHT_IRIDESCENCE_USED\n"; // decision 0392
+		actions.usage_defines["IRIDESCENCE_IOR"] = "@IRIDESCENCE";
+		actions.usage_defines["IRIDESCENCE_THICKNESS"] = "@IRIDESCENCE";
 		actions.usage_defines["ANISOTROPY"] = "#define LIGHT_ANISOTROPY_USED\n";
 		actions.usage_defines["ANISOTROPY_FLOW"] = "@ANISOTROPY";
 		actions.usage_defines["AO"] = "#define AO_USED\n";

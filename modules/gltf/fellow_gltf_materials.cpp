@@ -40,6 +40,8 @@
 // * KHR_materials_ior and KHR_materials_specular: the dielectric's reflectance at normal incidence as Godot's specular
 //   (F0 = 0.16 specular^2); the specular colour's tint is averaged (Godot's dielectric reflectance is grey), its textures
 //   not read.
+// * KHR_materials_iridescence (milestone 250, decision 0392): the thin film (BaseMaterial3D's iridescence); its
+//   strength and thickness textures packed into iridescence_texture (R, G).
 
 #include "gltf_document.h"
 
@@ -288,6 +290,33 @@ void GLTFDocument::_fellow_parse_material_extensions(Ref<GLTFState> p_state, con
 		}
 	}
 
+	if (p_extensions.has("KHR_materials_iridescence")) {
+		// (milestone 250, decision 0392)
+		const Dictionary irid = p_extensions["KHR_materials_iridescence"];
+		const float strength = fellow_float(irid, "iridescenceFactor", 0.0f);
+		if (strength > 0.0f) {
+			p_material->set_iridescence_enabled(true);
+			p_material->set_iridescence_strength(strength);
+			p_material->set_iridescence_ior(fellow_float(irid, "iridescenceIor", 1.3f));
+			p_material->set_iridescence_thickness_min(fellow_float(irid, "iridescenceThicknessMinimum", 100.0f));
+			p_material->set_iridescence_thickness_max(fellow_float(irid, "iridescenceThicknessMaximum", 400.0f));
+			int strength_index = -1;
+			int thickness_index = -1;
+			const Ref<Image> strength_image = _fellow_texture_image(p_state, irid, "iridescenceTexture", p_primary_texture_coord, &strength_index);
+			const Ref<Image> thickness_image = _fellow_texture_image(p_state, irid, "iridescenceThicknessTexture", p_primary_texture_coord, &thickness_index);
+			if (strength_image.is_valid() && strength_index == thickness_index) {
+				// (one texture: R the strength, G the thickness, as BaseMaterial3D reads it)
+				p_material->set_iridescence_texture(_get_texture(p_state, strength_index, TEXTURE_TYPE_GENERIC));
+			} else if (strength_image.is_valid() || thickness_image.is_valid()) {
+				const bool has_thickness = thickness_image.is_valid();
+				p_material->set_iridescence_texture(fellow_combine(strength_image, thickness_image, name + "_iridescence", [has_thickness](const Color &p_s, const Color &p_t) {
+					// (without a thickness texture glTF's thickness is its maximum: G 1)
+					return Color(p_s.r, has_thickness ? p_t.g : 1.0f, 0.0f, 1.0f);
+				}));
+			}
+		}
+	}
+
 	if (p_extensions.has("KHR_materials_ior") || p_extensions.has("KHR_materials_specular")) {
 		float ior = 1.5f;
 		if (p_extensions.has("KHR_materials_ior")) {
@@ -374,6 +403,21 @@ void GLTFDocument::_fellow_serialize_material_extensions(Ref<GLTFState> p_state,
 		}
 		r_extensions["KHR_materials_anisotropy"] = aniso;
 		p_state->add_used_extension("KHR_materials_anisotropy");
+	}
+
+	if (p_material->is_iridescence_enabled() && p_material->get_iridescence_strength() > 0.0f) {
+		Dictionary irid;
+		irid["iridescenceFactor"] = p_material->get_iridescence_strength();
+		irid["iridescenceIor"] = p_material->get_iridescence_ior();
+		irid["iridescenceThicknessMinimum"] = p_material->get_iridescence_thickness_min();
+		irid["iridescenceThicknessMaximum"] = p_material->get_iridescence_thickness_max();
+		const Dictionary info = texture_info(p_material->get_iridescence_texture());
+		if (!info.is_empty()) {
+			irid["iridescenceTexture"] = info;
+			irid["iridescenceThicknessTexture"] = info;
+		}
+		r_extensions["KHR_materials_iridescence"] = irid;
+		p_state->add_used_extension("KHR_materials_iridescence");
 	}
 
 	if (!Math::is_equal_approx(p_material->get_specular(), 0.5f)) {

@@ -167,6 +167,10 @@ ShaderTypes::ShaderTypes() {
 	// FellowEngine (decision 0383): a cloth's sheen (Forward+; Mobile and Compatibility ignore it).
 	shader_modes[RSE::SHADER_SPATIAL].functions["fragment"].built_ins["SHEEN"] = ShaderLanguage::TYPE_VEC3;
 	shader_modes[RSE::SHADER_SPATIAL].functions["fragment"].built_ins["SHEEN_ROUGHNESS"] = ShaderLanguage::TYPE_FLOAT;
+	// FellowEngine (decision 0392): a thin film's iridescence (Forward+; Mobile and Compatibility ignore it).
+	shader_modes[RSE::SHADER_SPATIAL].functions["fragment"].built_ins["IRIDESCENCE"] = ShaderLanguage::TYPE_FLOAT;
+	shader_modes[RSE::SHADER_SPATIAL].functions["fragment"].built_ins["IRIDESCENCE_IOR"] = ShaderLanguage::TYPE_FLOAT;
+	shader_modes[RSE::SHADER_SPATIAL].functions["fragment"].built_ins["IRIDESCENCE_THICKNESS"] = ShaderLanguage::TYPE_FLOAT;
 	shader_modes[RSE::SHADER_SPATIAL].functions["fragment"].built_ins["ANISOTROPY"] = ShaderLanguage::TYPE_FLOAT;
 	shader_modes[RSE::SHADER_SPATIAL].functions["fragment"].built_ins["ANISOTROPY_FLOW"] = ShaderLanguage::TYPE_VEC2;
 	shader_modes[RSE::SHADER_SPATIAL].functions["fragment"].built_ins["SSS_STRENGTH"] = ShaderLanguage::TYPE_FLOAT;

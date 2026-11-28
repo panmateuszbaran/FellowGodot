@@ -278,6 +278,24 @@
 			For best results, the texture should be normalized (with [member heightmap_scale] reduced to compensate). In [url=https://gimp.org]GIMP[/url], this can be done using [b]Colors &gt; Auto &gt; Equalize[/b]. If the texture only uses a small part of its available range, the parallax effect may look strange, especially when the camera moves.
 			[b]Note:[/b] To reduce memory usage and improve loading times, you may be able to use a lower-resolution heightmap texture as most heightmaps are only comprised of low-frequency data.
 		</member>
+		<member name="iridescence" type="bool" setter="set_iridescence_enabled" getter="is_iridescence_enabled" default="false">
+			If [code]true[/code], a thin film lies over the surface (FellowEngine, Forward+): soap bubbles, oil on water or on a puddle, the colours of tempered or anodized metal, a beetle's shell, mother-of-pearl. Light reflected from the film's top and from the surface under it interferes, so the reflections take colours that change with the viewing angle and the film's thickness. It follows glTF's [code]KHR_materials_iridescence[/code] (Belcour and Barla's thin-film model): it changes the specular reflection's Fresnel term, for every light and the ambient light, by [member iridescence_strength]. The Mobile and Compatibility renderers ignore it.
+		</member>
+		<member name="iridescence_ior" type="float" setter="set_iridescence_ior" getter="get_iridescence_ior" default="1.3">
+			The film's index of refraction. A film whose index equals the surface's under it shows no colours on it; soap and oil films are about [code]1.3[/code]-[code]1.5[/code], oxide layers on metals higher.
+		</member>
+		<member name="iridescence_strength" type="float" setter="set_iridescence_strength" getter="get_iridescence_strength" default="1.0">
+			How much of the reflection is the film's: [code]0[/code] none, [code]1[/code] all of it.
+		</member>
+		<member name="iridescence_texture" type="Texture2D" setter="set_iridescence_texture" getter="get_iridescence_texture">
+			Varies the film over the surface: its red channel multiplies [member iridescence_strength], its green channel places the film's thickness between [member iridescence_thickness_min] and [member iridescence_thickness_max] — glTF's [code]iridescenceTexture[/code] and [code]iridescenceThicknessTexture[/code] packed into one texture. Without it the film is [member iridescence_thickness_max] thick everywhere. Read with the material's UV1.
+		</member>
+		<member name="iridescence_thickness_max" type="float" setter="set_iridescence_thickness_max" getter="get_iridescence_thickness_max" default="400.0">
+			The film's thickness in nanometres (where [member iridescence_texture]'s green channel is 1, or everywhere without it). Films of a few hundred nanometres give the strongest colours; thicker ones repeat them, paler; a film thinning to nothing shows none.
+		</member>
+		<member name="iridescence_thickness_min" type="float" setter="set_iridescence_thickness_min" getter="get_iridescence_thickness_min" default="100.0">
+			The film's thickness in nanometres where [member iridescence_texture]'s green channel is 0.
+		</member>
 		<member name="metallic" type="float" setter="set_metallic" getter="get_metallic" default="0.0">
 			A high value makes the material appear more like a metal. Non-metals use their albedo as the diffuse color and add diffuse to the specular reflection. With non-metals, the reflection appears on top of the albedo color. Metals use their albedo as a multiplier to the specular reflection and set the diffuse color to black resulting in a tinted reflection. Materials work better when fully metal or fully non-metal, values between [code]0[/code] and [code]1[/code] should only be used for blending between metal and non-metal sections. To alter the amount of reflection use [member roughness].
 		</member>
