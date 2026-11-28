@@ -9,6 +9,18 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 255 — virtual shadow maps for the sun (2026-11-28)
+
+- Decision 0396 (`shadows/virtual/enabled`, off). The sun's shadow as Unreal keeps it: clipmap levels of 128 × 128 texel
+  pages around the camera, from 2 mm texels to 4 m, of which only the pages the view's pixels look up are allocated
+  (the depth pre-pass marks them on the GPU, read back) and drawn — when allocated, when a static caster over them
+  changed, every frame under a dynamic caster — and kept otherwise; heights towards the light in a 64 MB pool
+  (`imageAtomicMax` from shadow passes of up to 16 × 16 pages through the batched shadow lists). The colour passes take
+  the finest level with the pages, then the cascades. On lavapipe: a fence's 5 cm slats, a shutter's louvres and a
+  neighbour's roofline sharp where the cascades smear them; at rest no page drawn; pages kept against drawn every
+  frame the same pixels (but 20 at a box's foot); the scene cull's part 0.13-0.29 ms with 10 000 instances. Not
+  measured on a GPU yet.
+
 ## Milestone 254 — the game's window and the mouse (2026-11-28)
 
 - Decision 0395 (Windows). A game started behind another window (its launcher closed before the window was up, so

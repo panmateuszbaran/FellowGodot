@@ -39,6 +39,7 @@
 #include "servers/rendering/fellow_memory_counters.h"
 #include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/fellow_positional_shadow_cache.h"
+#include "servers/rendering/fellow_virtual_shadow.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
@@ -288,6 +289,12 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag_indirect", true); // decision 0381
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_dag_parallel", true); // decision 0384 (RTX laptop: the prepare step halved)
 	GLOBAL_DEF("rendering/fellow/shadows/directional_depth_fit", false); // decision 0388
+	GLOBAL_DEF("rendering/fellow/shadows/virtual/enabled", false); // decision 0396 (changes the image)
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/virtual/levels", PROPERTY_HINT_RANGE, "1,16,1"), 12);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shadows/virtual/texel_size", PROPERTY_HINT_RANGE, "0.0005,0.1,0.0005,suffix:m"), 0.002);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/virtual/pool_size", PROPERTY_HINT_ENUM, "2048:2048,4096:4096,8192:8192,16384:16384"), 4096);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shadows/virtual/lod_bias", PROPERTY_HINT_RANGE, "-2,4,0.25"), 0.0);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/virtual/max_new_pages_per_frame", PROPERTY_HINT_RANGE, "1,4096,1"), 512);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_min_surface_triangles", PROPERTY_HINT_RANGE, "256,1048576,1"), 32768);
 	GLOBAL_DEF("rendering/fellow/lights/enabled", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", true);
@@ -722,6 +729,11 @@ Dictionary Fellow::get_stats_dictionary() {
 		d["shadows_depth_fit_renders"] = Fellow::depth_fit_stats().fitted_renders.get(); // decision 0388
 		d["shadows_depth_fit_near_mm"] = Fellow::depth_fit_stats().last_near_mm.get();
 		d["shadows_depth_fit_far_mm"] = Fellow::depth_fit_stats().last_far_mm.get();
+		d["shadows_virtual_resident_pages"] = Fellow::vsm_stats().resident.get(); // decision 0396
+		d["shadows_virtual_drawn_pages"] = Fellow::vsm_stats().drawn.get();
+		d["shadows_virtual_passes"] = Fellow::vsm_stats().passes.get();
+		d["shadows_virtual_requested_pages"] = Fellow::vsm_stats().requested.get();
+		d["shadows_virtual_update_usec"] = Fellow::vsm_stats().update_usec.get();
 		d["geometry_cluster_dag_prepare_usec"] = cs.prepare_usec.get(); // decision 0384
 		d["geometry_cluster_dag_parallel_walks"] = cs.parallel_walks.get();
 		d["geometry_cluster_dag_cache_hits"] = cs.cache_hits.get();

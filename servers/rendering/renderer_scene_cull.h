@@ -45,6 +45,7 @@
 #include "servers/rendering/renderer_scene_render.h"
 #include "servers/rendering/rendering_method.h"
 #include "servers/rendering/fellow_settings.h"
+#include "servers/rendering/fellow_virtual_shadow.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/storage/utilities.h"
@@ -283,6 +284,10 @@ public:
 			FLAG_FELLOW_HLOD_MEMBER = (1 << 26),
 			// FellowEngine (decision 0260): its shadow faded last frame (shadow maps drawn again once it stops).
 			FLAG_FELLOW_SHADOW_FADED = (1 << 27),
+			// FellowEngine virtual shadow maps (decision 0396): copies of what makes its shadow uncacheable (its material
+			// or mesh instance, dynamic GI: Instance and InstanceGeometryData), and at a cascade's far texels.
+			FLAG_FELLOW_SHADOW_NOCACHE = (1 << 28),
+			FLAG_FELLOW_SHADOW_NOCACHE_FAR = (1 << 29),
 		};
 
 		uint32_t flags = 0;
@@ -296,6 +301,7 @@ public:
 		Instance *instance = nullptr;
 		int32_t parent_array_index = -1;
 		int32_t visibility_index = -1;
+		uint32_t fellow_change_frame = 0; // decision 0396: Instance::fellow_change_frame's low bits (read without the instance)
 
 		// Each time occlusion culling determines an instance is visible,
 		// set this to occlusion_frame plus some delay.
@@ -1198,6 +1204,48 @@ public:
 		float nearest = 0.0f;
 		float farthest = 0.0f;
 	} fellow_depth_fit_now;
+
+	/* FellowEngine virtual shadow maps (docs/decisions/0396-virtual-shadow-maps.md) */
+
+	struct FellowVSMPage {
+		uint32_t phys = 0;
+		uint64_t used_frame = 0; // last asked for
+	};
+	struct FellowVSMCandidate {
+		RenderGeometryInstance *geometry = nullptr;
+		Instance *instance = nullptr; // (its HLOD distances and range end read only for those with them)
+		real_t u0, v0, u1, v1; // light-space box across the light
+		bool dynamic = false;
+		bool wind_far = false; // moved only by the wind: static on the coarse levels (decision 0125)
+		bool ranged = false; // a visibility range (decision 0272)
+		uint32_t hlod = 0; // InstanceData::FLAG_FELLOW_HLOD_*
+	};
+	struct FellowVSMState {
+		uint32_t state_id = 0;
+		RID light_instance;
+		Scenario *scenario = nullptr;
+		Vector3 axis_x, axis_y, axis_z;
+		int levels = 0;
+		float texel0 = 0.0f;
+		int pool_pages = 0;
+		uint64_t last_event_seq = 0;
+		uint64_t last_frame = 0;
+		float footprint = 0.0f; // from the requests: a pixel's size per metre of depth (0: not known yet)
+		float lod_bias = 0.0f;
+		HashMap<Vector2i, FellowVSMPage> pages[Fellow::VSM_MAX_LEVELS]; // resident, by absolute page coordinates
+		LocalVector<uint32_t> free_phys;
+		HashMap<Vector2i, uint8_t> requested[Fellow::VSM_MAX_LEVELS]; // the latest requests (absolute pages)
+		HashMap<RenderGeometryInstance *, Rect2> dynamic_prev; // dynamic casters' boxes last frame
+		LocalVector<PagedArray<RenderGeometryInstance *> *> pass_lists; // one per pass (regions of a level's pages)
+		LocalVector<FellowVSMCandidate> candidates;
+	};
+	HashMap<RID, FellowVSMState *> fellow_vsm_states; // by viewport
+	struct CullData;
+	Fellow::VSMFrame fellow_vsm_frame;
+	uint32_t fellow_vsm_next_state_id = 1;
+	void _fellow_vsm_update(const CullData &p_cull_data, Instance *p_light, RID p_viewport, const Ref<RenderSceneBuffers> &p_render_buffers, const Transform3D &p_cam_transform);
+	void _fellow_vsm_free(RID p_viewport);
+	static void _fellow_vsm_sync_instance_data(Instance *p_instance);
 
 	/* FellowEngine directional shadow cache (docs/decisions/0004-directional-shadow-cache.md) */
 

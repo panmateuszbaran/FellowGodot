@@ -314,6 +314,12 @@ bool sc_fellow_mm_instance_fade() {
 	return ((sc_packed_2() >> 10) & 1U) != 0;
 }
 
+// FellowEngine virtual shadow maps (decision 0396): the colour passes take the virtual shadow map's light's shadow from
+// its pages where they are resident (fellow_vsm_pool, fellow_vsm), from its cascades elsewhere.
+bool sc_fellow_vsm_sun() {
+	return ((sc_packed_2() >> 11) & 1U) != 0;
+}
+
 // FellowEngine DDGI (decision 0083): the colour passes take the ambient light from the probe volume.
 bool sc_fellow_ddgi() {
 	return ((sc_packed_2() >> 2) & 1U) != 0;
@@ -855,6 +861,36 @@ layout(set = 1, binding = 54) uniform texture2D fellow_cloud_shadow;
 // FellowEngine weathering (decision 0332): the scene seen from above in horizontal layers, bottom up, one layer of the
 // array each (its highest surface, reverse depth: 1 the layer's top, 0 empty).
 layout(set = 1, binding = 55) uniform texture2DArray fellow_weathering_layers;
+// FellowEngine virtual shadow maps (decision 0396): the physical pool of pages (each texel the highest caster's height
+// towards the light, fixed point, offset by 2^31; 0: none) and the frame's header and page table.
+struct FellowVSMHeader {
+	uint levels;
+	uint light_index; // in directional_lights
+	uint pool_pages; // per side
+	uint flags; // 1: an orthogonal view (its pixels' size does not grow with depth)
+	float texel0; // level 0's texel (m); level l's is texel0 * 2^l
+	float lod_bias;
+	float footprint; // a pixel's size (m) per metre of depth (orthogonal: its size)
+	float max_distance; // the view depth beyond which there is no shadow
+	int h_top_fixed; // the passes' cameras' height towards the light (fixed point)
+	int cam_h_fixed; // the view's camera's (fixed point, rounded)
+	float cam_h_frac; // and what was rounded away (fixed point units)
+	float pad;
+	vec4 axis_x; // the light's axes in the view's view space (z towards the light)
+	vec4 axis_y;
+	vec4 axis_z;
+	vec4 origin[16]; // xy: the view's camera in each level's window, in that level's texels
+};
+layout(set = 1, binding = 56) uniform utexture2D fellow_vsm_pool;
+layout(set = 1, binding = 57, std430) restrict readonly buffer FellowVSMBuffer {
+	FellowVSMHeader header;
+	uint table[]; // levels * 64 * 64: 0 none, else the physical page + 1 (| 1 << 30: drawn this frame)
+}
+fellow_vsm;
+#ifdef MODE_FELLOW_VSM
+// The pass draws into the pool: binding 56 is a placeholder in its passes.
+layout(r32ui, set = 1, binding = 58) uniform restrict uimage2D fellow_vsm_pool_image;
+#endif
 
 #endif
 

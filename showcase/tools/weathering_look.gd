@@ -178,6 +178,14 @@ func _init() -> void:
 		await RenderingServer.frame_post_draw
 		root.get_texture().get_image().save_png("%s/%s.png" % [out, v])
 		print("weathering_look: ", v)
+		if ProjectSettings.get_setting("rendering/fellow/shadows/virtual/enabled", false):
+			# Milestone 255: the virtual shadow map's pages and the scene cull's time for them (decision 0396).
+			var st: Dictionary = RenderingServer.fellow_get_stats()
+			var parts := PackedStringArray()
+			for k in st.keys():
+				if String(k).begins_with("shadows_virtual"):
+					parts.append("%s=%s" % [String(k).trim_prefix("shadows_virtual_"), st[k]])
+			print("weathering_look_vsm %s %s" % [v, " ".join(parts)])
 		if timing:
 			# Milestone 199: the view's frame on the GPU and the CPU, the mean of 120 frames (ms).
 			var vp := root.get_viewport_rid()

@@ -586,6 +586,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			pipeline_specialization.fellow_rt_reflections = 0;
 			pipeline_specialization.fellow_ddgi_screen = 0;
 			pipeline_specialization.fellow_cloud_shadow = 0; // decision 0133: colour pass code
+			pipeline_specialization.fellow_vsm_sun = 0; // decision 0396: colour pass code
 		}
 
 		pipeline_key.color_pass_flags = 0;
@@ -619,6 +620,9 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			case PASS_MODE_SHADOW:
 			case PASS_MODE_DEPTH: {
 				pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_MULTIVIEW : SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS;
+				if (p_pass_mode == PASS_MODE_SHADOW && p_params->fellow_vsm) {
+					pipeline_key.version = SceneShaderForwardClustered::PIPELINE_VERSION_FELLOW_VSM; // decision 0396
+				}
 			} break;
 			case PASS_MODE_SHADOW_DP: {
 				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for shadow DP pass");
@@ -5424,6 +5428,200 @@ RID RenderForwardClustered::_fellow_process_contact_shadow(RenderDataRD *p_rende
 	return params.dest;
 }
 
+// FellowEngine virtual shadow maps (decision 0396): this render's pool (the render buffers'), the frame's header and
+// table (where the pool does not hold what the scene cull's state thinks resident, only the pages drawn this frame are
+// looked up, and the cull is told to start over), the shader group of the passes.
+void RenderForwardClustered::_fellow_vsm_begin(RenderDataRD *p_render_data) {
+	fellow_vsm_active = false;
+	fellow_vsm_pool = RID();
+	const Fellow::VSMFrame *f = fellow_vsm_frame;
+	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
+	const StringName scope = SNAME("fellow_vsm");
+	const StringName name = SNAME("pool");
+	// Not in views smaller than 320 x 240 (the editor's previews and thumbnails: a pool each would be wasted).
+	const bool view_ok = rb.is_valid() && rb->get_view_count() == 1 && p_render_data->reflection_probe.is_null() && rb->has_custom_data(RB_SCOPE_FORWARD_CLUSTERED) && rb->get_internal_size().x * rb->get_internal_size().y >= 320 * 240;
+	if (f == nullptr || !f->active || !view_ok || f->levels <= 0) {
+		if (rb.is_valid() && p_render_data->reflection_probe.is_null() && rb->has_texture(scope, name)) {
+			rb->clear_context(scope); // (the pool's memory back when they are turned off)
+		}
+		return;
+	}
+	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+	// The light's index in the frame's directional lights, as LightStorage::update_light_buffers() numbers them.
+	int light_index = -1;
+	uint32_t count = 0;
+	for (uint32_t i = 0; i < (uint32_t)p_render_data->lights->size(); i++) {
+		RID li = (*p_render_data->lights)[i];
+		RID base = light_storage->light_instance_get_base_light(li);
+		if (light_storage->light_get_type(base) != RSE::LIGHT_DIRECTIONAL || light_storage->light_directional_get_sky_mode(base) == RSE::LIGHT_DIRECTIONAL_SKY_MODE_SKY_ONLY) {
+			continue;
+		}
+		if (count >= light_storage->get_max_directional_lights()) {
+			break;
+		}
+		if (li == f->light_instance) {
+			light_index = int(count);
+			break;
+		}
+		count++;
+	}
+	if (light_index < 0) {
+		return;
+	}
+	if (!fellow_vsm) {
+		fellow_vsm = memnew(RendererRD::FellowVirtualShadow);
+	}
+
+	const int side = f->pool_pages * Fellow::VSM_PAGE;
+	if (rb->has_texture(scope, name) && rb->get_texture_format(scope, name).width != uint32_t(side)) {
+		rb->clear_context(scope);
+	}
+	if (!rb->has_texture(scope, name)) {
+		rb->create_texture(scope, name, RD::DATA_FORMAT_R32_UINT, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, Size2i(side, side));
+	}
+	const RID pool = rb->get_texture(scope, name);
+
+	const ObjectID buffers = rb->get_instance_id();
+	if (fellow_vsm_pools.size() > 32 && !fellow_vsm_pools.has(buffers)) {
+		fellow_vsm_pools.clear(); // (render buffers freed long ago)
+	}
+	FellowVSMPool &pool_info = fellow_vsm_pools[buffers];
+	thread_local LocalVector<uint32_t> table;
+	table = f->table;
+	if (pool_info.texture != pool || pool_info.state_id != f->state_id) {
+		bool masked = false;
+		for (uint32_t &e : table) {
+			if (e != 0 && !(e & Fellow::VSM_ENTRY_DRAWN)) {
+				e = 0;
+				masked = true;
+			}
+		}
+		if (masked) {
+			Fellow::vsm_pool_lost(buffers);
+		} else {
+			pool_info.texture = pool;
+			pool_info.state_id = f->state_id;
+		}
+	}
+
+	RendererRD::FellowVirtualShadow::Header h;
+	h.levels = uint32_t(f->levels);
+	h.light_index = uint32_t(light_index);
+	h.pool_pages = uint32_t(f->pool_pages);
+	const Projection &proj = p_render_data->scene_data->cam_projection;
+	const Size2i size = rb->get_internal_size();
+	const bool orthogonal = proj.is_orthogonal();
+	h.flags = orthogonal ? 1u : 0u;
+	h.footprint = 2.0f / (MAX(float(CMP_EPSILON), Math::abs(float(proj.columns[1][1]))) * float(MAX(1, size.y)));
+	h.texel0 = f->texel0;
+	h.lod_bias = f->lod_bias;
+	h.max_distance = MIN(f->max_distance, float(p_render_data->scene_data->z_far));
+	h.h_top_fixed = f->h_top_fixed;
+	h.cam_h_fixed = f->cam_h_fixed;
+	h.cam_h_frac = f->cam_h_frac;
+	const Basis cb = p_render_data->scene_data->cam_transform.basis.orthonormalized();
+	const Vector3 vx = cb.xform_inv(f->axis_x);
+	const Vector3 vy = cb.xform_inv(f->axis_y);
+	const Vector3 vz = cb.xform_inv(f->axis_z);
+	for (int i = 0; i < 3; i++) {
+		h.axis_x[i] = vx[i];
+		h.axis_y[i] = vy[i];
+		h.axis_z[i] = vz[i];
+	}
+	for (int l = 0; l < f->levels; l++) {
+		h.origin[l][0] = f->origin[l][0];
+		h.origin[l][1] = f->origin[l][1];
+	}
+	fellow_vsm->upload(h, table.ptr(), uint32_t(f->levels));
+
+	scene_shader.fellow_enable_vsm_shader_group();
+	if (scene_shader.default_shader_fellow_vsm_rd.is_null()) {
+		scene_shader.default_shader_fellow_vsm_rd = scene_shader.default_material_shader_ptr->get_shader_variant(SceneShaderForwardClustered::PIPELINE_VERSION_FELLOW_VSM, 0, false);
+		ERR_FAIL_COND(scene_shader.default_shader_fellow_vsm_rd.is_null());
+	}
+	fellow_vsm_pool = pool;
+	fellow_vsm_active = true;
+	fellow_vsm_footprint = h.footprint;
+}
+
+// The pages the depth pre-pass's pixels look up, read back for the scene cull (a few frames later).
+void RenderForwardClustered::_fellow_vsm_mark(const RenderDataRD *p_render_data) {
+	const Fellow::VSMFrame *f = fellow_vsm_frame;
+	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
+	if (!fellow_vsm_active || f == nullptr || rb.is_null()) {
+		return;
+	}
+	RENDER_TIMESTAMP("FellowEngine VSM Mark Pages");
+	PackedInt32Array windows;
+	windows.resize(f->levels * 2);
+	for (int l = 0; l < f->levels; l++) {
+		windows.write[l * 2] = f->window[l][0];
+		windows.write[l * 2 + 1] = f->window[l][1];
+	}
+	fellow_vsm->mark(rb->get_depth_texture(0), rb->get_internal_size(), _fellow_jittered_projection(p_render_data), callable_mp_static(&RenderForwardClustered::_fellow_vsm_readback).bind(uint64_t(rb->get_instance_id()), f->frame, f->state_id, f->levels, fellow_vsm_footprint, windows));
+}
+
+void RenderForwardClustered::_fellow_vsm_readback(const Vector<uint8_t> &p_data, uint64_t p_buffers, uint64_t p_frame, uint32_t p_state_id, int p_levels, float p_footprint, const PackedInt32Array &p_windows) {
+	const int bytes = p_levels * Fellow::VSM_WINDOW * Fellow::VSM_WINDOW / 8;
+	if (p_levels <= 0 || p_levels > Fellow::VSM_MAX_LEVELS || p_data.size() < bytes || p_windows.size() < p_levels * 2) {
+		return;
+	}
+	Fellow::VSMRequests r;
+	r.frame = p_frame;
+	r.state_id = p_state_id;
+	r.levels = p_levels;
+	r.footprint = p_footprint;
+	for (int l = 0; l < p_levels; l++) {
+		r.window[l][0] = p_windows[l * 2];
+		r.window[l][1] = p_windows[l * 2 + 1];
+	}
+	r.bits = p_data.slice(0, bytes);
+	Fellow::vsm_requests_set(ObjectID(p_buffers), r);
+}
+
+// The frame's passes, appended to the shadow passes: each draws its casters into an empty framebuffer through a camera
+// at its level's window corner (view x, y: the window's texels times the level's texel) at the passes' top.
+void RenderForwardClustered::_fellow_vsm_append_passes(RenderDataRD *p_render_data) {
+	const Fellow::VSMFrame *f = fellow_vsm_frame;
+	if (!fellow_vsm_active || f == nullptr || f->passes.is_empty()) {
+		return;
+	}
+	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+	RID base = light_storage->light_instance_get_base_light(f->light_instance);
+	const bool reverse_cull_face = base.is_valid() && light_storage->light_get_reverse_cull_face_mode(base);
+	const RID fb = fellow_vsm->get_empty_framebuffer();
+	const double h_top = double(f->h_top_fixed) / double(Fellow::VSM_DEPTH_SCALE);
+	const double depth = h_top - f->h_bottom;
+	Size2i viewport_size = Size2i(1, 1);
+	if (p_render_data->render_buffers.is_valid()) {
+		viewport_size = p_render_data->render_buffers->get_internal_size();
+	}
+	const float lod_distance_multiplier = p_render_data->scene_data->cam_projection.get_lod_multiplier();
+	Basis basis;
+	basis.set_columns(f->axis_x, f->axis_y, f->axis_z);
+	for (const Fellow::VSMFrame::Pass &pass : f->passes) {
+		const int l = pass.level;
+		const double t = double(f->texel0) * double(1 << l);
+		const double ou = f->window_origin[l][0];
+		const double ov = f->window_origin[l][1];
+		Transform3D cam;
+		cam.basis = basis;
+		for (int i = 0; i < 3; i++) {
+			cam.origin[i] = real_t(double(f->axis_x[i]) * ou + double(f->axis_y[i]) * ov + double(f->axis_z[i]) * h_top);
+		}
+		const double x0 = double(pass.page_min[0]) * Fellow::VSM_PAGE * t;
+		const double x1 = double(pass.page_max[0] + 1) * Fellow::VSM_PAGE * t;
+		const double y0 = double(pass.page_min[1]) * Fellow::VSM_PAGE * t;
+		const double y1 = double(pass.page_max[1] + 1) * Fellow::VSM_PAGE * t;
+		Projection proj;
+		proj.set_orthogonal(real_t(x0), real_t(x1), real_t(y0), real_t(y1), 0.0, real_t(depth));
+		const Rect2i rect(0, 0, (pass.page_max[0] - pass.page_min[0] + 1) * Fellow::VSM_PAGE, (pass.page_max[1] - pass.page_min[1] + 1) * Fellow::VSM_PAGE);
+		fellow_vsm_append = true;
+		_render_shadow_append(fb, *pass.instances, proj, cam, real_t(depth), 0, 0, reverse_cull_face, false, false, true, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, rect, true, false, false, false, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
+		fellow_vsm_append = false;
+	}
+}
+
 // FellowEngine depth-fitted sun shadows (decision 0388): the depth pre-pass's nearest and farthest opaque surface,
 // read back for the scene cull's next set-ups of the directional cascades (keyed by the render buffers).
 void RenderForwardClustered::_fellow_depth_fit_reduce(const RenderDataRD *p_render_data) {
@@ -6543,7 +6741,15 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 	// Render GI
 
-	bool render_shadows = p_render_data->directional_shadows.size() || p_render_data->shadows.size();
+	// FellowEngine virtual shadow maps (decision 0396): the pages drawn this frame emptied, then their passes drawn with
+	// the shadows.
+	const bool fellow_vsm_passes = fellow_vsm_active && fellow_vsm_frame != nullptr && !fellow_vsm_frame->passes.is_empty();
+	if (fellow_vsm_active && fellow_vsm_frame != nullptr && !fellow_vsm_frame->clear_pages.is_empty()) {
+		RENDER_TIMESTAMP("FellowEngine VSM Clear Pages");
+		fellow_vsm->clear_pages(fellow_vsm_pool, uint32_t(fellow_vsm_frame->pool_pages), fellow_vsm_frame->clear_pages);
+	}
+
+	bool render_shadows = p_render_data->directional_shadows.size() || p_render_data->shadows.size() || fellow_vsm_passes;
 	bool render_gi = rb.is_valid() && p_use_gi;
 
 	if (render_shadows && render_gi) {
@@ -6565,6 +6771,9 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		//render positional shadows
 		for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
 			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, &p_render_data->render_shadows[p_render_data->shadows[i]].fellow);
+		}
+		if (fellow_vsm_passes) {
+			_fellow_vsm_append_passes(p_render_data); // decision 0396
 		}
 
 		_render_shadow_process();
@@ -7395,6 +7604,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	base_specialization.fellow_light_hot = false;
 	base_specialization.fellow_light_hot_ubo = false;
 	base_specialization.fellow_light_tile_cull = false; // the opaque colour pass's own copy (decision 0049)
+	// FellowEngine virtual shadow maps (decision 0396): this render's pool, header and table, before the passes reading
+	// them (the depth pre-pass's marking, the shadow passes, the colour passes).
+	_fellow_vsm_begin(p_render_data);
+	base_specialization.fellow_vsm_sun = fellow_vsm_active;
 
 	bool using_ssao = depth_pre_pass && !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssao_enabled(p_render_data->environment);
 
@@ -7455,6 +7668,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 	if (depth_pre_pass && !use_msaa && !is_reflection_probe && Fellow::directional_depth_fit()) {
 		_fellow_depth_fit_reduce(p_render_data);
+	}
+	if (depth_pre_pass && !use_msaa && fellow_vsm_active) {
+		_fellow_vsm_mark(p_render_data); // decision 0396
 	}
 
 	{
@@ -9131,6 +9347,7 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 		shadow_pass.rect = p_rect;
 
 		shadow_pass.uniform_buffer_index = uniform_buffer_index;
+		shadow_pass.fellow_vsm = fellow_vsm_append; // decision 0396
 
 		shadow_pass.fellow_cluster_plane_count = 0;
 		shadow_pass.fellow_mm_plane_count = 0;
@@ -9217,7 +9434,7 @@ void RenderForwardClustered::_render_shadow_process() {
 		if (shadow_pass.fellow_copy) {
 			continue;
 		}
-		shadow_pass.rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default(), shadow_pass.uniform_buffer_index, false);
+		shadow_pass.rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default(), shadow_pass.uniform_buffer_index, false, shadow_pass.fellow_vsm);
 	}
 
 	RD::get_singleton()->draw_command_end_label();
@@ -9237,6 +9454,7 @@ void RenderForwardClustered::_render_shadow_end() {
 		render_list_parameters.fellow_cluster_dag = shadow_pass.fellow_cluster_dag;
 		render_list_parameters.fellow_lod_eye = shadow_pass.fellow_lod_eye;
 		render_list_parameters.fellow_lod_distance_bias = shadow_pass.fellow_lod_distance_bias;
+		render_list_parameters.fellow_vsm = shadow_pass.fellow_vsm; // decision 0396
 		_fellow_multimesh_cull_params(1, RENDER_LIST_SECONDARY, shadow_pass.element_from, render_list_parameters);
 		_render_list_with_draw_list(&render_list_parameters, shadow_pass.framebuffer, shadow_pass.clear_depth ? RD::DRAW_CLEAR_DEPTH : RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0, shadow_pass.rect);
 	}
@@ -9729,7 +9947,7 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 	}
 }
 
-RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, uint32_t p_uniform_buffer_index, bool p_use_directional_shadow_atlas) {
+RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, uint32_t p_uniform_buffer_index, bool p_use_directional_shadow_atlas, bool p_fellow_vsm_pass) {
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
@@ -10293,6 +10511,33 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		u_layers.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 		u_layers.append_id(layers.is_valid() ? layers : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_2D_ARRAY_BLACK));
 		uniforms.push_back(u_layers);
+	}
+	{
+		// FellowEngine virtual shadow maps (decision 0396): the pool for the colour passes reading it (a placeholder
+		// elsewhere), the frame's header and table; in a virtual shadow map's pass the pool to draw into (binding 58).
+		if (!fellow_vsm) {
+			fellow_vsm = memnew(RendererRD::FellowVirtualShadow);
+		}
+		const bool colour_pass = p_render_data != nullptr && (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION || p_render_list == RENDER_LIST_ALPHA);
+		RD::Uniform u_pool;
+		u_pool.binding = 56;
+		u_pool.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		u_pool.append_id(colour_pass && fellow_vsm_active && fellow_vsm_pool.is_valid() ? fellow_vsm_pool : fellow_vsm->get_dummy_pool());
+		uniforms.push_back(u_pool);
+		RD::Uniform u_table;
+		u_table.binding = 57;
+		u_table.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u_table.append_id(fellow_vsm->get_buffer());
+		uniforms.push_back(u_table);
+		if (p_fellow_vsm_pass) {
+			RD::Uniform u_image;
+			u_image.binding = 58;
+			u_image.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+			u_image.append_id(fellow_vsm_pool);
+			uniforms.push_back(u_image);
+			ERR_FAIL_COND_V(scene_shader.default_shader_fellow_vsm_rd.is_null() || fellow_vsm_pool.is_null(), RID());
+			return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_fellow_vsm_rd, RENDER_PASS_UNIFORM_SET, uniforms);
+		}
 	}
 
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, RENDER_PASS_UNIFORM_SET, uniforms);
@@ -11986,6 +12231,10 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (fellow_depth_range) {
 		memdelete(fellow_depth_range);
 		fellow_depth_range = nullptr;
+	}
+	if (fellow_vsm) {
+		memdelete(fellow_vsm);
+		fellow_vsm = nullptr;
 	}
 	if (fellow_contact_shadow) {
 		memdelete(fellow_contact_shadow);

@@ -48,6 +48,7 @@ public:
 		SHADER_GROUP_ADVANCED,
 		SHADER_GROUP_MULTIVIEW,
 		SHADER_GROUP_ADVANCED_MULTIVIEW,
+		SHADER_GROUP_FELLOW_VSM, // FellowEngine virtual shadow maps (decision 0396): compiled when they are first drawn
 	};
 
 	// Not an enum because these values are constants that are processed as numbers
@@ -63,6 +64,9 @@ public:
 		constexpr static uint16_t SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL = 7;
 		constexpr static uint16_t SHADER_VERSION_DEPTH_PASS_WITH_SDF = 8;
 		constexpr static uint16_t SHADER_VERSION_COLOR_PASS = 9;
+		// FellowEngine virtual shadow maps (decision 0396): after the colour passes (SHADER_VERSION_COLOR_PASS * 2 +
+		// SHADER_COLOR_PASS_FLAG_COUNT of them), the ubershader's next.
+		constexpr static uint16_t SHADER_VERSION_FELLOW_VSM = 50;
 	};
 
 	enum ShaderColorPassFlags {
@@ -85,6 +89,7 @@ public:
 		PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_MULTIVIEW,
 		PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_AND_VOXEL_GI_MULTIVIEW,
 		PIPELINE_VERSION_COLOR_PASS,
+		PIPELINE_VERSION_FELLOW_VSM, // decision 0396: a shadow pass into the virtual shadow map's pages
 		PIPELINE_VERSION_MAX
 	};
 
@@ -175,6 +180,7 @@ public:
 				uint32_t fellow_dither_fade : 1; // decision 0256: an opaque instance's fade dithered (depth and colour passes)
 				uint32_t fellow_dither_fade_near : 1; // decision 0256: the other share of the pixels (fading at its range's start)
 				uint32_t fellow_mm_instance_fade : 1; // decision 0257: a culled MultiMesh's instances carry their dithered fade
+				uint32_t fellow_vsm_sun : 1; // decision 0396: the virtual shadow map's light from its pages where they are resident
 			};
 		};
 	};
@@ -267,7 +273,7 @@ public:
 		RID version;
 		uint64_t fellow_code_hash = 0; // the code's hash: its pipelines' key in recorded pipelines (decision 0171)
 
-		static const uint32_t VERTEX_INPUT_MASKS_SIZE = ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + SHADER_COLOR_PASS_FLAG_COUNT;
+		static const uint32_t VERTEX_INPUT_MASKS_SIZE = ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + SHADER_COLOR_PASS_FLAG_COUNT + 2; // (+2: decision 0396)
 		std::atomic<uint64_t> vertex_input_masks[VERTEX_INPUT_MASKS_SIZE] = {};
 
 		Vector<ShaderCompiler::GeneratedCode::Texture> texture_uniforms;
@@ -414,6 +420,7 @@ public:
 	RID debug_shadow_splits_material;
 	RID default_shader_rd;
 	RID default_shader_sdfgi_rd;
+	RID default_shader_fellow_vsm_rd; // decision 0396: its render pass uniform set's layout
 
 	RID default_vec4_xform_buffer;
 	RID default_vec4_xform_uniform_set;
@@ -440,6 +447,7 @@ public:
 	void set_default_specialization(const ShaderSpecialization &p_specialization);
 	void enable_multiview_shader_group();
 	void enable_advanced_shader_group(bool p_needs_multiview = false);
+	void fellow_enable_vsm_shader_group(); // decision 0396
 	bool is_multiview_shader_group_enabled() const;
 	bool is_advanced_shader_group_enabled(bool p_multiview) const;
 	uint32_t get_pipeline_compilations(RSE::PipelineSource p_source);

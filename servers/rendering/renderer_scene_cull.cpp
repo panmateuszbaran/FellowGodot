@@ -2097,6 +2097,7 @@ void RendererSceneCull::_update_instance(Instance *p_instance) const {
 
 		p_instance->scenario->instance_data.push_back(idata);
 		p_instance->scenario->instance_aabbs.push_back(InstanceBounds(p_instance->transformed_aabb));
+		_fellow_vsm_sync_instance_data(p_instance); // decision 0396
 		_update_instance_visibility_dependencies(p_instance);
 	} else {
 		if ((1 << p_instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) {
@@ -2686,7 +2687,10 @@ void RendererSceneCull::_fellow_shadow_instance_changed(Instance *p_instance) co
 	const uint64_t frame = RSG::rasterizer->get_frame_number();
 	const uint64_t prev = p_instance->fellow_change_frame;
 	p_instance->fellow_change_frame = frame;
-	if (prev == frame || p_instance->scenario == nullptr || p_instance->array_index < 0 || !(Fellow::directional_shadow_cache() || Fellow::positional_shadow_cache())) {
+	if (p_instance->scenario != nullptr && p_instance->array_index >= 0) {
+		p_instance->scenario->instance_data[p_instance->array_index].fellow_change_frame = uint32_t(frame); // decision 0396
+	}
+	if (prev == frame || p_instance->scenario == nullptr || p_instance->array_index < 0 || !(Fellow::directional_shadow_cache() || Fellow::positional_shadow_cache() || Fellow::vsm_enabled())) {
 		return;
 	}
 	if (prev + (uint64_t)Fellow::directional_shadow_cache_static_frames() > frame) {
@@ -3125,6 +3129,526 @@ void RendererSceneCull::_fellow_shadow_cache_gc(uint64_t p_frame, bool p_free_al
 	for (const RID &rid : empty_viewports) {
 		fellow_dir_shadow_caches.erase(rid);
 	}
+}
+
+/* FellowEngine virtual shadow maps (docs/decisions/0396-virtual-shadow-maps.md) */
+
+void RendererSceneCull::_fellow_vsm_free(RID p_viewport) {
+	FellowVSMState **st = fellow_vsm_states.getptr(p_viewport);
+	if (st == nullptr) {
+		return;
+	}
+	for (PagedArray<RenderGeometryInstance *> *list : (*st)->pass_lists) {
+		list->reset();
+		memdelete(list);
+	}
+	memdelete(*st);
+	fellow_vsm_states.erase(p_viewport);
+}
+
+// The copies in the instance's InstanceData of what the virtual shadow map's scan needs from the instance (decision 0396).
+void RendererSceneCull::_fellow_vsm_sync_instance_data(Instance *p_instance) {
+	if (p_instance->scenario == nullptr || p_instance->array_index < 0) {
+		return;
+	}
+	InstanceData &idata = p_instance->scenario->instance_data[p_instance->array_index];
+	idata.fellow_change_frame = uint32_t(p_instance->fellow_change_frame);
+	idata.flags &= ~(InstanceData::FLAG_FELLOW_SHADOW_NOCACHE | InstanceData::FLAG_FELLOW_SHADOW_NOCACHE_FAR);
+	if (((1 << p_instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && p_instance->base_data) {
+		const InstanceGeometryData *geom = static_cast<const InstanceGeometryData *>(p_instance->base_data);
+		if (!geom->fellow_shadow_cacheable || p_instance->dynamic_gi) {
+			idata.flags |= InstanceData::FLAG_FELLOW_SHADOW_NOCACHE;
+		}
+		if (!geom->fellow_shadow_cacheable_far || p_instance->dynamic_gi) {
+			idata.flags |= InstanceData::FLAG_FELLOW_SHADOW_NOCACHE_FAR;
+		}
+	}
+}
+
+void RendererSceneCull::_fellow_vsm_update(const CullData &p_cull_data, Instance *p_light, RID p_viewport, const Ref<RenderSceneBuffers> &p_render_buffers, const Transform3D &p_cam_transform) {
+	Fellow::VSMFrame &f = fellow_vsm_frame;
+	f.active = false;
+	f.passes.clear();
+	f.clear_pages.clear();
+	const uint64_t frame = RSG::rasterizer->get_frame_number();
+
+	// States of viewports no longer drawn.
+	{
+		LocalVector<RID> gone;
+		for (const KeyValue<RID, FellowVSMState *> &E : fellow_vsm_states) {
+			if (E.value->last_frame + 120 < frame) {
+				gone.push_back(E.key);
+			}
+		}
+		for (const RID &vp : gone) {
+			_fellow_vsm_free(vp);
+		}
+	}
+	if (p_light == nullptr || p_render_buffers.is_null() || !scene_render->fellow_vsm_supported()) {
+		if (p_viewport.is_valid()) {
+			_fellow_vsm_free(p_viewport);
+		}
+		return;
+	}
+
+	Scenario *scenario = p_cull_data.scenario;
+	InstanceLightData *light = static_cast<InstanceLightData *>(p_light->base_data);
+	const RID base = p_light->base;
+	const int levels = Fellow::vsm_levels();
+	const float texel0 = Fellow::vsm_texel_size();
+	const int pool_pages = Fellow::vsm_pool_size() / Fellow::VSM_PAGE;
+	constexpr int W = Fellow::VSM_WINDOW;
+	constexpr int P = Fellow::VSM_PAGE;
+
+	// Light space: x, y across the light, z towards it (a directional light shines along its -Z).
+	const Basis lb = p_light->transform.basis.orthonormalized();
+	const Vector3 az = lb.get_column(Vector3::AXIS_Z).normalized();
+	const Vector3 ax = lb.get_column(Vector3::AXIS_X).normalized();
+	const Vector3 ay = az.cross(ax).normalized();
+
+	FellowVSMState **stp = fellow_vsm_states.getptr(p_viewport);
+	FellowVSMState *st = stp ? *stp : nullptr;
+	if (st == nullptr) {
+		st = memnew(FellowVSMState);
+		fellow_vsm_states.insert(p_viewport, st);
+	}
+	// A new state (nothing resident) when the light turned, the settings or the scenario changed, or invalidation events
+	// were forgotten before this state saw them.
+	const bool pool_lost = Fellow::vsm_pool_lost_take(p_render_buffers->get_instance_id());
+	const bool reset = pool_lost || st->state_id == 0 || st->light_instance != light->instance || st->scenario != scenario || st->levels != levels || st->texel0 != texel0 || st->pool_pages != pool_pages || st->axis_z.dot(az) < 0.999999f || st->axis_x.dot(ax) < 0.999999f || st->last_event_seq < scenario->fellow_shadow_events_dropped_seq;
+	if (reset) {
+		st->state_id = fellow_vsm_next_state_id++;
+		st->light_instance = light->instance;
+		st->scenario = scenario;
+		st->levels = levels;
+		st->texel0 = texel0;
+		st->pool_pages = pool_pages;
+		st->axis_x = ax;
+		st->axis_y = ay;
+		st->axis_z = az;
+		st->last_event_seq = scenario->fellow_shadow_event_seq;
+		for (int l = 0; l < Fellow::VSM_MAX_LEVELS; l++) {
+			st->pages[l].clear();
+			st->requested[l].clear();
+		}
+		st->free_phys.clear();
+		const uint32_t total = uint32_t(pool_pages) * uint32_t(pool_pages);
+		st->free_phys.resize(total);
+		for (uint32_t i = 0; i < total; i++) {
+			st->free_phys[i] = total - 1 - i; // (popped from the back: page 0 first)
+		}
+		st->dynamic_prev.clear();
+	}
+	st->last_frame = frame;
+
+	f.active = true;
+	f.frame = frame;
+	f.state_id = st->state_id;
+	f.light_instance = light->instance;
+	f.levels = levels;
+	f.texel0 = texel0;
+	f.lod_bias = Fellow::vsm_lod_bias();
+	f.max_distance = RSG::light_storage->light_get_param(base, RSE::LIGHT_PARAM_SHADOW_MAX_DISTANCE);
+	f.pool_pages = pool_pages;
+	f.axis_x = ax;
+	f.axis_y = ay;
+	f.axis_z = az;
+	const Vector3 &co = p_cam_transform.origin;
+	f.cam_origin = co;
+	const double cu = double(ax.x) * double(co.x) + double(ax.y) * double(co.y) + double(ax.z) * double(co.z);
+	const double cv = double(ay.x) * double(co.x) + double(ay.y) * double(co.y) + double(ay.z) * double(co.z);
+	const double ch = double(az.x) * double(co.x) + double(az.y) * double(co.y) + double(az.z) * double(co.z);
+	const double reach = MAX(double(f.max_distance), 50.0) * 2.0;
+	// The passes' top in steps of 16 m (their cameras stay put while the view moves a little).
+	f.h_top = Math::ceil((ch + reach) / 16.0) * 16.0;
+	f.h_bottom = ch - reach;
+	f.h_top_fixed = int32_t(Math::round(f.h_top * double(Fellow::VSM_DEPTH_SCALE)));
+	f.cam_h_fixed = int32_t(Math::round(ch * double(Fellow::VSM_DEPTH_SCALE)));
+	f.cam_h_frac = float(ch * double(Fellow::VSM_DEPTH_SCALE) - double(f.cam_h_fixed));
+	double page_size[Fellow::VSM_MAX_LEVELS];
+	for (int l = 0; l < levels; l++) {
+		page_size[l] = double(texel0) * double(1 << l) * double(P);
+		f.window[l][0] = int32_t(Math::floor(cu / page_size[l])) - W / 2;
+		f.window[l][1] = int32_t(Math::floor(cv / page_size[l])) - W / 2;
+		const double t = double(texel0) * double(1 << l);
+		f.origin[l][0] = float(cu / t - double(f.window[l][0]) * double(P));
+		f.origin[l][1] = float(cv / t - double(f.window[l][1]) * double(P));
+		f.window_origin[l][0] = double(f.window[l][0]) * page_size[l];
+		f.window_origin[l][1] = double(f.window[l][1]) * page_size[l];
+	}
+
+	// Pages out of their level's window can no longer be looked up: freed.
+	for (int l = 0; l < levels; l++) {
+		LocalVector<Vector2i> out;
+		for (const KeyValue<Vector2i, FellowVSMPage> &E : st->pages[l]) {
+			const int rx = E.key.x - f.window[l][0];
+			const int ry = E.key.y - f.window[l][1];
+			if (rx < 0 || ry < 0 || rx >= W || ry >= W) {
+				out.push_back(E.key);
+			}
+		}
+		for (const Vector2i &k : out) {
+			st->free_phys.push_back(st->pages[l][k].phys);
+			st->pages[l].erase(k);
+		}
+	}
+
+	// The latest requests read back (a few frames old, in their own windows).
+	{
+		Fellow::VSMRequests r;
+		if (Fellow::vsm_requests_take(p_render_buffers->get_instance_id(), r) && r.state_id == st->state_id) {
+			st->footprint = r.footprint;
+			uint64_t count = 0;
+			for (int l = 0; l < levels && l < r.levels; l++) {
+				st->requested[l].clear();
+				const uint8_t *bits = r.bits.ptr() + (size_t(l) * W * W) / 8;
+				for (int i = 0; i < W * W; i++) {
+					if (bits[i >> 3] & (1 << (i & 7))) {
+						st->requested[l].insert(Vector2i(r.window[l][0] + (i % W), r.window[l][1] + (i / W)), 1);
+						count++;
+					}
+				}
+			}
+			Fellow::vsm_stats().requested.set(count);
+		}
+	}
+
+	// Dirty pages by level, in window coordinates.
+	LocalVector<uint8_t> dirty;
+	dirty.resize(size_t(levels) * W * W);
+	memset(dirty.ptr(), 0, dirty.size());
+	auto mark_rect = [&](int p_level, real_t p_u0, real_t p_v0, real_t p_u1, real_t p_v1) {
+		const double s = page_size[p_level];
+		const int x0 = MAX(int(Math::floor(p_u0 / s)) - f.window[p_level][0], 0);
+		const int y0 = MAX(int(Math::floor(p_v0 / s)) - f.window[p_level][1], 0);
+		const int x1 = MIN(int(Math::floor(p_u1 / s)) - f.window[p_level][0], W - 1);
+		const int y1 = MIN(int(Math::floor(p_v1 / s)) - f.window[p_level][1], W - 1);
+		uint8_t *d = dirty.ptr() + size_t(p_level) * W * W;
+		for (int y = y0; y <= y1; y++) {
+			for (int x = x0; x <= x1; x++) {
+				d[y * W + x] = 1;
+			}
+		}
+	};
+
+	// Allocation: the requested pages not resident, coarse levels first (a finer page missing falls back to them).
+	{
+		const int max_new = Fellow::vsm_max_new_pages();
+		int allocated = 0;
+		// Eviction candidates: resident pages not asked for lately, the oldest first.
+		LocalVector<Pair<uint64_t, Pair<int, Vector2i>>> stale;
+		bool stale_built = false;
+		uint32_t stale_next = 0;
+		for (int l = levels - 1; l >= 0 && allocated < max_new; l--) {
+			for (const KeyValue<Vector2i, uint8_t> &E : st->requested[l]) {
+				const int rx = E.key.x - f.window[l][0];
+				const int ry = E.key.y - f.window[l][1];
+				if (rx < 0 || ry < 0 || rx >= W || ry >= W) {
+					continue;
+				}
+				FellowVSMPage *pg = st->pages[l].getptr(E.key);
+				if (pg != nullptr) {
+					pg->used_frame = frame;
+					continue;
+				}
+				if (allocated >= max_new) {
+					continue;
+				}
+				uint32_t phys = UINT32_MAX;
+				if (!st->free_phys.is_empty()) {
+					phys = st->free_phys[st->free_phys.size() - 1];
+					st->free_phys.resize(st->free_phys.size() - 1);
+				} else {
+					if (!stale_built) {
+						stale_built = true;
+						for (int sl = 0; sl < levels; sl++) {
+							for (const KeyValue<Vector2i, FellowVSMPage> &S : st->pages[sl]) {
+								if (S.value.used_frame + 8 < frame && !st->requested[sl].has(S.key)) {
+									stale.push_back({ S.value.used_frame, { sl, S.key } });
+								}
+							}
+						}
+						stale.sort_custom<PairSort<uint64_t, Pair<int, Vector2i>>>();
+					}
+					while (stale_next < stale.size()) {
+						const Pair<int, Vector2i> &victim = stale[stale_next++].second;
+						FellowVSMPage *vp = st->pages[victim.first].getptr(victim.second);
+						if (vp != nullptr) {
+							phys = vp->phys;
+							st->pages[victim.first].erase(victim.second);
+							break;
+						}
+					}
+				}
+				if (phys == UINT32_MAX) {
+					break; // the pool is full of pages in use
+				}
+				FellowVSMPage np;
+				np.phys = phys;
+				np.used_frame = frame;
+				st->pages[l].insert(E.key, np);
+				dirty[size_t(l) * W * W + size_t(ry) * W + rx] = 1;
+				allocated++;
+			}
+		}
+	}
+
+	// Invalidation events (static casters that changed or left): their old boxes' pages, every level.
+	const uint64_t static_frames = (uint64_t)Fellow::directional_shadow_cache_static_frames();
+	for (const Scenario::FellowShadowInvalidation &ev : scenario->fellow_shadow_invalidations) {
+		if (ev.seq <= st->last_event_seq) {
+			continue;
+		}
+		const Vector3 c = ev.aabb.get_center();
+		const Vector3 e = ev.aabb.size * 0.5;
+		const real_t u = ax.dot(c), v = ay.dot(c);
+		const real_t eu = Math::abs(ax.x) * e.x + Math::abs(ax.y) * e.y + Math::abs(ax.z) * e.z;
+		const real_t ev_ = Math::abs(ay.x) * e.x + Math::abs(ay.y) * e.y + Math::abs(ay.z) * e.z;
+		for (int l = 0; l < levels; l++) {
+			mark_rect(l, u - eu, v - ev_, u + eu, v + ev_);
+		}
+	}
+	st->last_event_seq = scenario->fellow_shadow_event_seq;
+
+	// The casters near enough to the window: their light-space boxes, dynamic or not.
+	const uint32_t caster_mask = RSG::light_storage->light_get_shadow_caster_mask(base);
+	const int coarse = levels - 1;
+	const real_t win_u0 = real_t(double(f.window[coarse][0]) * page_size[coarse]);
+	const real_t win_v0 = real_t(double(f.window[coarse][1]) * page_size[coarse]);
+	const real_t win_u1 = real_t(double(f.window[coarse][0] + W) * page_size[coarse]);
+	const real_t win_v1 = real_t(double(f.window[coarse][1] + W) * page_size[coarse]);
+	st->candidates.clear();
+	HashMap<RenderGeometryInstance *, Rect2> dynamic_now;
+	// (only InstanceData and the boxes are read for each instance: the instance itself for those with a visibility
+	// dependency, decision 0396's copies otherwise)
+	const uint32_t frame32 = uint32_t(frame);
+	const uint32_t static_frames32 = uint32_t(MIN(static_frames, uint64_t(UINT32_MAX)));
+	const real_t ax_abs[3] = { Math::abs(ax.x), Math::abs(ax.y), Math::abs(ax.z) };
+	const real_t ay_abs[3] = { Math::abs(ay.x), Math::abs(ay.y), Math::abs(ay.z) };
+	const real_t az_abs[3] = { Math::abs(az.x), Math::abs(az.y), Math::abs(az.z) };
+	st->candidates.reserve(scenario->instance_data.size());
+	for (uint32_t i = 0; i < scenario->instance_data.size(); i++) {
+		const InstanceData &idata = scenario->instance_data[i];
+		const uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
+		if (!((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK) || !(idata.flags & InstanceData::FLAG_CAST_SHADOWS) || !(caster_mask & idata.layer_mask) || idata.instance_geometry == nullptr) {
+			continue;
+		}
+		const uint32_t hlod = idata.flags & (InstanceData::FLAG_FELLOW_HLOD_PROXY | InstanceData::FLAG_FELLOW_HLOD_MEMBER);
+		if (hlod == 0) {
+			const uint32_t visibility_flags = idata.flags & (InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN_CLOSE_RANGE | InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN | InstanceData::FLAG_VISIBILITY_DEPENDENCY_FADE_CHILDREN);
+			if (visibility_flags == InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN_CLOSE_RANGE || visibility_flags == InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN) {
+				continue;
+			}
+			if (visibility_flags == InstanceData::FLAG_VISIBILITY_DEPENDENCY_NEEDS_CHECK) {
+				const bool range_ok = (idata.visibility_index == -1) || _visibility_range_check<false>(scenario->instance_visibility[idata.visibility_index], p_cull_data.cam_transform.origin, p_cull_data.visibility_viewport_mask) == 0;
+				if (!range_ok || !_visibility_parent_check(p_cull_data, idata)) {
+					continue;
+				}
+			}
+		}
+		const real_t *b = scenario->instance_aabbs[i].bounds;
+		const real_t cx = (b[0] + b[3]) * 0.5, cy = (b[1] + b[4]) * 0.5, cz = (b[2] + b[5]) * 0.5;
+		const real_t ex = (b[3] - b[0]) * 0.5, ey = (b[4] - b[1]) * 0.5, ez = (b[5] - b[2]) * 0.5;
+		const real_t u = ax.x * cx + ax.y * cy + ax.z * cz;
+		const real_t v = ay.x * cx + ay.y * cy + ay.z * cz;
+		const real_t eu = ax_abs[0] * ex + ax_abs[1] * ey + ax_abs[2] * ez;
+		const real_t ev_ = ay_abs[0] * ex + ay_abs[1] * ey + ay_abs[2] * ez;
+		if (u + eu < win_u0 || u - eu > win_u1 || v + ev_ < win_v0 || v - ev_ > win_v1) {
+			continue;
+		}
+		const real_t h = az.x * cx + az.y * cy + az.z * cz;
+		const real_t eh = az_abs[0] * ex + az_abs[1] * ey + az_abs[2] * ez;
+		if (double(h + eh) < f.h_bottom) {
+			continue;
+		}
+		FellowVSMCandidate cd;
+		cd.geometry = idata.instance_geometry;
+		cd.instance = idata.instance;
+		cd.u0 = u - eu;
+		cd.v0 = v - ev_;
+		cd.u1 = u + eu;
+		cd.v1 = v + ev_;
+		const bool cacheable = (hlod != 0 || (idata.visibility_index == -1 && idata.parent_array_index == -1));
+		const bool unchanged = frame32 - idata.fellow_change_frame >= static_frames32;
+		cd.dynamic = !(cacheable && unchanged && !(idata.flags & InstanceData::FLAG_FELLOW_SHADOW_NOCACHE));
+		cd.wind_far = cd.dynamic && cacheable && unchanged && !(idata.flags & InstanceData::FLAG_FELLOW_SHADOW_NOCACHE_FAR);
+		cd.ranged = idata.visibility_index != -1;
+		cd.hlod = hlod;
+		st->candidates.push_back(cd);
+	}
+
+	// A level's nearest distance (from the requests' footprint): where an HLOD hands over and instance ranges end.
+	float level_begin[Fellow::VSM_MAX_LEVELS];
+	for (int l = 0; l < levels; l++) {
+		level_begin[l] = st->footprint > 0.0f ? float(double(texel0) * Math::pow(2.0, double(l) - double(f.lod_bias) - 1.0) / double(st->footprint)) : 0.0f;
+	}
+	auto in_level = [&](const FellowVSMCandidate &p_c, int p_level) -> bool {
+		if (p_c.ranged && p_level > 0) {
+			const float range_end = p_c.instance->fellow_range_end > 0.0f ? p_c.instance->fellow_range_end + p_c.instance->fellow_range_end_margin : 0.0f;
+			if (range_end > 0.0f && level_begin[p_level] >= range_end) {
+				return false;
+			}
+		}
+		if (p_c.hlod) {
+			const bool far_level = level_begin[p_level] >= p_c.instance->fellow_hlod_distance;
+			if (far_level != ((p_c.hlod & InstanceData::FLAG_FELLOW_HLOD_PROXY) != 0)) {
+				return false;
+			}
+			if (far_level && p_c.instance->fellow_hlod_end > 0.0f && level_begin[p_level] >= p_c.instance->fellow_hlod_end) {
+				return false;
+			}
+		}
+		return true;
+	};
+
+	// Dynamic casters: their pages now and where they were (moved, animated, or no longer there).
+	const float wind_static_texel = 0.05f; // decision 0125's spirit: the wind's sway is lost in texels this coarse
+	for (const FellowVSMCandidate &cd : st->candidates) {
+		if (!cd.dynamic) {
+			continue;
+		}
+		const Rect2 now(cd.u0, cd.v0, cd.u1 - cd.u0, cd.v1 - cd.v0);
+		const Rect2 *prev = st->dynamic_prev.getptr(cd.geometry);
+		for (int l = 0; l < levels; l++) {
+			if (cd.wind_far && texel0 * float(1 << l) >= wind_static_texel) {
+				continue;
+			}
+			mark_rect(l, cd.u0, cd.v0, cd.u1, cd.v1);
+			if (prev != nullptr) {
+				mark_rect(l, prev->position.x, prev->position.y, prev->position.x + prev->size.x, prev->position.y + prev->size.y);
+			}
+		}
+		dynamic_now.insert(cd.geometry, now);
+	}
+	for (const KeyValue<RenderGeometryInstance *, Rect2> &E : st->dynamic_prev) {
+		if (!dynamic_now.has(E.key)) {
+			for (int l = 0; l < levels; l++) {
+				mark_rect(l, E.value.position.x, E.value.position.y, E.value.position.x + E.value.size.x, E.value.position.y + E.value.size.y);
+			}
+		}
+	}
+	st->dynamic_prev = dynamic_now;
+
+	// The table, the pages drawn, the passes.
+	f.table.resize(size_t(levels) * W * W);
+	memset(f.table.ptr(), 0, f.table.size() * sizeof(uint32_t));
+	uint32_t resident = 0;
+	uint32_t pass_count = 0;
+	constexpr int R = Fellow::VSM_REGION;
+	constexpr int RN = W / R; // regions a side
+	LocalVector<int> sat;
+	sat.resize(size_t(W + 1) * (W + 1));
+	for (int l = 0; l < levels; l++) {
+		uint8_t *d = dirty.ptr() + size_t(l) * W * W;
+		bool any = false;
+		for (const KeyValue<Vector2i, FellowVSMPage> &E : st->pages[l]) {
+			const int rx = E.key.x - f.window[l][0];
+			const int ry = E.key.y - f.window[l][1];
+			uint32_t entry = E.value.phys + 1;
+			resident++;
+			if (d[ry * W + rx]) {
+				entry |= Fellow::VSM_ENTRY_DRAWN;
+				f.clear_pages.push_back(E.value.phys);
+				any = true;
+			}
+			f.table[size_t(l) * W * W + size_t(ry) * W + rx] = entry;
+		}
+		if (!any) {
+			continue;
+		}
+		// (dirty marks on pages not resident are dropped)
+		for (int i = 0; i < W * W; i++) {
+			d[i] = (f.table[size_t(l) * W * W + i] & Fellow::VSM_ENTRY_DRAWN) ? 1 : 0;
+		}
+		// Summed-area table of the drawn pages: a caster is drawn where its box covers one.
+		memset(sat.ptr(), 0, sat.size() * sizeof(int));
+		for (int y = 0; y < W; y++) {
+			for (int x = 0; x < W; x++) {
+				sat[size_t(y + 1) * (W + 1) + x + 1] = int(d[y * W + x]) + sat[size_t(y) * (W + 1) + x + 1] + sat[size_t(y + 1) * (W + 1) + x] - sat[size_t(y) * (W + 1) + x];
+			}
+		}
+		auto drawn_in = [&](int p_x0, int p_y0, int p_x1, int p_y1) -> int {
+			return sat[size_t(p_y1 + 1) * (W + 1) + p_x1 + 1] - sat[size_t(p_y0) * (W + 1) + p_x1 + 1] - sat[size_t(p_y1 + 1) * (W + 1) + p_x0] + sat[size_t(p_y0) * (W + 1) + p_x0];
+		};
+		// A pass per region of R x R pages with drawn pages, over their bounding rectangle.
+		int region_pass[RN * RN];
+		for (int r = 0; r < RN * RN; r++) {
+			region_pass[r] = -1;
+			const int gx = (r % RN) * R;
+			const int gy = (r / RN) * R;
+			int32_t mn[2] = { INT32_MAX, INT32_MAX };
+			int32_t mx[2] = { INT32_MIN, INT32_MIN };
+			for (int y = gy; y < gy + R; y++) {
+				for (int x = gx; x < gx + R; x++) {
+					if (d[y * W + x]) {
+						mn[0] = MIN(mn[0], x);
+						mn[1] = MIN(mn[1], y);
+						mx[0] = MAX(mx[0], x);
+						mx[1] = MAX(mx[1], y);
+					}
+				}
+			}
+			if (mn[0] == INT32_MAX) {
+				continue;
+			}
+			if (st->pass_lists.size() <= pass_count) {
+				PagedArray<RenderGeometryInstance *> *list = memnew(PagedArray<RenderGeometryInstance *>);
+				list->set_page_pool(&geometry_instance_cull_page_pool);
+				st->pass_lists.push_back(list);
+			}
+			PagedArray<RenderGeometryInstance *> *list = st->pass_lists[pass_count];
+			list->clear();
+			region_pass[r] = int(f.passes.size());
+			Fellow::VSMFrame::Pass pass;
+			pass.level = l;
+			pass.page_min[0] = mn[0];
+			pass.page_min[1] = mn[1];
+			pass.page_max[0] = mx[0];
+			pass.page_max[1] = mx[1];
+			pass.instances = list;
+			f.passes.push_back(pass);
+			pass_count++;
+		}
+		const double s = page_size[l];
+		for (const FellowVSMCandidate &cd : st->candidates) {
+			const int x0 = MAX(int(Math::floor(cd.u0 / s)) - f.window[l][0], 0);
+			const int y0 = MAX(int(Math::floor(cd.v0 / s)) - f.window[l][1], 0);
+			const int x1 = MIN(int(Math::floor(cd.u1 / s)) - f.window[l][0], W - 1);
+			const int y1 = MIN(int(Math::floor(cd.v1 / s)) - f.window[l][1], W - 1);
+			if (x0 > x1 || y0 > y1 || drawn_in(x0, y0, x1, y1) == 0 || !in_level(cd, l)) {
+				continue;
+			}
+			for (int ry = y0 / R; ry <= y1 / R; ry++) {
+				for (int rx = x0 / R; rx <= x1 / R; rx++) {
+					const int pi = region_pass[ry * RN + rx];
+					if (pi < 0) {
+						continue;
+					}
+					const Fellow::VSMFrame::Pass &pass = f.passes[pi];
+					const int ix0 = MAX(x0, pass.page_min[0]);
+					const int iy0 = MAX(y0, pass.page_min[1]);
+					const int ix1 = MIN(x1, pass.page_max[0]);
+					const int iy1 = MIN(y1, pass.page_max[1]);
+					if (ix0 <= ix1 && iy0 <= iy1 && drawn_in(ix0, iy0, ix1, iy1) > 0) {
+						pass.instances->push_back(cd.geometry);
+					}
+				}
+			}
+		}
+	}
+	// Passes left without casters still clear their pages (cleared before the passes): nothing to draw.
+	for (uint32_t i = 0; i < f.passes.size();) {
+		if (f.passes[i].instances->size() == 0) {
+			f.passes.remove_at(i);
+		} else {
+			i++;
+		}
+	}
+	f.resident = resident;
+	f.drawn = f.clear_pages.size();
+	Fellow::vsm_stats().resident.set(resident);
+	Fellow::vsm_stats().drawn.set(f.drawn);
+	Fellow::vsm_stats().passes.set(f.passes.size());
 }
 
 void RendererSceneCull::_fellow_shadow_events_gc(Scenario *p_scenario, uint64_t p_frame) {
@@ -4550,6 +5074,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	cull.frustum = Frustum(planes);
 
 	Vector<RID> directional_lights;
+	Instance *fellow_vsm_light = nullptr; // decision 0396: the first shadowed directional light
 	// directional lights
 	{
 		cull.shadow_count = 0;
@@ -4579,6 +5104,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		}
 
 		RSG::light_storage->set_directional_shadow_count(lights_with_shadow.size());
+		fellow_vsm_light = lights_with_shadow.is_empty() ? nullptr : lights_with_shadow[0];
 
 		// FellowEngine directional shadow cache: only for the main render of a viewport, one shadowed directional
 		// light (square cascade rects) and square split layouts (orthogonal or 4 splits).
@@ -4786,6 +5312,25 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				RSG::mesh_storage->mesh_instance_check_for_update(scene_cull_result.mesh_instances[i]);
 			}
 			RSG::mesh_storage->update_mesh_instances();
+		}
+
+		// FellowEngine virtual shadow maps (decision 0396): the main render of a viewport.
+		fellow_vsm_frame.active = false;
+		if (Fellow::vsm_enabled() && p_reflection_probe.is_null() && p_viewport.is_valid() && p_using_shadows) {
+			if (Fellow::list_markers()) {
+				RENDER_TIMESTAMP("FellowEngine Virtual Shadow Pages");
+			}
+			const uint64_t fellow_vsm_t0 = OS::get_singleton()->get_ticks_usec();
+			_fellow_vsm_update(cull_data, fellow_vsm_light, p_viewport, p_render_buffers, p_camera_data->main_transform);
+			Fellow::vsm_stats().update_usec.set(OS::get_singleton()->get_ticks_usec() - fellow_vsm_t0);
+		} else if (!Fellow::vsm_enabled() && !fellow_vsm_states.is_empty()) {
+			LocalVector<RID> all;
+			for (const KeyValue<RID, FellowVSMState *> &E : fellow_vsm_states) {
+				all.push_back(E.key);
+			}
+			for (const RID &vp : all) {
+				_fellow_vsm_free(vp);
+			}
 		}
 	}
 
@@ -5176,6 +5721,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	}
 
 	RENDER_TIMESTAMP("Render 3D Scene");
+	scene_render->fellow_vsm_set_frame(fellow_vsm_frame.active ? &fellow_vsm_frame : nullptr);
 	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, p_window_output_max_value, &sdfgi_update_data, r_render_info);
 
 	if (p_viewport.is_valid()) {
@@ -5834,6 +6380,7 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 				}
 				geom->fellow_shadow_cacheable = cacheable;
 				geom->fellow_shadow_cacheable_far = cacheable_far;
+				_fellow_vsm_sync_instance_data(p_instance); // decision 0396
 			}
 
 			if (p_instance->instance_uniforms.materials_finish(p_instance->self)) {
@@ -6052,6 +6599,9 @@ RendererSceneCull::RendererSceneCull() {
 }
 
 RendererSceneCull::~RendererSceneCull() {
+	while (!fellow_vsm_states.is_empty()) {
+		_fellow_vsm_free(fellow_vsm_states.begin()->key);
+	}
 	FellowParallelFor::shared_release();
 	fellow_cull_parallel = nullptr;
 	instance_cull_result.reset();

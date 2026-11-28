@@ -33,6 +33,7 @@
 #include "core/templates/paged_allocator.h"
 #include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/fellow_sort.h"
+#include "servers/rendering/fellow_virtual_shadow.h"
 #include "servers/rendering/multi_uma_buffer.h"
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fellow_atmosphere.h"
@@ -48,6 +49,7 @@
 #include "servers/rendering/renderer_rd/effects/fellow_sdf_gather.h"
 #include "servers/rendering/renderer_rd/effects/fellow_shadow_cache.h"
 #include "servers/rendering/renderer_rd/effects/fellow_shadow_max_mip.h"
+#include "servers/rendering/renderer_rd/effects/fellow_virtual_shadow.h"
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
 #include "servers/rendering/renderer_rd/effects/fsr3.h"
 #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
@@ -249,7 +251,7 @@ private:
 
 	void _update_render_base_uniform_set();
 	RID _setup_sdfgi_render_pass_uniform_set(RID p_albedo_texture, RID p_emission_texture, RID p_emission_aniso_texture, RID p_geom_facing_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, uint32_t p_uniform_buffer_index);
-	RID _setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, uint32_t p_uniform_buffer_index, bool p_use_directional_shadow_atlas = false);
+	RID _setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, uint32_t p_uniform_buffer_index, bool p_use_directional_shadow_atlas = false, bool p_fellow_vsm_pass = false);
 
 	struct BestFitNormal {
 		BestFitNormalShaderRD shader;
@@ -335,6 +337,7 @@ private:
 		uint32_t fellow_prepare_flips = 0;
 		Vector3 fellow_lod_eye;
 		float fellow_lod_distance_bias = 0.0;
+		bool fellow_vsm = false; // decision 0396: a shadow pass into the virtual shadow map's pages
 		// FellowEngine occlusion culling (opaque colour pass): per list element, the index of the culled run it starts
 		// (its draw is then indirect, reading the compacted elements: one draw per chunk of 64 elements, the run's chunks
 		// consecutive from that index) or UINT32_MAX.
@@ -566,6 +569,7 @@ private:
 			float fellow_scale = 1.0;
 			float fellow_bias = 0.0;
 			float fellow_clamp_max = 0.9999f; // 1: a positional face copied as it is (decision 0373)
+			bool fellow_vsm = false; // decision 0396: a pass into the virtual shadow map's pages
 
 			// FellowEngine mesh clusters: world-space planes of the shadow camera's volume (no near plane when casters
 			// are pancaked).
@@ -1530,6 +1534,23 @@ private:
 	RendererRD::FellowRTShadow *fellow_rt_shadow = nullptr;
 	RendererRD::FellowContactShadow *fellow_contact_shadow = nullptr; // decision 0107
 	RendererRD::FellowDepthRange *fellow_depth_range = nullptr; // decision 0388
+	// FellowEngine virtual shadow maps (decision 0396): the scene cull's frame for this render (nullptr: none), whether
+	// this render draws and reads them, its pool, and each render buffers' pool with the state its content is from.
+	RendererRD::FellowVirtualShadow *fellow_vsm = nullptr;
+	const Fellow::VSMFrame *fellow_vsm_frame = nullptr;
+	bool fellow_vsm_active = false;
+	bool fellow_vsm_append = false; // _render_shadow_append(): the pass appended is a virtual shadow map's
+	float fellow_vsm_footprint = 0.0f;
+	RID fellow_vsm_pool;
+	struct FellowVSMPool {
+		RID texture;
+		uint32_t state_id = 0;
+	};
+	HashMap<ObjectID, FellowVSMPool> fellow_vsm_pools;
+	void _fellow_vsm_begin(RenderDataRD *p_render_data);
+	void _fellow_vsm_mark(const RenderDataRD *p_render_data);
+	void _fellow_vsm_append_passes(RenderDataRD *p_render_data);
+	static void _fellow_vsm_readback(const Vector<uint8_t> &p_data, uint64_t p_buffers, uint64_t p_frame, uint32_t p_state_id, int p_levels, float p_footprint, const PackedInt32Array &p_windows);
 	void _fellow_depth_fit_reduce(const RenderDataRD *p_render_data);
 	static void _fellow_depth_fit_readback(const Vector<uint8_t> &p_data, uint64_t p_buffers, uint64_t p_frame, const Vector3 &p_cam_origin, const Vector3 &p_cam_forward);
 	// FellowEngine sky atmosphere (decision 0108): the tables, their wrappers for the global shader parameters, this
@@ -1763,6 +1784,8 @@ public:
 	virtual bool free(RID p_rid) override;
 
 	virtual bool fellow_directional_shadow_cache_supported() const override { return true; }
+	virtual bool fellow_vsm_supported() const override { return true; } // decision 0396
+	virtual void fellow_vsm_set_frame(const Fellow::VSMFrame *p_frame) override { fellow_vsm_frame = p_frame; }
 	virtual void fellow_directional_shadow_cache_free(int64_t p_cache_id) override;
 	virtual bool fellow_directional_shadow_cache_take_lost(int64_t p_cache_id) override;
 	virtual bool fellow_directional_shadow_cache_get_static_cost(int64_t p_cache_id, int p_cascade, uint64_t p_build_frame, uint64_t &r_primitives, uint32_t &r_draws) const override;

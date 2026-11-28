@@ -4033,6 +4033,24 @@
 		<member name="rendering/fellow/shadows/skip_unblended_cascade" type="bool" setter="" getter="" default="true">
 			The second cascade's lookup skipped outside the blend band. Exact: the same image or results as stock Godot. Decision 0005.
 		</member>
+		<member name="rendering/fellow/shadows/virtual/enabled" type="bool" setter="" getter="" default="false">
+			Virtual shadow maps for the first shadowed directional light: its shadow in clipmap levels of 128 x 128 texel pages around the camera (level 0's texel shadows/virtual/texel_size, each level's twice the one before), only the pages the view's pixels look up allocated in a physical pool (shadows/virtual/pool_size) and drawn, and kept until something in them changes (a static caster that moved or left; a dynamic caster's pages every frame, now and where it was). The depth pre-pass marks the pages its pixels need on the GPU, read back a few frames later; each pixel takes the finest level its size asks for whose pages are resident, a coarser one where they are not, the cascades where none is (the cascades are still drawn). Sharp shadows at every distance: at 1080p a texel about a pixel wide near and far. Forward+ only, a single view (not in XR), not with MSAA, not in reflection probes. Changes the image. Read every frame. Decision 0396.
+		</member>
+		<member name="rendering/fellow/shadows/virtual/levels" type="int" setter="" getter="" default="12">
+			With shadows/virtual/enabled: the clipmap's levels (each a window of 64 x 64 pages around the camera, its texel twice the one before). 12 levels of 2 mm reach a texel of 4 m. Read every frame (a change starts the map over). Decision 0396.
+		</member>
+		<member name="rendering/fellow/shadows/virtual/lod_bias" type="float" setter="" getter="" default="0.0">
+			With shadows/virtual/enabled: levels added to the one a pixel's size asks for (1: texels twice as large, about a quarter of the pages; negative: finer than a pixel). Read every frame. Decision 0396.
+		</member>
+		<member name="rendering/fellow/shadows/virtual/max_new_pages_per_frame" type="int" setter="" getter="" default="512">
+			With shadows/virtual/enabled: at most this many pages allocated (and drawn for the first time) a frame, coarse levels first; the others are shaded by a coarser level or the cascades until their turn. Bounds the cost of a cut or a fast turn. Read every frame. Decision 0396.
+		</member>
+		<member name="rendering/fellow/shadows/virtual/pool_size" type="int" setter="" getter="" default="4096">
+			With shadows/virtual/enabled: the physical pool's side in texels ((side / 128)^2 pages of 128 x 128, 4 bytes a texel: 4096 holds 1024 pages in 64 MB). A view needs two to four pages per 16 384 of its pixels (a 1280 x 720 view of a town 120-240; a 3840 x 2160 view up to two thousand: 8192 there); needing more than the pool holds, it evicts the pages not looked up lately, and where a page cannot be had the cascades shade. Read every frame (a change starts the map over). Decision 0396.
+		</member>
+		<member name="rendering/fellow/shadows/virtual/texel_size" type="float" setter="" getter="" default="0.002">
+			With shadows/virtual/enabled: level 0's texel in metres (level l's is this times 2^l); the finest texel any pixel gets. Read every frame (a change starts the map over). Decision 0396.
+		</member>
 		<member name="rendering/fellow/shadows/wind_cached_from_cascade" type="int" setter="" getter="" default="2">
 			Casters moved only by the wind are cached from this directional cascade on (their far shadows keep the pose of the cache's last build); -1: never. Decision 0125.
 		</member>

@@ -303,6 +303,9 @@ void SceneShaderForwardClustered::ShaderData::_fellow_replay_pipelines() {
 		if (key.cull_mode > RD::POLYGON_CULL_MAX || key.primitive_type > RSE::PRIMITIVE_MAX || key.version >= PIPELINE_VERSION_MAX) {
 			continue;
 		}
+		if (key.version == PIPELINE_VERSION_FELLOW_VSM && !SceneShaderForwardClustered::singleton->shader.is_group_enabled(SHADER_GROUP_FELLOW_VSM)) {
+			continue; // decision 0396: its variants are not compiled until virtual shadow maps are drawn
+		}
 		pipeline_hash_map.compile_pipeline(key, key.hash(), RSE::PIPELINE_SOURCE_MESH, false);
 	}
 }
@@ -386,6 +389,8 @@ uint16_t SceneShaderForwardClustered::ShaderData::_get_shader_version(PipelineVe
 			return ShaderVersion::SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL + ubershader_base;
 		case PIPELINE_VERSION_DEPTH_PASS_WITH_SDF:
 			return ShaderVersion::SHADER_VERSION_DEPTH_PASS_WITH_SDF + ubershader_base;
+		case PIPELINE_VERSION_FELLOW_VSM:
+			return ShaderVersion::SHADER_VERSION_FELLOW_VSM + (p_ubershader ? 1 : 0);
 		case PIPELINE_VERSION_COLOR_PASS: {
 			int shader_flags = 0;
 
@@ -459,7 +464,9 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 
 	RD::PipelineDepthStencilState depth_stencil_state;
 
-	if (depth_test != DEPTH_TEST_DISABLED) {
+	// FellowEngine virtual shadow maps (decision 0396): their passes have no depth attachment (each fragment keeps the
+	// highest surface itself, with an atomic max into the pool).
+	if (depth_test != DEPTH_TEST_DISABLED && p_pipeline_key.version != PIPELINE_VERSION_FELLOW_VSM) {
 		depth_stencil_state.enable_depth_test = true;
 		depth_stencil_state.enable_depth_write = depth_draw != DEPTH_DRAW_DISABLED ? true : false;
 		depth_stencil_state.depth_compare_operator = RD::COMPARE_OP_GREATER_OR_EQUAL;
@@ -801,6 +808,12 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 			}
 
 			shader_versions.push_back(ShaderRD::VariantDefine(group, version, false));
+		}
+
+		// FellowEngine virtual shadow maps (decision 0396): SHADER_VERSION_FELLOW_VSM and its ubershader.
+		for (uint32_t ubershader = 0; ubershader < 2; ubershader++) {
+			const String base_define = ubershader ? "\n#define UBERSHADER\n" : "";
+			shader_versions.push_back(ShaderRD::VariantDefine(SHADER_GROUP_FELLOW_VSM, base_define + "\n#define MODE_RENDER_DEPTH\n#define MODE_FELLOW_VSM\n", false));
 		}
 
 		Vector<uint64_t> dynamic_buffers;
@@ -1167,6 +1180,12 @@ void SceneShaderForwardClustered::enable_advanced_shader_group(bool p_needs_mult
 		shader.enable_group(SHADER_GROUP_ADVANCED_MULTIVIEW);
 	}
 	shader.enable_group(SHADER_GROUP_ADVANCED);
+}
+
+void SceneShaderForwardClustered::fellow_enable_vsm_shader_group() {
+	if (!shader.is_group_enabled(SHADER_GROUP_FELLOW_VSM)) {
+		shader.enable_group(SHADER_GROUP_FELLOW_VSM);
+	}
 }
 
 bool SceneShaderForwardClustered::is_multiview_shader_group_enabled() const {

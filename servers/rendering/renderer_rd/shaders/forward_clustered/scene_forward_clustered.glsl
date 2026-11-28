@@ -1312,6 +1312,78 @@ float fellow_directional_soft_cascade(uint i, uint c, vec3 vertex, vec3 base_nor
 	vec2 tex_scale = uv_scale * test_radius;
 	return float(sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, taa_frame_count, c));
 }
+
+#if !defined(USE_VERTEX_LIGHTING) && !defined(USE_MULTIVIEW)
+// FellowEngine virtual shadow maps (decision 0396): a page table entry of level p_level's window (0 outside it).
+uint fellow_vsm_entry(int p_level, ivec2 p_page) {
+	if (any(lessThan(p_page, ivec2(0))) || any(greaterThanEqual(p_page, ivec2(64)))) {
+		return 0u;
+	}
+	return fellow_vsm.table[uint(p_level) * 4096u + uint(p_page.y) * 64u + uint(p_page.x)];
+}
+
+// The light reaching a point (view space) through the virtual shadow map: a box filter two texels wide on the finest
+// level a pixel there asks for whose pages under the filter are resident, else on a coarser one; -1 where no level has
+// them (the cascades then). Each texel's height is compared with the receiver's plane there (its geometric normal:
+// the pool holds each texel's height at its centre), less a bias of a texel. p_normal_bias: the geometric normal,
+// shortened on faces turned from the light (the lookup moved along it by a texel).
+float fellow_vsm_shadow(vec3 p_vertex, vec3 p_geo_normal, vec3 p_normal_bias) {
+	float z = -p_vertex.z;
+	if (z > fellow_vsm.header.max_distance) {
+		return -1.0;
+	}
+	int levels = int(fellow_vsm.header.levels);
+	float texel0 = fellow_vsm.header.texel0;
+	float size = bool(fellow_vsm.header.flags & 1u) ? fellow_vsm.header.footprint : z * fellow_vsm.header.footprint;
+	int l = clamp(int(ceil(log2(max(size / texel0, 1e-8)) + fellow_vsm.header.lod_bias)), 0, levels - 1);
+	uint pool_pages = fellow_vsm.header.pool_pages;
+	vec3 ax = fellow_vsm.header.axis_x.xyz;
+	vec3 ay = fellow_vsm.header.axis_y.xyz;
+	vec3 az = fellow_vsm.header.axis_z.xyz;
+	// The receiver's plane: its height's slope across the light (metres per metre), steep planes bounded.
+	vec3 n = vec3(dot(ax, p_geo_normal), dot(ay, p_geo_normal), dot(az, p_geo_normal));
+	vec2 slope = clamp(-n.xy / max(n.z, 0.2), vec2(-5.0), vec2(5.0));
+	for (; l < levels; l++) {
+		float t = texel0 * exp2(float(l));
+		vec3 p = p_vertex + p_normal_bias * t;
+		vec2 tc = fellow_vsm.header.origin[l].xy + vec2(dot(ax, p), dot(ay, p)) / t;
+		// The receiver's height towards the light, relative to the camera's rounded height (fixed point), less the bias.
+		float hr = fellow_vsm.header.cam_h_frac + (dot(az, p) + t) * 1024.0 + 2.0;
+		vec2 hslope = slope * (t * 1024.0); // per texel
+		// The box [tc - 1, tc + 1] covers texels k0 .. k0 + 2.
+		ivec2 k0 = ivec2(floor(tc - 1.0));
+		vec2 c0 = vec2(k0) + 2.0 - tc;
+		vec2 c2 = tc - vec2(k0) - 1.0;
+		ivec2 pa = k0 >> 7;
+		ivec2 pb = (k0 + 2) >> 7;
+		uint e00 = fellow_vsm_entry(l, pa);
+		uint e10 = pb.x != pa.x ? fellow_vsm_entry(l, ivec2(pb.x, pa.y)) : e00;
+		uint e01 = pb.y != pa.y ? fellow_vsm_entry(l, ivec2(pa.x, pb.y)) : e00;
+		uint e11 = (pb.x != pa.x && pb.y != pa.y) ? fellow_vsm_entry(l, pb) : (pb.x != pa.x ? e10 : e01);
+		if (e00 == 0u || e10 == 0u || e01 == 0u || e11 == 0u) {
+			continue;
+		}
+		float lit = 0.0;
+		for (int y = 0; y < 3; y++) {
+			float wy = y == 0 ? c0.y : (y == 1 ? 1.0 : c2.y);
+			for (int x = 0; x < 3; x++) {
+				ivec2 k = k0 + ivec2(x, y);
+				ivec2 pg = k >> 7;
+				uint e = pg.y == pa.y ? (pg.x == pa.x ? e00 : e10) : (pg.x == pa.x ? e01 : e11);
+				uint phys = (e & 0x00ffffffu) - 1u;
+				ivec2 pt = ivec2(int(phys % pool_pages), int(phys / pool_pages)) * 128 + (k & 127);
+				uint s = texelFetch(usampler2D(fellow_vsm_pool, SAMPLER_NEAREST_CLAMP), pt, 0).r;
+				float h = hr + dot(hslope, vec2(k) + 0.5 - tc);
+				bool occluded = s != 0u && float(int(s - 0x80000000u) - fellow_vsm.header.cam_h_fixed) > h;
+				float wx = x == 0 ? c0.x : (x == 1 ? 1.0 : c2.x);
+				lit += occluded ? 0.0 : wx * wy;
+			}
+		}
+		return lit * 0.25;
+	}
+	return -1.0;
+}
+#endif
 #endif // !SHADOWS_DISABLED
 
 #include "../scene_forward_gi_inc.glsl"
@@ -3418,8 +3490,18 @@ void fragment_shader(in SceneData scene_data) {
 	normal_bias -= light_dir * dot(light_dir, normal_bias);                                     \
 	m_var.xyz += normal_bias;
 
+					// FellowEngine virtual shadow maps (decision 0396): the pages' shadow where they are resident.
+					float fellow_vsm_s = -1.0;
+#if !defined(USE_VERTEX_LIGHTING) && !defined(USE_MULTIVIEW)
+					if (sc_fellow_vsm_sun() && i == fellow_vsm.header.light_index) {
+						fellow_vsm_s = fellow_vsm_shadow(vertex, geo_normal, base_normal_bias);
+					}
+#endif
+
 					//version with soft shadows, more expensive
-					if (sc_fellow_pcss_blend_band() && sc_use_directional_soft_shadows() && directional_lights.data[i].softshadow_angle > 0 && bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_PCSS_BLEND_BAND)) {
+					if (fellow_vsm_s >= 0.0) {
+						shadow = fellow_vsm_s;
+					} else if (sc_fellow_pcss_blend_band() && sc_use_directional_soft_shadows() && directional_lights.data[i].softshadow_angle > 0 && bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_PCSS_BLEND_BAND)) {
 						// FellowEngine: sample the cascade that contains the pixel; with blend splits, blend towards the next
 						// cascade over the last 10 % of the split only (as the PCF path does) instead of over the whole split.
 						vec4 splits = directional_lights.data[i].shadow_split_offsets;
@@ -4533,6 +4615,28 @@ void fragment_shader(in SceneData scene_data) {
 #endif // USE_SHADOW_TO_OPACITY
 
 #ifdef MODE_RENDER_DEPTH
+
+#ifdef MODE_FELLOW_VSM
+	// FellowEngine virtual shadow maps (decision 0396): this fragment's height towards the light into its texel's page,
+	// where the page is drawn this frame. The pass's camera sits at its level's window corner (view x, y: the window's
+	// texels times the level's texel), at the passes' top (h_top_fixed).
+	{
+		float fellow_t = 2.0 / (projection_matrix[0][0] * scene_data.viewport_size.x); // (projection_matrix: scene_data's)
+		int fellow_l = clamp(int(round(log2(fellow_t / fellow_vsm.header.texel0))), 0, int(fellow_vsm.header.levels) - 1);
+		ivec2 fellow_texel = ivec2(floor(vertex_interp.xy / fellow_t));
+		if (all(greaterThanEqual(fellow_texel, ivec2(0))) && all(lessThan(fellow_texel, ivec2(64 * 128)))) {
+			ivec2 fellow_page = fellow_texel >> 7;
+			uint fellow_entry = fellow_vsm.table[uint(fellow_l) * 4096u + uint(fellow_page.y) * 64u + uint(fellow_page.x)];
+			if ((fellow_entry & (1u << 30)) != 0u) {
+				uint fellow_phys = (fellow_entry & 0x00ffffffu) - 1u;
+				uint fellow_pool_pages = fellow_vsm.header.pool_pages;
+				ivec2 fellow_pt = ivec2(int(fellow_phys % fellow_pool_pages), int(fellow_phys / fellow_pool_pages)) * 128 + (fellow_texel & 127);
+				int fellow_h = fellow_vsm.header.h_top_fixed + int(round(vertex_interp.z * 1024.0));
+				imageAtomicMax(fellow_vsm_pool_image, fellow_pt, uint(fellow_h) + 0x80000000u);
+			}
+		}
+	}
+#endif
 
 #ifdef MODE_RENDER_SDF
 

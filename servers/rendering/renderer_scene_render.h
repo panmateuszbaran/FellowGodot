@@ -40,6 +40,10 @@
 #include "servers/rendering/storage/environment_storage.h"
 #include "servers/rendering/storage/render_scene_buffers.h"
 
+namespace Fellow {
+struct VSMFrame;
+} // namespace Fellow
+
 class RendererSceneRender {
 private:
 	RendererEnvironmentStorage environment_storage;
@@ -322,6 +326,10 @@ public:
 	};
 
 	virtual bool fellow_directional_shadow_cache_supported() const { return false; }
+	// FellowEngine virtual shadow maps (decision 0396): the renderers that draw them; the frame's, set by the scene cull
+	// before render_scene() (nullptr: none), read during it.
+	virtual bool fellow_vsm_supported() const { return false; }
+	virtual void fellow_vsm_set_frame(const Fellow::VSMFrame *p_frame) {}
 	virtual void fellow_directional_shadow_cache_free(int64_t p_cache_id) {}
 	// True (once) if the renderer lost a cache's content (e.g. atlas format change); all its cascades must rebuild.
 	virtual bool fellow_directional_shadow_cache_take_lost(int64_t p_cache_id) { return false; }
