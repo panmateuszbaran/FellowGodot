@@ -349,6 +349,14 @@ func _init() -> void:
 				pos[str(k).trim_prefix("shadow_pos_cache_")] = st[k]
 		print("climb_look: shadows %d frames: %.1f draws, %.0f primitives a frame; positional cache %s" % [_shadow_frames,
 				float(_shadow_draws) / _shadow_frames, float(_shadow_prims) / _shadow_frames, pos])
+	if ProjectSettings.get_setting("rendering/fellow/shadows/virtual/enabled", false):
+		# Milestone 255: the virtual shadow map's pages and the scene cull's time for them, the last frame (decision 0396).
+		var vst: Dictionary = RenderingServer.fellow_get_stats()
+		var vparts := PackedStringArray()
+		for k in vst:
+			if str(k).begins_with("shadows_virtual"):
+				vparts.append("%s=%s" % [str(k).trim_prefix("shadows_virtual_"), vst[k]])
+		print("climb_look: virtual shadows " + " ".join(vparts))
 	if _perf and _perf_gpu.size() > 0:
 		var g := Array(_perf_gpu)
 		var c := Array(_perf_cpu)
