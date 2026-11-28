@@ -12,7 +12,15 @@ glTF for the engine (milestone 232, decision 0374).
   "game_engine" rig (53 bones; 55 with the eyes) renamed to Godot's `SkeletonProfileHumanoid`, the faces under the clothes removed;
   materials opaque but for the hair, eyebrows and eyelashes; textures at most 2048 px (the skin) and 1024 px (the rest),
   encoded again with Pillow (Blender's JPEGs carry an ICC segment Godot's JPEG loader refuses; the cut-out cards' PNGs
-  with a palette). About 33 000 triangles a person. Everything in them is CC0.
+  with a palette). About 33 000 triangles a person. Everything from the system assets pack is CC0; the clothes are
+  not all (below, and `CREDITS.md`).
+* **Period clothes** (milestone 253, decision 0394): the people are dressed for the showcase's town (Tuscany, the 15th
+  century) from MakeHuman's community asset packs — dress01, dress02, skirts01, suits02 and shirts03 from
+  <https://static.makehumancommunity.org/assets/assetpacks/>, their `clothes/` folders unpacked into the `--assets`
+  folder's (CC0 and CC BY: `CREDITS.md` lists the authors). Garments whose texture is a modern print (`PLAIN_CLOTH`) get
+  a plain woven cloth instead, light, for the showcase to dye; garments worn over others are layered (`LAYERS`: a
+  blouse tucked under a skirt's waistband, the skirt drawn in under an apron — MPFB fits each to the body alone, so
+  their surfaces crossed).
 * **Faces** (milestone 234): with MakeHuman's Faceunits 01 pack (CC0: ARKit's 52 shapes as targets; `--faces <dir>`,
   by default `<assets>/targets/faceunits`) the body gets the 52 shapes as morph targets, and the eyebrows and eyelashes
   (the eye, brow and cheek shapes) and the teeth and tongue (added: the jaw and mouth shapes) the same shapes, each fitted

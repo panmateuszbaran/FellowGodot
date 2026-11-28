@@ -112,8 +112,10 @@ clouds, light shafts, bloom and contact shadows, `FellowPipelineWarmer3D`; since
 `FellowRain3D` and `FellowLightning3D` (the weather keys; milestone 214: its overcast light), `FellowGasVolume3D` and
 `FellowBurnable3D` (the brazier, the chimneys' smoke, the osteria's fireplace), `FellowInteriorMaterial3D` (the rooms
 behind the windows, lit at night), the people's talk, looks and shelter, and CasaRosa's osteria to walk into. From
-milestone 232 the people are people — MakeHuman bodies with their skins, hair and clothes (`people/*.glb`, CC0, made by
-`tools/fellow_characters/make_characters.py`), worn over the mannequins (`scripts/fellow_person.gd`: the mannequin's
+milestone 232 the people are people — MakeHuman bodies with their skins, hair and clothes (`people/*.glb`, made by
+`tools/fellow_characters/make_characters.py`; from milestone 253 dressed for the town's age — tunics and hose, gowns,
+skirts with blouses and aprons, a friar's habit — in period dyes, from MakeHuman's community packs, CC0 and CC BY:
+`tools/fellow_characters/CREDITS.md`), worn over the mannequins (`scripts/fellow_person.gd`: the mannequin's
 skeleton drives them through a `RetargetModifier3D`); `--people=0` brings the mannequins back. From milestone 233 the
 player too (Luca, his hands and feet put on the mannequin's by a two-bone IK; `--player_person=0`). Their faces blink
 and talk (milestone 234), their eyes turn to the player before their heads, and they show moods — glad, surprised,

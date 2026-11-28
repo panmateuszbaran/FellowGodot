@@ -9,6 +9,18 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 253 — the people in period clothes (2026-11-28)
+
+- Decision 0394 (the showcase). The owner: modern people in a town of an Assassin's Creed kind look very bad. The
+  seven people dressed for a Tuscan town of the 15th century from MakeHuman's community packs (CC0 and CC BY,
+  `tools/fellow_characters/CREDITS.md`): tunics over hose and boots, a long gown, a blouse with a full skirt and an
+  apron, a friar's habit, a tunic over a skirt, a labourer's tunic with a sash. Modern prints replaced by a plain woven
+  cloth (`make_characters.py`, `PLAIN_CLOTH`), each garment dyed from the period's dyes (`FellowPerson.PERIOD_DYES`:
+  madder, woad, weld, walnut, russet, green, black, undyed wool; linen undyed or bleached); garments worn over others
+  layered (`layer_clothes`: the hidden one drawn in under the outer, a blouse tucked under the waistband). And the
+  people's shoulders at rest: their clavicles were turned to the mannequin's (which rise 9 degrees where MPFB's fall
+  6-10), so everyone stood shrugged by about 5 cm; they keep their own now (`FellowPerson.LIMB_TAILS`).
+
 ## RTX measurements of milestones 241-251 (2026-11-28)
 
 - The materials' layers over a 1440p screen: sheen +0.13 ms (with its texture +0.27), iridescence +0.29, anisotropy

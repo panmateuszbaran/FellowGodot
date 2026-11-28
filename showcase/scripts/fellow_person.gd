@@ -69,14 +69,14 @@ static func dress(p_npc: Node3D, p_person: PackedScene, p_rng: RandomNumberGener
 	retarget.add_child(pskel)
 	if p_match_height:
 		_contact_ik(pskel, skel)
-	# One tint for its clothes, one for its hair (from p_rng: twins in a crowd dressed apart).
-	var cloth_tint := Color.WHITE
+	# Its clothes dyed from the city's age's dyes, one for its hair (from p_rng: twins in a crowd dressed apart).
+	var dye_seed := 0
 	var hair_tint := Color.WHITE
 	if p_rng:
-		cloth_tint = Color.from_hsv(p_rng.randf(), p_rng.randf_range(0.0, 0.45), p_rng.randf_range(0.7, 1.0))
+		dye_seed = p_rng.randi() % 9973
 		hair_tint = Color.from_hsv(0.08, p_rng.randf_range(0.0, 0.3), p_rng.randf_range(0.55, 1.0))
 	for mi in pskel.find_children("*", "MeshInstance3D", true, false):
-		_materials(mi as MeshInstance3D, cloth_tint, hair_tint, p_person.resource_path.get_basename())
+		_materials(mi as MeshInstance3D, dye_seed, hair_tint, p_person.resource_path.get_basename())
 	_face(pskel, skel, p_rng)
 	if parts_lod:
 		_small_parts(pskel)
@@ -257,9 +257,11 @@ static func keep_last(p_skeleton: Skeleton3D) -> void:
 ## The person's limbs' rests turned bone by bone (parents first) so that each points where the mannequin's does: MPFB's
 ## rest is an A-pose (arms 45 degrees down, legs apart), the mannequin's a T-pose, and RetargetModifier3D hands over each
 ## bone's turn from its rest — from different rests the arms end up 45 degrees off (crossed over the body). The trunk,
-## neck and head keep theirs (their small tilts are the body's own). Only the rests change, not the skin's binds: at rest
-## the person stands as the mannequin does.
-const LIMB_TAILS := {"Shoulder": "UpperArm", "UpperArm": "LowerArm", "LowerArm": "Hand", "Hand": "MiddleProximal",
+## neck and head keep theirs (their small tilts are the body's own), and so do the clavicles (milestone 253, decision
+## 0394: the mannequin's rise 9 degrees, MPFB's fall 6-10 — turned to the mannequin's, every person's shoulders were
+## shrugged 16-20 degrees, about 5 cm). Only the rests change, not the skin's binds: at rest the person stands as the
+## mannequin does.
+const LIMB_TAILS := {"UpperArm": "LowerArm", "LowerArm": "Hand", "Hand": "MiddleProximal",
 		"ThumbMetacarpal": "ThumbProximal", "ThumbProximal": "ThumbDistal", "IndexProximal": "IndexIntermediate",
 		"IndexIntermediate": "IndexDistal", "MiddleProximal": "MiddleIntermediate", "MiddleIntermediate": "MiddleDistal",
 		"RingProximal": "RingIntermediate", "RingIntermediate": "RingDistal", "LittleProximal": "LittleIntermediate",
@@ -311,7 +313,45 @@ static func _descends(p_skel: Skeleton3D, p_bone: int, p_ancestor: int) -> bool:
 	return false
 
 
-static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint: Color, p_base := "") -> void:
+## Milestone 253: the people dressed for the city's age (decision 0394): tunics, hose and boots, gowns, skirts with
+## blouses and aprons, a friar's habit (MakeHuman's community packs, make_characters.py), each garment dyed from what a
+## 15th-century Tuscan dyer had — madder's reds, woad's blues, weld's yellows, walnut's browns, greens of woad over weld,
+## black for the well-off — its linen (shirts, blouses, aprons, undershifts) undyed or bleached, its leather and the
+## friar's habit as they are. A garment's dye comes from the person's seed and its own name, so a crowd's twins dress
+## apart and one person's pieces differ.
+const PERIOD_DYES: Array[Color] = [
+	Color(0.66, 0.22, 0.18), # madder red
+	Color(0.52, 0.16, 0.15), # deep madder
+	Color(0.30, 0.38, 0.55), # woad blue
+	Color(0.22, 0.26, 0.40), # deep woad
+	Color(0.78, 0.63, 0.32), # weld yellow
+	Color(0.47, 0.34, 0.23), # walnut brown
+	Color(0.62, 0.45, 0.30), # russet
+	Color(0.38, 0.43, 0.26), # green (woad over weld)
+	Color(0.18, 0.17, 0.16), # black
+	Color(0.56, 0.53, 0.49), # undyed grey wool
+]
+const UNDYED: Array[Color] = [Color(0.95, 0.92, 0.84), Color(0.99, 0.98, 0.94), Color(0.86, 0.81, 0.70)]
+const LINEN_GARMENTS := ["blouse", "apron", "mycenaean"]
+const UNDYED_GARMENTS := ["boots", "shoes", "monk_robe"]
+
+
+static func _dye(p_seed: int, p_garment: String) -> Color:
+	var n := absi(hash(p_garment) + p_seed * 7919)
+	if UNDYED_GARMENTS.any(func(g: String) -> bool: return p_garment.contains(g)):
+		return Color.WHITE.darkened(float(n % 5) * 0.04)
+	if LINEN_GARMENTS.any(func(g: String) -> bool: return p_garment.contains(g)):
+		return UNDYED[n % UNDYED.size()]
+	return PERIOD_DYES[n % PERIOD_DYES.size()]
+
+
+## Wool's fuzz (the sheen): the tunics, gowns, skirts, hose and the habit, not linen or leather.
+static func _wool(p_garment: String) -> bool:
+	var other := ["boots", "shoes"] + LINEN_GARMENTS
+	return not other.any(func(g: String) -> bool: return p_garment.contains(g))
+
+
+static func _materials(p_mesh: MeshInstance3D, p_dye_seed: int, p_hair_tint: Color, p_base := "") -> void:
 	if p_mesh.mesh == null:
 		return
 	for i in p_mesh.mesh.get_surface_count():
@@ -354,10 +394,11 @@ static func _materials(p_mesh: MeshInstance3D, p_cloth_tint: Color, p_hair_tint:
 		else:
 			m.roughness = maxf(m.roughness, 0.75) # cloth
 			m.metallic = 0.0
-			m.albedo_color *= p_cloth_tint
-			if cloth_sheen and (n.contains("suit") or n.contains("fedora")):
+			var dye := _dye(p_dye_seed, n)
+			m.albedo_color *= dye
+			if cloth_sheen and _wool(n):
 				m.sheen = true
-				m.sheen_color = Color(CLOTH_SHEEN, CLOTH_SHEEN, CLOTH_SHEEN) * p_cloth_tint
+				m.sheen_color = Color(CLOTH_SHEEN, CLOTH_SHEEN, CLOTH_SHEEN) * dye
 				m.sheen_roughness = CLOTH_SHEEN_ROUGHNESS
 		p_mesh.set_surface_override_material(i, m)
 

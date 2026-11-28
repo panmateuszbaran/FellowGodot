@@ -38,6 +38,18 @@ SKIN_AO_SIZE = 1024
 SKIN_AO_SAMPLES = 64
 SKIN_AO_DISTANCE = 0.06  # m: crevices' scale (eye sockets, nostrils, the mouth's corners, ears, fingers)
 DETAIL_TILE = 0.02  # m
+
+# Milestone 253: the people dressed for the showcase's city (a Tuscan town of the 15th century), from MakeHuman's
+# community asset packs (see tools/fellow_characters/CREDITS.md). Garments whose texture is a modern print get a plain
+# cloth of their own instead (light, so the showcase's period dyes tint it: FellowPerson.PERIOD_DYES): wool for tunics
+# and skirts, linen for shirts, blouses and aprons.
+PLAIN_CLOTH = {
+    "rehmanpolanski_viking_tunic": "wool",
+    "toigo_long_full_skirt": "wool",
+    "elvs_ruffle_sleeve_peasant_blouse_1": "linen",
+    "elvs_ladies_apron": "linen",
+    "drednicolson_asymmetric_tunic_and_sash": "wool",
+}
 SKIN_AO = True
 
 
@@ -129,6 +141,59 @@ def game_materials(bpy, root, cut_names):
                     w, h = n.image.size
                     if max(w, h) > limit:
                         n.image.scale(max(1, w * limit // max(w, h)), max(1, h * limit // max(w, h)))
+
+
+def plain_cloth_image(bpy, kind, size=512, seed=3):
+    """Milestone 253: a plain woven cloth (a light grey for the dyes to tint): linen's fine even weave, wool's coarser,
+    fuzzier one, a little uneven in its threads. Tiles."""
+    import numpy as np
+
+    rng = np.random.default_rng(seed + (0 if kind == "linen" else 1))
+    n = size
+    y, x = np.mgrid[0:n, 0:n].astype(np.float32)
+    period = 4.0 if kind == "linen" else 6.0
+    warp = 0.5 + 0.5 * np.cos(2 * np.pi * x / period)
+    weft = 0.5 + 0.5 * np.cos(2 * np.pi * y / period)
+    over = ((np.floor(x / period) + np.floor(y / period)) % 2).astype(np.float32)
+    weave = over * warp + (1 - over) * weft
+    f = np.fft.fft2(rng.standard_normal((n, n)))
+    k = np.fft.fftfreq(n)
+    kk = np.sqrt(k[None, :] ** 2 + k[:, None] ** 2)
+    slub = np.real(np.fft.ifft2(f * np.exp(-((kk * 40.0) ** 2))))
+    slub /= np.abs(slub).max() + 1e-9
+    fuzz = rng.standard_normal((n, n)) * (0.02 if kind == "linen" else 0.045)
+    base = 0.86 if kind == "linen" else 0.80
+    v = base * (0.9 + 0.1 * weave) * (1.0 + 0.06 * slub) + fuzz
+    tone = np.array([1.0, 0.985, 0.95] if kind == "linen" else [1.0, 0.99, 0.97], np.float32)
+    rgb = np.clip(v[..., None] * tone, 0.0, 1.0)
+    img = bpy.data.images.new("plain_" + kind, n, n, alpha=False)
+    rgba = np.concatenate([rgb, np.ones((n, n, 1), np.float32)], axis=-1)[::-1]
+    img.pixels.foreach_set(rgba.astype(np.float32).ravel())
+    img.pack()
+    return img
+
+
+def plain_cloth(bpy, root):
+    """Milestone 253: PLAIN_CLOTH's garments' colour textures replaced by a plain cloth (their normal maps kept)."""
+    images = {}
+    done = 0
+    for ob in root.children_recursive:
+        if ob.type != "MESH":
+            continue
+        kind = next((v for k, v in PLAIN_CLOTH.items() if k in ob.name), None)
+        if kind is None:
+            continue
+        for slot in ob.material_slots:
+            m = slot.material
+            if m is None or m.node_tree is None:
+                continue
+            for node in m.node_tree.nodes:
+                if node.type == "TEX_IMAGE" and node.image is not None and node.image.colorspace_settings.name == "sRGB":
+                    if kind not in images:
+                        images[kind] = plain_cloth_image(bpy, kind)
+                    node.image = images[kind]
+                    done += 1
+    return done
 
 
 def repack_images(path, quality=88):
@@ -583,6 +648,111 @@ def detail_uv(bpy, body, tile=DETAIL_TILE):
     return len(scale)
 
 
+# Milestone 253: garments worn over others (MPFB fits each to the body alone): (the inner's names, the outer's names,
+# whether the inner's faces wholly under the outer are removed).
+LAYERS = (
+    (("skirt",), ("apron",), False),
+    (("blouse", "mycenaean_tunic"), ("skirt",), True), # tucked under a skirt's waistband (as the skirt now lies)
+)
+LAYER_GAP = 0.006 # m between two layers
+LAYER_REACH = 0.06 # m: an inner vertex farther outside the outer garment than this is not under it (a sleeve)
+LAYER_PROBE = 0.015 # m: the outer's surface looked for this far around each inner vertex (its folds between them)
+
+
+def layer_clothes(bpy, root):
+    """Milestone 253: clothes over clothes. MPFB fits each garment to the body alone, so a blouse's hem came out through
+    a full skirt (white patches round Rosa's waist) and the skirt's folds through her apron. For each pair in LAYERS the
+    inner garment's vertices under the outer one are drawn in under it, along the line from the body's axis (the
+    skirt's waistband's centre) through each: the outer garment's surface is found along that line and lines
+    LAYER_PROBE to each side and above and below (its folds between two vertices), and the vertex is moved to
+    LAYER_GAP inside the nearest. The inner garment is what moves, so what changes is hidden: no seams or holes open in
+    what is seen. A tucked-in garment's faces wholly under the waistband are removed. Returns (faces removed, vertices
+    moved)."""
+    import math
+
+    import bmesh
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+
+    meshes = [c for c in root.children_recursive if c.type == "MESH"]
+
+    def named(keys):
+        return [c for c in meshes if any(k in c.name.lower() for k in keys)]
+
+    skirt = next(iter(named(("skirt",))), None)
+    centre = Vector((0.0, 0.0))
+    if skirt is not None:
+        pts = [skirt.matrix_world @ v.co for v in skirt.data.vertices]
+        top = max(p.z for p in pts)
+        band = [p for p in pts if p.z > top - 0.03]
+        centre = Vector((sum(p.x for p in band) / len(band), sum(p.y for p in band) / len(band)))
+    gone = moved = 0
+    for inner_keys, outer_keys, tuck in LAYERS:
+        outers = named(outer_keys)
+        inners = [c for c in named(inner_keys) if c not in outers]
+        if not outers or not inners:
+            continue
+        outer = outers[0]
+        obm = bmesh.new()
+        obm.from_mesh(outer.data)
+        obm.transform(outer.matrix_world)
+        tree = BVHTree.FromBMesh(obm)
+        o_top = max(v.co.z for v in obm.verts)
+        obm.free()
+
+        def outer_radius(w):
+            # (the outer garment's nearest surface from the axis, at this vertex and around it; None if not under it)
+            d = Vector((w.x - centre.x, w.y - centre.y, 0.0))
+            r = d.length
+            if r < 1e-4:
+                return None, r, d
+            d /= r
+            a = LAYER_PROBE / max(r, 0.05)
+            best = None
+            for da, dz in ((0.0, 0.0), (a, 0.0), (-a, 0.0), (0.0, LAYER_PROBE), (0.0, -LAYER_PROBE)):
+                c, s = math.cos(da), math.sin(da)
+                dd = Vector((d.x * c - d.y * s, d.x * s + d.y * c, 0.0))
+                hit = tree.ray_cast(Vector((centre.x, centre.y, w.z + dz)), dd, r + 0.3)[0]
+                if hit is not None:
+                    h = (hit.xy - centre).length
+                    best = h if best is None else min(best, h)
+            return best, r, d
+
+        for ob in inners:
+            mw = ob.matrix_world
+            inv = mw.inverted()
+            bm = bmesh.new()
+            bm.from_mesh(ob.data)
+            under = {}
+            for v in bm.verts:
+                w = mw @ v.co
+                if w.z > o_top - (0.01 if tuck else 0.0):
+                    continue
+                R, r, d = outer_radius(w)
+                if R is not None and r < R + LAYER_REACH:
+                    under[v] = (R, r, d)
+            if tuck:
+                faces = [f for f in bm.faces if all(v in under for v in f.verts)]
+                gone += len(faces)
+                bmesh.ops.delete(bm, geom=faces, context="FACES")
+                loose = [v for v in bm.verts if not v.link_faces]
+                bmesh.ops.delete(bm, geom=loose, context="VERTS")
+            for v in bm.verts:
+                # (keyed by the vertices themselves: the removal renumbers them)
+                if v not in under:
+                    continue
+                R, r, d = under[v]
+                if r > R - LAYER_GAP:
+                    w = mw @ v.co
+                    t = R - LAYER_GAP
+                    v.co = inv @ Vector((centre.x + d.x * t, centre.y + d.y * t, w.z))
+                    moved += 1
+            bm.to_mesh(ob.data)
+            bm.free()
+            ob.data.update()
+    return gone, moved
+
+
 def make(bpy, service, spec, out, save_blend, face_dir, hair_dump=""):
     HumanService = service("services.humanservice", "HumanService")
     TargetService = service("services.targetservice", "TargetService")
@@ -631,8 +801,14 @@ def make(bpy, service, spec, out, save_blend, face_dir, hair_dump=""):
     if spec.get("eyes_mesh", EYES_MESH) == "high-poly":
         cut.append("high-poly")
     game_materials(bpy, root, cut)
+    n = plain_cloth(bpy, root)
+    if n:
+        print("make_characters: %s's plain cloth: %d textures" % (spec["name"], n))
     apply_shape_keys(bpy, root, set(face))
     trim_under_hat(bpy, root, spec.get("hair"), spec.get("clothes", []))
+    gone, moved = layer_clothes(bpy, root)
+    if gone or moved:
+        print("make_characters: %s's clothes layered: %d faces tucked away, %d vertices moved" % (spec["name"], gone, moved))
     humanoid_bones(root)
     eye_bones(bpy, root, spec.get("eyes_mesh", EYES_MESH))
     os.makedirs(out, exist_ok=True)
