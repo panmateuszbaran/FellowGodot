@@ -54,7 +54,7 @@ business suit and tie. Every crowd figure on the square showed the same.
   apron's vertices out to the skirt's nearest surface: neighbouring vertices went to different folds and the apron
   tore into strips (the skirt showing through); moving the hidden garment in fixed it.
 * The square by day with its 61 people (`climb_look.gd --program=weather --view=square --crowd=1`): on the RTX laptop
-  (lavapipe runs out of the container's 8 GB with the crowd).
+  (lavapipe runs out of the container's 8 GB with the crowd; below).
 * The shoulders, the cast standing and walking: the shoulders level with the base of the neck where they rose over
   it (Marco, Aldo, Kenji most); the arms swing as before.
 * The meshes: 4.5-6.3 MB a person, were 4.0-4.5 (the apron is dense: 28 700 vertices); the cast's draw calls as
@@ -63,15 +63,36 @@ business suit and tie. Every crowd figure on the square showed the same.
 
 ![The cast before and after](../showcase/period_clothes_m253.jpg)
 
+## RTX laptop (2026-11-28; RTX 5070 Ti Laptop, milestone 253's build)
+
+The square by day without its people and with them (1920×1080, 840 frames, two runs each, alternating), against
+decision 0389's milestone 251:
+
+| | 251: without → with the people | 253: without → with the people |
+|---|---|---|
+| render thread | 1.57 → 2.99 ms (+1.42) | 1.71 → 3.31 ms (**+1.60**) |
+| shadow draws a frame | 1492 → 1859 (+367) | 1494 → 1920 (**+426**) |
+| GPU | 8.47 → 9.02 ms (+0.55) | 8.95 → 9.69 ms (**+0.74**: runs 9.91, 9.47) |
+
+The new clothes cost the crowd about +0.18 ms of the render thread and 59 shadow draws a frame (Rosa's four garments
+where she had two, the apron's dense mesh) and about +0.2 ms of the GPU, within this view's run-to-run spread (the runs
+with the people 0.44 ms apart). The frame stays under 10 ms.
+
+![The square on the RTX](../showcase/period_square_m253.jpg)
+
 ## Decision
 
-KEEP. Open: hats and headwear of the time (a coif or veil for the women, a cap or hood for the men — the community
-packs have a maid's bonnet and a veil under CC BY), period hair for the men (their haircuts are modern), and a
+KEEP. Open: hats and headwear of the time (a coif or veil for the women, a cap or hood for the men; tried, below),
+period hair for the men (their haircuts are modern), and a
 doublet or a giornea for the well-off.
 
 ## Rejected
 
 * **Tinting the old clothes** (jeans and T-shirts in period colours): their cut is modern whatever their colour.
 * **The apron pushed out over the skirt** (each of its vertices to the skirt's nearest surface): it tore (above).
+* **Headwear from the hats03 pack** (CC BY: a linen veil for Rosa, a soft cap for Marco): MPFB fits the hair to the
+  head, not under the hat, and the hair's cards cut away under them (decision 0378's trim) left a bald band between
+  the cap and what hung below it, a scalp showing at the veil's front; and the cap, a slouchy beanie, read as modern.
+  Headwear wants hair made for it (short under a cap, gathered under a veil).
 * **The hood of the monk's robe as a separate garment**: `donitz_monk_robe_hood_down` is the hood alone (Aldo came out
   naked under it); the habit is `donitz_monk_robe`.

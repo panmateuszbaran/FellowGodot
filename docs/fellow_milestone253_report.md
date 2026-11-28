@@ -22,7 +22,11 @@ The owner, of the showcase: modern people dropped into a town of an Assassin's C
   everyone stood shrugged by 16-20 degrees (about 5 cm). The clavicles now keep their own rests (`LIMB_TAILS`).
 * Checked on lavapipe: the cast before and after (`docs/showcase/period_clothes_m253.jpg`), Rosa walking from the
   front and the side, the layers in Blender's rest pose, the shoulders standing and walking. The square with its
-  people goes to the RTX laptop (lavapipe runs out of the container's 8 GB with the crowd).
+  people on the RTX laptop (lavapipe runs out of the container's 8 GB with the crowd): with the people 9.69 ms GPU and
+  3.31 ms render thread (without 8.95 / 1.71); against milestone 251 the crowd costs +0.18 ms of the render thread and
+  59 shadow draws more, the GPU's +0.2 ms within the view's spread (`docs/showcase/period_square_m253.jpg`).
+* Tried and rejected: headwear from the hats03 pack (a veil, a soft cap): the hair cut away under them left bald
+  patches, and the cap read as a modern beanie.
 
 Open: headwear of the time (coifs and veils, caps and hoods), the men's hair (modern cuts), clothes of the well-off (a
 doublet, a giornea).

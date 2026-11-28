@@ -19,7 +19,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   madder, woad, weld, walnut, russet, green, black, undyed wool; linen undyed or bleached); garments worn over others
   layered (`layer_clothes`: the hidden one drawn in under the outer, a blouse tucked under the waistband). And the
   people's shoulders at rest: their clavicles were turned to the mannequin's (which rise 9 degrees where MPFB's fall
-  6-10), so everyone stood shrugged by about 5 cm; they keep their own now (`FellowPerson.LIMB_TAILS`).
+  6-10), so everyone stood shrugged by about 5 cm; they keep their own now (`FellowPerson.LIMB_TAILS`). On the RTX
+  the square with its people 9.69 ms GPU, 3.31 ms render thread: the new clothes +0.18 ms of the render thread.
 
 ## RTX measurements of milestones 241-251 (2026-11-28)
 
