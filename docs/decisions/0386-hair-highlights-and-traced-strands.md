@@ -54,3 +54,9 @@ a little darker with a few strands at its silhouette catching the sky, and Rosa'
 (the darkened shell between the cards). Not better than MakeHuman's painted shell at 0.6 m, so not kept: hair that reads
 as strands needs authored cards (many more, their strands drawn per hairstyle) or strands resolved better than by
 dithering, not cards laid along a few hundred guides.
+
+Also tried (2026-11-28): the shells shaded by a hair shader of their own — two Kajiya-Kay lobes along the flow map's
+strands (Scheuermann's: a white one shifted to the tips, one coloured by the hair shifted to the roots), jittered by the
+painted strands, the diffuse wrapped. With narrow lobes the highlight was a white streak or white blotches (Marco's
+short hair, Luca's parting); with broad, jittered ones a grey wash over brown hair. Not better than the anisotropic GGX
+band above (its roughness spreads the band evenly): not kept.
