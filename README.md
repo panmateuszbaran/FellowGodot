@@ -1,14 +1,16 @@
 # FellowEngine
 
 <p align="center">
-  <img src="docs/showcase/bistro_night_rain_cafe.jpg" width="100%" alt="Bistro at night in the rain: FellowRain3D wetting the cobblestones, ray-traced reflections of the lamps">
+  <img src="docs/showcase/rooftops_square_north.jpg" width="100%" alt="The rooftops showcase: a Tuscan square of the 15th century by day, its bell tower, palazzi, fountain and hay cart, its people in the clothes of the time">
 </p>
 
 **FellowEngine is a fork of [Godot Engine](https://github.com/godotengine/godot) 4.7.2-stable** that makes the
 Forward+ renderer faster and adds real-time effects that stock Godot does not have: water with FFT waves, rain and wet
 surfaces, snow, lightning, wind with gusts and a weather controller that changes them all over time, GPU smoke and
 fire, wood that burns to char and ash, automatic HLOD, a terrain with scattered foliage, ray tracing and a set of
-post-processing effects.
+post-processing effects; and for characters, motion matching, climbing and free-running, physical animation, faces
+that talk and blink, cloth and hair. Its showcase is a Tuscan town of the 15th century to climb over, with its people,
+its weather, its day and night.
 
 * **Faster with the same image.** With the default settings FellowEngine renders eight of the nine benchmark scenes
   16-54 % faster than stock Godot, the ninth 3-12 % (table below). The changes that are on by default are *exact*:
@@ -24,7 +26,35 @@ in [docs/](docs/) and the [showcase](docs/SHOWCASE.md).
 
 ## Showcase
 
+### The rooftops
+
 <p align="center">
+  <img src="docs/showcase/rooftops_square_day.jpg" width="49%" alt="The square by day: people round the fountain, the brazier's smoke, the bell tower">
+  <img src="docs/showcase/rooftops_talk.jpg" width="49%" alt="The player talking with a group by the fountain">
+  <img src="docs/showcase/rooftops_climb_window.jpg" width="49%" alt="Climbing a palazzo's front from window to window">
+  <img src="docs/showcase/rooftops_roof_run.jpg" width="49%" alt="Running over the roofs, the city and the Tuscan hills beyond">
+  <img src="docs/showcase/rooftops_lookup.jpg" width="49%" alt="People on the square looking up at the climber: Madonna, he'll break his neck!">
+  <img src="docs/showcase/rooftops_vista.jpg" width="49%" alt="The view from the bell tower over the city to the hills">
+  <img src="docs/showcase/rooftops_night.jpg" width="49%" alt="The square at night: the moon, lit windows, the brazier">
+  <img src="docs/showcase/rooftops_brazier_night.jpg" width="49%" alt="The brazier's fire at night, simulated on the GPU, lighting the setts">
+  <img src="docs/showcase/rooftops_osteria.jpg" width="49%" alt="Inside the osteria at night: people at the tables, the fireplace">
+  <img src="docs/showcase/rooftops_storm.jpg" width="49%" alt="A thunderstorm over the square, a lightning flash">
+  <img src="docs/showcase/rooftops_snow.jpg" width="49%" alt="Snow on the square, footprints in it">
+  <img src="docs/showcase/rooftops_people_period.jpg" width="49%" alt="The town's people: MakeHuman bodies in the clothes of the time, dyed in the period's colours">
+</p>
+
+A Renaissance square, its palazzi, bell tower, fountain, market and the streets out of it, the city beyond and the
+hills round it ([showcase/](showcase/README.md), `rooftops/rooftops.tscn`): every building climbed from hold to hold,
+roofs to run over, a leap of faith into the hay. Sixty people live on it — walking, talking in groups, sitting on the
+benches, looking up at the climber, sheltering from the rain and going home at night — MakeHuman bodies with their
+faces, skin, eyes and hair, dressed in the clothes and dyes of the time; the player talks to them. The weather goes
+from the golden hour to a storm or a blizzard, the day to a night lit by the moon, the windows and the lanterns, and
+the osteria's fireplace burns inside. Captured on an RTX 5070 Ti Laptop GPU at 1920 × 1080 (milestone 254).
+
+### The labs
+
+<p align="center">
+  <img src="docs/showcase/bistro_night_rain_cafe.jpg" width="100%" alt="Bistro at night in the rain: FellowRain3D wetting the cobblestones, ray-traced reflections of the lamps">
   <img src="docs/showcase/bistro_gold_tree.jpg" width="49%" alt="Bistro at the golden hour: the atmosphere sky, light shafts through the tree, ray-traced GI">
   <img src="docs/showcase/water_pier_sunset.jpg" width="49%" alt="FellowWater3D at sunset: FFT wind waves, the glitter path, volumetric clouds">
   <img src="docs/showcase/loop_bistro_rain_street.webp" width="49%" alt="Moving down a wet Bistro street at night in the rain">
@@ -57,10 +87,11 @@ These are real-time captures from the benchmark scenes on an RTX 5070 Ti Laptop 
 features, nodes and (in Bistro) ray tracing on. Captions, settings and more images are in
 [docs/SHOWCASE.md](docs/SHOWCASE.md).
 
-To try it yourself: [showcase/](showcase/README.md) is a small playable valley built with these nodes — terrain and
+To try it yourself: [showcase/](showcase/README.md) holds the rooftops (`godot --path showcase
+res://rooftops/rooftops.tscn`; `-- --demo` plays its demo) and a small valley built with these nodes — terrain and
 foliage, a lake, a village with a campfire, weather from sun to blizzard, a day's sky — with a character to walk it
 (MotionBricks' mannequin moved by the neural network when its files are installed, a simple one otherwise). Open it in
-a FellowEngine editor build and press F5.
+a FellowEngine editor build and press F5 (the valley) or run the rooftops' scene.
 
 ## Performance
 

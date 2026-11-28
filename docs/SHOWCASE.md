@@ -9,6 +9,36 @@ Nothing here is painted over. Each scene is the bench scene with FellowEngine's 
 camera, sun and exposure chosen for the picture. The command lines are in the showcase jobs (`m26_s2`-`m26_s4`): see
 [how they were made](#how-they-were-made) below.
 
+## The rooftops: a Tuscan town of the 15th century (`showcase/rooftops`)
+
+<img src="showcase/rooftops_square_north.jpg" width="100%" alt="The square by day: the bell tower, the palazzi, the fountain and the hay cart, the people in the clothes of the time">
+
+The showcase's own scene (milestones 150-254): a Renaissance square, its palazzi and bell tower climbed from hold to
+hold, the city beyond and the hills round it, and its sixty people in the clothes and dyes of the time (decision 0394).
+By day its people walk, talk in groups and sit on the benches; the player talks to them (E) and they look up at the
+climber.
+
+<img src="showcase/rooftops_square_day.jpg" width="49%" alt="The square by day, people round the fountain"> <img src="showcase/rooftops_talk.jpg" width="49%" alt="The player talking with a group by the fountain">
+<img src="showcase/rooftops_climb_window.jpg" width="49%" alt="Climbing a palazzo's front"> <img src="showcase/rooftops_roof_run.jpg" width="49%" alt="Over the roofs, the city and the hills beyond">
+<img src="showcase/rooftops_lookup.jpg" width="49%" alt="The square looking up at the climber"> <img src="showcase/rooftops_vista.jpg" width="49%" alt="The view from the bell tower">
+
+The weather keys (1-7) turn the golden hour to clouds, rain, a storm, snow or a blizzard; N brings the night — the
+moon, the lit windows and lanterns, the brazier's fire simulated on the GPU, the osteria's fireplace.
+
+<img src="showcase/rooftops_rain.jpg" width="49%" alt="Rain on the square"> <img src="showcase/rooftops_storm.jpg" width="49%" alt="A lightning flash over the square">
+<img src="showcase/rooftops_snow.jpg" width="49%" alt="Snow on the square, footprints in it"> <img src="showcase/rooftops_sky_sun.jpg" width="49%" alt="Towards the sun over the square">
+<img src="showcase/rooftops_night.jpg" width="49%" alt="The square at night"> <img src="showcase/rooftops_brazier_night.jpg" width="49%" alt="The brazier at night">
+<img src="showcase/rooftops_osteria_door.jpg" width="49%" alt="The osteria from its door at night"> <img src="showcase/rooftops_osteria.jpg" width="49%" alt="Inside the osteria at night">
+
+<img src="showcase/rooftops_people_period.jpg" width="100%" alt="The town's people walking: MakeHuman bodies in tunics, hose, gowns, skirts and a friar's habit">
+
+How they were made: milestone 254's build on the RTX 5070 Ti Laptop GPU at 1920 × 1080 with the scene's own settings,
+`showcase/tools/climb_look.gd` (`--program=weather --view=square --crowd=1` with `--weather=4|5|6` or `--night=1`,
+`--view=brazier`, `--program=osteria --view=inside|door --night=1`, `--program=talk`, `--demo --demo_from=house
+--cam=demo`, `--program=lookup`), `weathering_look.gd` (`--views=north,vista_s,sky_sun`) and `person_look.gd`
+(`--view=cast --clip=walk`); scaled to 1280 × 720 (the first to 1600 × 900), the view from the tower cropped below the
+game's hint line.
+
 ## The weather in Bistro: `FellowWeather3D`
 
 <img src="showcase/bistro_weather_grid.jpg" width="100%" alt="The same Bistro street under each of FellowWeather3D's presets: clear, overcast, rain, a thunderstorm, snow and a blizzard">
