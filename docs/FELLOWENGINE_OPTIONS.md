@@ -1762,7 +1762,10 @@ there, its normal texture not read), `KHR_materials_anisotropy` (the strength ma
 roughness, the rotation and direction texture baked into `anisotropy_flowmap`), and `KHR_materials_ior` with
 `KHR_materials_specular` (the reflectance at normal incidence as `metallic_specular`, up to F0 0.16; the specular
 colour averaged, its textures not read); from milestone 250 also `KHR_materials_iridescence` (the film above, its textures
-packed into `iridescence_texture`). Files that require one of them load. Packed textures are embedded
+packed into `iridescence_texture`); from milestone 251 `KHR_materials_transmission` and `KHR_materials_volume` (glass:
+BaseMaterial3D's refraction tinted by the albedo, `refraction_tint`, letting through the transmission factor; a volume
+bent by its IOR and absorbing along its thickness, scaled to the world's units, a thickness texture baked into the albedo
+texture; decision 0393). Files that require one of them load. Packed textures are embedded
 uncompressed, as the stock specular-glossiness conversion's are. Off, as stock: the extensions are ignored.
 
 ## Options that change the image (off by default)

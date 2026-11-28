@@ -1848,7 +1848,12 @@ void fragment() {)";
 
 	// If the depth buffer is lower then the model's Z position, use the refracted UV, otherwise use the normal screen UV.
 	// At low depth differences, decrease refraction intensity to avoid sudden discontinuities.
-	EMISSION += textureLod(screen_texture, mix(SCREEN_UV, ref_ofs, smoothstep(0.0, 1.0, VERTEX.z - refraction_view_pos.z)), ROUGHNESS * 8.0).rgb * ref_amount * EXPOSURE;
+	EMISSION += textureLod(screen_texture, mix(SCREEN_UV, ref_ofs, smoothstep(0.0, 1.0, VERTEX.z - refraction_view_pos.z)), ROUGHNESS * 8.0).rgb * ref_amount * EXPOSURE)";
+		if (refraction_tint) {
+			// FellowEngine (decision 0393): coloured glass — the light through it tinted by its albedo.
+			code += " * ALBEDO";
+		}
+		code += R"(;
 	ALBEDO *= 1.0 - ref_amount;
 	// Force transparency on the material (required for refraction).
 	ALPHA = 1.0;
@@ -3103,6 +3108,15 @@ Ref<Texture2D> BaseMaterial3D::get_sheen_texture() const {
 	return sheen_texture;
 }
 
+void BaseMaterial3D::set_refraction_tint(bool p_enable) {
+	refraction_tint = p_enable;
+	_queue_shader_change();
+}
+
+bool BaseMaterial3D::is_refraction_tint() const {
+	return refraction_tint;
+}
+
 void BaseMaterial3D::set_iridescence_enabled(bool p_enable) {
 	iridescence_enabled = p_enable;
 	_queue_shader_change();
@@ -3781,6 +3795,8 @@ void BaseMaterial3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_ao_texture_channel", "channel"), &BaseMaterial3D::set_ao_texture_channel);
 	ClassDB::bind_method(D_METHOD("get_ao_texture_channel"), &BaseMaterial3D::get_ao_texture_channel);
 
+	ClassDB::bind_method(D_METHOD("set_refraction_tint", "enable"), &BaseMaterial3D::set_refraction_tint);
+	ClassDB::bind_method(D_METHOD("is_refraction_tint"), &BaseMaterial3D::is_refraction_tint);
 	ClassDB::bind_method(D_METHOD("set_refraction_texture_channel", "channel"), &BaseMaterial3D::set_refraction_texture_channel);
 	ClassDB::bind_method(D_METHOD("get_refraction_texture_channel"), &BaseMaterial3D::get_refraction_texture_channel);
 
@@ -3950,6 +3966,7 @@ void BaseMaterial3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "refraction_scale", PROPERTY_HINT_RANGE, "-1,1,0.01"), "set_refraction", "get_refraction");
 	ADD_PROPERTYI(PropertyInfo(Variant::OBJECT, "refraction_texture", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_texture", "get_texture", TEXTURE_REFRACTION);
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "refraction_texture_channel", PROPERTY_HINT_ENUM, "Red,Green,Blue,Alpha,Gray"), "set_refraction_texture_channel", "get_refraction_texture_channel");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "refraction_tint"), "set_refraction_tint", "is_refraction_tint");
 
 	ADD_GROUP("Detail", "detail_");
 	ADD_PROPERTYI(PropertyInfo(Variant::BOOL, "detail_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_feature", "get_feature", FEATURE_DETAIL);

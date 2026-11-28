@@ -169,7 +169,7 @@ private:
 	// FellowEngine (decision 0390): glTF's PBR material extensions beyond the core (fellow_gltf_materials.cpp).
 	static bool _fellow_material_extensions_enabled();
 	Ref<Image> _fellow_texture_image(Ref<GLTFState> p_state, const Dictionary &p_extension, const String &p_key, int p_primary_texture_coord, int *r_texture_index);
-	void _fellow_parse_material_extensions(Ref<GLTFState> p_state, const Dictionary &p_extensions, int p_primary_texture_coord, Ref<StandardMaterial3D> p_material);
+	void _fellow_parse_material_extensions(Ref<GLTFState> p_state, int p_index, const Dictionary &p_extensions, int p_primary_texture_coord, Ref<StandardMaterial3D> p_material);
 	void _fellow_serialize_material_extensions(Ref<GLTFState> p_state, Ref<BaseMaterial3D> p_material, const String &p_material_name, Dictionary &r_extensions);
 	void _set_texture_transform_uv1(const Dictionary &d, Ref<BaseMaterial3D> p_material);
 	void spec_gloss_to_rough_metal(Ref<GLTFSpecGloss> r_spec_gloss,

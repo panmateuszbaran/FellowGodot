@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 251 — glTF's glass (2026-11-28)
+
+- Decision 0393 (with `shading/gltf_material_extensions`, off). `KHR_materials_transmission` and
+  `KHR_materials_volume` read: glass as BaseMaterial3D's refraction tinted by its albedo (`refraction_tint`, new, off),
+  a volume bent by its IOR and absorbing along its thickness (Beer-Lambert in world units; a thickness texture baked
+  into the albedo). ToyCar's windows, the candle-holder's glass and the amber dragon as in Khronos' references.
+
 ## Milestone 250 — Iridescence (2026-11-28)
 
 - Decision 0392. A thin film over a surface (soap, oil, tempered metal, shells, pearl): `IRIDESCENCE`,

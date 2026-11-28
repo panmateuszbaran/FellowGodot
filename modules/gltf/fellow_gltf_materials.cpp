@@ -42,6 +42,9 @@
 //   not read.
 // * KHR_materials_iridescence (milestone 250, decision 0392): the thin film (BaseMaterial3D's iridescence); its
 //   strength and thickness textures packed into iridescence_texture (R, G).
+// * KHR_materials_transmission and KHR_materials_volume (milestone 251, decision 0393): glass as BaseMaterial3D's
+//   refraction tinted by its albedo (refraction_tint); a volume bent by its IOR and absorbing along its thickness (with
+//   a thickness texture, the absorption baked into the albedo texture).
 
 #include "gltf_document.h"
 
@@ -166,6 +169,75 @@ float fellow_float(const Dictionary &p_dict, const String &p_key, float p_defaul
 	return p_dict.has(p_key) ? float(p_dict[p_key]) : p_default;
 }
 
+// The scale of the first node whose mesh uses the material (the cube root of its world basis's determinant): glTF's
+// volume thickness is in the mesh's space, its attenuation distance in the world's.
+float fellow_material_scale(const Dictionary &p_json, int p_material) {
+	if (!p_json.has("nodes") || !p_json.has("meshes")) {
+		return 1.0f;
+	}
+	const Array nodes = p_json["nodes"];
+	const Array meshes = p_json["meshes"];
+	Vector<int> parent;
+	parent.resize(nodes.size());
+	parent.fill(-1);
+	for (int i = 0; i < nodes.size(); i++) {
+		const Dictionary node = nodes[i];
+		if (node.has("children")) {
+			const Array children = node["children"];
+			for (int k = 0; k < children.size(); k++) {
+				const int c = children[k];
+				if (c >= 0 && c < parent.size()) {
+					parent.write[c] = i;
+				}
+			}
+		}
+	}
+	auto local_det = [&](int p_node) -> float {
+		const Dictionary node = nodes[p_node];
+		if (node.has("matrix")) {
+			const Array m = node["matrix"];
+			if (m.size() == 16) {
+				const Basis b(Vector3(m[0], m[1], m[2]), Vector3(m[4], m[5], m[6]), Vector3(m[8], m[9], m[10]));
+				return Math::abs(b.determinant());
+			}
+			return 1.0f;
+		}
+		if (node.has("scale")) {
+			const Array s = node["scale"];
+			if (s.size() == 3) {
+				return Math::abs(float(s[0]) * float(s[1]) * float(s[2]));
+			}
+		}
+		return 1.0f;
+	};
+	for (int i = 0; i < nodes.size(); i++) {
+		const Dictionary node = nodes[i];
+		if (!node.has("mesh")) {
+			continue;
+		}
+		const int mesh = node["mesh"];
+		if (mesh < 0 || mesh >= meshes.size()) {
+			continue;
+		}
+		const Dictionary mesh_dict = meshes[mesh];
+		const Array primitives = mesh_dict.get("primitives", Array());
+		bool uses = false;
+		for (int k = 0; k < primitives.size() && !uses; k++) {
+			const Dictionary prim = primitives[k];
+			uses = prim.has("material") && int(prim["material"]) == p_material;
+		}
+		if (!uses) {
+			continue;
+		}
+		float det = 1.0f;
+		for (int n = i, guard = 0; n >= 0 && guard < nodes.size(); n = parent[n], guard++) {
+			det *= local_det(n);
+		}
+		return det > 0.0f ? Math::pow(det, 1.0f / 3.0f) : 1.0f;
+	}
+	return 1.0f;
+}
+
 } // namespace
 
 bool GLTFDocument::_fellow_material_extensions_enabled() {
@@ -205,7 +277,7 @@ Ref<Image> GLTFDocument::_fellow_texture_image(Ref<GLTFState> p_state, const Dic
 	return image;
 }
 
-void GLTFDocument::_fellow_parse_material_extensions(Ref<GLTFState> p_state, const Dictionary &p_extensions, int p_primary_texture_coord, Ref<StandardMaterial3D> p_material) {
+void GLTFDocument::_fellow_parse_material_extensions(Ref<GLTFState> p_state, int p_index, const Dictionary &p_extensions, int p_primary_texture_coord, Ref<StandardMaterial3D> p_material) {
 	const String name = p_material->get_name();
 
 	if (p_extensions.has("KHR_materials_sheen")) {
@@ -317,6 +389,73 @@ void GLTFDocument::_fellow_parse_material_extensions(Ref<GLTFState> p_state, con
 		}
 	}
 
+	if (p_extensions.has("KHR_materials_transmission")) {
+		// (milestone 251, decision 0393) Glass: the background seen through the surface (BaseMaterial3D's refraction:
+		// the screen behind, blurred by the roughness), tinted by the base colour; thin-walled straight through, a volume
+		// bent by its IOR (Godot's screen-space offset) and absorbing along its thickness (Beer-Lambert).
+		const Dictionary trans = p_extensions["KHR_materials_transmission"];
+		const float factor = CLAMP(fellow_float(trans, "transmissionFactor", 0.0f), 0.0f, 1.0f);
+		if (factor > 0.0f) {
+			Dictionary volume;
+			if (p_extensions.has("KHR_materials_volume")) {
+				volume = p_extensions["KHR_materials_volume"];
+			}
+			float thickness = MAX(fellow_float(volume, "thicknessFactor", 0.0f), 0.0f);
+			if (thickness > 0.0f) {
+				thickness *= fellow_material_scale(p_state->json, p_index); // (the mesh's space to the world's)
+			}
+			const float ior = p_extensions.has("KHR_materials_ior") ? fellow_float(p_extensions["KHR_materials_ior"], "ior", 1.5f) : 1.5f;
+			p_material->set_feature(BaseMaterial3D::FEATURE_REFRACTION, true);
+			p_material->set_refraction_tint(true);
+			p_material->set_refraction(thickness > 0.0f ? 0.05f * CLAMP((ior - 1.0f) / 0.5f, 0.0f, 2.0f) : 0.0f);
+			Color tint = p_material->get_albedo();
+			const float distance = fellow_float(volume, "attenuationDistance", 0.0f);
+			const Color absorbed = fellow_linear_color(volume, "attenuationColor", Color(1, 1, 1));
+			const Ref<Image> thickness_image = _fellow_texture_image(p_state, volume, "thicknessTexture", p_primary_texture_coord, nullptr);
+			const bool absorbs = thickness > 0.0f && distance > 0.0f;
+			if (absorbs && thickness_image.is_null()) {
+				Color lin = tint.srgb_to_linear();
+				const float path = thickness / distance;
+				lin.r *= Math::pow(CLAMP(absorbed.r, 0.0f, 1.0f), path);
+				lin.g *= Math::pow(CLAMP(absorbed.g, 0.0f, 1.0f), path);
+				lin.b *= Math::pow(CLAMP(absorbed.b, 0.0f, 1.0f), path);
+				const float a = tint.a;
+				tint = lin.linear_to_srgb();
+				tint.a = a;
+			}
+			// (BaseMaterial3D's refraction lets through 1 - the albedo's alpha)
+			const Ref<Image> trans_image = _fellow_texture_image(p_state, trans, "transmissionTexture", p_primary_texture_coord, nullptr);
+			if (trans_image.is_valid()) {
+				const Ref<Texture2D> albedo_tex = p_material->get_texture(BaseMaterial3D::TEXTURE_ALBEDO);
+				const Ref<Image> albedo_image = albedo_tex.is_valid() ? albedo_tex->get_image() : Ref<Image>();
+				p_material->set_texture(BaseMaterial3D::TEXTURE_ALBEDO, fellow_combine(albedo_image, trans_image, name + "_albedo_transmission", [factor](const Color &p_a, const Color &p_t) {
+					return Color(p_a.r, p_a.g, p_a.b, 1.0f - factor * p_t.r);
+				}));
+				tint.a = 1.0f;
+			} else {
+				tint.a = 1.0f - factor;
+			}
+			p_material->set_albedo(tint);
+			if (absorbs && thickness_image.is_valid()) {
+				// (the absorption along the texture's thickness — its G times the factor — baked into the albedo
+				// texture's colour: thin parts lighter, thick ones deeper)
+				const Ref<Texture2D> albedo_tex = p_material->get_texture(BaseMaterial3D::TEXTURE_ALBEDO);
+				const Ref<Image> albedo_image = albedo_tex.is_valid() ? albedo_tex->get_image() : Ref<Image>();
+				const Color ab(CLAMP(absorbed.r, 0.0f, 1.0f), CLAMP(absorbed.g, 0.0f, 1.0f), CLAMP(absorbed.b, 0.0f, 1.0f));
+				p_material->set_texture(BaseMaterial3D::TEXTURE_ALBEDO, fellow_combine(albedo_image, thickness_image, name + "_albedo_volume", [thickness, distance, ab](const Color &p_a, const Color &p_t) {
+					const float path = thickness * p_t.g / distance;
+					Color lin = Color(p_a.r, p_a.g, p_a.b).srgb_to_linear();
+					lin.r *= Math::pow(ab.r, path);
+					lin.g *= Math::pow(ab.g, path);
+					lin.b *= Math::pow(ab.b, path);
+					Color out = lin.linear_to_srgb();
+					out.a = p_a.a;
+					return out;
+				}));
+			}
+		}
+	}
+
 	if (p_extensions.has("KHR_materials_ior") || p_extensions.has("KHR_materials_specular")) {
 		float ior = 1.5f;
 		if (p_extensions.has("KHR_materials_ior")) {
@@ -418,6 +557,14 @@ void GLTFDocument::_fellow_serialize_material_extensions(Ref<GLTFState> p_state,
 		}
 		r_extensions["KHR_materials_iridescence"] = irid;
 		p_state->add_used_extension("KHR_materials_iridescence");
+	}
+
+	if (p_material->get_feature(BaseMaterial3D::FEATURE_REFRACTION) && p_material->is_refraction_tint()) {
+		// (thin-walled: the refraction's bend is not written)
+		Dictionary trans;
+		trans["transmissionFactor"] = CLAMP(1.0f - p_material->get_albedo().a, 0.0f, 1.0f);
+		r_extensions["KHR_materials_transmission"] = trans;
+		p_state->add_used_extension("KHR_materials_transmission");
 	}
 
 	if (!Math::is_equal_approx(p_material->get_specular(), 0.5f)) {

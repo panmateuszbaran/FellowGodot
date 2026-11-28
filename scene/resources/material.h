@@ -389,6 +389,7 @@ private:
 		uint64_t fellow_sheen_texture : 1;
 		uint64_t fellow_iridescence : 1;
 		uint64_t fellow_iridescence_texture : 1;
+		uint64_t fellow_refraction_tint : 1;
 		uint64_t proximity_fade : 1;
 		uint64_t orm : 1;
 
@@ -445,6 +446,7 @@ private:
 		mk.fellow_sheen_texture = sheen_enabled && sheen_texture.is_valid();
 		mk.fellow_iridescence = iridescence_enabled;
 		mk.fellow_iridescence_texture = iridescence_enabled && iridescence_texture.is_valid();
+		mk.fellow_refraction_tint = refraction_tint;
 		mk.proximity_fade = proximity_fade_enabled;
 		mk.distance_fade = distance_fade;
 		mk.emission_op = emission_op;
@@ -603,6 +605,7 @@ private:
 	float iridescence_thickness_min = 100.0f; // nm
 	float iridescence_thickness_max = 400.0f; // nm
 	Ref<Texture2D> iridescence_texture; // R: the strength, G: the thickness from min to max
+	bool refraction_tint = false; // FellowEngine (decision 0393): the refracted background tinted by the albedo
 	int particles_anim_h_frames = 0;
 	int particles_anim_v_frames = 0;
 	bool particles_anim_loop = false;
@@ -759,6 +762,8 @@ public:
 
 	void set_refraction(float p_refraction);
 	float get_refraction() const;
+	void set_refraction_tint(bool p_enable);
+	bool is_refraction_tint() const;
 
 	void set_point_size(float p_point_size);
 	float get_point_size() const;

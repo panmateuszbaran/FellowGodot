@@ -3205,7 +3205,7 @@ Error GLTFDocument::_parse_materials(Ref<GLTFState> p_state) {
 		}
 
 		if (_fellow_material_extensions_enabled()) {
-			_fellow_parse_material_extensions(p_state, material_extensions, primary_texture_coord, material); // FellowEngine (decision 0390)
+			_fellow_parse_material_extensions(p_state, i, material_extensions, primary_texture_coord, material); // FellowEngine (decision 0390)
 		}
 		if (material_dict.has("extras")) {
 			_attach_extras_to_meta(material_dict["extras"], material);
@@ -6991,6 +6991,8 @@ HashSet<String> GLTFDocument::get_supported_gltf_extensions_hashset() {
 		supported_extensions.insert("KHR_materials_iridescence");
 		supported_extensions.insert("KHR_materials_sheen");
 		supported_extensions.insert("KHR_materials_specular");
+		supported_extensions.insert("KHR_materials_transmission");
+		supported_extensions.insert("KHR_materials_volume");
 	}
 	for (Ref<GLTFDocumentExtension> ext : all_document_extensions) {
 		ERR_CONTINUE(ext.is_null());
