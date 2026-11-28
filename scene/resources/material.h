@@ -386,6 +386,7 @@ private:
 		uint64_t grow : 1;
 		uint64_t fellow_wind : 1;
 		uint64_t fellow_sheen : 1;
+		uint64_t fellow_sheen_texture : 1;
 		uint64_t proximity_fade : 1;
 		uint64_t orm : 1;
 
@@ -439,6 +440,7 @@ private:
 		mk.grow = grow_enabled;
 		mk.fellow_wind = wind_enabled;
 		mk.fellow_sheen = sheen_enabled;
+		mk.fellow_sheen_texture = sheen_enabled && sheen_texture.is_valid();
 		mk.proximity_fade = proximity_fade_enabled;
 		mk.distance_fade = distance_fade;
 		mk.emission_op = emission_op;
@@ -505,6 +507,7 @@ private:
 		StringName wind_sheen;
 		StringName sheen_color;
 		StringName sheen_roughness;
+		StringName texture_sheen;
 		StringName proximity_fade_distance;
 		StringName msdf_pixel_range;
 		StringName msdf_outline_size;
@@ -583,6 +586,7 @@ private:
 	bool sheen_enabled = false;
 	Color sheen_color = Color(0.5, 0.5, 0.5);
 	float sheen_roughness = 0.5f;
+	Ref<Texture2D> sheen_texture; // RGB: the sheen's colour (sRGB), A: its roughness (decision 0390)
 	int particles_anim_h_frames = 0;
 	int particles_anim_v_frames = 0;
 	bool particles_anim_loop = false;
@@ -845,6 +849,8 @@ public:
 	Color get_sheen_color() const;
 	void set_sheen_roughness(float p_roughness);
 	float get_sheen_roughness() const;
+	void set_sheen_texture(const Ref<Texture2D> &p_texture);
+	Ref<Texture2D> get_sheen_texture() const;
 
 	void set_alpha_scissor_threshold(float p_threshold);
 	float get_alpha_scissor_threshold() const;

@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 248 — glTF's material extensions (2026-11-28)
+
+- Decision 0390 (`shading/gltf_material_extensions`, off). glTF files are read and written with `KHR_materials_sheen`,
+  `KHR_materials_clearcoat`, `KHR_materials_anisotropy`, `KHR_materials_ior` and `KHR_materials_specular`, within what
+  BaseMaterial3D can show; files requiring them load. BaseMaterial3D gets `sheen_texture`. Khronos' sample assets
+  follow their references (velvet, cloth, coats, brushed metal); export and load again keep the values.
+
 ## Milestone 247 — The people's small parts (2026-11-27)
 
 - Decision 0389 (showcase). A person is nine meshes, five of them small (eyes, eyebrows, eyelashes, teeth, tongue):

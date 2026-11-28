@@ -393,6 +393,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_cull_approx", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_camera_motion_vectors", false);
 	GLOBAL_DEF("rendering/fellow/shading/blended_alpha_zero_skip", true);
+	GLOBAL_DEF("rendering/fellow/shading/gltf_material_extensions", false); // decision 0390
 	GLOBAL_DEF_RST("rendering/fellow/shading/adaptive_vrs", false);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shading/adaptive_vrs_threshold", PROPERTY_HINT_RANGE, "0,0.1,0.0005"), 0.006);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shading/adaptive_vrs_max_rate", PROPERTY_HINT_ENUM, "2x2,4x4"), 1);

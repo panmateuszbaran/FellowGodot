@@ -598,6 +598,7 @@ void BaseMaterial3D::init_shaders() {
 	shader_names->wind_sheen = "wind_sheen";
 	shader_names->sheen_color = "sheen_color";
 	shader_names->sheen_roughness = "sheen_roughness";
+	shader_names->texture_sheen = "texture_sheen";
 
 	shader_names->ao_light_affect = "ao_light_affect";
 
@@ -964,6 +965,9 @@ uniform sampler2D texture_albedo : source_color, %s;
 	if (sheen_enabled) {
 		code += "uniform vec4 sheen_color : source_color;\n";
 		code += "uniform float sheen_roughness : hint_range(0.0, 1.0, 0.01);\n";
+		if (sheen_texture.is_valid()) {
+			code += vformat("uniform sampler2D texture_sheen : source_color, hint_default_white, %s;\n", texfilter_str);
+		}
 	}
 
 	if (proximity_fade_enabled) {
@@ -1928,6 +1932,16 @@ void fragment() {)";
 	SHEEN = sheen_color.rgb;
 	SHEEN_ROUGHNESS = sheen_roughness;
 )";
+		if (sheen_texture.is_valid()) {
+			// (decision 0390: glTF's sheenColorTexture in RGB, its sheenRoughnessTexture in A)
+			if (flags[FLAG_UV1_USE_TRIPLANAR]) {
+				code += "	vec4 sheen_tex = triplanar_texture(texture_sheen, uv1_power_normal, uv1_triplanar_pos);\n";
+			} else {
+				code += "	vec4 sheen_tex = texture(texture_sheen, base_uv);\n";
+			}
+			code += "	SHEEN *= sheen_tex.rgb;\n";
+			code += "	SHEEN_ROUGHNESS *= sheen_tex.a;\n";
+		}
 	}
 
 	if (features[FEATURE_ANISOTROPY]) {
@@ -2605,7 +2619,7 @@ void BaseMaterial3D::_validate_property(PropertyInfo &p_property) const {
 			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 		}
 
-		if ((p_property.name == "sheen_color" || p_property.name == "sheen_roughness") && !sheen_enabled) {
+		if ((p_property.name == "sheen_color" || p_property.name == "sheen_roughness" || p_property.name == "sheen_texture") && !sheen_enabled) {
 			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 		}
 
@@ -3038,6 +3052,17 @@ void BaseMaterial3D::set_sheen_roughness(float p_roughness) {
 
 float BaseMaterial3D::get_sheen_roughness() const {
 	return sheen_roughness;
+}
+
+void BaseMaterial3D::set_sheen_texture(const Ref<Texture2D> &p_texture) {
+	sheen_texture = p_texture;
+	Variant rid = p_texture.is_valid() ? Variant(p_texture->get_rid()) : Variant();
+	_material_set_param(shader_names->texture_sheen, rid);
+	_queue_shader_change();
+}
+
+Ref<Texture2D> BaseMaterial3D::get_sheen_texture() const {
+	return sheen_texture;
 }
 
 static Vector4 _get_texture_mask(BaseMaterial3D::TextureChannel p_channel) {
@@ -3636,6 +3661,8 @@ void BaseMaterial3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_sheen_color"), &BaseMaterial3D::get_sheen_color);
 	ClassDB::bind_method(D_METHOD("set_sheen_roughness", "roughness"), &BaseMaterial3D::set_sheen_roughness);
 	ClassDB::bind_method(D_METHOD("get_sheen_roughness"), &BaseMaterial3D::get_sheen_roughness);
+	ClassDB::bind_method(D_METHOD("set_sheen_texture", "texture"), &BaseMaterial3D::set_sheen_texture);
+	ClassDB::bind_method(D_METHOD("get_sheen_texture"), &BaseMaterial3D::get_sheen_texture);
 
 	ClassDB::bind_method(D_METHOD("set_metallic_texture_channel", "channel"), &BaseMaterial3D::set_metallic_texture_channel);
 	ClassDB::bind_method(D_METHOD("get_metallic_texture_channel"), &BaseMaterial3D::get_metallic_texture_channel);
@@ -3870,6 +3897,7 @@ void BaseMaterial3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sheen", PROPERTY_HINT_GROUP_ENABLE), "set_sheen_enabled", "is_sheen_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "sheen_color", PROPERTY_HINT_COLOR_NO_ALPHA), "set_sheen_color", "get_sheen_color");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sheen_roughness", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_sheen_roughness", "get_sheen_roughness");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "sheen_texture", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_sheen_texture", "get_sheen_texture");
 
 	ADD_GROUP("Transform", "");
 	ADD_PROPERTYI(PropertyInfo(Variant::BOOL, "fixed_size"), "set_flag", "get_flag", FLAG_FIXED_SIZE);

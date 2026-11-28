@@ -1739,6 +1739,20 @@ under every light and the ambient light. A `ShaderMaterial` writes `SHEEN` (vec3
 `fragment()`. Mobile and Compatibility take the built-ins and ignore them; a material that does not write them compiles
 as before.
 
+`sheen_texture` (milestone 248, decision 0390) varies it over the surface: RGB multiply `sheen_color` (sRGB), A
+multiplies `sheen_roughness` — glTF's `sheenColorTexture` and `sheenRoughnessTexture` packed into one.
+
+## glTF's material extensions (milestone 248)
+
+`shading/gltf_material_extensions` (off; decision 0390): glTF files are read (the editor's import, `GLTFDocument` at run
+time) and written with `KHR_materials_sheen` (the sheen, its textures into `sheen_texture`), `KHR_materials_clearcoat`
+(the coat; its strength and roughness textures packed into `clearcoat_texture`; coats rougher than glTF's 0.32 held
+there, its normal texture not read), `KHR_materials_anisotropy` (the strength matched to Godot's at the material's
+roughness, the rotation and direction texture baked into `anisotropy_flowmap`), and `KHR_materials_ior` with
+`KHR_materials_specular` (the reflectance at normal incidence as `metallic_specular`, up to F0 0.16; the specular
+colour averaged, its textures not read). Files that require one of them load. Packed textures are embedded
+uncompressed, as the stock specular-glossiness conversion's are. Off, as stock: the extensions are ignored.
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |
@@ -1749,6 +1763,7 @@ as before.
 | `geometry/contribution_cull_instances` (Thin) | MultiMesh instances below the threshold: thinned (a share kept and grown to the threshold's size, so a far meadow keeps its coverage) or culled | Foliage Lab aerial at 2 px of 960: thinned 41.1 dB with the meadow's mean colour unchanged; culled 36.8 dB, the meadow 3.7 levels lighter | 0121 |
 | `shadows/contribution_cull_texels` (0 = off) | a caster whose box's diagonal spans fewer than this many texels of a directional cascade is not drawn into it (per node; per instance for culled MultiMeshes) | the shadows of tiny far casters disappear: City Lab at 2 texels 0 differing pixels (its smallest casters span 6 texels of the far cascade) | 0121 |
 | `shadows/directional_depth_fit` (every frame) | the directional light's cascades fitted to the depths the view shows (sample distribution shadow maps): the depth pre-pass reduced on the GPU to its nearest and farthest opaque surface, read back a frame or a few later, held as the farthest of the recent ones (let go by 3 % a frame), widened by how far the camera moved; the cascades then span that range (its farthest kept before the shadow's fade, in quarter-octave steps) instead of the near plane to the shadow's max distance, never wider than stock's; after a cut or a turn of more than 15° the stock cascades for the frames until a new range arrives; not with MSAA or in reflection probes | sharper shadows where the view ends short of the max distance: against a 16384 shadow atlas, a courtyard 25.5 → 29.2 dB, looking down 29.8 → 33.0 dB, a street 31.4 → 31.5 dB, an open vista the same; sharper texels show their steps where stock blurred them | 0388 |
+| `shading/gltf_material_extensions` (when a glTF file is imported, loaded or exported) | glTF's sheen, clear coat, anisotropy, IOR and specular extensions read into BaseMaterial3D and written from it (see *glTF's material extensions*) | the assets that use them look as authored (velvet, car paint, brushed metal) instead of losing those layers; within Godot's ranges (coat roughness ≤ 0.32, F0 ≤ 0.16, a grey specular) | 0390 |
 | `geometry/dithered_fade` | an opaque instance fading at its visibility range (its own fade, or its visibility parent's) is drawn in the depth pre-pass and the opaque passes with a share of its pixels kept by a dither moving with TAA's frames, instead of blended in the transparent pass; one fading at its range's start keeps the other share (two levels crossing over cover every pixel once); their shadows dithered the same way in the shadow maps, from milestone 135 (decision 0260: an omni light's cube map casts them whole while fading); Forward+ | fading objects stay solid instead of see-through, with TAA or FSR a blend over a few frames, without them a screen-door pattern; 4 000 balls all mid-fade on the RTX: GPU +0.9-1.7 ms against blending, the renderer's CPU −0.7 ms (instanced); City Lab's HLOD fading: the same GPU time as blended | 0256, 0260 |
 | `geometry/cluster_lod` (with `geometry/mesh_clusters`) | each cluster of a large static surface is drawn at the mesh LOD stock would give it as an instance of its own (the main camera's distance to the cluster), with its neighbours' finer levels where they meet (no cracks) | the image as LOD changes it: Sponza 63.6 dB on a moving sequence, stills 52.9-56.8 dB at distant silhouettes; Sponza GPU −3.1 %, render thread +0.21 ms | 0063 |
 | `geometry/cluster_dag` (with `geometry/mesh_clusters`; read when a surface's clusters are built and every frame) | large static surfaces also get a hierarchy of 128-triangle clusters simplified from each other (meshoptimizer: groups of about 8 neighbouring clusters simplified to half with their borders locked, as Nanite does), drawn as the cut through it just fine enough on screen from the main camera (Godot's LOD threshold, the clusters' own errors), in the camera and shadow passes; no cracks, no overlaps; its own index buffer of all the levels (about twice the surface's indices) | the image as LOD changes it; see decision 0379 for the triangles drawn and the image against full detail | 0379 |

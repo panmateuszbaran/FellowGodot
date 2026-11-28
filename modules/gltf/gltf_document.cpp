@@ -2928,6 +2928,9 @@ Error GLTFDocument::_serialize_materials(Ref<GLTFState> p_state) {
 			extensions["KHR_materials_emissive_strength"] = mat_emissive_strength;
 			p_state->add_used_extension("KHR_materials_emissive_strength");
 		}
+		if (_fellow_material_extensions_enabled()) {
+			_fellow_serialize_material_extensions(p_state, base_material, mat_name, extensions); // FellowEngine (decision 0390)
+		}
 		if (!extensions.is_empty()) {
 			mat_dict["extensions"] = extensions;
 		}
@@ -3201,6 +3204,9 @@ Error GLTFDocument::_parse_materials(Ref<GLTFState> p_state) {
 			material->set_alpha_scissor_threshold(0.5f);
 		}
 
+		if (_fellow_material_extensions_enabled()) {
+			_fellow_parse_material_extensions(p_state, material_extensions, primary_texture_coord, material); // FellowEngine (decision 0390)
+		}
 		if (material_dict.has("extras")) {
 			_attach_extras_to_meta(material_dict["extras"], material);
 		}
@@ -6977,6 +6983,14 @@ HashSet<String> GLTFDocument::get_supported_gltf_extensions_hashset() {
 	supported_extensions.insert("KHR_materials_unlit");
 	supported_extensions.insert("KHR_node_visibility");
 	supported_extensions.insert("KHR_texture_transform");
+	if (_fellow_material_extensions_enabled()) {
+		// FellowEngine (decision 0390)
+		supported_extensions.insert("KHR_materials_anisotropy");
+		supported_extensions.insert("KHR_materials_clearcoat");
+		supported_extensions.insert("KHR_materials_ior");
+		supported_extensions.insert("KHR_materials_sheen");
+		supported_extensions.insert("KHR_materials_specular");
+	}
 	for (Ref<GLTFDocumentExtension> ext : all_document_extensions) {
 		ERR_CONTINUE(ext.is_null());
 		Vector<String> ext_supported_extensions = ext->get_supported_extensions();
